@@ -5,6 +5,7 @@ import { withAudit } from '../runtime/audit.js';
 import { checkFilePath } from '../runtime/security.js';
 import { validate, pathSchema } from '../utils/validation.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { getFFPClient } from '../ffp/client.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -60,7 +61,9 @@ export async function fsWrite(
       updated_at: new Date().toISOString(),
     }, { onConflict: 'agent_id,path' });
 
-    return { path, sizeBytes: buffer.length };
+    const result = { path, sizeBytes: buffer.length };
+    void getFFPClient().log({ primitive: 'fs', action: 'write', params: { path, sizeBytes: buffer.length }, result, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -93,12 +96,14 @@ export async function fsRead(
       .eq('path', path)
       .single();
 
-    return {
+    const result = {
       path,
       data: buffer.toString('base64'),
       contentType: meta?.content_type ?? 'application/octet-stream',
       sizeBytes: buffer.length,
     };
+    void getFFPClient().log({ primitive: 'fs', action: 'read', params: { path }, result: { path, sizeBytes: result.sizeBytes }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -129,6 +134,7 @@ export async function fsList(
       type: (item.id ? 'file' : 'directory') as 'file' | 'directory',
     }));
 
+    void getFFPClient().log({ primitive: 'fs', action: 'list', params: { path }, result: { count: entries.length }, timestamp: Date.now(), agentId: ctx.agentId });
     return { path, entries };
   });
 }
@@ -158,6 +164,7 @@ export async function fsDelete(
       .eq('agent_id', ctx.agentId)
       .eq('path', path);
 
+    void getFFPClient().log({ primitive: 'fs', action: 'delete', params: { path }, result: { deleted: true }, timestamp: Date.now(), agentId: ctx.agentId });
     return { path, deleted: true };
   });
 }

@@ -303,6 +303,19 @@ Agent-OS/
 
 ---
 
+## Modes
+
+AgentOS runs in two modes controlled by a single environment variable:
+
+| Mode | Config | Description |
+|---|---|---|
+| **Standalone** (default) | `FFP_MODE=disabled` | Self-contained AgentOS — no external dependencies beyond Supabase + Redis |
+| **FFP Router** | `FFP_MODE=enabled` | Connects to the Furge Fabric Protocol network; all operations are logged to FFP chains with optional consensus gates for critical calls |
+
+See [FFP_INTEGRATION.md](./FFP_INTEGRATION.md) for the full setup guide.
+
+---
+
 ## Author
 
 Built and maintained by **riz**.

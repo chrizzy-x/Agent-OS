@@ -3,6 +3,7 @@ import { getRedisClient, agentKey } from '../storage/redis.js';
 import { withAudit } from '../runtime/audit.js';
 import { validate, keySchema } from '../utils/validation.js';
 import { ValidationError } from '../utils/errors.js';
+import { getFFPClient } from '../ffp/client.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const MAX_MESSAGE_SIZE = 1 * 1024 * 1024; // 1MB
@@ -61,6 +62,7 @@ export async function eventsPublish(
       .publish(channelKey, envelope)
       .exec();
 
+    void getFFPClient().log({ primitive: 'events', action: 'publish', params: { topic, isPublic }, result: { messageId }, timestamp: Date.now(), agentId: ctx.agentId });
     return { topic, messageId };
   });
 }
@@ -97,6 +99,7 @@ export async function eventsSubscribe(
       try { return JSON.parse(m); } catch { return m; }
     });
 
+    void getFFPClient().log({ primitive: 'events', action: 'subscribe', params: { topic }, result: { subscriptionId }, timestamp: Date.now(), agentId: ctx.agentId });
     return { subscriptionId, topic, recentMessages };
   });
 }
@@ -115,6 +118,7 @@ export async function eventsUnsubscribe(
     const redis = getRedisClient();
     const subKey = agentKey('subscriptions', ctx.agentId, subscriptionId);
     const deleted = await redis.del(subKey);
+    void getFFPClient().log({ primitive: 'events', action: 'unsubscribe', params: { subscriptionId }, result: { unsubscribed: deleted > 0 }, timestamp: Date.now(), agentId: ctx.agentId });
     return { subscriptionId, unsubscribed: deleted > 0 };
   });
 }

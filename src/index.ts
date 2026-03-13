@@ -5,6 +5,25 @@ import { checkRateLimit } from './runtime/resource-manager.js';
 import { toErrorResponse } from './utils/errors.js';
 import { AuthError, ValidationError } from './utils/errors.js';
 
+// Validate required environment variables at startup — fail fast with a clear message.
+const REQUIRED_ENV: string[] = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_KEY',
+  'REDIS_URL',
+  'JWT_SECRET',
+  'ADMIN_TOKEN',
+];
+
+function validateEnv(): void {
+  const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+  if (missing.length > 0) {
+    console.error(`[startup] Missing required environment variables: ${missing.join(', ')}`);
+    console.error('[startup] Set these in your .env file or Vercel project settings.');
+    process.exit(1);
+  }
+  console.log('[startup] Environment validated ✓');
+}
+
 // Primitives
 import { memSet, memGet, memDelete, memList, memIncr, memExpire } from './primitives/mem.js';
 import { fsWrite, fsRead, fsList, fsDelete, fsMkdir, fsStat } from './primitives/fs.js';
@@ -12,6 +31,7 @@ import { dbQuery, dbTransaction, dbCreateTable, dbInsert, dbUpdate, dbDelete } f
 import { netHttpGet, netHttpPost, netHttpPut, netHttpDelete, netDnsResolve } from './primitives/net.js';
 import { eventsPublish, eventsSubscribe, eventsUnsubscribe, eventsListTopics } from './primitives/events.js';
 import { procExecute, procSchedule, procSpawn, procKill, procList } from './primitives/proc.js';
+import { getFFPClient } from './ffp/client.js';
 import type { AgentContext } from './auth/permissions.js';
 
 // Tool registry — maps MCP tool names to their handler functions
@@ -190,10 +210,66 @@ async function handleCreateAgent(req: IncomingMessage, res: ServerResponse): Pro
   });
 }
 
+// Handle GET /ffp/audit/:agentId — query FFP chain for an agent's operation log
+async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, agentId: string): Promise<void> {
+  const adminToken = process.env.ADMIN_TOKEN!;
+  const token = extractBearerToken(req.headers.authorization);
+  if (token !== adminToken) {
+    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } });
+    return;
+  }
+
+  try {
+    const urlObj = new URL(req.url ?? '/', `http://localhost`);
+    const chainId = urlObj.searchParams.get('chain_id') ?? undefined;
+    const startTime = urlObj.searchParams.get('start_time') ? Number(urlObj.searchParams.get('start_time')) : undefined;
+    const endTime = urlObj.searchParams.get('end_time') ? Number(urlObj.searchParams.get('end_time')) : undefined;
+
+    const operations = await getFFPClient().queryOperations({ agentId, chainId, startTime, endTime });
+    sendJson(res, 200, { agentId, operations, total: operations.length });
+  } catch (err) {
+    const errResp = toErrorResponse(err);
+    sendJson(res, errResp.statusCode, { error: errResp });
+  }
+}
+
+// Handle GET /ffp/consensus/:agentId — query FFP consensus history for an agent
+async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, agentId: string): Promise<void> {
+  const adminToken = process.env.ADMIN_TOKEN!;
+  const token = extractBearerToken(req.headers.authorization);
+  if (token !== adminToken) {
+    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } });
+    return;
+  }
+
+  try {
+    const proposals = await getFFPClient().queryConsensusHistory(agentId);
+    sendJson(res, 200, { agentId, proposals, total: proposals.length });
+  } catch (err) {
+    const errResp = toErrorResponse(err);
+    sendJson(res, errResp.statusCode, { error: errResp });
+  }
+}
+
+// Handle GET /ffp/status — FFP mode and config summary (no secrets)
+function handleFFPStatus(_req: IncomingMessage, res: ServerResponse): void {
+  const ffp = getFFPClient();
+  sendJson(res, 200, {
+    enabled: ffp.config.enabled,
+    chainId: ffp.config.chainId || null,
+    nodeUrl: ffp.config.nodeUrl || null,
+    requireConsensus: ffp.config.requireConsensus,
+  });
+}
+
 // Main HTTP request router
 async function router(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url ?? '/';
   const method = req.method ?? 'GET';
+
+  // Match /ffp/audit/:agentId and /ffp/consensus/:agentId
+  const ffpAuditMatch = url.match(/^\/ffp\/audit\/([^/?]+)/);
+  const ffpConsensusMatch = url.match(/^\/ffp\/consensus\/([^/?]+)/);
 
   try {
     if (url === '/health' && method === 'GET') {
@@ -203,8 +279,13 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
     } else if (url === '/admin/agents' && method === 'POST') {
       await handleCreateAgent(req, res);
     } else if (url === '/tools' && method === 'GET') {
-      // List available tools with their descriptions
       sendJson(res, 200, { tools: Object.keys(TOOLS) });
+    } else if (url === '/ffp/status' && method === 'GET') {
+      handleFFPStatus(req, res);
+    } else if (ffpAuditMatch && method === 'GET') {
+      await handleFFPAudit(req, res, decodeURIComponent(ffpAuditMatch[1]));
+    } else if (ffpConsensusMatch && method === 'GET') {
+      await handleFFPConsensus(req, res, decodeURIComponent(ffpConsensusMatch[1]));
     } else {
       sendJson(res, 404, { error: { code: 'NOT_FOUND', message: `${method} ${url} not found` } });
     }
@@ -219,13 +300,27 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   return router(req, res);
 }
 
+// Validate environment before starting
+validateEnv();
+
 // Also support running as a standalone Node.js server for local development
 if (process.env.NODE_ENV !== 'production' || process.env.STANDALONE === 'true') {
-  const PORT = parseInt(process.env.PORT ?? '3000');
+  const PORT = parseInt(process.env.PORT ?? '3000', 10);
   const server = createServer(router);
   server.listen(PORT, () => {
-    console.log(`AgentOS server running on port ${PORT}`);
-    console.log(`Health: http://localhost:${PORT}/health`);
-    console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`[startup] AgentOS server running on port ${PORT}`);
+    console.log(`[startup] Health:  http://localhost:${PORT}/health`);
+    console.log(`[startup] MCP:     http://localhost:${PORT}/mcp`);
+    console.log(`[startup] Tools:   http://localhost:${PORT}/tools`);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('[shutdown] SIGTERM received — closing server');
+    server.close(() => process.exit(0));
+  });
+
+  process.on('SIGINT', () => {
+    console.log('[shutdown] SIGINT received — closing server');
+    server.close(() => process.exit(0));
   });
 }

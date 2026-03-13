@@ -4,6 +4,7 @@ import { adjustMemoryUsage, checkMemoryQuota } from '../runtime/resource-manager
 import { withAudit } from '../runtime/audit.js';
 import { validate, keySchema, ttlSchema } from '../utils/validation.js';
 import { NotFoundError } from '../utils/errors.js';
+import { getFFPClient } from '../ffp/client.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const DEFAULT_TTL = 60 * 60 * 24 * 7; // 7 days in seconds
@@ -41,7 +42,9 @@ export async function memSet(
     await redis.set(rKey, serialized, 'EX', effectiveTtl);
     await adjustMemoryUsage(ctx.agentId, delta);
 
-    return { key };
+    const result = { key };
+    void getFFPClient().log({ primitive: 'mem', action: 'set', params: { key, bytes }, result, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -60,7 +63,9 @@ export async function memGet(
       throw new NotFoundError(`Key not found: ${key}`);
     }
 
-    return { key, value: JSON.parse(raw) };
+    const result = { key, value: JSON.parse(raw) };
+    void getFFPClient().log({ primitive: 'mem', action: 'get', params: { key }, result: { key }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -85,7 +90,9 @@ export async function memDelete(
       await adjustMemoryUsage(ctx.agentId, -existingBytes);
     }
 
-    return { key, deleted: deleted > 0 };
+    const result = { key, deleted: deleted > 0 };
+    void getFFPClient().log({ primitive: 'mem', action: 'delete', params: { key }, result, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -126,7 +133,9 @@ export async function memIncr(
     const redis = getRedisClient();
     const rKey = memKey(ctx.agentId, key);
     const newValue = await redis.incrby(rKey, amount);
-    return { key, value: newValue };
+    const result = { key, value: newValue };
+    void getFFPClient().log({ primitive: 'mem', action: 'incr', params: { key, amount }, result, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -142,7 +151,9 @@ export async function memExpire(
 
   return withAudit({ agentId: ctx.agentId, primitive: 'mem', operation: 'expire', metadata: { key, seconds } }, async () => {
     const redis = getRedisClient();
-    const result = await redis.expire(memKey(ctx.agentId, key), seconds);
-    return { key, set: result === 1 };
+    const expResult = await redis.expire(memKey(ctx.agentId, key), seconds);
+    const result = { key, set: expResult === 1 };
+    void getFFPClient().log({ primitive: 'mem', action: 'expire', params: { key, seconds }, result, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
