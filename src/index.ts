@@ -5,6 +5,25 @@ import { checkRateLimit } from './runtime/resource-manager.js';
 import { toErrorResponse } from './utils/errors.js';
 import { AuthError, ValidationError } from './utils/errors.js';
 
+// Validate required environment variables at startup — fail fast with a clear message.
+const REQUIRED_ENV: string[] = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_KEY',
+  'REDIS_URL',
+  'JWT_SECRET',
+  'ADMIN_TOKEN',
+];
+
+function validateEnv(): void {
+  const missing = REQUIRED_ENV.filter(k => !process.env[k]);
+  if (missing.length > 0) {
+    console.error(`[startup] Missing required environment variables: ${missing.join(', ')}`);
+    console.error('[startup] Set these in your .env file or Vercel project settings.');
+    process.exit(1);
+  }
+  console.log('[startup] Environment validated ✓');
+}
+
 // Primitives
 import { memSet, memGet, memDelete, memList, memIncr, memExpire } from './primitives/mem.js';
 import { fsWrite, fsRead, fsList, fsDelete, fsMkdir, fsStat } from './primitives/fs.js';
@@ -219,13 +238,27 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   return router(req, res);
 }
 
+// Validate environment before starting
+validateEnv();
+
 // Also support running as a standalone Node.js server for local development
 if (process.env.NODE_ENV !== 'production' || process.env.STANDALONE === 'true') {
-  const PORT = parseInt(process.env.PORT ?? '3000');
+  const PORT = parseInt(process.env.PORT ?? '3000', 10);
   const server = createServer(router);
   server.listen(PORT, () => {
-    console.log(`AgentOS server running on port ${PORT}`);
-    console.log(`Health: http://localhost:${PORT}/health`);
-    console.log(`MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`[startup] AgentOS server running on port ${PORT}`);
+    console.log(`[startup] Health:  http://localhost:${PORT}/health`);
+    console.log(`[startup] MCP:     http://localhost:${PORT}/mcp`);
+    console.log(`[startup] Tools:   http://localhost:${PORT}/tools`);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('[shutdown] SIGTERM received — closing server');
+    server.close(() => process.exit(0));
+  });
+
+  process.on('SIGINT', () => {
+    console.log('[shutdown] SIGINT received — closing server');
+    server.close(() => process.exit(0));
   });
 }
