@@ -137,12 +137,10 @@ export default function HomePage() {
               Docs
             </a>
             <a
-              href="https://github.com/chrizzy-x/Agent-OS"
-              className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-700 transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/signup"
+              className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors"
             >
-              Star on GitHub
+              Get Started
             </a>
           </div>
         </div>
@@ -164,18 +162,18 @@ export default function HomePage() {
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <a
-            href="https://github.com/chrizzy-x/Agent-OS"
+            href="/signup"
             className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors text-center"
+          >
+            Get Started Free
+          </a>
+          <a
+            href="https://github.com/chrizzy-x/Agent-OS"
+            className="border border-gray-300 text-gray-700 px-6 py-3 rounded-lg font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors text-center"
             target="_blank"
             rel="noopener noreferrer"
           >
             Star on GitHub
-          </a>
-          <a
-            href="https://docs.agentos.io"
-            className="border border-gray-300 text-gray-700 px-6 py-3 rounded-lg font-medium hover:border-gray-400 hover:bg-gray-50 transition-colors text-center"
-          >
-            Read the Docs
           </a>
         </div>
       </section>
@@ -251,20 +249,22 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold mb-4">Get started in 5 minutes</h2>
           <p className="text-gray-400 mb-8">
-            Deploy to Vercel, connect Supabase + Redis, get your API key.
+            Create your agent in 30 seconds. No credit card required.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a
-              href="https://docs.agentos.io"
+              href="/signup"
               className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
             >
-              Quick Start Guide
+              Get Started Free
             </a>
             <a
-              href="https://discord.gg/agentos"
+              href="https://github.com/chrizzy-x/Agent-OS"
               className="border border-gray-700 text-gray-300 px-6 py-3 rounded-lg font-medium hover:border-gray-500 hover:text-white transition-colors"
+              target="_blank"
+              rel="noopener noreferrer"
             >
-              Join Discord
+              View on GitHub
             </a>
           </div>
         </div>
