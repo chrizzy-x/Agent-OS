@@ -64,8 +64,9 @@ export function createAgentToken(
     quotas: options?.quotas,
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return jwt.sign(payload, getJwtSecret(), {
-    expiresIn: options?.expiresIn ?? '30d',
+    expiresIn: (options?.expiresIn ?? '30d') as any,
   });
 }
 

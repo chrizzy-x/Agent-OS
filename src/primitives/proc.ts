@@ -117,8 +117,8 @@ export async function procSpawn(
     z.object({
       config: z.object({
         name: z.string().max(100).optional(),
-        allowedDomains: z.array(z.string()).optional().default([]),
-      }).optional().default({}),
+        allowedDomains: z.array(z.string()).default([]),
+      }).default({}),
     }),
     input
   );
@@ -214,8 +214,8 @@ export async function procList(
 ): Promise<{ processes: unknown[]; scheduledTasks: unknown[] }> {
   const { status, limit } = validate(
     z.object({
-      status: z.enum(['running', 'completed', 'failed', 'killed', 'all']).optional().default('all'),
-      limit: z.number().int().min(1).max(100).optional().default(20),
+      status: z.enum(['running', 'completed', 'failed', 'killed', 'all']).default('all'),
+      limit: z.number().int().min(1).max(100).default(20),
     }),
     input
   );

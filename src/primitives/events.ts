@@ -29,7 +29,7 @@ export async function eventsPublish(
     z.object({
       topic: keySchema,
       message: z.unknown(),
-      isPublic: z.boolean().optional().default(false),
+      isPublic: z.boolean().default(false),
     }),
     input
   );
@@ -77,8 +77,8 @@ export async function eventsSubscribe(
   const { topic, isPublic, limit } = validate(
     z.object({
       topic: keySchema,
-      isPublic: z.boolean().optional().default(false),
-      limit: z.number().int().min(1).max(100).optional().default(10),
+      isPublic: z.boolean().default(false),
+      limit: z.number().int().min(1).max(100).default(10),
     }),
     input
   );

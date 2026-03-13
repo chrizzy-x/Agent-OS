@@ -112,7 +112,7 @@ export async function fsList(
   ctx: AgentContext,
   input: unknown
 ): Promise<{ path: string; entries: Array<{ name: string; path: string; sizeBytes: number; type: 'file' | 'directory' }> }> {
-  const { path } = validate(z.object({ path: pathSchema.optional().default('/') }), input);
+  const { path } = validate(z.object({ path: pathSchema.default('/') }), input);
 
   return withAudit({ agentId: ctx.agentId, primitive: 'fs', operation: 'list', metadata: { path } }, async () => {
     const normalizedPath = path === '/' ? '' : checkFilePath(path);
