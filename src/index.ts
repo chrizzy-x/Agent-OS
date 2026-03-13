@@ -163,8 +163,26 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   }
 }
 
+// Handle GET / — API root info
+function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
+  sendJson(res, 200, {
+    name: 'AgentOS',
+    version: '1.0.0',
+    description: 'OS-level primitives for agents: memory, files, databases, networking, events and code execution',
+    status: 'ok',
+    endpoints: {
+      'GET  /': 'API info (this response)',
+      'GET  /health': 'Liveness check',
+      'GET  /tools': 'List available MCP tools',
+      'POST /mcp': 'Execute an MCP tool call (Bearer token required)',
+      'POST /admin/agents': 'Create a new agent token (Admin token required)',
+      'GET  /ffp/status': 'FFP mode and config summary',
+    },
+  });
+}
+
 // Handle GET /health — basic liveness check
-function handleHealth(req: IncomingMessage, res: ServerResponse): void {
+function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     status: 'ok',
     version: '1.0.0',
@@ -272,7 +290,9 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const ffpConsensusMatch = url.match(/^\/ffp\/consensus\/([^/?]+)/);
 
   try {
-    if (url === '/health' && method === 'GET') {
+    if ((url === '/' || url === '') && method === 'GET') {
+      handleRoot(req, res);
+    } else if (url === '/health' && method === 'GET') {
       handleHealth(req, res);
     } else if (url === '/mcp' && method === 'POST') {
       await handleMcp(req, res);
