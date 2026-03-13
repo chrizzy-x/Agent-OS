@@ -1,14 +1,16 @@
 # AgentOS
 
-**OS-level primitives for AI agents — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
+> Built by **riz**
 
-AgentOS is a stateless server that gives AI agents a safe, isolated environment to persist data, run code, make HTTP requests, and communicate — without touching the host system directly. Each agent gets its own namespace, enforced quotas, and a full audit trail.
+**OS-level primitives for apps and services — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
+
+AgentOS is a stateless server that gives any app or service a safe, isolated environment to persist data, run code, make HTTP requests, and communicate — without touching the host system directly. Each client gets its own namespace, enforced quotas, and a full audit trail.
 
 ---
 
 ## What it does
 
-AI agents (Claude, GPT-4, custom LLMs) call tools. Most tools are stateless — they answer a question and forget everything. AgentOS gives agents **state and system access** by exposing six OS primitives as tools:
+Apps and services call tools via HTTP. Most integrations are stateless — they process a request and forget everything. AgentOS gives any client **persistent state and system access** by exposing six OS primitives as tools:
 
 | Primitive | What it gives agents | Backed by |
 |-----------|---------------------|-----------|
@@ -19,14 +21,14 @@ AI agents (Claude, GPT-4, custom LLMs) call tools. Most tools are stateless — 
 | **events** | Pub/sub messaging between agents | Redis |
 | **proc** | Code execution (Python, JavaScript, Bash) + cron scheduling + child agents | Sandboxed subprocess |
 
-Every operation is scoped to the calling agent's identity, quota-checked, rate-limited, and written to an immutable audit log.
+Every operation is scoped to the calling client's identity, quota-checked, rate-limited, and written to an immutable audit log.
 
 ---
 
 ## Architecture
 
 ```
-AI Agent
+Client App / Service
    │  Authorization: Bearer <jwt>
    ▼
 POST /mcp  { "tool": "mem_set", "input": { "key": "...", "value": "..." } }
@@ -300,6 +302,10 @@ Agent-OS/
 ```
 
 ---
+
+## Author
+
+Built and maintained by **riz**.
 
 ## License
 

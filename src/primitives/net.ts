@@ -9,7 +9,7 @@ import type { AgentContext } from '../auth/permissions.js';
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
 const REQUEST_TIMEOUT = 30_000; // 30 seconds
-const USER_AGENT = 'AgentOS/1.0 (https://github.com/chrizzy-x/Agent-OS)';
+const USER_AGENT = 'AgentOS/1.0 by riz (+https://github.com/chrizzy-x/Agent-OS)';
 
 interface HttpResponse {
   status: number;

@@ -1,6 +1,6 @@
 # AgentOS API Reference
 
-AgentOS exposes OS-level primitives to AI agents over HTTP. All requests are authenticated with a JWT bearer token.
+AgentOS exposes OS-level primitives to apps and services over HTTP. All requests are authenticated with a JWT bearer token.
 
 ## Base URL
 

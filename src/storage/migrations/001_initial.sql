@@ -1,7 +1,7 @@
 -- AgentOS Initial Schema Migration
 -- Run this against your Supabase PostgreSQL database before deploying
 
--- Agents registry — each row represents a registered AI agent
+-- Agents registry — each row represents a registered client/app
 CREATE TABLE IF NOT EXISTS agents (
   id          TEXT PRIMARY KEY,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),

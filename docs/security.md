@@ -6,13 +6,13 @@ This document describes the security controls in AgentOS and the threat model th
 
 ## Threat Model
 
-AgentOS is designed to run code and access resources on behalf of AI agents. The primary threats are:
+AgentOS is designed to run code and access resources on behalf of apps and services. The primary threats are:
 
-1. **Agent escaping its namespace** — reading/writing another agent's data
-2. **SSRF (Server-Side Request Forgery)** — agents reaching internal cloud metadata or private networks
-3. **SQL injection** — agents manipulating database queries to access unauthorized data
-4. **Path traversal** — agents escaping their file storage namespace via `../` sequences
-5. **Code execution abuse** — agents running malicious code that harms the host system
+1. **Client escaping its namespace** — reading/writing another client's data
+2. **SSRF (Server-Side Request Forgery)** — clients reaching internal cloud metadata or private networks
+3. **SQL injection** — clients manipulating database queries to access unauthorized data
+4. **Path traversal** — clients escaping their file storage namespace via `../` sequences
+5. **Code execution abuse** — clients running malicious code that harms the host system
 6. **Resource exhaustion** — agents consuming excessive CPU, memory, or storage
 7. **Authentication bypass** — forged or stolen tokens granting unauthorized access
 
