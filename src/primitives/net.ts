@@ -5,6 +5,7 @@ import { checkSsrf, checkDomainAllowed } from '../runtime/security.js';
 import { withAudit } from '../runtime/audit.js';
 import { validate, urlSchema, headersSchema } from '../utils/validation.js';
 import { ValidationError } from '../utils/errors.js';
+import { getFFPClient } from '../ffp/client.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -30,6 +31,19 @@ async function makeRequest(
   await checkSsrf(url);
   checkDomainAllowed(url, ctx.allowedDomains);
   await checkRateLimit(ctx);
+
+  // FFP consensus gate — blocks critical outbound calls until network approves
+  const ffp = getFFPClient();
+  if (ffp.isCriticalUrl(url)) {
+    const approved = await ffp.consensus({
+      operation: `net.${method.toLowerCase()}`,
+      params: { url, method },
+      confidence: 0.95,
+    });
+    if (!approved) {
+      throw new ValidationError(`FFP consensus rejected outbound ${method} to ${url}`);
+    }
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
@@ -109,7 +123,11 @@ export async function netHttpGet(ctx: AgentContext, input: unknown): Promise<Htt
 
   return withAudit(
     { agentId: ctx.agentId, primitive: 'net', operation: 'http_get', metadata: { url } },
-    () => makeRequest(ctx, 'GET', url, headers ?? {})
+    async () => {
+      const result = await makeRequest(ctx, 'GET', url, headers ?? {});
+      void getFFPClient().log({ primitive: 'net', action: 'http_get', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+      return result;
+    }
   );
 }
 
@@ -121,7 +139,11 @@ export async function netHttpPost(ctx: AgentContext, input: unknown): Promise<Ht
 
   return withAudit(
     { agentId: ctx.agentId, primitive: 'net', operation: 'http_post', metadata: { url } },
-    () => makeRequest(ctx, 'POST', url, headers ?? {}, body)
+    async () => {
+      const result = await makeRequest(ctx, 'POST', url, headers ?? {}, body);
+      void getFFPClient().log({ primitive: 'net', action: 'http_post', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+      return result;
+    }
   );
 }
 
@@ -133,7 +155,11 @@ export async function netHttpPut(ctx: AgentContext, input: unknown): Promise<Htt
 
   return withAudit(
     { agentId: ctx.agentId, primitive: 'net', operation: 'http_put', metadata: { url } },
-    () => makeRequest(ctx, 'PUT', url, headers ?? {}, body)
+    async () => {
+      const result = await makeRequest(ctx, 'PUT', url, headers ?? {}, body);
+      void getFFPClient().log({ primitive: 'net', action: 'http_put', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+      return result;
+    }
   );
 }
 
@@ -145,7 +171,11 @@ export async function netHttpDelete(ctx: AgentContext, input: unknown): Promise<
 
   return withAudit(
     { agentId: ctx.agentId, primitive: 'net', operation: 'http_delete', metadata: { url } },
-    () => makeRequest(ctx, 'DELETE', url, headers ?? {})
+    async () => {
+      const result = await makeRequest(ctx, 'DELETE', url, headers ?? {});
+      void getFFPClient().log({ primitive: 'net', action: 'http_delete', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+      return result;
+    }
   );
 }
 

@@ -4,6 +4,7 @@ import { withAudit } from '../runtime/audit.js';
 import { checkTableName, checkSqlSafety } from '../runtime/security.js';
 import { validate, sqlSchema } from '../utils/validation.js';
 import { ValidationError } from '../utils/errors.js';
+import { getFFPClient } from '../ffp/client.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const MAX_ROWS = 10_000;
@@ -49,7 +50,9 @@ export async function dbQuery(
     }
 
     const rows = Array.isArray(data) ? data.slice(0, MAX_ROWS) : (data ? [data] : []);
-    return { rows, rowCount: rows.length };
+    const result = { rows, rowCount: rows.length };
+    void getFFPClient().log({ primitive: 'db', action: 'query', params: { sql: sql.slice(0, 200) }, result: { rowCount: result.rowCount }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -86,7 +89,9 @@ export async function dbTransaction(
       throw new Error(`Transaction failed: ${error.message}`);
     }
 
-    return { results: data ?? [] };
+    const result = { results: data ?? [] };
+    void getFFPClient().log({ primitive: 'db', action: 'transaction', params: { queryCount: queries.length }, result: { resultCount: result.results.length }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
@@ -140,6 +145,7 @@ export async function dbCreateTable(
       throw new Error(`Failed to create table: ${error.message}`);
     }
 
+    void getFFPClient().log({ primitive: 'db', action: 'create_table', params: { table }, result: { created: true }, timestamp: Date.now(), agentId: ctx.agentId });
     return { table, created: true };
   });
 }
@@ -181,6 +187,7 @@ export async function dbInsert(
       throw new Error(`Insert failed: ${error.message}`);
     }
 
+    void getFFPClient().log({ primitive: 'db', action: 'insert', params: { table }, result: { success: true }, timestamp: Date.now(), agentId: ctx.agentId });
     return { table, row: result };
   });
 }
@@ -216,6 +223,7 @@ export async function dbUpdate(
       throw new Error(`Update failed: ${error.message}`);
     }
 
+    void getFFPClient().log({ primitive: 'db', action: 'update', params: { table }, result: { updatedCount: result ?? 0 }, timestamp: Date.now(), agentId: ctx.agentId });
     return { table, updatedCount: result ?? 0 };
   });
 }
@@ -249,6 +257,7 @@ export async function dbDelete(
       throw new Error(`Delete failed: ${error.message}`);
     }
 
+    void getFFPClient().log({ primitive: 'db', action: 'delete', params: { table }, result: { deletedCount: result ?? 0 }, timestamp: Date.now(), agentId: ctx.agentId });
     return { table, deletedCount: result ?? 0 };
   });
 }

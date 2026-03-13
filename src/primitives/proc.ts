@@ -6,6 +6,7 @@ import { validate } from '../utils/validation.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { createAgentToken } from '../auth/agent-identity.js';
 import { randomUUID } from 'crypto';
+import { getFFPClient } from '../ffp/client.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const MAX_TIMEOUT = 5 * 60 * 1000; // 5 minutes
@@ -51,7 +52,9 @@ export async function procExecute(
           completed_at: new Date().toISOString(),
         }).eq('id', processId);
 
-        return { processId, ...result };
+        const execResult = { processId, ...result };
+        void getFFPClient().log({ primitive: 'proc', action: 'execute', params: { language }, result: { processId, exitCode: result.exitCode, durationMs: result.durationMs }, timestamp: Date.now(), agentId: ctx.agentId });
+        return execResult;
       } catch (err) {
         await supabase.from('agent_processes').update({
           status: 'failed',
@@ -98,6 +101,7 @@ export async function procSchedule(
         throw new Error(`Failed to schedule task: ${error.message}`);
       }
 
+      void getFFPClient().log({ primitive: 'proc', action: 'schedule', params: { language, cronExpression }, result: { taskId }, timestamp: Date.now(), agentId: ctx.agentId });
       return { taskId, cronExpression, language };
     }
   );
@@ -139,6 +143,7 @@ export async function procSpawn(
         expiresIn: '24h',
       });
 
+      void getFFPClient().log({ primitive: 'proc', action: 'spawn', params: { parentAgentId: ctx.agentId }, result: { childAgentId }, timestamp: Date.now(), agentId: ctx.agentId });
       return { childAgentId, token };
     }
   );

@@ -31,6 +31,7 @@ import { dbQuery, dbTransaction, dbCreateTable, dbInsert, dbUpdate, dbDelete } f
 import { netHttpGet, netHttpPost, netHttpPut, netHttpDelete, netDnsResolve } from './primitives/net.js';
 import { eventsPublish, eventsSubscribe, eventsUnsubscribe, eventsListTopics } from './primitives/events.js';
 import { procExecute, procSchedule, procSpawn, procKill, procList } from './primitives/proc.js';
+import { getFFPClient } from './ffp/client.js';
 import type { AgentContext } from './auth/permissions.js';
 
 // Tool registry — maps MCP tool names to their handler functions
@@ -209,10 +210,66 @@ async function handleCreateAgent(req: IncomingMessage, res: ServerResponse): Pro
   });
 }
 
+// Handle GET /ffp/audit/:agentId — query FFP chain for an agent's operation log
+async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, agentId: string): Promise<void> {
+  const adminToken = process.env.ADMIN_TOKEN!;
+  const token = extractBearerToken(req.headers.authorization);
+  if (token !== adminToken) {
+    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } });
+    return;
+  }
+
+  try {
+    const urlObj = new URL(req.url ?? '/', `http://localhost`);
+    const chainId = urlObj.searchParams.get('chain_id') ?? undefined;
+    const startTime = urlObj.searchParams.get('start_time') ? Number(urlObj.searchParams.get('start_time')) : undefined;
+    const endTime = urlObj.searchParams.get('end_time') ? Number(urlObj.searchParams.get('end_time')) : undefined;
+
+    const operations = await getFFPClient().queryOperations({ agentId, chainId, startTime, endTime });
+    sendJson(res, 200, { agentId, operations, total: operations.length });
+  } catch (err) {
+    const errResp = toErrorResponse(err);
+    sendJson(res, errResp.statusCode, { error: errResp });
+  }
+}
+
+// Handle GET /ffp/consensus/:agentId — query FFP consensus history for an agent
+async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, agentId: string): Promise<void> {
+  const adminToken = process.env.ADMIN_TOKEN!;
+  const token = extractBearerToken(req.headers.authorization);
+  if (token !== adminToken) {
+    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } });
+    return;
+  }
+
+  try {
+    const proposals = await getFFPClient().queryConsensusHistory(agentId);
+    sendJson(res, 200, { agentId, proposals, total: proposals.length });
+  } catch (err) {
+    const errResp = toErrorResponse(err);
+    sendJson(res, errResp.statusCode, { error: errResp });
+  }
+}
+
+// Handle GET /ffp/status — FFP mode and config summary (no secrets)
+function handleFFPStatus(_req: IncomingMessage, res: ServerResponse): void {
+  const ffp = getFFPClient();
+  sendJson(res, 200, {
+    enabled: ffp.config.enabled,
+    chainId: ffp.config.chainId || null,
+    nodeUrl: ffp.config.nodeUrl || null,
+    requireConsensus: ffp.config.requireConsensus,
+  });
+}
+
 // Main HTTP request router
 async function router(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = req.url ?? '/';
   const method = req.method ?? 'GET';
+
+  // Match /ffp/audit/:agentId and /ffp/consensus/:agentId
+  const ffpAuditMatch = url.match(/^\/ffp\/audit\/([^/?]+)/);
+  const ffpConsensusMatch = url.match(/^\/ffp\/consensus\/([^/?]+)/);
 
   try {
     if (url === '/health' && method === 'GET') {
@@ -222,8 +279,13 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
     } else if (url === '/admin/agents' && method === 'POST') {
       await handleCreateAgent(req, res);
     } else if (url === '/tools' && method === 'GET') {
-      // List available tools with their descriptions
       sendJson(res, 200, { tools: Object.keys(TOOLS) });
+    } else if (url === '/ffp/status' && method === 'GET') {
+      handleFFPStatus(req, res);
+    } else if (ffpAuditMatch && method === 'GET') {
+      await handleFFPAudit(req, res, decodeURIComponent(ffpAuditMatch[1]));
+    } else if (ffpConsensusMatch && method === 'GET') {
+      await handleFFPConsensus(req, res, decodeURIComponent(ffpConsensusMatch[1]));
     } else {
       sendJson(res, 404, { error: { code: 'NOT_FOUND', message: `${method} ${url} not found` } });
     }
