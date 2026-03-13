@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import CodeBlock from '@/components/CodeBlock';
 import FeatureCard from '@/components/FeatureCard';
 
@@ -130,6 +131,12 @@ export default function HomePage() {
             >
               API
             </a>
+            <Link
+              href="/marketplace"
+              className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
+            >
+              Marketplace
+            </Link>
             <a
               href="https://docs.agentos.io"
               className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
@@ -244,6 +251,52 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Skills Marketplace */}
+      <section className="max-w-5xl mx-auto px-4 py-16">
+        <div className="flex items-end justify-between mb-3">
+          <h2 className="text-3xl font-bold">Skills Marketplace</h2>
+          <Link href="/marketplace" className="text-sm text-blue-600 hover:underline">
+            Browse all skills →
+          </Link>
+        </div>
+        <p className="text-gray-500 mb-10">
+          Extend Agent OS with community-built capabilities. Install only what you need.
+        </p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {[
+            { icon: '🔄', name: 'JSON Transformer', cat: 'Data & Analytics', desc: 'Parse, filter, and reshape JSON data.', slug: 'json-transformer' },
+            { icon: '📝', name: 'Text Utilities', cat: 'Documents', desc: 'Slugify, truncate, extract emails, count words.', slug: 'text-utils' },
+            { icon: '📊', name: 'Math & Stats', cat: 'Data & Analytics', desc: 'Mean, median, std dev, moving averages.', slug: 'math-stats' },
+            { icon: '📅', name: 'Date & Time', cat: 'Data & Analytics', desc: 'Parse, format, diff, and add dates.', slug: 'date-time' },
+            { icon: '🌐', name: 'HTTP Request Builder', cat: 'Web & Browser', desc: 'Build headers, encode params, parse responses.', slug: 'http-request-builder' },
+            { icon: '📋', name: 'CSV Processor', cat: 'Documents', desc: 'Parse CSV, filter rows, sum columns.', slug: 'csv-processor' },
+          ].map(s => (
+            <Link key={s.slug} href={`/marketplace/${s.slug}`}
+              className="group border border-gray-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-sm transition-all bg-white">
+              <div className="flex items-start justify-between mb-2">
+                <span className="text-2xl">{s.icon}</span>
+                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">{s.cat}</span>
+              </div>
+              <div className="font-semibold text-gray-900 text-sm mb-1 group-hover:text-blue-600">{s.name}</div>
+              <div className="text-xs text-gray-500 leading-relaxed">{s.desc}</div>
+              <div className="mt-3 text-xs font-medium text-green-600">Free</div>
+            </Link>
+          ))}
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 flex items-center justify-between gap-6">
+          <div>
+            <p className="font-semibold text-blue-900 mb-1">Build skills. Earn 70% revenue share.</p>
+            <p className="text-sm text-blue-700">
+              Publish your skills to the marketplace and earn from every API call.
+            </p>
+          </div>
+          <Link href="/developer"
+            className="flex-shrink-0 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors">
+            Developer Dashboard →
+          </Link>
+        </div>
+      </section>
+
       {/* Quick start */}
       <section className="bg-gray-900 text-white py-16">
         <div className="max-w-5xl mx-auto px-4 text-center">
@@ -276,8 +329,9 @@ export default function HomePage() {
           <span className="font-mono font-bold text-gray-900">Agent OS</span>
           <div className="flex items-center gap-6 text-sm text-gray-500">
             <a href="https://github.com/chrizzy-x/Agent-OS" className="hover:text-gray-900 transition-colors" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <Link href="/marketplace" className="hover:text-gray-900 transition-colors">Marketplace</Link>
+            <Link href="/developer" className="hover:text-gray-900 transition-colors">Developer</Link>
             <a href="https://docs.agentos.io" className="hover:text-gray-900 transition-colors">Docs</a>
-            <a href="https://discord.gg/agentos" className="hover:text-gray-900 transition-colors">Discord</a>
             <a href="/api" className="hover:text-gray-900 transition-colors">API</a>
           </div>
           <span className="text-sm text-gray-400">MIT License</span>
