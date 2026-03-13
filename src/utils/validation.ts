@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { ValidationError } from './errors.js';
 
 // Validate and parse input against a zod schema, throwing a ValidationError on failure
-export function validate<T>(schema: z.ZodType<T>, data: unknown): T {
+export function validate<S extends z.ZodTypeAny>(schema: S, data: unknown): z.output<S> {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ');
+    const issues = result.error.issues.map((i: z.ZodIssue) => `${i.path.join('.')}: ${i.message}`).join(', ');
     throw new ValidationError(`Invalid input: ${issues}`);
   }
   return result.data;
