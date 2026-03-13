@@ -237,9 +237,13 @@ Requires Node.js 20+.
 
 ---
 
-## API reference
+## Documentation
 
-Full tool schemas, error codes, and request/response examples: **[docs/api.md](docs/api.md)**
+| Doc | Description |
+|-----|-------------|
+| **[docs/overview.md](docs/overview.md)** | Product overview, use cases, architecture, and quick start guide |
+| **[docs/api.md](docs/api.md)** | Full tool schemas, error codes, and request/response examples |
+| **[docs/security.md](docs/security.md)** | Threat model and security controls |
 
 ---
 
