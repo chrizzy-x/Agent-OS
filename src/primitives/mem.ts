@@ -125,7 +125,7 @@ export async function memIncr(
   input: unknown
 ): Promise<{ key: string; value: number }> {
   const { key, amount } = validate(
-    z.object({ key: keySchema, amount: z.number().int().optional().default(1) }),
+    z.object({ key: keySchema, amount: z.number().int().default(1) }),
     input
   );
 

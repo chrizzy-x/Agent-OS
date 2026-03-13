@@ -29,7 +29,7 @@ export async function eventsPublish(
     z.object({
       topic: keySchema,
       message: z.unknown(),
-      isPublic: z.boolean().optional().default(false),
+      isPublic: z.boolean().default(false),
     }),
     input
   );
@@ -51,7 +51,7 @@ export async function eventsPublish(
       timestamp: new Date().toISOString(),
     });
 
-    const listKey = topicKey(ctx.agentId, topic, isPublic);
+    const listKey = topicKey(ctx.agentId, topic, isPublic ?? false);
     const channelKey = `${listKey}:channel`;
 
     // Push to list (for polling/history) and publish to channel (for real-time)
@@ -77,15 +77,15 @@ export async function eventsSubscribe(
   const { topic, isPublic, limit } = validate(
     z.object({
       topic: keySchema,
-      isPublic: z.boolean().optional().default(false),
-      limit: z.number().int().min(1).max(100).optional().default(10),
+      isPublic: z.boolean().default(false),
+      limit: z.number().int().min(1).max(100).default(10),
     }),
     input
   );
 
   return withAudit({ agentId: ctx.agentId, primitive: 'events', operation: 'subscribe', metadata: { topic } }, async () => {
     const redis = getRedisClient();
-    const listKey = topicKey(ctx.agentId, topic, isPublic);
+    const listKey = topicKey(ctx.agentId, topic, isPublic ?? false);
 
     // Store subscription record so agent can poll for new messages
     const subscriptionId = `sub_${ctx.agentId}_${topic}_${Date.now()}`;
@@ -94,7 +94,7 @@ export async function eventsSubscribe(
     await redis.set(subKey, JSON.stringify({ topic, isPublic, createdAt: Date.now() }), 'EX', MESSAGE_RETENTION_SECONDS);
 
     // Return recent messages from the topic history
-    const rawMessages = await redis.lrange(listKey, 0, limit - 1);
+    const rawMessages = await redis.lrange(listKey, 0, (limit ?? 10) - 1);
     const recentMessages = rawMessages.map(m => {
       try { return JSON.parse(m); } catch { return m; }
     });

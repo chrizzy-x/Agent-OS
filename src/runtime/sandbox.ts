@@ -71,7 +71,7 @@ async function runProcess(
         PATH: '/usr/local/bin:/usr/bin:/bin',
         HOME: cwd,
         TMPDIR: cwd,
-      },
+      } as unknown as NodeJS.ProcessEnv,
       // Don't inherit parent stdin
       stdio: ['ignore', 'pipe', 'pipe'],
     });
