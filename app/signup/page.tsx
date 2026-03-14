@@ -47,7 +47,7 @@ function CredentialField({ label, value }: { label: string; value: string }) {
 }
 
 function QuickStartCode({ agentId, apiKey }: { agentId: string; apiKey: string }) {
-  const code = `const AGENT_OS_URL = 'https://agentos-app.vercel.app';
+  const code = `const AGENT_OS_URL = 'https://agentos.vercel.app';
 const API_KEY = '${apiKey}';
 const AGENT_ID = '${agentId}';
 

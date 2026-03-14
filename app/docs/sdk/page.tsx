@@ -35,7 +35,7 @@ export default function SdkPage() {
           <p className="text-sm text-gray-500">
             Or use the API directly:
           </p>
-          <Code>{`curl -s -X POST https://agentos-app.vercel.app/api/signup \\
+          <Code>{`curl -s -X POST https://agentos.vercel.app/api/signup \\
   -H "Content-Type: application/json" \\
   -d '{"email":"you@example.com","agentName":"My Agent"}' | jq`}</Code>
           <Result>{`{
@@ -55,7 +55,7 @@ export default function SdkPage() {
           </p>
           <Code>{`const API_KEY = 'eyJhbGciOiJIUzI1NiJ9...'; // your key
 
-const res = await fetch('https://agentos-app.vercel.app/mcp', {
+const res = await fetch('https://agentos.vercel.app/mcp', {
   method: 'POST',
   headers: {
     Authorization: \`Bearer \${API_KEY}\`,
@@ -73,7 +73,7 @@ console.log(result); // true`}</Code>
 
         {/* Step 3 */}
         <Step n={3} title="Read it back">
-          <Code>{`const { result } = await fetch('https://agentos-app.vercel.app/mcp', {
+          <Code>{`const { result } = await fetch('https://agentos.vercel.app/mcp', {
   method: 'POST',
   headers: { Authorization: \`Bearer \${API_KEY}\`, 'Content-Type': 'application/json' },
   body: JSON.stringify({ tool: 'mem_get', input: { key: 'greeting' } }),
@@ -140,14 +140,14 @@ console.log(stats); // { avg: 42920, high: 44200, low: 41800 }`}</Code>
         {/* Step 7 */}
         <Step n={7} title="Install and use a skill">
           <Code>{`// Install the JSON Transformer skill
-await fetch('https://agentos-app.vercel.app/api/skills/install', {
+await fetch('https://agentos.vercel.app/api/skills/install', {
   method: 'POST',
   headers: { Authorization: \`Bearer \${API_KEY}\`, 'Content-Type': 'application/json' },
   body: JSON.stringify({ skill_id: '<skill-uuid>' }),
 });
 
 // Use a capability
-const { result } = await fetch('https://agentos-app.vercel.app/api/skills/use', {
+const { result } = await fetch('https://agentos.vercel.app/api/skills/use', {
   method: 'POST',
   headers: { Authorization: \`Bearer \${API_KEY}\`, 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -164,7 +164,7 @@ const { result } = await fetch('https://agentos-app.vercel.app/api/skills/use', 
           <p className="text-sm text-gray-500 mb-4">
             Copy this helper to simplify all MCP calls in your project:
           </p>
-          <Code>{`const AGENT_OS_URL = 'https://agentos-app.vercel.app';
+          <Code>{`const AGENT_OS_URL = 'https://agentos.vercel.app';
 const API_KEY = process.env.AGENT_OS_KEY;
 
 async function mcp(tool, input) {

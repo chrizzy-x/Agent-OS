@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Agent OS',
     description: 'Operating system infrastructure for AI agents',
-    url: 'https://agentos-app.vercel.app',
+    url: 'https://agentos.vercel.app',
     type: 'website',
   },
   twitter: {
