@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface InstalledSkill {
@@ -44,6 +45,7 @@ function decodeJwt(token: string): Record<string, unknown> | null {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [apiKey, setApiKey] = useState('');
   const [agentId, setAgentId] = useState('');
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
@@ -53,17 +55,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const key = localStorage.getItem('apiKey') || '';
-    setApiKey(key);
-    if (key) {
-      const payload = decodeJwt(key);
-      const id = (payload?.sub as string) || '';
-      setAgentId(id);
-      if (id) loadDashboard(key, id);
-      else setLoading(false);
-    } else {
-      setLoading(false);
+    if (!key) {
+      router.replace('/signin');
+      return;
     }
-  }, []);
+    setApiKey(key);
+    const payload = decodeJwt(key);
+    const id = (payload?.sub as string) || '';
+    setAgentId(id);
+    if (id) loadDashboard(key, id);
+    else setLoading(false);
+  }, [router]);
 
   const loadDashboard = async (key: string, _id: string) => {
     setLoading(true);
@@ -81,24 +83,10 @@ export default function DashboardPage() {
     } catch { /* silent */ }
   };
 
-  const handleConnect = () => {
-    const key = prompt('Paste your API key:');
-    if (key?.trim()) {
-      localStorage.setItem('apiKey', key.trim());
-      const payload = decodeJwt(key.trim());
-      const id = (payload?.sub as string) || '';
-      setApiKey(key.trim());
-      setAgentId(id);
-      loadDashboard(key.trim(), id);
-    }
-  };
-
-  const handleDisconnect = () => {
+  const handleSignOut = () => {
     localStorage.removeItem('apiKey');
-    setApiKey('');
-    setAgentId('');
-    setInstalledSkills([]);
-    setRecentAudit([]);
+    localStorage.removeItem('agentId');
+    router.push('/signin');
   };
 
   const uninstallSkill = async (skillId: string) => {
@@ -117,33 +105,12 @@ export default function DashboardPage() {
     fs: '🗂️', net: '🌐', proc: '⚙️', mem: '💾', db: '🗄️', events: '📡',
   };
 
-  // ── Not connected state
-  if (!apiKey) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <DashNav agentId="" onConnect={handleConnect} onDisconnect={handleDisconnect} connected={false} />
-        <div className="max-w-2xl mx-auto px-4 py-24 text-center">
-          <div className="text-5xl mb-4">🤖</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Agent Dashboard</h1>
-          <p className="text-gray-500 mb-8">Connect your API key to manage your agent, view installed skills, and monitor activity.</p>
-          <div className="flex justify-center gap-3">
-            <button onClick={handleConnect}
-              className="px-6 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-              Connect API Key
-            </button>
-            <Link href="/signup"
-              className="px-6 py-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
-              Create Agent
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Redirect is handled in useEffect; show nothing while redirecting
+  if (!apiKey) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashNav agentId={agentId} onConnect={handleConnect} onDisconnect={handleDisconnect} connected={true} />
+      <DashNav agentId={agentId} onSignOut={handleSignOut} />
 
       <div className="max-w-5xl mx-auto px-4 py-8">
         {/* Agent info bar */}
@@ -389,17 +356,7 @@ export default function DashboardPage() {
 
 // ── Sub-components
 
-function DashNav({
-  agentId,
-  onConnect,
-  onDisconnect,
-  connected,
-}: {
-  agentId: string;
-  onConnect: () => void;
-  onDisconnect: () => void;
-  connected: boolean;
-}) {
+function DashNav({ agentId, onSignOut }: { agentId: string; onSignOut: () => void }) {
   return (
     <nav className="bg-white border-b border-gray-100">
       <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -412,22 +369,15 @@ function DashNav({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {connected && agentId && (
+          {agentId && (
             <span className="hidden sm:block text-xs font-mono text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded">
               {agentId.slice(0, 20)}...
             </span>
           )}
-          {connected ? (
-            <button onClick={onDisconnect}
-              className="text-sm text-gray-500 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-md transition-colors">
-              Disconnect
-            </button>
-          ) : (
-            <button onClick={onConnect}
-              className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors">
-              Connect
-            </button>
-          )}
+          <button onClick={onSignOut}
+            className="text-sm text-gray-500 hover:text-gray-900 border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-md transition-colors">
+            Sign out
+          </button>
         </div>
       </div>
     </nav>
