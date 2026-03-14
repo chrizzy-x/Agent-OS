@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
-import { getSupabaseAdmin } from '@/src/storage/supabase';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -12,6 +11,22 @@ function isValidEmail(email: string): boolean {
 function generateAgentId(): string {
   const random = crypto.randomBytes(18).toString('base64url');
   return `agent_${random}`;
+}
+
+async function tryStoreInSupabase(agentId: string, name: string, email: string): Promise<void> {
+  try {
+    const { getSupabaseAdmin } = await import('@/src/storage/supabase');
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('agents').insert({
+      id: agentId,
+      name,
+      quotas: {},
+      metadata: { email, signup_source: 'web' },
+    });
+    if (error) console.error('Signup Supabase insert error (non-fatal):', error.message);
+  } catch (err) {
+    console.error('Signup Supabase unavailable (non-fatal):', err);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -29,48 +44,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
   }
 
-  const supabase = getSupabaseAdmin();
-
-  // Check for existing registration
-  const { data: existing } = await supabase
-    .from('agents')
-    .select('id')
-    .eq('metadata->>email', email)
-    .maybeSingle();
-
-  if (existing) {
-    return NextResponse.json(
-      { error: 'Email already registered. Check your inbox for your original credentials.' },
-      { status: 409 }
-    );
-  }
-
   const agentId = generateAgentId();
   const name = agentName || `Agent ${agentId.slice(0, 12)}`;
 
-  // Insert agent record into Supabase
-  const { error: insertError } = await supabase.from('agents').insert({
-    id: agentId,
-    name,
-    quotas: {},
-    metadata: { email, signup_source: 'web' },
-  });
-
-  if (insertError) {
-    console.error('Signup insert error:', insertError);
-    return NextResponse.json({ error: 'Failed to create agent. Please try again.' }, { status: 500 });
-  }
-
-  // Create JWT token (this is the API key users will use as Bearer token)
+  // Generate JWT token — self-contained, works immediately as Bearer token
   let apiKey: string;
   try {
     apiKey = createAgentToken(agentId, { expiresIn: '90d' });
   } catch (err) {
     console.error('Token creation error:', err);
-    // Clean up the inserted agent on failure
-    await supabase.from('agents').delete().eq('id', agentId);
-    return NextResponse.json({ error: 'Failed to generate credentials. Please try again.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Credential generation failed. JWT_SECRET may not be configured.' },
+      { status: 500 }
+    );
   }
+
+  // Store in Supabase for records — fire and forget, non-blocking
+  void tryStoreInSupabase(agentId, name, email);
 
   return NextResponse.json(
     {
