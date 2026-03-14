@@ -40,8 +40,27 @@ const CATEGORIES = [
   'Communication', 'Data & Analytics', 'Cloud & Deploy', 'Security',
 ];
 
+/** Safely decode a JWT payload (base64url → JSON) */
+function decodeJwt(token: string): Record<string, unknown> | null {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+interface Earnings {
+  this_month: string;
+  last_month: string;
+  all_time: string;
+  per_skill: { skill_id: string; skill_name: string; total_calls: number; total_revenue: string }[];
+}
+
 export default function DeveloperPage() {
   const [mySkills, setMySkills] = useState<Skill[]>([]);
+  const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiKey, setApiKey] = useState('');
   const [showPublish, setShowPublish] = useState(false);
@@ -53,24 +72,37 @@ export default function DeveloperPage() {
   useEffect(() => {
     const key = localStorage.getItem('apiKey') || '';
     setApiKey(key);
-    if (key) fetchMySkills(key);
-    else setLoading(false);
+    if (key) {
+      fetchMySkills(key);
+      fetchEarnings(key);
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   const fetchMySkills = async (key: string) => {
     setLoading(true);
     try {
-      // Decode agentId from JWT to use as author filter
-      const payload = JSON.parse(atob(key.split('.')[1]));
-      const agentId = payload.sub;
+      const payload = decodeJwt(key);
+      const agentId = payload?.sub as string | undefined;
+      if (!agentId) throw new Error('Cannot decode agent ID from token');
       const res = await fetch(`/api/skills?author=${agentId}`);
       const data = await res.json();
       setMySkills(data.skills ?? []);
     } catch {
-      // JWT decode failed or fetch failed
+      // JWT decode failed or fetch failed — leave empty
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchEarnings = async (key: string) => {
+    try {
+      const res = await fetch('/api/developer/earnings', {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (res.ok) setEarnings(await res.json());
+    } catch { /* silent */ }
   };
 
   const handlePublish = async (e: React.FormEvent) => {
@@ -167,6 +199,23 @@ export default function DeveloperPage() {
             </button>
           )}
         </div>
+
+        {/* Earnings overview (only when logged in and earnings exist) */}
+        {apiKey && earnings && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {[
+              { label: 'This Month', value: `$${earnings.this_month}`, color: 'text-blue-700' },
+              { label: 'Last Month', value: `$${earnings.last_month}`, color: 'text-gray-700' },
+              { label: 'All Time', value: `$${earnings.all_time}`, color: 'text-gray-700' },
+              { label: 'Published Skills', value: String(mySkills.length), color: 'text-gray-700' },
+            ].map(c => (
+              <div key={c.label} className="bg-white border border-gray-200 rounded-xl p-4">
+                <div className={`text-2xl font-bold mb-0.5 ${c.color}`}>{c.value}</div>
+                <div className="text-xs text-gray-500">{c.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* No API key state */}
         {!apiKey && (

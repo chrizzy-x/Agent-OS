@@ -125,30 +125,12 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <span className="font-mono font-bold text-lg text-gray-900">Agent OS</span>
           <div className="flex items-center gap-4">
-            <a
-              href="/api"
-              className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              API
-            </a>
-            <Link
-              href="/marketplace"
-              className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              Marketplace
-            </Link>
-            <a
-              href="https://docs.agentos.io"
-              className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              Docs
-            </a>
-            <a
-              href="/signup"
-              className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors"
-            >
+            <Link href="/marketplace" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Marketplace</Link>
+            <Link href="/docs" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Docs</Link>
+            <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Dashboard</Link>
+            <Link href="/signup" className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors">
               Get Started
-            </a>
+            </Link>
           </div>
         </div>
       </nav>
@@ -330,9 +312,9 @@ export default function HomePage() {
           <div className="flex items-center gap-6 text-sm text-gray-500">
             <a href="https://github.com/chrizzy-x/Agent-OS" className="hover:text-gray-900 transition-colors" target="_blank" rel="noopener noreferrer">GitHub</a>
             <Link href="/marketplace" className="hover:text-gray-900 transition-colors">Marketplace</Link>
+            <Link href="/docs" className="hover:text-gray-900 transition-colors">Docs</Link>
             <Link href="/developer" className="hover:text-gray-900 transition-colors">Developer</Link>
-            <a href="https://docs.agentos.io" className="hover:text-gray-900 transition-colors">Docs</a>
-            <a href="/api" className="hover:text-gray-900 transition-colors">API</a>
+            <Link href="/dashboard" className="hover:text-gray-900 transition-colors">Dashboard</Link>
           </div>
           <span className="text-sm text-gray-400">MIT License</span>
         </div>

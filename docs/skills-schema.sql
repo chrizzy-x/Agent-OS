@@ -116,6 +116,28 @@ RETURNS void AS $$
   WHERE id = p_skill_id;
 $$ LANGUAGE sql;
 
+-- Developer earnings tracking (monthly roll-up, populated by cron/batch job)
+CREATE TABLE IF NOT EXISTS developer_earnings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  developer_id TEXT NOT NULL,              -- agent_id of the skill author
+  skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  period_start TIMESTAMPTZ NOT NULL,       -- first day of the month (UTC)
+  period_end TIMESTAMPTZ NOT NULL,         -- last day of the month (UTC)
+  total_calls INTEGER DEFAULT 0,
+  gross_revenue NUMERIC DEFAULT 0,         -- full usage fee collected
+  developer_share NUMERIC DEFAULT 0,       -- 70% of gross_revenue
+  platform_share NUMERIC DEFAULT 0,        -- 30% of gross_revenue
+  paid BOOLEAN DEFAULT FALSE,
+  paid_at TIMESTAMPTZ,
+  stripe_transfer_id TEXT,
+
+  UNIQUE(developer_id, skill_id, period_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dev_earnings_developer ON developer_earnings(developer_id);
+CREATE INDEX IF NOT EXISTS idx_dev_earnings_skill ON developer_earnings(skill_id);
+CREATE INDEX IF NOT EXISTS idx_dev_earnings_period ON developer_earnings(period_start);
+
 -- ==========================================
 -- SEED DATA: Built-in example skills
 -- ==========================================

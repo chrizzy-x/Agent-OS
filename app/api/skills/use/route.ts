@@ -67,7 +67,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Validate capability exists
+  // Validate capability name is safe (alphanumeric + underscore only)
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(capability)) {
+    return NextResponse.json({ error: 'Invalid capability name' }, { status: 400 });
+  }
+
+  // Validate capability exists on the skill
   const caps = Array.isArray(skill.capabilities) ? skill.capabilities : [];
   const capDef = caps.find((c: { name: string }) => c.name === capability);
   if (!capDef) {

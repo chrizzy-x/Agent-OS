@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface Credentials {
   agentId: string;
@@ -130,20 +131,24 @@ function CredentialsPanel({ credentials }: { credentials: Credentials }) {
       <div className="border border-gray-200 rounded-lg p-4 space-y-3">
         <p className="text-sm font-medium text-gray-700">Next steps</p>
         <div className="flex flex-col sm:flex-row gap-2">
-          <a
-            href="https://github.com/chrizzy-x/Agent-OS#readme"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/dashboard"
             className="flex-1 text-center text-sm bg-blue-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors"
           >
-            Read the Docs
-          </a>
-          <a
-            href="/tools"
+            Go to Dashboard
+          </Link>
+          <Link
+            href="/docs"
             className="flex-1 text-center text-sm border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors"
           >
-            Browse Available Tools
-          </a>
+            Read the Docs
+          </Link>
+          <Link
+            href="/marketplace"
+            className="flex-1 text-center text-sm border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+          >
+            Browse Skills
+          </Link>
         </div>
       </div>
     </div>
@@ -238,22 +243,24 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
 export default function SignupPage() {
   const [credentials, setCredentials] = useState<Credentials | null>(null);
 
+  // Save API key to localStorage so dashboard can pick it up
+  useEffect(() => {
+    if (credentials?.apiKey) {
+      localStorage.setItem('apiKey', credentials.apiKey);
+    }
+  }, [credentials]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Nav */}
       <nav className="bg-white border-b border-gray-100">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <a href="/" className="font-mono font-bold text-lg text-gray-900">
-            Agent OS
-          </a>
-          <a
-            href="https://github.com/chrizzy-x/Agent-OS"
-            className="text-sm text-gray-500 hover:text-gray-900 transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            GitHub
-          </a>
+          <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
+          <div className="flex items-center gap-4 text-sm text-gray-500">
+            <Link href="/marketplace" className="hover:text-gray-900">Marketplace</Link>
+            <Link href="/docs" className="hover:text-gray-900">Docs</Link>
+            <Link href="/dashboard" className="hover:text-gray-900">Dashboard</Link>
+          </div>
         </div>
       </nav>
 
