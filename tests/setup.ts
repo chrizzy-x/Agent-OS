@@ -5,6 +5,7 @@ process.env.JWT_SECRET = 'test-jwt-secret-must-be-at-least-32-bytes-long-for-hs2
 process.env.ADMIN_TOKEN = 'test-admin-token';
 process.env.REDIS_URL = 'redis://localhost:6379';
 process.env.SUPABASE_URL = 'https://test.supabase.co';
+process.env.SUPABASE_ANON_KEY = 'test-anon-key';
 process.env.SUPABASE_SERVICE_KEY = 'test-service-key';
 process.env.ALLOWED_DOMAINS = 'httpbin.org,api.example.com';
 
