@@ -13,49 +13,25 @@ interface Credentials {
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-
   const handleCopy = async () => {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
   return (
-    <button
-      onClick={handleCopy}
-      className={`text-xs px-3 py-1.5 rounded font-medium transition-colors ${
-        copied
-          ? 'bg-green-100 text-green-700'
-          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-      }`}
-    >
-      {copied ? 'Copied!' : label}
+    <button onClick={handleCopy}
+      className="text-xs px-3 py-1.5 rounded-md font-medium transition-all flex-shrink-0"
+      style={copied
+        ? { background: 'rgba(34,197,94,0.12)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
+        : { background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--border-bright)' }}>
+      {copied ? '✓ Copied' : label}
     </button>
   );
 }
 
-function CredentialField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="text-sm font-medium text-gray-700">{label}</div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 bg-gray-50 border border-gray-200 rounded-md px-3 py-2.5 font-mono text-sm text-gray-800 truncate">
-          {value}
-        </div>
-        <CopyButton text={value} />
-      </div>
-    </div>
-  );
-}
-
-function QuickStartCode({ agentId, apiKey }: { agentId: string; apiKey: string }) {
-  const code = `const AGENT_OS_URL = '${APP_URL}';
-const API_KEY = '${apiKey}';
-const AGENT_ID = '${agentId}';
-
-// Check health
-const health = await fetch(\`\${AGENT_OS_URL}/health\`).then(r => r.json());
-console.log('Status:', health.status);
+function CredentialsPanel({ credentials }: { credentials: Credentials }) {
+  const quickstart = `const AGENT_OS_URL = '${APP_URL}';
+const API_KEY = '${credentials.apiKey}';
 
 // Store a value in memory
 await fetch(\`\${AGENT_OS_URL}/mcp\`, {
@@ -64,94 +40,85 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
     'Authorization': \`Bearer \${API_KEY}\`,
     'Content-Type': 'application/json',
   },
-  body: JSON.stringify({ tool: 'mem_set', input: { key: 'hello', value: 'world' } }),
-}).then(r => r.json());
+  body: JSON.stringify({
+    tool: 'mem_set',
+    input: { key: 'hello', value: 'world' }
+  }),
+});`;
 
-// Read it back
-const result = await fetch(\`\${AGENT_OS_URL}/mcp\`, {
-  method: 'POST',
-  headers: {
-    'Authorization': \`Bearer \${API_KEY}\`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({ tool: 'mem_get', input: { key: 'hello' } }),
-}).then(r => r.json());
-
-console.log(result); // { result: 'world' }`;
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">Quick start code</span>
-        <CopyButton text={code} label="Copy all" />
-      </div>
-      <div className="relative rounded-lg bg-gray-950 border border-gray-200 overflow-hidden">
-        <div className="flex items-center px-4 py-2 border-b border-gray-800">
-          <span className="text-xs text-gray-500 font-mono">javascript</span>
-        </div>
-        <pre className="overflow-x-auto p-4 text-xs leading-relaxed">
-          <code className="font-mono text-gray-300 whitespace-pre">{code}</code>
-        </pre>
-      </div>
-      <p className="text-xs text-gray-500">
-        This code is ready to run — paste it into any JavaScript/TypeScript environment.
-      </p>
-    </div>
-  );
-}
-
-function CredentialsPanel({ credentials }: { credentials: Credentials }) {
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-green-600 text-lg">
-          ✓
+      {/* Success header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)' }}>
+          <svg width="18" height="18" fill="none" stroke="#86efac" strokeWidth="2.5" viewBox="0 0 24 24">
+            <polyline points="20 6 9 17 4 12" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Agent created successfully!</h2>
-          <p className="text-sm text-gray-500">Save your credentials before closing this page.</p>
+          <h2 className="text-lg font-black">Agent created!</h2>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Save your credentials before closing.</p>
         </div>
       </div>
 
-      {/* Credentials box */}
-      <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-4">
-        <div className="flex items-start gap-2">
-          <span className="text-amber-600 text-sm">⚠</span>
-          <p className="text-sm text-amber-800 font-medium">
-            Your API key is shown only once. Copy it now and store it securely.
-          </p>
+      {/* Warning box */}
+      <div className="rounded-xl p-4 space-y-4"
+        style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}>
+        <div className="flex items-start gap-2 text-sm" style={{ color: '#fcd34d' }}>
+          <svg width="15" height="15" fill="currentColor" viewBox="0 0 20 20" className="flex-shrink-0 mt-0.5">
+            <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+          </svg>
+          Your API key is shown <strong>only once</strong>. Copy and store it securely.
         </div>
-        <CredentialField label="Agent ID" value={credentials.agentId} />
-        <CredentialField label="API Key (Bearer Token)" value={credentials.apiKey} />
-        <p className="text-xs text-amber-700">Expires in {credentials.expiresIn}</p>
+
+        {[
+          { label: 'Agent ID', value: credentials.agentId },
+          { label: 'API Key', value: credentials.apiKey },
+        ].map(f => (
+          <div key={f.label} className="space-y-1.5">
+            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{f.label}</div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 rounded-lg px-3 py-2 font-mono text-xs truncate"
+                style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-bright)', color: '#a78bfa' }}>
+                {f.value}
+              </div>
+              <CopyButton text={f.value} />
+            </div>
+          </div>
+        ))}
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Expires in {credentials.expiresIn}</p>
       </div>
 
       {/* Quick start */}
-      <QuickStartCode agentId={credentials.agentId} apiKey={credentials.apiKey} />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold">Quick start</span>
+          <CopyButton text={quickstart} label="Copy all" />
+        </div>
+        <div className="terminal">
+          <div className="terminal-header">
+            <div className="terminal-dot" style={{ background: '#ef4444' }} />
+            <div className="terminal-dot" style={{ background: '#f59e0b' }} />
+            <div className="terminal-dot" style={{ background: '#22c55e' }} />
+            <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>quickstart.js</span>
+          </div>
+          <pre className="p-4 text-xs overflow-x-auto" style={{ color: '#94a3b8' }}>{quickstart}</pre>
+        </div>
+      </div>
 
       {/* Next steps */}
-      <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-        <p className="text-sm font-medium text-gray-700">Next steps</p>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Link
-            href="/dashboard"
-            className="flex-1 text-center text-sm bg-blue-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-          >
-            Go to Dashboard
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { href: '/dashboard', label: 'Dashboard', primary: true },
+          { href: '/docs', label: 'Docs', primary: false },
+          { href: '/marketplace', label: 'Skills', primary: false },
+        ].map(b => (
+          <Link key={b.href} href={b.href}
+            className={`text-center text-sm py-2.5 rounded-lg font-medium transition-all ${b.primary ? 'btn-primary' : 'btn-outline'}`}>
+            {b.label}
           </Link>
-          <Link
-            href="/docs"
-            className="flex-1 text-center text-sm border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-          >
-            Read the Docs
-          </Link>
-          <Link
-            href="/marketplace"
-            className="flex-1 text-center text-sm border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-          >
-            Browse Skills
-          </Link>
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -179,21 +146,17 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
     }
 
     setLoading(true);
-
     try {
       const res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, agentName }),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
         setError(data.error || 'Something went wrong. Please try again.');
         return;
       }
-
       onSuccess(data.credentials);
     } catch {
       setError('Network error. Check your connection and try again.');
@@ -202,93 +165,78 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
     }
   };
 
+  const ready = email && password && confirmPassword;
+
   return (
     <>
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-1.5">
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-          Email <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="email"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-          Password <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="password"
-          type="password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 8 characters"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-          Confirm password <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="confirmPassword"
-          type="password"
-          required
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          placeholder="Re-enter your password"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <label htmlFor="agentName" className="block text-sm font-medium text-gray-700">
-          Agent name <span className="text-gray-400 font-normal">(optional)</span>
-        </label>
-        <input
-          id="agentName"
-          type="text"
-          value={agentName}
-          onChange={(e) => setAgentName(e.target.value)}
-          placeholder="My Trading Bot"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        />
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-          {error}
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-widest"
+            style={{ color: 'var(--text-muted)' }}>Email <span style={{ color: '#f87171' }}>*</span></label>
+          <input id="email" type="email" required autoFocus
+            value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com" className="input-dark" />
         </div>
-      )}
 
-      <button
-        type="submit"
-        disabled={loading || !email || !password || !confirmPassword}
-        className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {loading ? 'Creating agent...' : 'Create Agent'}
-      </button>
+        <div className="space-y-1.5">
+          <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest"
+            style={{ color: 'var(--text-muted)' }}>Password <span style={{ color: '#f87171' }}>*</span></label>
+          <input id="password" type="password" required
+            value={password} onChange={(e) => setPassword(e.target.value)}
+            placeholder="At least 8 characters" className="input-dark" />
+        </div>
 
-      <p className="text-xs text-gray-500 text-center">
-        No credit card required. Free to use.
-      </p>
-    </form>
+        <div className="space-y-1.5">
+          <label htmlFor="confirmPassword" className="block text-xs font-semibold uppercase tracking-widest"
+            style={{ color: 'var(--text-muted)' }}>Confirm password <span style={{ color: '#f87171' }}>*</span></label>
+          <input id="confirmPassword" type="password" required
+            value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter your password" className="input-dark" />
+        </div>
 
-    <div className="mt-5 pt-5 border-t border-gray-100 text-center text-sm text-gray-500">
-      Already have an account?{' '}
-      <Link href="/signin" className="text-blue-600 hover:underline font-medium">
-        Sign in
-      </Link>
-    </div>
+        <div className="space-y-1.5">
+          <label htmlFor="agentName" className="block text-xs font-semibold uppercase tracking-widest"
+            style={{ color: 'var(--text-muted)' }}>
+            Agent name <span style={{ color: 'var(--text-dim)' }}>(optional)</span>
+          </label>
+          <input id="agentName" type="text"
+            value={agentName} onChange={(e) => setAgentName(e.target.value)}
+            placeholder="My Trading Bot" className="input-dark" />
+        </div>
+
+        {error && (
+          <div className="rounded-lg px-4 py-3 text-sm"
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}>
+            {error}
+          </div>
+        )}
+
+        <button type="submit" disabled={loading || !ready}
+          className="btn-primary w-full py-3 rounded-lg"
+          style={{ opacity: (loading || !ready) ? 0.5 : 1, cursor: (loading || !ready) ? 'not-allowed' : 'pointer' }}>
+          {loading ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Creating agent...
+            </span>
+          ) : 'Create agent →'}
+        </button>
+
+        <p className="text-xs text-center" style={{ color: 'var(--text-dim)' }}>
+          No credit card required. Free to use.
+        </p>
+      </form>
+
+      <div className="mt-5 pt-5 text-center text-sm"
+        style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+        Already have an account?{' '}
+        <Link href="/signin" className="font-medium hover:text-white transition-colors" style={{ color: '#a855f7' }}>
+          Sign in
+        </Link>
+      </div>
     </>
   );
 }
@@ -297,14 +245,10 @@ export default function SignupPage() {
   const router = useRouter();
   const [credentials, setCredentials] = useState<Credentials | null>(null);
 
-  // Already signed in? Go straight to dashboard
   useEffect(() => {
-    if (localStorage.getItem('apiKey')) {
-      router.replace('/dashboard');
-    }
+    if (localStorage.getItem('apiKey')) router.replace('/dashboard');
   }, [router]);
 
-  // Auto-login after signup
   useEffect(() => {
     if (credentials?.apiKey) {
       localStorage.setItem('apiKey', credentials.apiKey);
@@ -313,35 +257,74 @@ export default function SignupPage() {
   }, [credentials]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Nav */}
-      <nav className="bg-white border-b border-gray-100">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
-          <div className="flex items-center gap-4 text-sm text-gray-500">
-            <Link href="/marketplace" className="hover:text-gray-900">Marketplace</Link>
-            <Link href="/docs" className="hover:text-gray-900">Docs</Link>
-            <Link href="/signin" className="hover:text-gray-900">Sign in</Link>
+    <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
+      {/* Left panel */}
+      <div className="hidden lg:flex flex-col justify-between w-[420px] flex-shrink-0 relative overflow-hidden p-10 bg-grid"
+        style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
+        <div className="absolute top-[-100px] right-[-60px] w-80 h-80 rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+        <div className="absolute bottom-[-60px] left-[-60px] w-64 h-64 rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+
+        <Link href="/" className="relative flex items-center gap-2.5 w-fit">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black font-mono text-sm"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 16px rgba(124,58,237,0.5)' }}>
+            A
+          </div>
+          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
+        </Link>
+
+        <div className="relative">
+          <div className="badge badge-cyan mb-5 w-fit">Free to start</div>
+          <h2 className="text-2xl font-black mb-4 leading-snug">
+            Ship your agent<br /><span className="gradient-text">in 5 minutes.</span>
+          </h2>
+          <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--text-muted)' }}>
+            Create your account and get instant access to all 6 primitives — no credit card, no setup, no infrastructure headaches.
+          </p>
+
+          <div className="space-y-3">
+            {[
+              { icon: '✓', text: 'All 6 primitives included' },
+              { icon: '✓', text: 'No credit card required' },
+              { icon: '✓', text: 'API key valid for 90 days' },
+              { icon: '✓', text: 'MIT license, self-hostable' },
+            ].map(item => (
+              <div key={item.text} className="flex items-center gap-3 text-sm">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs flex-shrink-0 font-bold"
+                  style={{ background: 'rgba(34,197,94,0.12)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }}>
+                  {item.icon}
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>{item.text}</span>
+              </div>
+            ))}
           </div>
         </div>
-      </nav>
 
-      <div className="max-w-lg mx-auto px-4 py-12">
-        {!credentials ? (
-          <>
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Get started with Agent OS</h1>
-              <p className="text-gray-500">Create your agent in under 30 seconds. No credit card required.</p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <div className="relative text-xs" style={{ color: 'var(--text-dim)' }}>MIT License · Open Source</div>
+      </div>
+
+      {/* Right panel */}
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
+        <Link href="/" className="flex items-center gap-2 mb-10 lg:hidden">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>A</div>
+          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
+        </Link>
+
+        <div className="w-full max-w-sm">
+          {!credentials ? (
+            <>
+              <h1 className="text-2xl font-black mb-1">Create your account</h1>
+              <p className="text-sm mb-8" style={{ color: 'var(--text-muted)' }}>
+                Get started with Agent OS in seconds.
+              </p>
               <SignupForm onSuccess={setCredentials} />
-            </div>
-          </>
-        ) : (
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+            </>
+          ) : (
             <CredentialsPanel credentials={credentials} />
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
