@@ -68,6 +68,11 @@ export default function DeveloperPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
+  const [payoutEmail, setPayoutEmail] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState('paypal');
+  const [payoutSaving, setPayoutSaving] = useState(false);
+  const [payoutMsg, setPayoutMsg] = useState('');
+  const [payoutRequested, setPayoutRequested] = useState(false);
 
   useEffect(() => {
     const key = localStorage.getItem('apiKey') || '';
@@ -75,6 +80,7 @@ export default function DeveloperPage() {
     if (key) {
       fetchMySkills(key);
       fetchEarnings(key);
+      fetchPayoutSettings(key);
     } else {
       setLoading(false);
     }
@@ -103,6 +109,41 @@ export default function DeveloperPage() {
       });
       if (res.ok) setEarnings(await res.json());
     } catch { /* silent */ }
+  };
+
+  const fetchPayoutSettings = async (key: string) => {
+    try {
+      const res = await fetch('/api/developer/payout-settings', {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPayoutEmail(data.payout_email ?? '');
+        setPayoutMethod(data.payout_method ?? 'paypal');
+        setPayoutRequested(data.payout_requested ?? false);
+      }
+    } catch { /* silent */ }
+  };
+
+  const handleSavePayoutSettings = async (e: React.FormEvent, requestPayout = false) => {
+    e.preventDefault();
+    setPayoutSaving(true);
+    setPayoutMsg('');
+    try {
+      const res = await fetch('/api/developer/payout-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ payout_email: payoutEmail, payout_method: payoutMethod, request_payout: requestPayout }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPayoutMsg(data.error ?? 'Failed to save'); return; }
+      setPayoutMsg(requestPayout ? 'Payout requested! We\'ll process it within 5 business days.' : 'Payout settings saved.');
+      if (requestPayout) setPayoutRequested(true);
+    } catch {
+      setPayoutMsg('Network error. Please try again.');
+    } finally {
+      setPayoutSaving(false);
+    }
   };
 
   const handlePublish = async (e: React.FormEvent) => {
@@ -443,14 +484,71 @@ export default function DeveloperPage() {
           </div>
         )}
 
+        {/* Payout settings */}
+        {apiKey && (
+          <div className="card mt-10 p-6">
+            <h3 className="text-lg font-bold mb-1" style={{ color: 'var(--text)' }}>Payout Settings</h3>
+            <p className="text-sm mb-5" style={{ color: 'var(--text-muted)' }}>
+              Connect your payout account to receive your 70% revenue share monthly.
+            </p>
+            <form onSubmit={(e) => handleSavePayoutSettings(e, false)} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>
+                  Payout Email
+                </label>
+                <input
+                  type="email"
+                  className="input-dark w-full"
+                  placeholder="your@email.com"
+                  value={payoutEmail}
+                  onChange={e => setPayoutEmail(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>
+                  Payment Method
+                </label>
+                <select
+                  className="input-dark w-full"
+                  value={payoutMethod}
+                  onChange={e => setPayoutMethod(e.target.value)}
+                >
+                  <option value="paypal">PayPal</option>
+                  <option value="bank_transfer">Bank Transfer (ACH/Wire)</option>
+                  <option value="crypto">Crypto (USDC)</option>
+                </select>
+              </div>
+              {payoutMsg && (
+                <p className="text-sm" style={{ color: payoutMsg.includes('error') || payoutMsg.includes('Failed') ? '#f87171' : '#4ade80' }}>
+                  {payoutMsg}
+                </p>
+              )}
+              <div className="flex gap-3 flex-wrap">
+                <button type="submit" className="btn-primary text-sm px-4 py-2" disabled={payoutSaving}>
+                  {payoutSaving ? 'Saving…' : 'Save Settings'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline text-sm px-4 py-2"
+                  disabled={payoutSaving || payoutRequested || !earnings || earnings.all_time === '0.00'}
+                  onClick={(e) => handleSavePayoutSettings(e as unknown as React.FormEvent, true)}
+                  style={payoutRequested ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                >
+                  {payoutRequested ? 'Payout Requested ✓' : 'Request Payout'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
         {/* Revenue sharing info */}
         {apiKey && (
-          <div className="mt-10 rounded-xl p-6"
+          <div className="mt-6 rounded-xl p-6"
             style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
             <h3 className="text-base font-bold mb-2" style={{ color: '#c084fc' }}>Revenue Sharing</h3>
             <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
               Agent OS shares <strong style={{ color: 'var(--text)' }}>70% of all usage revenue</strong> with skill developers.
-              Paid skills earn $0.001–$0.10 per API call. Earnings are paid monthly via Stripe.
+              Paid skills earn $0.001–$0.10 per API call. Earnings are paid monthly to your connected payout account.
               Free skills help grow your install count and reputation.
             </p>
           </div>
