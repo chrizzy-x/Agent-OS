@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { APP_URL } from '@/lib/config';
 
 interface Capability {
   name: string;
@@ -100,7 +101,7 @@ export default function SkillDetailPage() {
     const paramExample = cap?.params
       ? Object.entries(cap.params).map(([k]) => `  ${k}: 'your-${k}'`).join(',\n')
       : '';
-    return `const AGENT_OS_URL = 'https://agentos.vercel.app';
+    return `const AGENT_OS_URL = '${APP_URL}';
 const API_KEY = 'your-api-key';
 
 // 1. Install the skill

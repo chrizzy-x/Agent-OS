@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { APP_URL } from '@/lib/config';
 
 export const metadata: Metadata = {
   title: 'Agent OS — Operating System for AI Agents',
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Agent OS',
     description: 'Operating system infrastructure for AI agents',
-    url: 'https://agentos.vercel.app',
+    url: APP_URL,
     type: 'website',
   },
   twitter: {

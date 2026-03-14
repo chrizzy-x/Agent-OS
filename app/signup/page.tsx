@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { APP_URL } from '@/lib/config';
 
 interface Credentials {
   agentId: string;
@@ -47,7 +48,7 @@ function CredentialField({ label, value }: { label: string; value: string }) {
 }
 
 function QuickStartCode({ agentId, apiKey }: { agentId: string; apiKey: string }) {
-  const code = `const AGENT_OS_URL = 'https://agentos.vercel.app';
+  const code = `const AGENT_OS_URL = '${APP_URL}';
 const API_KEY = '${apiKey}';
 const AGENT_ID = '${agentId}';
 
