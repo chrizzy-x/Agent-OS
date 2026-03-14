@@ -100,7 +100,7 @@ export default function SkillDetailPage() {
     const paramExample = cap?.params
       ? Object.entries(cap.params).map(([k]) => `  ${k}: 'your-${k}'`).join(',\n')
       : '';
-    return `const AGENT_OS_URL = 'https://agentos-app.vercel.app';
+    return `const AGENT_OS_URL = 'https://agentos.vercel.app';
 const API_KEY = 'your-api-key';
 
 // 1. Install the skill

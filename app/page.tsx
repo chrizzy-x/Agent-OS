@@ -5,7 +5,7 @@ import FeatureCard from '@/components/FeatureCard';
 const CODE_EXAMPLE = `import { AgentOS } from '@agentos/sdk';
 
 const os = new AgentOS({
-  apiUrl: 'https://agentos-app.vercel.app',
+  apiUrl: 'https://agentos.vercel.app',
   apiKey: process.env.AGENT_OS_KEY
 });
 

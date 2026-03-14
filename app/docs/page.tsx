@@ -112,7 +112,7 @@ export default function DocsPage() {
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 mb-8">
           <h3 className="text-base font-semibold text-gray-900 mb-3">Base URL</h3>
           <code className="font-mono text-sm bg-gray-900 text-green-400 px-4 py-2 rounded block">
-            https://agentos-app.vercel.app
+            https://agentos.vercel.app
           </code>
           <p className="text-sm text-gray-500 mt-3">
             All API requests use this base URL. The API accepts and returns JSON. Authentication is via Bearer token.
@@ -126,7 +126,7 @@ export default function DocsPage() {
             <Link href="/docs/sdk" className="text-xs text-blue-600 hover:underline">Full guide →</Link>
           </div>
           <div className="bg-gray-950 p-5">
-            <pre className="text-xs font-mono text-gray-300 overflow-x-auto leading-relaxed">{`const AGENT_OS = 'https://agentos-app.vercel.app';
+            <pre className="text-xs font-mono text-gray-300 overflow-x-auto leading-relaxed">{`const AGENT_OS = 'https://agentos.vercel.app';
 const API_KEY  = 'eyJ...';   // from /signup
 
 // Store a value in cache

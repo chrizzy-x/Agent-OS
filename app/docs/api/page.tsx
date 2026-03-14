@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import DocsFooter from '@/components/DocsFooter';
 
-const BASE = 'https://agentos-app.vercel.app';
+const BASE = 'https://agentos.vercel.app';
 
 interface Endpoint {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE';
