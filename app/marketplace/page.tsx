@@ -73,17 +73,23 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* Nav */}
-      <nav className="bg-white border-b border-gray-100">
+      <nav className="sticky top-0 z-40 backdrop-blur-md"
+        style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
+              A
+            </div>
+            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+          </Link>
           <div className="flex items-center gap-6">
-            <Link href="/marketplace" className="text-sm font-medium text-blue-600">Marketplace</Link>
-            <Link href="/developer" className="text-sm text-gray-500 hover:text-gray-900">Developer</Link>
-            <Link href="/signup" className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors">
-              Get Started
-            </Link>
+            <Link href="/marketplace" className="text-sm font-medium" style={{ color: '#a855f7' }}>Marketplace</Link>
+            <Link href="/developer" className="text-sm transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Developer</Link>
+            <Link href="/docs" className="text-sm transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Docs</Link>
+            <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
           </div>
         </div>
       </nav>
@@ -91,10 +97,13 @@ export default function MarketplacePage() {
       <div className="max-w-6xl mx-auto px-4 py-10">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Skills Marketplace</h1>
-          <p className="text-gray-500">
+          <div className="badge badge-purple mb-4">Community Skills</div>
+          <h1 className="text-3xl font-black mb-2">
+            Skills <span className="gradient-text">Marketplace</span>
+          </h1>
+          <p style={{ color: 'var(--text-muted)' }}>
             Extend Agent OS with community-built skills.
-            {total > 0 && <span className="ml-1 text-gray-400">{total} skills available.</span>}
+            {total > 0 && <span className="ml-1">{total} skills available.</span>}
           </p>
         </div>
 
@@ -105,18 +114,14 @@ export default function MarketplacePage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search skills..."
-            className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="input-dark flex-1"
           />
-          <button
-            type="submit"
-            className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Search
-          </button>
+          <button type="submit" className="btn-primary px-5">Search</button>
           <select
             value={sort}
             onChange={e => setSort(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="input-dark"
+            style={{ width: 'auto', paddingRight: '2rem' }}
           >
             <option value="popular">Most Popular</option>
             <option value="recent">Newest</option>
@@ -130,11 +135,16 @@ export default function MarketplacePage() {
             <button
               key={cat}
               onClick={() => setCategory(cat)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                category === cat
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
-              }`}
+              className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+              style={category === cat ? {
+                background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                color: 'white',
+                border: '1px solid rgba(139,92,246,0.5)',
+              } : {
+                background: 'transparent',
+                color: 'var(--text-muted)',
+                border: '1px solid var(--border-bright)',
+              }}
             >
               {cat}
             </button>
@@ -145,19 +155,19 @@ export default function MarketplacePage() {
         {loading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
-                <div className="w-10 h-10 bg-gray-200 rounded-lg mb-3" />
-                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
-                <div className="h-3 bg-gray-100 rounded w-full mb-1" />
-                <div className="h-3 bg-gray-100 rounded w-2/3" />
+              <div key={i} className="card p-5 animate-pulse">
+                <div className="w-10 h-10 rounded-lg mb-3" style={{ background: 'var(--surface-2)' }} />
+                <div className="h-4 rounded w-3/4 mb-2" style={{ background: 'var(--surface-2)' }} />
+                <div className="h-3 rounded w-full mb-1" style={{ background: 'var(--border)' }} />
+                <div className="h-3 rounded w-2/3" style={{ background: 'var(--border)' }} />
               </div>
             ))}
           </div>
         ) : skills.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
+          <div className="card p-20 text-center">
             <div className="text-4xl mb-3">🔍</div>
-            <p className="font-medium">No skills found</p>
-            <p className="text-sm mt-1">Try a different search or category.</p>
+            <p className="font-medium mb-1">No skills found</p>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Try a different search or category.</p>
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -165,40 +175,37 @@ export default function MarketplacePage() {
               <Link
                 key={skill.id}
                 href={`/marketplace/${skill.slug}`}
-                className="group bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-sm transition-all"
+                className="card p-5 block group"
+                style={{ textDecoration: 'none' }}
               >
                 <div className="flex items-start justify-between mb-3">
                   <span className="text-3xl">{skill.icon || '📦'}</span>
                   <div className="flex items-center gap-1.5">
                     {skill.verified && (
-                      <span title="Verified by Agent OS" className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded font-medium">
-                        ✓ Official
-                      </span>
+                      <span className="badge badge-green text-xs">✓ Official</span>
                     )}
-                    <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded font-medium">
-                      {skill.category}
-                    </span>
+                    <span className="badge badge-purple text-xs">{skill.category}</span>
                   </div>
                 </div>
 
-                <h3 className="font-semibold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
+                <h3 className="font-semibold mb-1 transition-colors group-hover:text-purple-400">
                   {skill.name}
                 </h3>
-                <p className="text-sm text-gray-500 mb-3 line-clamp-2 leading-relaxed">
+                <p className="text-sm mb-3 line-clamp-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
                   {skill.description}
                 </p>
 
-                <div className="flex items-center justify-between text-xs text-gray-400">
+                <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text-muted)' }}>
                   <div className="flex items-center gap-3">
                     {skill.rating > 0 && (
                       <span className="flex items-center gap-0.5">
                         ⭐ {Number(skill.rating).toFixed(1)}
-                        {skill.review_count > 0 && <span className="text-gray-300 ml-0.5">({skill.review_count})</span>}
+                        {skill.review_count > 0 && <span className="ml-0.5">({skill.review_count})</span>}
                       </span>
                     )}
                     <span>{skill.total_installs.toLocaleString()} installs</span>
                   </div>
-                  <span className={`font-semibold ${skill.pricing_model === 'free' ? 'text-green-600' : 'text-blue-600'}`}>
+                  <span className="font-semibold" style={{ color: skill.pricing_model === 'free' ? '#22c55e' : '#a855f7' }}>
                     {pricingLabel(skill)}
                   </span>
                 </div>

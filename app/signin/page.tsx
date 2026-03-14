@@ -120,8 +120,14 @@ export default function SignInPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest"
-                style={{ color: 'var(--text-muted)' }}>Password</label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest"
+                  style={{ color: 'var(--text-muted)' }}>Password</label>
+                <Link href="/forgot-password" className="text-xs hover:underline transition-colors"
+                  style={{ color: '#a855f7' }}>
+                  Forgot password?
+                </Link>
+              </div>
               <input id="password" type="password" required
                 value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password" className="input-dark" />

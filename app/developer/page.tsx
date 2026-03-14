@@ -90,7 +90,7 @@ export default function DeveloperPage() {
       const data = await res.json();
       setMySkills(data.skills ?? []);
     } catch {
-      // JWT decode failed or fetch failed — leave empty
+      // leave empty
     } finally {
       setLoading(false);
     }
@@ -123,10 +123,7 @@ export default function DeveloperPage() {
     try {
       const res = await fetch('/api/skills', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
           name: form.name,
           slug: form.slug,
@@ -161,25 +158,22 @@ export default function DeveloperPage() {
     }
   };
 
-  const field = (label: string, node: React.ReactNode, hint?: string) => (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      {node}
-      {hint && <p className="text-xs text-gray-500 mt-1">{hint}</p>}
-    </div>
-  );
-
-  const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       {/* Nav */}
-      <nav className="bg-white border-b border-gray-100">
+      <nav className="sticky top-0 z-40 backdrop-blur-md"
+        style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
+              A
+            </div>
+            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+          </Link>
           <div className="flex items-center gap-6">
-            <Link href="/marketplace" className="text-sm text-gray-500 hover:text-gray-900">Marketplace</Link>
-            <Link href="/developer" className="text-sm font-medium text-blue-600">Developer</Link>
+            <Link href="/marketplace" className="text-sm transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Marketplace</Link>
+            <Link href="/developer" className="text-sm font-medium" style={{ color: '#a855f7' }}>Developer</Link>
           </div>
         </div>
       </nav>
@@ -187,31 +181,32 @@ export default function DeveloperPage() {
       <div className="max-w-5xl mx-auto px-4 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Developer Dashboard</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Publish and manage your skills</p>
+            <div className="badge badge-purple mb-3">Developer Portal</div>
+            <h1 className="text-2xl font-black">Developer <span className="gradient-text">Dashboard</span></h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Publish and manage your skills</p>
           </div>
           {apiKey && (
             <button
               onClick={() => { setShowPublish(!showPublish); setPublishError(''); setPublishSuccess(''); }}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              className="btn-primary"
             >
               {showPublish ? 'Cancel' : '+ Publish Skill'}
             </button>
           )}
         </div>
 
-        {/* Earnings overview (only when logged in and earnings exist) */}
+        {/* Earnings overview */}
         {apiKey && earnings && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
             {[
-              { label: 'This Month', value: `$${earnings.this_month}`, color: 'text-blue-700' },
-              { label: 'Last Month', value: `$${earnings.last_month}`, color: 'text-gray-700' },
-              { label: 'All Time', value: `$${earnings.all_time}`, color: 'text-gray-700' },
-              { label: 'Published Skills', value: String(mySkills.length), color: 'text-gray-700' },
+              { label: 'This Month', value: `$${earnings.this_month}`, color: '#a855f7' },
+              { label: 'Last Month', value: `$${earnings.last_month}`, color: 'var(--text)' },
+              { label: 'All Time', value: `$${earnings.all_time}`, color: 'var(--text)' },
+              { label: 'Published Skills', value: String(mySkills.length), color: '#06b6d4' },
             ].map(c => (
-              <div key={c.label} className="bg-white border border-gray-200 rounded-xl p-4">
-                <div className={`text-2xl font-bold mb-0.5 ${c.color}`}>{c.value}</div>
-                <div className="text-xs text-gray-500">{c.label}</div>
+              <div key={c.label} className="card p-4">
+                <div className="text-2xl font-black mb-0.5" style={{ color: c.color }}>{c.value}</div>
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.label}</div>
               </div>
             ))}
           </div>
@@ -219,22 +214,20 @@ export default function DeveloperPage() {
 
         {/* No API key state */}
         {!apiKey && (
-          <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-            <div className="text-4xl mb-3">🔑</div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Sign in to publish skills</h2>
-            <p className="text-sm text-gray-500 mb-6">
+          <div className="card p-12 text-center">
+            <div className="text-5xl mb-4">🔑</div>
+            <h2 className="text-lg font-bold mb-2">Sign in to publish skills</h2>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
               You need an Agent OS API key to publish skills to the marketplace.
             </p>
             <div className="flex justify-center gap-3">
-              <Link href="/signup" className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
-                Get API Key
-              </Link>
+              <Link href="/signup" className="btn-primary">Get API Key</Link>
               <button
                 onClick={() => {
                   const key = prompt('Paste your API key:');
                   if (key) { localStorage.setItem('apiKey', key); setApiKey(key); fetchMySkills(key); }
                 }}
-                className="px-5 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+                className="btn-outline"
               >
                 Enter API Key
               </button>
@@ -244,100 +237,130 @@ export default function DeveloperPage() {
 
         {/* Publish form */}
         {apiKey && showPublish && (
-          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">Publish a New Skill</h2>
+          <div className="card p-6 mb-8">
+            <h2 className="text-lg font-bold mb-6">Publish a New Skill</h2>
             <form onSubmit={handlePublish} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                {field('Skill Name *', (
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                    style={{ color: 'var(--text-muted)' }}>Skill Name *</label>
                   <input type="text" required value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className={inputClass} placeholder="e.g. PDF Extractor" />
-                ))}
-                {field('Slug *', (
+                    className="input-dark" placeholder="e.g. PDF Extractor" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                    style={{ color: 'var(--text-muted)' }}>Slug *</label>
                   <input type="text" required value={form.slug}
                     onChange={e => setForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
-                    className={inputClass} placeholder="e.g. pdf-extractor" />
-                ), 'Lowercase letters, numbers, hyphens only')}
+                    className="input-dark" placeholder="e.g. pdf-extractor" />
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>Lowercase letters, numbers, hyphens only</p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                {field('Category *', (
-                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={inputClass}>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                    style={{ color: 'var(--text-muted)' }}>Category *</label>
+                  <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="input-dark">
                     {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                   </select>
-                ))}
-                {field('Icon (emoji)', (
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                    style={{ color: 'var(--text-muted)' }}>Icon (emoji)</label>
                   <input type="text" value={form.icon}
                     onChange={e => setForm(f => ({ ...f, icon: e.target.value }))}
-                    className={inputClass} placeholder="📦" maxLength={4} />
-                ))}
+                    className="input-dark" placeholder="📦" maxLength={4} />
+                </div>
               </div>
-              {field('Short Description *', (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}>Short Description *</label>
                 <input type="text" required value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  className={inputClass} placeholder="One sentence describing what this skill does" />
-              ))}
-              {field('Long Description', (
+                  className="input-dark" placeholder="One sentence describing what this skill does" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}>Long Description</label>
                 <textarea rows={3} value={form.long_description}
                   onChange={e => setForm(f => ({ ...f, long_description: e.target.value }))}
-                  className={inputClass} placeholder="Detailed description shown on the skill detail page" />
-              ))}
+                  className="input-dark" placeholder="Detailed description shown on the skill detail page" />
+              </div>
               <div className="grid grid-cols-3 gap-4">
-                {field('Pricing', (
-                  <select value={form.pricing_model} onChange={e => setForm(f => ({ ...f, pricing_model: e.target.value }))} className={inputClass}>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                    style={{ color: 'var(--text-muted)' }}>Pricing</label>
+                  <select value={form.pricing_model} onChange={e => setForm(f => ({ ...f, pricing_model: e.target.value }))} className="input-dark">
                     <option value="free">Free</option>
                     <option value="usage">Usage-based</option>
                   </select>
-                ))}
-                {field('Price per Call ($)', (
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                    style={{ color: 'var(--text-muted)' }}>Price per Call ($)</label>
                   <input type="number" min={0} step={0.001} value={form.price_per_call}
                     onChange={e => setForm(f => ({ ...f, price_per_call: parseFloat(e.target.value) || 0 }))}
-                    className={inputClass} disabled={form.pricing_model === 'free'} />
-                ))}
-                {field('Free Tier Calls', (
+                    className="input-dark" disabled={form.pricing_model === 'free'} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                    style={{ color: 'var(--text-muted)' }}>Free Tier Calls</label>
                   <input type="number" min={0} value={form.free_tier_calls}
                     onChange={e => setForm(f => ({ ...f, free_tier_calls: parseInt(e.target.value) || 0 }))}
-                    className={inputClass} />
-                ))}
+                    className="input-dark" />
+                </div>
               </div>
-              {field('Capabilities JSON *', (
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}>Capabilities JSON *</label>
                 <textarea rows={8} required value={form.capabilities}
                   onChange={e => setForm(f => ({ ...f, capabilities: e.target.value }))}
-                  className={`${inputClass} font-mono text-xs`}
+                  className="input-dark font-mono text-xs"
                   placeholder='[{"name": "run", "description": "...", "params": {}, "returns": "string"}]' />
-              ), 'JSON array of capability objects with name, description, params, returns')}
-              {field('Source Code *', (
+                <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>JSON array of capability objects with name, description, params, returns</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}>Source Code *</label>
                 <textarea rows={12} required value={form.source_code}
                   onChange={e => setForm(f => ({ ...f, source_code: e.target.value }))}
-                  className={`${inputClass} font-mono text-xs`}
-                  placeholder="class Skill {\n  run(params) {\n    return { result: 'hello' };\n  }\n}" />
-              ), 'JavaScript class named Skill. Each capability method should match a capability name.')}
-              {field('Tags (comma-separated)', (
+                  className="input-dark font-mono text-xs"
+                  placeholder={"class Skill {\n  run(params) {\n    return { result: 'hello' };\n  }\n}"} />
+                <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>JavaScript class named Skill. Each capability method should match a capability name.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}>Tags (comma-separated)</label>
                 <input type="text" value={form.tags}
                   onChange={e => setForm(f => ({ ...f, tags: e.target.value }))}
-                  className={inputClass} placeholder="data, json, transform" />
-              ))}
-              {field('Repository URL', (
+                  className="input-dark" placeholder="data, json, transform" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5"
+                  style={{ color: 'var(--text-muted)' }}>Repository URL</label>
                 <input type="url" value={form.repository_url}
                   onChange={e => setForm(f => ({ ...f, repository_url: e.target.value }))}
-                  className={inputClass} placeholder="https://github.com/..." />
-              ))}
+                  className="input-dark" placeholder="https://github.com/..." />
+              </div>
 
               {publishError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{publishError}</div>
+                <div className="rounded-lg px-4 py-3 text-sm"
+                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}>
+                  {publishError}
+                </div>
               )}
-              <button
-                type="submit"
-                disabled={publishing}
-                className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {publishing ? 'Publishing...' : 'Publish to Marketplace'}
+              <button type="submit" disabled={publishing} className="btn-primary w-full py-3"
+                style={{ opacity: publishing ? 0.5 : 1, cursor: publishing ? 'not-allowed' : 'pointer' }}>
+                {publishing ? 'Publishing…' : 'Publish to Marketplace'}
               </button>
             </form>
           </div>
         )}
 
         {publishSuccess && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+          <div className="rounded-lg px-4 py-3 text-sm mb-6"
+            style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac' }}>
             ✓ {publishSuccess}
           </div>
         )}
@@ -345,73 +368,71 @@ export default function DeveloperPage() {
         {/* Skills list */}
         {apiKey && (
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Your Skills {!loading && <span className="text-gray-400 font-normal">({mySkills.length})</span>}
+            <h2 className="text-lg font-bold mb-4">
+              Your Skills{' '}
+              {!loading && (
+                <span className="font-normal text-sm" style={{ color: 'var(--text-muted)' }}>
+                  ({mySkills.length})
+                </span>
+              )}
             </h2>
 
             {loading ? (
               <div className="space-y-3">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-                    <div className="h-3 bg-gray-100 rounded w-2/3" />
+                  <div key={i} className="card p-5 animate-pulse">
+                    <div className="h-4 rounded w-1/3 mb-2" style={{ background: 'var(--surface-2)' }} />
+                    <div className="h-3 rounded w-2/3" style={{ background: 'var(--border)' }} />
                   </div>
                 ))}
               </div>
             ) : mySkills.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-                <div className="text-4xl mb-3">🛠️</div>
-                <h3 className="text-gray-700 font-medium mb-2">No skills published yet</h3>
-                <p className="text-sm text-gray-500 mb-4">
+              <div className="card p-12 text-center">
+                <div className="text-5xl mb-4">🛠️</div>
+                <h3 className="font-bold mb-2">No skills published yet</h3>
+                <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
                   Build a skill and share it with the Agent OS community.
                 </p>
-                <button
-                  onClick={() => setShowPublish(true)}
-                  className="px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
-                >
+                <button onClick={() => setShowPublish(true)} className="btn-primary">
                   Publish Your First Skill
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
                 {mySkills.map(skill => (
-                  <div key={skill.id} className="bg-white border border-gray-200 rounded-xl p-5">
+                  <div key={skill.id} className="card p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="text-xl">{skill.icon || '📦'}</span>
-                          <h3 className="font-semibold text-gray-900">{skill.name}</h3>
-                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{skill.category}</span>
+                          <h3 className="font-bold">{skill.name}</h3>
+                          <span className="badge badge-purple text-xs">{skill.category}</span>
                           {skill.published ? (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Published</span>
+                            <span className="badge badge-green text-xs">Published</span>
                           ) : (
-                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Draft</span>
+                            <span className="badge badge-amber text-xs">Draft</span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-500 mb-3">{skill.description}</p>
+                        <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>{skill.description}</p>
                         <div className="flex items-center gap-5 text-sm">
                           <div>
-                            <span className="text-gray-400">Installs</span>
-                            <span className="ml-1.5 font-semibold text-gray-900">{skill.total_installs.toLocaleString()}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>Installs</span>
+                            <span className="ml-1.5 font-semibold">{skill.total_installs.toLocaleString()}</span>
                           </div>
                           <div>
-                            <span className="text-gray-400">API Calls</span>
-                            <span className="ml-1.5 font-semibold text-gray-900">{skill.total_calls.toLocaleString()}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>API Calls</span>
+                            <span className="ml-1.5 font-semibold">{skill.total_calls.toLocaleString()}</span>
                           </div>
                           {skill.rating > 0 && (
                             <div>
-                              <span className="text-gray-400">Rating</span>
-                              <span className="ml-1.5 font-semibold text-gray-900">
-                                ⭐ {Number(skill.rating).toFixed(1)}
-                              </span>
+                              <span style={{ color: 'var(--text-muted)' }}>Rating</span>
+                              <span className="ml-1.5 font-semibold">⭐ {Number(skill.rating).toFixed(1)}</span>
                             </div>
                           )}
                         </div>
                       </div>
-                      <Link
-                        href={`/marketplace/${skill.slug}`}
-                        className="text-sm text-blue-600 hover:underline flex-shrink-0"
-                      >
+                      <Link href={`/marketplace/${skill.slug}`} className="text-sm flex-shrink-0 hover:underline"
+                        style={{ color: '#a855f7' }}>
                         View →
                       </Link>
                     </div>
@@ -424,10 +445,11 @@ export default function DeveloperPage() {
 
         {/* Revenue sharing info */}
         {apiKey && (
-          <div className="mt-10 bg-blue-50 border border-blue-200 rounded-xl p-6">
-            <h3 className="text-base font-semibold text-blue-900 mb-2">Revenue Sharing</h3>
-            <p className="text-sm text-blue-800 leading-relaxed">
-              Agent OS shares <strong>70% of all usage revenue</strong> with skill developers.
+          <div className="mt-10 rounded-xl p-6"
+            style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
+            <h3 className="text-base font-bold mb-2" style={{ color: '#c084fc' }}>Revenue Sharing</h3>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              Agent OS shares <strong style={{ color: 'var(--text)' }}>70% of all usage revenue</strong> with skill developers.
               Paid skills earn $0.001–$0.10 per API call. Earnings are paid monthly via Stripe.
               Free skills help grow your install count and reputation.
             </p>
