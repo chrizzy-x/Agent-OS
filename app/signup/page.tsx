@@ -159,6 +159,8 @@ function CredentialsPanel({ credentials }: { credentials: Credentials }) {
 
 function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [agentName, setAgentName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -166,13 +168,23 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, agentName }),
+        body: JSON.stringify({ email, password, agentName }),
       });
 
       const data = await res.json();
@@ -209,6 +221,36 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
       </div>
 
       <div className="space-y-1.5">
+        <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+          Password <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="password"
+          type="password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="At least 8 characters"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+          Confirm password <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="confirmPassword"
+          type="password"
+          required
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Re-enter your password"
+          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+      </div>
+
+      <div className="space-y-1.5">
         <label htmlFor="agentName" className="block text-sm font-medium text-gray-700">
           Agent name <span className="text-gray-400 font-normal">(optional)</span>
         </label>
@@ -230,7 +272,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
 
       <button
         type="submit"
-        disabled={loading || !email}
+        disabled={loading || !email || !password || !confirmPassword}
         className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {loading ? 'Creating agent...' : 'Create Agent'}
