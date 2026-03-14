@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import CodeBlock from '@/components/CodeBlock';
 import { APP_URL } from '@/lib/config';
+import { FeatureShowcase } from '@/components/FeatureShowcase';
 
 const CODE_EXAMPLE = `import { AgentOS } from '@agentos/sdk';
 
@@ -521,6 +522,11 @@ export default function HomePage() {
             </a>
           </div>
         </div>
+      </section>
+
+      {/* ── Feature Showcase ── */}
+      <section className="max-w-6xl mx-auto px-5 py-24">
+        <FeatureShowcase />
       </section>
 
       {/* ── Footer ── */}
