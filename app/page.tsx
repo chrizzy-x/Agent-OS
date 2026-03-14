@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import CodeBlock from '@/components/CodeBlock';
 import FeatureCard from '@/components/FeatureCard';
+import { APP_URL } from '@/lib/config';
 
 const CODE_EXAMPLE = `import { AgentOS } from '@agentos/sdk';
 
 const os = new AgentOS({
-  apiUrl: 'https://agentos.vercel.app',
+  apiUrl: '${APP_URL}',
   apiKey: process.env.AGENT_OS_KEY
 });
 
