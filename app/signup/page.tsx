@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { APP_URL } from '@/lib/config';
 
@@ -190,6 +191,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
   };
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-1.5">
         <label htmlFor="email" className="block text-sm font-medium text-gray-700">
@@ -238,16 +240,33 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
         No credit card required. Free to use.
       </p>
     </form>
+
+    <div className="mt-5 pt-5 border-t border-gray-100 text-center text-sm text-gray-500">
+      Already have an account?{' '}
+      <Link href="/signin" className="text-blue-600 hover:underline font-medium">
+        Sign in
+      </Link>
+    </div>
+    </>
   );
 }
 
 export default function SignupPage() {
+  const router = useRouter();
   const [credentials, setCredentials] = useState<Credentials | null>(null);
 
-  // Save API key to localStorage so dashboard can pick it up
+  // Already signed in? Go straight to dashboard
+  useEffect(() => {
+    if (localStorage.getItem('apiKey')) {
+      router.replace('/dashboard');
+    }
+  }, [router]);
+
+  // Auto-login after signup
   useEffect(() => {
     if (credentials?.apiKey) {
       localStorage.setItem('apiKey', credentials.apiKey);
+      localStorage.setItem('agentId', credentials.agentId);
     }
   }, [credentials]);
 
@@ -260,7 +279,7 @@ export default function SignupPage() {
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <Link href="/marketplace" className="hover:text-gray-900">Marketplace</Link>
             <Link href="/docs" className="hover:text-gray-900">Docs</Link>
-            <Link href="/dashboard" className="hover:text-gray-900">Dashboard</Link>
+            <Link href="/signin" className="hover:text-gray-900">Sign in</Link>
           </div>
         </div>
       </nav>
