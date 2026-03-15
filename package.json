@@ -3,6 +3,7 @@
     "version":  "1.0.0",
     "description":  "AgentOS - OS-level primitives for apps and services: memory, files, databases, networking, events and code execution",
     "author":  "riz",
+    "homepage":  "https://agentos-app.vercel.app",
     "scripts":  {
                     "dev":  "next dev",
                     "build":  "next build",
