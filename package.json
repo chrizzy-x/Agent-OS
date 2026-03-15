@@ -38,7 +38,7 @@
                             "vitest":  "^1.0.4"
                         },
     "engines":  {
-                    "node":  "\u003e=18.0.0"
+                    "node":  ">=20.0.0"
                 },
     "license":  "MIT"
 }
