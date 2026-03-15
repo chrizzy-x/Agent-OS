@@ -280,3 +280,18 @@ X-RateLimit-Reset: <reset timestamp>
 5. Deploy to production
 
 For technical support, API reference, and community resources, visit the [Agent OS developer portal](https://github.com/chrizzy-x/Agent-OS).
+
+---
+
+## Deployment Modes
+
+AgentOS runs in one of two modes, selected via the `FFP_MODE` environment variable:
+
+| Mode | Description |
+|------|-------------|
+| **Standalone** (default, `FFP_MODE=disabled`) | All primitive operations execute directly — no external dependencies beyond Redis and Supabase. Zero overhead. |
+| **FFP Router** (`FFP_MODE=enabled`) | Every primitive call is additionally logged to the Furge Fabric Protocol consensus network. Optionally, outbound HTTP calls to critical domains require network consensus before execution. |
+
+In both modes the API surface is identical — only the internal routing changes. Standalone mode is recommended for most deployments.
+
+See [FFP_INTEGRATION.md](../FFP_INTEGRATION.md) for full setup and configuration details.

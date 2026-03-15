@@ -4,7 +4,7 @@
 
 **OS-level primitives for apps and services — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
 
-🚀 **Live:** [agentos-app.vercel.app](https://agentos-app.vercel.app) · [Get started free →](https://agentos-app.vercel.app/signup)
+🚀 **Live:** [agent-os-one-eta.vercel.app](https://agent-os-one-eta.vercel.app) · [Get started free →](https://agent-os-one-eta.vercel.app/signup)
 
 AgentOS is a stateless server that gives any app or service a safe, isolated environment to persist data, run code, make HTTP requests, and communicate — without touching the host system directly. Each client gets its own namespace, enforced quotas, and a full audit trail.
 
@@ -56,7 +56,7 @@ Deployed as a single Vercel serverless function. No persistent processes, no sha
 
 ### Option A: Use the hosted version
 
-[Sign up at agentos-app.vercel.app/signup](https://agentos-app.vercel.app/signup) — get your Agent ID and API key in 30 seconds, no credit card required.
+[Sign up at agent-os-one-eta.vercel.app/signup](https://agent-os-one-eta.vercel.app/signup) — get your Agent ID and API key in 30 seconds, no credit card required.
 
 ### Option B: Self-host
 
