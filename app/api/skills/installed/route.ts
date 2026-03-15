@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { verifyAgentToken, extractBearerToken } from '@/src/auth/agent-identity';
+import { requireAgentContext } from '@/src/auth/request';
+import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
 // GET /api/skills/installed - List skills installed by the authenticated agent
 export async function GET(request: NextRequest) {
-  const token = extractBearerToken(request.headers.get('Authorization') ?? undefined);
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   let agentCtx;
   try {
-    agentCtx = verifyAgentToken(token);
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    agentCtx = requireAgentContext(request.headers);
+  } catch (error: unknown) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ error: err.message }, { status: err.statusCode });
   }
 
   const supabase = getSupabaseAdmin();
@@ -27,6 +26,9 @@ export async function GET(request: NextRequest) {
     .eq('agent_id', agentCtx.agentId)
     .order('installed_at', { ascending: false });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+  }
   return NextResponse.json({ installed_skills: data ?? [] });
 }

@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { verifyAgentToken, extractBearerToken } from '@/src/auth/agent-identity';
+import { requireAgentContext } from '@/src/auth/request';
+import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
 // POST /api/skills/install - Install a skill for the authenticated agent
 export async function POST(request: NextRequest) {
-  const token = extractBearerToken(request.headers.get('Authorization') ?? undefined);
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   let agentCtx;
   try {
-    agentCtx = verifyAgentToken(token);
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    agentCtx = requireAgentContext(request.headers);
+  } catch (error: unknown) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ error: err.message }, { status: err.statusCode });
   }
 
   let body: Record<string, unknown>;
@@ -36,13 +35,13 @@ export async function POST(request: NextRequest) {
     .select('id, name, total_installs')
     .eq('id', skill_id)
     .eq('published', true)
-    .single();
+    .maybeSingle();
 
   if (skillErr || !skill) {
     return NextResponse.json({ error: 'Skill not found or not published' }, { status: 404 });
   }
 
-  // Install
+  // Install - handle unique constraint idempotently
   const { data, error } = await supabase
     .from('skill_installations')
     .insert({ agent_id: agentCtx.agentId, skill_id })
@@ -51,7 +50,14 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     if (error.code === '23505') {
-      return NextResponse.json({ error: 'Skill already installed' }, { status: 409 });
+      // Already installed - return success idempotently
+      const { data: existing } = await supabase
+        .from('skill_installations')
+        .select()
+        .eq('agent_id', agentCtx.agentId)
+        .eq('skill_id', skill_id)
+        .single();
+      return NextResponse.json({ success: true, installation: existing }, { status: 200 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
