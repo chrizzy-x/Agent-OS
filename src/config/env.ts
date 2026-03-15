@@ -1,6 +1,6 @@
 ﻿import { ValidationError } from '../utils/errors.js';
 
-const DEFAULT_APP_URL = 'https://agent-os-one-eta.vercel.app';
+const DEFAULT_APP_URL = 'https://agentos-app.vercel.app';
 
 function getEnv(...keys: string[]): string | undefined {
   for (const key of keys) {

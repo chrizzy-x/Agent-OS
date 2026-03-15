@@ -16,9 +16,9 @@ beforeEach(() => {
 
 describe('env helpers', () => {
   it('prefers NEXT_PUBLIC_APP_URL for the public app URL', () => {
-    process.env.NEXT_PUBLIC_APP_URL = 'https://agent-os-one-eta.vercel.app';
+    process.env.NEXT_PUBLIC_APP_URL = 'https://agentos-app.vercel.app';
     process.env.NEXT_PUBLIC_API_URL = 'https://legacy.example.com';
-    expect(getPublicAppUrl()).toBe('https://agent-os-one-eta.vercel.app');
+    expect(getPublicAppUrl()).toBe('https://agentos-app.vercel.app');
   });
 
   it('falls back to the legacy Supabase service key alias', () => {

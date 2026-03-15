@@ -8,7 +8,7 @@ process.env.SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 process.env.SUPABASE_SERVICE_KEY = 'test-service-role-key';
-process.env.NEXT_PUBLIC_APP_URL = 'https://agent-os-one-eta.vercel.app';
+process.env.NEXT_PUBLIC_APP_URL = 'https://agentos-app.vercel.app';
 process.env.ALLOWED_DOMAINS = 'httpbin.org,api.example.com';
 
 export const mockRedis = {
