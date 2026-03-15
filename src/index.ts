@@ -8,7 +8,6 @@ import { AuthError, ValidationError } from './utils/errors.js';
 // Validate required environment variables at startup — fail fast with a clear message.
 const REQUIRED_ENV: string[] = [
   'SUPABASE_URL',
-  'SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'REDIS_URL',
   'JWT_SECRET',

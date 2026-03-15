@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   try {
     apiKey = createAgentToken(agent.id, { expiresIn: '90d' });
   } catch (err) {
-    console.error('Token creation error:', err);
+    console.error('[signin] token creation error:', err);
     return NextResponse.json({ error: 'Failed to generate credentials. Please try again.' }, { status: 500 });
   }
 

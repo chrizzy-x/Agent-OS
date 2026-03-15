@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     .eq('id', ctx.agentId);
 
   if (updateErr) {
-    console.error('Payout settings update error:', updateErr);
+    console.error('[payout-settings] update error:', updateErr);
     return NextResponse.json({ error: 'Failed to save payout settings' }, { status: 500 });
   }
 

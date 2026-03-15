@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     .eq('id', agent.id);
 
   if (error) {
-    console.error('Password reset error:', error);
+    console.error('[forgot-password] reset error:', error);
     return NextResponse.json({ error: 'Failed to reset password. Please try again.' }, { status: 500 });
   }
 

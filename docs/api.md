@@ -56,6 +56,9 @@ Returns server status. No authentication required.
 }
 ```
 
+> `tools` reflects the current number of registered MCP tools.
+```
+
 ### `GET /tools`
 Lists all available tool names. No authentication required.
 
