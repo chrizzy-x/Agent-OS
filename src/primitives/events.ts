@@ -88,7 +88,7 @@ export async function eventsSubscribe(
     const listKey = topicKey(ctx.agentId, topic, isPublic ?? false);
 
     // Store subscription record so agent can poll for new messages
-    const subscriptionId = `sub_${ctx.agentId}_${topic}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    const subscriptionId = `sub_${ctx.agentId}_${topic}_${Date.now()}_${crypto.randomUUID()}`;
     const subKey = agentKey('subscriptions', ctx.agentId, subscriptionId);
 
     await redis.set(subKey, JSON.stringify({ topic, isPublic, createdAt: Date.now() }), 'EX', MESSAGE_RETENTION_SECONDS);
