@@ -7,8 +7,8 @@ import { SecurityError, ValidationError } from '../utils/errors.js';
 export type SupportedLanguage = 'python' | 'javascript' | 'bash';
 
 const LANGUAGE_COMMANDS: Record<SupportedLanguage, { cmd: string; fileExt: string; args?: string[] }> = {
-  python: { cmd: 'python3', fileExt: 'py' },
-  javascript: { cmd: 'node', fileExt: 'js', args: ['--max-old-space-size=512'] },
+  python: { cmd: process.platform === 'win32' ? 'python' : 'python3', fileExt: 'py' },
+  javascript: { cmd: process.execPath, fileExt: 'js', args: ['--max-old-space-size=256'] },
   bash: { cmd: 'bash', fileExt: 'sh' },
 };
 
@@ -19,19 +19,15 @@ export interface ExecutionResult {
   durationMs: number;
 }
 
-// Execute code in a sandboxed subprocess with a strict timeout.
-// Each execution gets an isolated temporary directory that is cleaned up afterward.
-// Note: this sandbox relies on process-level isolation — for production,
-// Docker-based isolation is recommended. Vercel serverless does not support Docker.
 export async function executeCode(
   code: string,
   language: SupportedLanguage,
   timeoutMs = 30_000
 ): Promise<ExecutionResult> {
-  const MAX_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  const maxTimeout = 5 * 60 * 1000;
 
-  if (timeoutMs > MAX_TIMEOUT) {
-    throw new ValidationError(`Execution timeout cannot exceed ${MAX_TIMEOUT / 1000}s`);
+  if (timeoutMs > maxTimeout) {
+    throw new ValidationError(`Execution timeout cannot exceed ${maxTimeout / 1000}s`);
   }
 
   const config = LANGUAGE_COMMANDS[language];
@@ -39,18 +35,14 @@ export async function executeCode(
     throw new ValidationError(`Unsupported language: ${language}. Supported: python, javascript, bash`);
   }
 
-  // Create an isolated temp directory for this execution
   const workDir = await mkdtemp(join(tmpdir(), 'agent-exec-'));
   const scriptPath = join(workDir, `script.${config.fileExt}`);
 
   try {
     await writeFile(scriptPath, code, { mode: 0o700 });
-
     const args = [...(config.args ?? []), scriptPath];
-    const result = await runProcess(config.cmd, args, workDir, timeoutMs);
-    return result;
+    return await runProcess(config.cmd, args, workDir, timeoutMs);
   } finally {
-    // Always clean up the temp directory
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
@@ -63,54 +55,65 @@ async function runProcess(
 ): Promise<ExecutionResult> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
+    const maxOutput = 1024 * 1024;
+
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: process.env.PATH ?? '',
+      HOME: cwd,
+      TMPDIR: cwd,
+      TEMP: cwd,
+      TMP: cwd,
+    };
 
     const child = spawn(cmd, args, {
       cwd,
-      // Deny network access at the env level (can't write to /etc/hosts but limit env vars)
-      env: {
-        PATH: '/usr/local/bin:/usr/bin:/bin',
-        HOME: cwd,
-        TMPDIR: cwd,
-      } as unknown as NodeJS.ProcessEnv,
-      // Don't inherit parent stdin
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
 
-    const MAX_OUTPUT = 1 * 1024 * 1024; // 1MB max output
+    const finish = (handler: () => void) => {
+      if (!settled) {
+        settled = true;
+        handler();
+      }
+    };
 
     child.stdout?.on('data', (chunk: Buffer) => {
-      if (stdout.length < MAX_OUTPUT) {
+      if (stdout.length < maxOutput) {
         stdout += chunk.toString();
       }
     });
 
     child.stderr?.on('data', (chunk: Buffer) => {
-      if (stderr.length < MAX_OUTPUT) {
+      if (stderr.length < maxOutput) {
         stderr += chunk.toString();
       }
     });
 
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new SecurityError(`Execution timed out after ${timeoutMs / 1000}s`));
+      finish(() => reject(new SecurityError(`Execution timed out after ${timeoutMs / 1000}s`)));
     }, timeoutMs);
 
-    child.on('error', (err) => {
+    child.on('error', err => {
       clearTimeout(timer);
-      reject(new Error(`Failed to start process: ${err.message}`));
+      finish(() => reject(new Error(`Failed to start process: ${err.message}`)));
     });
 
-    child.on('close', (code) => {
+    child.on('close', code => {
       clearTimeout(timer);
-      resolve({
-        stdout: stdout.slice(0, MAX_OUTPUT),
-        stderr: stderr.slice(0, MAX_OUTPUT),
+      finish(() => resolve({
+        stdout: stdout.slice(0, maxOutput),
+        stderr: stderr.slice(0, maxOutput),
         exitCode: code ?? -1,
         durationMs: Date.now() - start,
-      });
+      }));
     });
   });
 }
+

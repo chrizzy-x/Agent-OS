@@ -3,20 +3,20 @@ import './globals.css';
 import { APP_URL } from '@/lib/config';
 
 export const metadata: Metadata = {
-  title: 'Agent OS — Operating System for AI Agents',
+  title: 'Agent OS | Autonomous Agent Infrastructure',
   description:
-    '6 primitives that give AI agents production-ready infrastructure: filesystem, network, code execution, caching, database, and messaging.',
-  keywords: 'AI agents, autonomous agents, agent infrastructure, AI operating system',
+    'Agent OS combines primitives, universal MCP routing, consensus controls, a skills marketplace, and an autonomous operations crew for production AI agents.',
+  keywords: 'AI agents, MCP, autonomous agents, skills marketplace, agent infrastructure, consensus',
   openGraph: {
     title: 'Agent OS',
-    description: 'Operating system infrastructure for AI agents',
+    description: 'Universal MCP, skills, consensus, and production infrastructure for AI agents.',
     url: APP_URL,
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Agent OS',
-    description: 'Operating system infrastructure for AI agents',
+    description: 'Universal MCP, skills, consensus, and production infrastructure for AI agents.',
   },
 };
 

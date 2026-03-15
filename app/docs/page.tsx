@@ -177,3 +177,4 @@ const { result } = await fetch(\`\${AGENT_OS}/mcp\`, {
     </div>
   );
 }
+

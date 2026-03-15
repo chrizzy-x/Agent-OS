@@ -1,15 +1,17 @@
 import { vi } from 'vitest';
 
-// ---- Environment variables required by all modules ----
 process.env.JWT_SECRET = 'test-jwt-secret-must-be-at-least-32-bytes-long-for-hs256';
 process.env.ADMIN_TOKEN = 'test-admin-token';
+process.env.CRON_SECRET = 'test-cron-secret';
 process.env.REDIS_URL = 'redis://localhost:6379';
 process.env.SUPABASE_URL = 'https://test.supabase.co';
+process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.SUPABASE_ANON_KEY = 'test-anon-key';
-process.env.SUPABASE_SERVICE_KEY = 'test-service-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+process.env.SUPABASE_SERVICE_KEY = 'test-service-role-key';
+process.env.NEXT_PUBLIC_APP_URL = 'https://agentos-app.vercel.app';
 process.env.ALLOWED_DOMAINS = 'httpbin.org,api.example.com';
 
-// ---- Redis mock ----
 export const mockRedis = {
   get: vi.fn(),
   set: vi.fn(),
@@ -42,7 +44,6 @@ vi.mock('../src/storage/redis.js', () => ({
   closeRedis: vi.fn(),
 }));
 
-// ---- Supabase mock ----
 export const mockSupabaseStorage = {
   from: vi.fn(() => ({
     upload: vi.fn().mockResolvedValue({ data: {}, error: null }),
@@ -59,9 +60,12 @@ export const mockSupabaseFrom = vi.fn(() => ({
   delete: vi.fn().mockReturnThis(),
   select: vi.fn().mockReturnThis(),
   eq: vi.fn().mockReturnThis(),
+  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
   single: vi.fn().mockResolvedValue({ data: null, error: null }),
   order: vi.fn().mockReturnThis(),
-  limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+  limit: vi.fn().mockReturnThis(),
+  range: vi.fn().mockResolvedValue({ data: [], error: null, count: 0 }),
+  in: vi.fn().mockReturnThis(),
 }));
 
 export const mockSupabase = {

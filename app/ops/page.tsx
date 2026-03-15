@@ -1,0 +1,338 @@
+﻿'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+
+type CrewItem = {
+  feature: {
+    slug: string;
+    id: number;
+    name: string;
+    kind: string;
+    categoryName: string;
+    categoryBadge: string;
+    short: string;
+  };
+  activePair: { infra_agent_id: string; status: string; infra_agent?: { name: string; status: string } | null } | null;
+  standbyPair: { infra_agent_id: string; status: string; infra_agent?: { name: string; status: string } | null } | null;
+  activeHealth: { status: string; health_score: number; summary: string } | null;
+  standbyHealth: { status: string; health_score: number; summary: string } | null;
+  openTasks: { id: string; task_type: string; status: string }[];
+  coverageState: string;
+};
+
+type CrewResponse = {
+  summary: { platformFeatures: number; runtimeFunctions: number; totalCatalogItems: number };
+  settings: { operation_mode: 'single_agent' | 'multi_agent'; consensus_mode_enabled: boolean };
+  items: CrewItem[];
+  failoverEvents: { id: string; feature_slug: string; reason: string; created_at: string }[];
+};
+
+type MetricsResponse = {
+  metrics: {
+    totalCatalogItems: number;
+    fullyCovered: number;
+    coveragePercent: number;
+    healthyActiveAgents: number;
+    degradedActiveAgents: number;
+    openTasks: number;
+    failoverEvents: number;
+  };
+};
+
+type SettingsResponse = {
+  settings: { operation_mode: 'single_agent' | 'multi_agent'; consensus_mode_enabled: boolean };
+  ffpEnabled: boolean;
+};
+
+export default function OpsPage() {
+  const [crew, setCrew] = useState<CrewResponse | null>(null);
+  const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [search, setSearch] = useState('');
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [crewRes, metricsRes, settingsRes] = await Promise.all([
+        fetch('/api/ops/crew'),
+        fetch('/api/ops/metrics'),
+        fetch('/api/ops/settings'),
+      ]);
+
+      const [crewData, metricsData, settingsData] = await Promise.all([
+        crewRes.json(),
+        metricsRes.json(),
+        settingsRes.json(),
+      ]);
+
+      setCrew(crewData);
+      setMetrics(metricsData);
+      setSettings(settingsData);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const storedKey = localStorage.getItem('apiKey') || '';
+    setApiKey(storedKey);
+    loadAll();
+  }, []);
+
+  async function saveSettings(next: { operationMode?: 'single_agent' | 'multi_agent'; consensusModeEnabled?: boolean }) {
+    if (!apiKey) {
+      setMessage('Sign in first to update ops settings.');
+      return;
+    }
+
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/ops/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(next),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update settings');
+      }
+      setSettings({ settings: data.settings, ffpEnabled: data.ffpEnabled });
+      setMessage('Ops settings updated.');
+      await loadAll();
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : 'Failed to update settings');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function runAction(path: string, body?: Record<string, unknown>) {
+    if (!apiKey) {
+      setMessage('Sign in first to run ops actions.');
+      return;
+    }
+
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body ?? {}),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Action failed');
+      }
+      setMessage('Action completed.');
+      await loadAll();
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : 'Action failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const filteredItems = crew?.items.filter(item => {
+    const term = search.trim().toLowerCase();
+    if (!term) {
+      return true;
+    }
+    return (
+      item.feature.name.toLowerCase().includes(term) ||
+      item.feature.slug.toLowerCase().includes(term) ||
+      item.feature.categoryName.toLowerCase().includes(term)
+    );
+  }) ?? [];
+
+  const operationMode = settings?.settings.operation_mode ?? 'single_agent';
+  const consensusEnabled = settings?.settings.consensus_mode_enabled ?? false;
+  const ffpEnabled = settings?.ffpEnabled ?? false;
+  const canToggleConsensus = operationMode === 'multi_agent' && ffpEnabled;
+
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <nav className="sticky top-0 z-40 backdrop-blur-md" style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
+              A
+            </div>
+            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+          </Link>
+          <div className="flex items-center gap-5 text-sm">
+            <Link href="/dashboard" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Dashboard</Link>
+            <Link href="/docs/features" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Feature Catalog</Link>
+            <button onClick={() => loadAll()} className="btn-outline text-xs px-4 py-2">Refresh</button>
+          </div>
+        </div>
+      </nav>
+
+      <div className="max-w-7xl mx-auto px-4 py-10 space-y-8">
+        <section className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+          <div>
+            <div className="badge badge-purple mb-4">Autonomous Infrastructure Crew</div>
+            <h1 className="text-4xl font-black mb-3">Active and standby coverage for every feature and function</h1>
+            <p className="text-base max-w-4xl" style={{ color: 'var(--text-muted)' }}>
+              The ops console confirms pair coverage, health snapshots, failovers, and queued work for every platform feature and runtime function.
+            </p>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <button onClick={() => runAction('/api/ops/crew/bootstrap')} className="btn-outline text-sm px-4 py-2" disabled={saving}>Bootstrap Coverage</button>
+            <button onClick={() => runAction('/api/ops/crew/cron')} className="btn-primary text-sm px-4 py-2" disabled={saving}>Run Cron Cycle</button>
+          </div>
+        </section>
+
+        {message && (
+          <div className="card p-4 text-sm" style={{ color: 'var(--text-muted)' }}>{message}</div>
+        )}
+
+        <section className="grid md:grid-cols-4 gap-4">
+          {[
+            { label: 'Catalog items', value: metrics?.metrics.totalCatalogItems ?? 0 },
+            { label: 'Fully covered', value: metrics?.metrics.fullyCovered ?? 0 },
+            { label: 'Coverage %', value: `${metrics?.metrics.coveragePercent ?? 0}%` },
+            { label: 'Open tasks', value: metrics?.metrics.openTasks ?? 0 },
+          ].map(card => (
+            <div key={card.label} className="card p-5">
+              <div className="text-3xl font-black gradient-text mb-1">{card.value}</div>
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{card.label}</div>
+            </div>
+          ))}
+        </section>
+
+        <section className="grid xl:grid-cols-[1.1fr,2fr] gap-4">
+          <div className="card p-6">
+            <h2 className="text-xl font-bold mb-4">Run Mode</h2>
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => saveSettings({ operationMode: 'single_agent', consensusModeEnabled: false })}
+                disabled={saving}
+                className="btn-outline text-sm px-4 py-2"
+                style={operationMode === 'single_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
+              >
+                Single-agent
+              </button>
+              <button
+                onClick={() => saveSettings({ operationMode: 'multi_agent' })}
+                disabled={saving}
+                className="btn-outline text-sm px-4 py-2"
+                style={operationMode === 'multi_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
+              >
+                Multi-agent
+              </button>
+            </div>
+            <div className="rounded-xl p-4 mb-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div>
+                  <div className="font-semibold">FFP / Consensus Mode</div>
+                  <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Only available when the workflow is multi-agent and deployment FFP mode is enabled.
+                  </div>
+                </div>
+                <button
+                  onClick={() => saveSettings({ consensusModeEnabled: !consensusEnabled })}
+                  disabled={!canToggleConsensus || saving}
+                  className="btn-primary text-sm px-4 py-2"
+                  style={!canToggleConsensus ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                >
+                  {consensusEnabled ? 'Consensus On' : 'Consensus Off'}
+                </button>
+              </div>
+              <div className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                Deployment FFP mode: {ffpEnabled ? 'enabled' : 'disabled'}
+              </div>
+            </div>
+            <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              {operationMode === 'multi_agent'
+                ? 'Multi-agent workflows can use consensus-aware execution and failover controls.'
+                : 'Switch to multi-agent mode to enable the consensus button.'}
+            </div>
+          </div>
+
+          <div className="card p-6">
+            <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
+              <div>
+                <h2 className="text-xl font-bold">Coverage Matrix</h2>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                  Every item should always keep one active agent and one standby agent assigned.
+                </p>
+              </div>
+              <input
+                type="text"
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Search features or functions"
+                className="input-dark"
+                style={{ width: '280px' }}
+              />
+            </div>
+
+            {loading ? (
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading operations data...</div>
+            ) : (
+              <div className="space-y-3 max-h-[900px] overflow-y-auto pr-1">
+                {filteredItems.map(item => (
+                  <article key={item.feature.slug} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+                    <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <span className="badge badge-purple text-xs">{item.feature.categoryBadge}</span>
+                          <span className="text-xs font-mono" style={{ color: 'var(--text-dim)' }}>#{item.feature.id}</span>
+                          <span className="text-xs uppercase" style={{ color: 'var(--text-dim)' }}>{item.feature.kind.replace('_', ' ')}</span>
+                        </div>
+                        <h3 className="font-semibold text-lg">{item.feature.name}</h3>
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{item.feature.short}</p>
+                      </div>
+                      <button
+                        onClick={() => runAction('/api/ops/crew/failover', { featureSlug: item.feature.slug })}
+                        className="btn-outline text-xs px-3 py-2"
+                        disabled={saving || !apiKey}
+                      >
+                        Force failover
+                      </button>
+                    </div>
+
+                    <div className="grid lg:grid-cols-3 gap-3 text-sm">
+                      <div className="rounded-lg p-3" style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)' }}>
+                        <div className="font-semibold mb-1">Active agent</div>
+                        <div>{item.activePair?.infra_agent?.name ?? 'Missing'}</div>
+                        <div style={{ color: 'var(--text-muted)' }}>Status: {item.activeHealth?.status ?? item.activePair?.status ?? 'unknown'}</div>
+                        <div style={{ color: 'var(--text-muted)' }}>Score: {item.activeHealth?.health_score ?? 'n/a'}</div>
+                      </div>
+                      <div className="rounded-lg p-3" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                        <div className="font-semibold mb-1">Standby agent</div>
+                        <div>{item.standbyPair?.infra_agent?.name ?? 'Missing'}</div>
+                        <div style={{ color: 'var(--text-muted)' }}>Status: {item.standbyHealth?.status ?? item.standbyPair?.status ?? 'unknown'}</div>
+                        <div style={{ color: 'var(--text-muted)' }}>Score: {item.standbyHealth?.health_score ?? 'n/a'}</div>
+                      </div>
+                      <div className="rounded-lg p-3" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                        <div className="font-semibold mb-1">Queue and coverage</div>
+                        <div>Coverage: {item.coverageState}</div>
+                        <div style={{ color: 'var(--text-muted)' }}>Open tasks: {item.openTasks.length}</div>
+                        <div style={{ color: 'var(--text-muted)' }}>Category: {item.feature.categoryName}</div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

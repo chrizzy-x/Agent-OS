@@ -1,15 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
+import { getConsensusDefaultThreshold, getConsensusWaitMs, isFfpEnabled } from '../src/config/env.js';
+import { getSupabaseAdmin } from '../src/storage/supabase.js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+type VoteRecord = { vote: string };
 
 export class MCPRouter {
-  private ffpMode: boolean;
+  private readonly ffpMode: boolean;
+  private readonly defaultWaitMs: number;
+  private readonly defaultThreshold: number;
 
   constructor() {
-    this.ffpMode = process.env.FFP_MODE === 'enabled';
+    this.ffpMode = isFfpEnabled();
+    this.defaultWaitMs = getConsensusWaitMs();
+    this.defaultThreshold = getConsensusDefaultThreshold();
   }
 
   async routeMCPCall(params: {
@@ -19,82 +21,97 @@ export class MCPRouter {
     arguments: Record<string, unknown>;
   }) {
     const { agentId, server, tool, arguments: args } = params;
+    const supabase = getSupabaseAdmin();
 
-    const { data: mcpServer } = await supabase
+    const { data: mcpServer, error: serverError } = await supabase
       .from('mcp_servers')
       .select('*')
       .eq('name', server)
+      .eq('active', true)
       .single();
 
-    if (!mcpServer) {
+    if (serverError || !mcpServer) {
       throw new Error(`MCP server '${server}' not found`);
     }
 
     let proposalId: string | null = null;
-    let consensusApproved = false;
-    let consensusVotes: unknown = null;
+    let consensusApproved: boolean | null = null;
+    let consensusVotes: unknown[] | null = null;
 
     if (this.ffpMode && mcpServer.requires_consensus) {
       const proposal = await this.proposeToConsensus({ agentId, action: 'mcp_call', server, tool, arguments: args });
       proposalId = proposal.id;
-      const consensus = await this.waitForConsensus(proposal.id);
+
+      const consensus = await this.waitForConsensus(proposal.id, mcpServer.consensus_threshold ?? this.defaultThreshold);
       consensusApproved = consensus.approved;
       consensusVotes = consensus.votes;
 
-      if (!consensusApproved) {
-        await supabase.from('mcp_calls').insert({
-          agent_id: agentId,
-          mcp_server: server,
-          tool_name: tool,
-          params: args,
-          proposal_id: proposalId,
-          consensus_approved: false,
-          consensus_votes: consensusVotes,
+      await supabase
+        .from('proposals')
+        .update({ status: consensus.approved ? 'approved' : 'rejected' })
+        .eq('id', proposal.id);
+
+      if (!consensus.approved) {
+        await this.recordMcpCall({
+          agentId,
+          server,
+          tool,
+          args,
+          proposalId,
+          consensusApproved: false,
+          consensusVotes,
           success: false,
-          error_message: 'Consensus not reached',
+          errorMessage: 'Consensus not reached',
+          executionTimeMs: 0,
         });
+
         throw new Error('Consensus rejected this MCP call');
       }
     }
 
-    const startTime = Date.now();
-    let result: unknown;
-    let success = true;
-    let errorMessage: string | null = null;
+    const startedAt = Date.now();
 
     try {
-      result = await this.executeMCPCall(mcpServer.url, tool, args);
-    } catch (error: unknown) {
-      success = false;
-      errorMessage = error instanceof Error ? error.message : String(error);
-      throw error;
-    } finally {
-      const executionTime = Date.now() - startTime;
+      const result = await this.executeMCPCall(mcpServer.url, tool, args);
+      const executionTimeMs = Date.now() - startedAt;
 
-      await supabase.from('mcp_calls').insert({
-        agent_id: agentId,
-        mcp_server: server,
-        tool_name: tool,
-        params: args,
-        proposal_id: proposalId,
-        consensus_approved: consensusApproved || null,
-        consensus_votes: consensusVotes,
+      await this.recordMcpCall({
+        agentId,
+        server,
+        tool,
+        args,
+        proposalId,
+        consensusApproved,
+        consensusVotes,
+        success: true,
         result,
-        success,
-        error_message: errorMessage,
-        execution_time_ms: executionTime,
+        executionTimeMs,
       });
 
-      if (proposalId && this.ffpMode) {
-        await supabase.from('chain_logs').insert({
-          agent_id: agentId,
-          action: 'mcp_call',
-          data: { server, tool, params: args, proposal_id: proposalId, consensus_votes: consensusVotes, result, success },
-        });
-      }
-    }
+      return result;
+    } catch (error: unknown) {
+      const executionTimeMs = Date.now() - startedAt;
+      const message = error instanceof Error ? error.message : 'Unknown MCP error';
 
-    return result;
+      if (proposalId && this.ffpMode) {
+        await supabase.from('proposals').update({ status: 'failed' }).eq('id', proposalId);
+      }
+
+      await this.recordMcpCall({
+        agentId,
+        server,
+        tool,
+        args,
+        proposalId,
+        consensusApproved,
+        consensusVotes,
+        success: false,
+        errorMessage: message,
+        executionTimeMs,
+      });
+
+      throw error;
+    }
   }
 
   private async proposeToConsensus(params: {
@@ -104,7 +121,8 @@ export class MCPRouter {
     tool: string;
     arguments: unknown;
   }) {
-    const { data: proposal } = await supabase
+    const supabase = getSupabaseAdmin();
+    const { data: proposal, error } = await supabase
       .from('proposals')
       .insert({
         agent_id: params.agentId,
@@ -112,28 +130,38 @@ export class MCPRouter {
         params: { server: params.server, tool: params.tool, arguments: params.arguments },
         confidence: 0.85,
         reasoning: `MCP call to ${params.server}.${params.tool}`,
+        status: 'pending',
       })
-      .select()
+      .select('id')
       .single();
+
+    if (error || !proposal) {
+      throw new Error('Failed to create consensus proposal');
+    }
 
     return proposal as { id: string };
   }
 
-  private async waitForConsensus(proposalId: string) {
-    // Allow 3 seconds for agents to vote
-    await new Promise(resolve => setTimeout(resolve, 3000));
+  private async waitForConsensus(proposalId: string, threshold: number) {
+    await new Promise(resolve => setTimeout(resolve, this.defaultWaitMs));
 
+    const supabase = getSupabaseAdmin();
     const { data: votes } = await supabase
       .from('votes')
-      .select('*')
+      .select('vote')
       .eq('proposal_id', proposalId);
 
-    const approvals = votes?.filter(v => v.vote === 'approve').length ?? 0;
+    const approvals = (votes ?? []).filter((vote: VoteRecord) => vote.vote === 'approve').length;
     const total = votes?.length ?? 0;
-    const threshold = 0.67;
     const approved = total > 0 && approvals / total >= threshold;
 
-    return { approved, votes: votes ?? [], threshold, approvals, total };
+    return {
+      approved,
+      votes: votes ?? [],
+      threshold,
+      approvals,
+      total,
+    };
   }
 
   private async executeMCPCall(serverUrl: string, tool: string, args: unknown) {
@@ -148,8 +176,62 @@ export class MCPRouter {
       }),
     });
 
-    const data = (await response.json()) as { error?: { message: string }; result?: unknown };
-    if (data.error) throw new Error(data.error.message);
+    if (!response.ok) {
+      throw new Error(`Remote MCP server returned ${response.status}`);
+    }
+
+    const data = await response.json() as { error?: { message: string }; result?: unknown };
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
     return data.result;
   }
+
+  private async recordMcpCall(params: {
+    agentId: string;
+    server: string;
+    tool: string;
+    args: Record<string, unknown>;
+    proposalId: string | null;
+    consensusApproved: boolean | null;
+    consensusVotes: unknown[] | null;
+    success: boolean;
+    result?: unknown;
+    errorMessage?: string;
+    executionTimeMs: number;
+  }) {
+    const supabase = getSupabaseAdmin();
+
+    await supabase.from('mcp_calls').insert({
+      agent_id: params.agentId,
+      mcp_server: params.server,
+      tool_name: params.tool,
+      params: params.args,
+      proposal_id: params.proposalId,
+      consensus_approved: params.consensusApproved,
+      consensus_votes: params.consensusVotes,
+      result: params.result ?? null,
+      success: params.success,
+      error_message: params.errorMessage ?? null,
+      execution_time_ms: params.executionTimeMs,
+    });
+
+    if (params.proposalId && this.ffpMode) {
+      await supabase.from('chain_logs').insert({
+        agent_id: params.agentId,
+        action: 'mcp_call',
+        data: {
+          server: params.server,
+          tool: params.tool,
+          params: params.args,
+          proposal_id: params.proposalId,
+          consensus_votes: params.consensusVotes,
+          result: params.result ?? null,
+          success: params.success,
+          error: params.errorMessage ?? null,
+        },
+      });
+    }
+  }
 }
+
