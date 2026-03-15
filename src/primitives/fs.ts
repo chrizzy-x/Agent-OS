@@ -179,8 +179,9 @@ export async function fsMkdir(
 
   return withAudit({ agentId: ctx.agentId, primitive: 'fs', operation: 'mkdir', metadata: { path } }, async () => {
     const keepPath = `${path}/.keep`;
-    return fsWrite(ctx, { path: keepPath, data: '', contentType: 'application/x-directory' });
-  }).then(() => ({ path }));
+    await fsWrite(ctx, { path: keepPath, data: '', contentType: 'application/x-directory' });
+    return { path };
+  });
 }
 
 // Get metadata for a file without reading its content.

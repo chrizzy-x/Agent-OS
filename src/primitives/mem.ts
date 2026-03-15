@@ -63,7 +63,14 @@ export async function memGet(
       throw new NotFoundError(`Key not found: ${key}`);
     }
 
-    const result = { key, value: JSON.parse(raw) };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error(`Corrupted value for key "${key}": stored data is not valid JSON`);
+    }
+
+    const result = { key, value: parsed };
     void getFFPClient().log({ primitive: 'mem', action: 'get', params: { key }, result: { key }, timestamp: Date.now(), agentId: ctx.agentId });
     return result;
   });
