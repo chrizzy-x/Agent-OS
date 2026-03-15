@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { verifyAgentToken, extractBearerToken } from '@/src/auth/agent-identity';
+import { requireAgentContext } from '@/src/auth/request';
+import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
 // DELETE /api/skills/uninstall - Uninstall a skill
 export async function DELETE(request: NextRequest) {
-  const token = extractBearerToken(request.headers.get('Authorization') ?? undefined);
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
   let agentCtx;
   try {
-    agentCtx = verifyAgentToken(token);
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    agentCtx = requireAgentContext(request.headers);
+  } catch (error: unknown) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ error: err.message }, { status: err.statusCode });
   }
 
   let body: Record<string, unknown>;
@@ -35,7 +34,10 @@ export async function DELETE(request: NextRequest) {
     .eq('agent_id', agentCtx.agentId)
     .eq('skill_id', skill_id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+  }
 
   // Decrement install count (best-effort)
   await supabase.rpc('decrement_skill_installs', { skill_id });

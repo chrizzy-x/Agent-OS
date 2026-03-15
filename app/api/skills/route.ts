@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { verifyAgentToken, extractBearerToken } from '@/src/auth/agent-identity';
+import { requireAgentContext } from '@/src/auth/request';
+import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
@@ -53,16 +54,12 @@ export async function GET(request: NextRequest) {
 
 // POST /api/skills - Publish a new skill
 export async function POST(request: NextRequest) {
-  const token = extractBearerToken(request.headers.get('Authorization') ?? undefined);
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   let agentCtx;
   try {
-    agentCtx = verifyAgentToken(token);
-  } catch {
-    return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    agentCtx = requireAgentContext(request.headers);
+  } catch (error: unknown) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ error: err.message }, { status: err.statusCode });
   }
 
   let body: Record<string, unknown>;
@@ -76,8 +73,8 @@ export async function POST(request: NextRequest) {
     price_per_call, free_tier_calls, capabilities, source_code,
     primitives_required, tags, homepage_url, repository_url } = body as Record<string, unknown>;
 
-  if (!name || !slug || !category || !description || !capabilities || !source_code) {
-    return NextResponse.json({ error: 'Missing required fields: name, slug, category, description, capabilities, source_code' }, { status: 400 });
+  if (!name || !slug || !category) {
+    return NextResponse.json({ error: 'Missing required fields: name, slug, category' }, { status: 400 });
   }
 
   // Validate slug format
@@ -94,14 +91,14 @@ export async function POST(request: NextRequest) {
       author_id: agentCtx.agentId,
       author_name: agentCtx.agentId.slice(0, 16),
       category,
-      description,
+      description: description || null,
       long_description: long_description || null,
       icon: icon || '📦',
       pricing_model: pricing_model || 'free',
       price_per_call: price_per_call || 0,
       free_tier_calls: free_tier_calls || 100,
-      capabilities,
-      source_code,
+      capabilities: capabilities || [],
+      source_code: source_code || null,
       primitives_required: primitives_required || [],
       tags: tags || [],
       homepage_url: homepage_url || null,
