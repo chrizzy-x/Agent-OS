@@ -57,6 +57,16 @@ describe('eventsPublish', () => {
     );
   });
 
+  it('generates unique message IDs across calls', async () => {
+    const results = await Promise.all([
+      eventsPublish(ctx, { topic: 'test', message: 'a' }),
+      eventsPublish(ctx, { topic: 'test', message: 'b' }),
+      eventsPublish(ctx, { topic: 'test', message: 'c' }),
+    ]);
+    const ids = results.map(r => r.messageId);
+    expect(new Set(ids).size).toBe(3);
+  });
+
   it('rejects oversized messages', async () => {
     const big = 'x'.repeat(1.1 * 1024 * 1024);
     await expect(eventsPublish(ctx, { topic: 'test', message: big }))

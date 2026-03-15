@@ -327,7 +327,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // Also support running as a standalone Node.js server for local development
-if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test' || process.env.STANDALONE === 'true') {
+if ((process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') || process.env.STANDALONE === 'true') {
   const PORT = parseInt(process.env.PORT ?? '3000', 10);
   const server = createServer(router);
   server.listen(PORT, () => {

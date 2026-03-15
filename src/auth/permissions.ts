@@ -22,7 +22,7 @@ export interface AgentContext {
 
 // Default quotas applied when not overridden in agent record
 export const DEFAULT_QUOTAS: AgentQuotas = {
-  storageQuotaBytes: parseInt(process.env.STORAGE_QUOTA_GB ?? '1') * 1024 * 1024 * 1024,
-  memoryQuotaBytes: parseInt(process.env.MEMORY_QUOTA_MB ?? '100') * 1024 * 1024,
-  rateLimitPerMin: parseInt(process.env.RATE_LIMIT_PER_MIN ?? '100'),
+  storageQuotaBytes: parseInt(process.env.STORAGE_QUOTA_GB ?? '1', 10) * 1024 * 1024 * 1024,
+  memoryQuotaBytes: parseInt(process.env.MEMORY_QUOTA_MB ?? '100', 10) * 1024 * 1024,
+  rateLimitPerMin: parseInt(process.env.RATE_LIMIT_PER_MIN ?? '100', 10),
 };

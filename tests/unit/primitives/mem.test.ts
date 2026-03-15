@@ -73,6 +73,11 @@ describe('memGet', () => {
     mockRedis.get.mockResolvedValue(null);
     await expect(memGet(ctx, { key: 'missing' })).rejects.toThrow(NotFoundError);
   });
+
+  it('throws when stored value is corrupted (not valid JSON)', async () => {
+    mockRedis.get.mockResolvedValue('not-valid-json{{{');
+    await expect(memGet(ctx, { key: 'corrupt' })).rejects.toThrow(/Corrupted value/);
+  });
 });
 
 describe('memDelete', () => {
