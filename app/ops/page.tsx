@@ -1,7 +1,24 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+
+type CrewPair = {
+  status: string;
+  infra_agent?: { name?: string; status?: string } | null;
+} | null;
+
+type CrewHealth = {
+  status: string;
+  health_score: number;
+  summary?: string;
+} | null;
+
+type CrewTask = {
+  id: string;
+  task_type: string;
+  status: string;
+};
 
 type CrewItem = {
   feature: {
@@ -13,11 +30,12 @@ type CrewItem = {
     categoryBadge: string;
     short: string;
   };
-  activePair: { infra_agent_id: string; status: string; infra_agent?: { name: string; status: string } | null } | null;
-  standbyPair: { infra_agent_id: string; status: string; infra_agent?: { name: string; status: string } | null } | null;
-  activeHealth: { status: string; health_score: number; summary: string } | null;
-  standbyHealth: { status: string; health_score: number; summary: string } | null;
-  openTasks: { id: string; task_type: string; status: string }[];
+  activePair: CrewPair;
+  standbyPair: CrewPair;
+  activeHealth: CrewHealth;
+  standbyHealth: CrewHealth;
+  openTasks?: CrewTask[];
+  openTaskCount?: number;
   coverageState: string;
 };
 
@@ -26,6 +44,7 @@ type CrewResponse = {
   settings: { operation_mode: 'single_agent' | 'multi_agent'; consensus_mode_enabled: boolean };
   items: CrewItem[];
   failoverEvents: { id: string; feature_slug: string; reason: string; created_at: string }[];
+  requiresAuthForDetails?: boolean;
 };
 
 type MetricsResponse = {
@@ -38,6 +57,7 @@ type MetricsResponse = {
     openTasks: number;
     failoverEvents: number;
   };
+  requiresAuthForDetails?: boolean;
 };
 
 type SettingsResponse = {
@@ -55,13 +75,16 @@ export default function OpsPage() {
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
 
-  async function loadAll() {
+  async function loadAll(token = apiKey) {
     setLoading(true);
     try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const requestInit = headers ? { headers } : undefined;
+
       const [crewRes, metricsRes, settingsRes] = await Promise.all([
-        fetch('/api/ops/crew'),
-        fetch('/api/ops/metrics'),
-        fetch('/api/ops/settings'),
+        fetch('/api/ops/crew', requestInit),
+        fetch('/api/ops/metrics', requestInit),
+        fetch('/api/ops/settings', requestInit),
       ]);
 
       const [crewData, metricsData, settingsData] = await Promise.all([
@@ -81,7 +104,7 @@ export default function OpsPage() {
   useEffect(() => {
     const storedKey = localStorage.getItem('apiKey') || '';
     setApiKey(storedKey);
-    loadAll();
+    void loadAll(storedKey);
   }, []);
 
   async function saveSettings(next: { operationMode?: 'single_agent' | 'multi_agent'; consensusModeEnabled?: boolean }) {
@@ -107,7 +130,7 @@ export default function OpsPage() {
       }
       setSettings({ settings: data.settings, ffpEnabled: data.ffpEnabled });
       setMessage('Ops settings updated.');
-      await loadAll();
+      await loadAll(apiKey);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : 'Failed to update settings');
     } finally {
@@ -137,7 +160,7 @@ export default function OpsPage() {
         throw new Error(data.error || 'Action failed');
       }
       setMessage('Action completed.');
-      await loadAll();
+      await loadAll(apiKey);
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : 'Action failed');
     } finally {
@@ -176,7 +199,7 @@ export default function OpsPage() {
           <div className="flex items-center gap-5 text-sm">
             <Link href="/dashboard" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Dashboard</Link>
             <Link href="/docs/features" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Feature Catalog</Link>
-            <button onClick={() => loadAll()} className="btn-outline text-xs px-4 py-2">Refresh</button>
+            <button onClick={() => void loadAll(apiKey)} className="btn-outline text-xs px-4 py-2">Refresh</button>
           </div>
         </div>
       </nav>
@@ -191,13 +214,19 @@ export default function OpsPage() {
             </p>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <button onClick={() => runAction('/api/ops/crew/bootstrap')} className="btn-outline text-sm px-4 py-2" disabled={saving}>Bootstrap Coverage</button>
-            <button onClick={() => runAction('/api/ops/crew/cron')} className="btn-primary text-sm px-4 py-2" disabled={saving}>Run Cron Cycle</button>
+            <button onClick={() => void runAction('/api/ops/crew/bootstrap')} className="btn-outline text-sm px-4 py-2" disabled={saving}>Bootstrap Coverage</button>
+            <button onClick={() => void runAction('/api/ops/crew/cron')} className="btn-primary text-sm px-4 py-2" disabled={saving}>Run Cron Cycle</button>
           </div>
         </section>
 
         {message && (
           <div className="card p-4 text-sm" style={{ color: 'var(--text-muted)' }}>{message}</div>
+        )}
+
+        {crew?.requiresAuthForDetails && !apiKey && (
+          <div className="card p-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+            Signed-out view hides individual infrastructure agent identities and incident details. Sign in to inspect and operate the full control plane.
+          </div>
         )}
 
         <section className="grid md:grid-cols-4 gap-4">
@@ -219,7 +248,7 @@ export default function OpsPage() {
             <h2 className="text-xl font-bold mb-4">Run Mode</h2>
             <div className="flex gap-2 mb-4">
               <button
-                onClick={() => saveSettings({ operationMode: 'single_agent', consensusModeEnabled: false })}
+                onClick={() => void saveSettings({ operationMode: 'single_agent', consensusModeEnabled: false })}
                 disabled={saving}
                 className="btn-outline text-sm px-4 py-2"
                 style={operationMode === 'single_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
@@ -227,7 +256,7 @@ export default function OpsPage() {
                 Single-agent
               </button>
               <button
-                onClick={() => saveSettings({ operationMode: 'multi_agent' })}
+                onClick={() => void saveSettings({ operationMode: 'multi_agent' })}
                 disabled={saving}
                 className="btn-outline text-sm px-4 py-2"
                 style={operationMode === 'multi_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
@@ -244,7 +273,7 @@ export default function OpsPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => saveSettings({ consensusModeEnabled: !consensusEnabled })}
+                  onClick={() => void saveSettings({ consensusModeEnabled: !consensusEnabled })}
                   disabled={!canToggleConsensus || saving}
                   className="btn-primary text-sm px-4 py-2"
                   style={!canToggleConsensus ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
@@ -285,49 +314,53 @@ export default function OpsPage() {
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading operations data...</div>
             ) : (
               <div className="space-y-3 max-h-[900px] overflow-y-auto pr-1">
-                {filteredItems.map(item => (
-                  <article key={item.feature.slug} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
-                    <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="badge badge-purple text-xs">{item.feature.categoryBadge}</span>
-                          <span className="text-xs font-mono" style={{ color: 'var(--text-dim)' }}>#{item.feature.id}</span>
-                          <span className="text-xs uppercase" style={{ color: 'var(--text-dim)' }}>{item.feature.kind.replace('_', ' ')}</span>
-                        </div>
-                        <h3 className="font-semibold text-lg">{item.feature.name}</h3>
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{item.feature.short}</p>
-                      </div>
-                      <button
-                        onClick={() => runAction('/api/ops/crew/failover', { featureSlug: item.feature.slug })}
-                        className="btn-outline text-xs px-3 py-2"
-                        disabled={saving || !apiKey}
-                      >
-                        Force failover
-                      </button>
-                    </div>
+                {filteredItems.map(item => {
+                  const openTaskCount = item.openTaskCount ?? item.openTasks?.length ?? 0;
 
-                    <div className="grid lg:grid-cols-3 gap-3 text-sm">
-                      <div className="rounded-lg p-3" style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)' }}>
-                        <div className="font-semibold mb-1">Active agent</div>
-                        <div>{item.activePair?.infra_agent?.name ?? 'Missing'}</div>
-                        <div style={{ color: 'var(--text-muted)' }}>Status: {item.activeHealth?.status ?? item.activePair?.status ?? 'unknown'}</div>
-                        <div style={{ color: 'var(--text-muted)' }}>Score: {item.activeHealth?.health_score ?? 'n/a'}</div>
+                  return (
+                    <article key={item.feature.slug} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+                      <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="badge badge-purple text-xs">{item.feature.categoryBadge}</span>
+                            <span className="text-xs font-mono" style={{ color: 'var(--text-dim)' }}>#{item.feature.id}</span>
+                            <span className="text-xs uppercase" style={{ color: 'var(--text-dim)' }}>{item.feature.kind.replace('_', ' ')}</span>
+                          </div>
+                          <h3 className="font-semibold text-lg">{item.feature.name}</h3>
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{item.feature.short}</p>
+                        </div>
+                        <button
+                          onClick={() => void runAction('/api/ops/crew/failover', { featureSlug: item.feature.slug })}
+                          className="btn-outline text-xs px-3 py-2"
+                          disabled={saving || !apiKey}
+                        >
+                          Force failover
+                        </button>
                       </div>
-                      <div className="rounded-lg p-3" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
-                        <div className="font-semibold mb-1">Standby agent</div>
-                        <div>{item.standbyPair?.infra_agent?.name ?? 'Missing'}</div>
-                        <div style={{ color: 'var(--text-muted)' }}>Status: {item.standbyHealth?.status ?? item.standbyPair?.status ?? 'unknown'}</div>
-                        <div style={{ color: 'var(--text-muted)' }}>Score: {item.standbyHealth?.health_score ?? 'n/a'}</div>
+
+                      <div className="grid lg:grid-cols-3 gap-3 text-sm">
+                        <div className="rounded-lg p-3" style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)' }}>
+                          <div className="font-semibold mb-1">Active agent</div>
+                          <div>{item.activePair?.infra_agent?.name ?? 'Missing'}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>Status: {item.activeHealth?.status ?? item.activePair?.status ?? 'unknown'}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>Score: {item.activeHealth?.health_score ?? 'n/a'}</div>
+                        </div>
+                        <div className="rounded-lg p-3" style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                          <div className="font-semibold mb-1">Standby agent</div>
+                          <div>{item.standbyPair?.infra_agent?.name ?? 'Missing'}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>Status: {item.standbyHealth?.status ?? item.standbyPair?.status ?? 'unknown'}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>Score: {item.standbyHealth?.health_score ?? 'n/a'}</div>
+                        </div>
+                        <div className="rounded-lg p-3" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                          <div className="font-semibold mb-1">Queue and coverage</div>
+                          <div>Coverage: {item.coverageState}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>Open tasks: {openTaskCount}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>Category: {item.feature.categoryName}</div>
+                        </div>
                       </div>
-                      <div className="rounded-lg p-3" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}>
-                        <div className="font-semibold mb-1">Queue and coverage</div>
-                        <div>Coverage: {item.coverageState}</div>
-                        <div style={{ color: 'var(--text-muted)' }}>Open tasks: {item.openTasks.length}</div>
-                        <div style={{ color: 'var(--text-muted)' }}>Category: {item.feature.categoryName}</div>
-                      </div>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>

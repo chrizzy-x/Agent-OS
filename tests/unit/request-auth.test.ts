@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createAgentToken } from '../../src/auth/agent-identity.js';
 import {
   hasAdminAccess,
+  hasAgentAccess,
   hasCronAccess,
   requireAgentContext,
   requireCronAccess,
@@ -18,6 +19,18 @@ describe('request auth helpers', () => {
 
     const ctx = requireAgentContext(headers);
     expect(ctx.agentId).toBe('agent-from-jwt');
+  });
+
+  it('recognizes valid agent bearer tokens', () => {
+    const token = createAgentToken('agent-from-jwt', { expiresIn: '1h' });
+    const headers = new Headers({ Authorization: `Bearer ${token}` });
+
+    expect(hasAgentAccess(headers)).toBe(true);
+  });
+
+  it('rejects invalid agent bearer tokens', () => {
+    const headers = new Headers({ Authorization: 'Bearer not-a-real-token' });
+    expect(hasAgentAccess(headers)).toBe(false);
   });
 
   it('recognizes the configured admin token', () => {

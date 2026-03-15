@@ -15,6 +15,15 @@ export function requireAgentContext(headers: Headers | globalThis.Headers): Agen
   return verifyAgentToken(token);
 }
 
+export function hasAgentAccess(headers: Headers | globalThis.Headers): boolean {
+  try {
+    requireAgentContext(headers);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function hasAdminAccess(headers: Headers | globalThis.Headers): boolean {
   const token = extractBearerToken(readAuthorization(headers));
   if (!token) return false;

@@ -7,6 +7,11 @@ export const metadata: Metadata = {
   description:
     'Agent OS combines primitives, universal MCP routing, consensus controls, a skills marketplace, and an autonomous operations crew for production AI agents.',
   keywords: 'AI agents, MCP, autonomous agents, skills marketplace, agent infrastructure, consensus',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
   openGraph: {
     title: 'Agent OS',
     description: 'Universal MCP, skills, consensus, and production infrastructure for AI agents.',

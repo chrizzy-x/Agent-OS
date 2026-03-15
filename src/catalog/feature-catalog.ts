@@ -1,4 +1,4 @@
-﻿export type CatalogKind = 'platform_feature' | 'runtime_function';
+export type CatalogKind = 'platform_feature' | 'runtime_function';
 
 type GroupKey =
   | 'core'
@@ -356,7 +356,7 @@ export const PROJECT_DETAILS = {
   name: 'Agent OS',
   summary: 'Agent OS is a production platform for building, deploying, and operating autonomous AI agents with hosted primitives, MCP routing, skills, and multi-agent control features.',
   audience: 'Platform engineers, AI product teams, startups shipping agent workflows, and operators who need governed automation.',
-  productionPath: 'GitHub main -> GitHub Actions -> Vercel production',
+  productionPath: 'Primary path: GitHub main -> GitHub Actions -> Vercel production. Direct Vercel deploys can be used temporarily for recovery or launch unblockers.',
   stack: [
     'Next.js App Router for product UI and APIs',
     'Supabase PostgreSQL and storage for durable state',
@@ -404,3 +404,4 @@ export function getFeatureCoverageSummary() {
     totalCatalogItems: FULL_CATALOG.length,
   };
 }
+

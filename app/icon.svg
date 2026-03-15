@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Agent OS icon">
+  <defs>
+    <linearGradient id="agentos-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#09090f" />
+  <rect x="10" y="10" width="108" height="108" rx="22" fill="none" stroke="url(#agentos-gradient)" stroke-width="8" />
+  <path d="M64 26L94 102H78l-6-16H56l-6 16H34L64 26zm3 46l-11-29-11 29h22z" fill="url(#agentos-gradient)" />
+</svg>
