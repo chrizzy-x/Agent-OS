@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (insertError) {
-    console.error('Signup insert error:', insertError);
+    console.error('[signup] insert error:', insertError);
     return NextResponse.json({ error: 'Failed to create account. Please try again.' }, { status: 500 });
   }
 
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
   try {
     apiKey = createAgentToken(agentId, { expiresIn: '90d' });
   } catch (err) {
-    console.error('Token creation error:', err);
+    console.error('[signup] token creation error:', err);
     // Clean up the inserted agent on failure
     await supabase.from('agents').delete().eq('id', agentId);
     return NextResponse.json({ error: 'Failed to generate credentials. Please try again.' }, { status: 500 });

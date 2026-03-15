@@ -207,16 +207,21 @@ See [docs/security.md](docs/security.md) for the full threat model.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `SUPABASE_URL` | ✅ | Your Supabase project URL |
-| `SUPABASE_SERVICE_KEY` | ✅ | Supabase service role key (bypasses RLS) |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service role key (bypasses RLS). Legacy alias `SUPABASE_SERVICE_KEY` is also accepted. |
 | `REDIS_URL` | ✅ | Redis connection string (e.g. from Upstash) |
 | `JWT_SECRET` | ✅ | Secret for signing agent tokens — generate with `openssl rand -hex 32` |
 | `ADMIN_TOKEN` | ✅ | Password for the agent creation endpoint |
-| `ALLOWED_DOMAINS` | ✅ | Comma-separated list of domains agents may call via `net_*` |
-| `ENCRYPTION_KEY` | ✅ | Key for encrypting sensitive data at rest |
-| `NODE_ENV` | ✅ | Set to `production` on Vercel |
+| `ALLOWED_DOMAINS` | ❌ | Comma-separated list of domains agents may call via `net_*` |
+| `NODE_ENV` | ❌ | Set to `production` on Vercel |
+| `CRON_SECRET` | ❌ | Secret for verifying scheduled cron requests |
 | `STORAGE_QUOTA_GB` | ❌ | Default storage quota per agent (default: `1`) |
 | `MEMORY_QUOTA_MB` | ❌ | Default Redis memory quota per agent (default: `100`) |
 | `RATE_LIMIT_PER_MIN` | ❌ | Default rate limit per agent (default: `100`) |
+| `FFP_MODE` | ❌ | Set to `enabled` to activate Furge Fabric Protocol (default: disabled) |
+| `FFP_CHAIN_ID` | ❌ | FFP chain identifier (required when `FFP_MODE=enabled`) |
+| `FFP_NODE_URL` | ❌ | FFP node endpoint URL (required when `FFP_MODE=enabled`) |
+| `FFP_AGENT_ID` | ❌ | FFP agent identifier (required when `FFP_MODE=enabled`) |
+| `FFP_REQUIRE_CONSENSUS` | ❌ | Set to `true` to gate critical operations behind FFP consensus |
 
 ---
 
@@ -274,10 +279,22 @@ npm run test:coverage # generate coverage report
 Agent-OS/
 ├── src/
 │   ├── index.ts                  # HTTP server + request router
+│   ├── tools.ts                  # Tool registry (MCP tool list)
 │   ├── auth/
 │   │   ├── agent-identity.ts     # JWT creation + verification
 │   │   ├── agent-context.ts      # AsyncLocalStorage for request context
 │   │   └── permissions.ts        # AgentContext type + default quotas
+│   ├── catalog/
+│   │   └── feature-catalog.ts    # Feature definitions for the docs UI
+│   ├── config/
+│   │   └── env.ts                # Environment variable helpers
+│   ├── ffp/
+│   │   └── client.ts             # Furge Fabric Protocol client (log + consensus)
+│   ├── mcp/
+│   │   └── registry.ts           # MCP server registry
+│   ├── ops/
+│   │   ├── public.ts             # Public ops endpoints
+│   │   └── service.ts            # Autonomous crew service
 │   ├── primitives/
 │   │   ├── mem.ts                # Memory primitive (Redis)
 │   │   ├── fs.ts                 # Filesystem primitive (Supabase Storage)
@@ -290,6 +307,9 @@ Agent-OS/
 │   │   ├── resource-manager.ts   # Rate limits + quota enforcement
 │   │   ├── sandbox.ts            # Sandboxed code execution
 │   │   └── security.ts           # SSRF checks + path/SQL validation
+│   ├── skills/
+│   │   ├── executor.ts           # Skill execution engine
+│   │   └── service.ts            # Skill management service
 │   ├── storage/
 │   │   ├── redis.ts              # Redis client singleton
 │   │   ├── supabase.ts           # Supabase client singleton
@@ -304,6 +324,7 @@ Agent-OS/
 │   ├── integration/              # Auth + storage integration tests
 │   └── e2e/                      # Full HTTP server end-to-end tests
 ├── docs/
+│   ├── overview.md               # Product overview, use cases, architecture
 │   ├── api.md                    # Complete tool reference
 │   └── security.md               # Threat model + security controls
 ├── .github/workflows/
