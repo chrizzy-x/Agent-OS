@@ -30,7 +30,7 @@ export function FeatureShowcase() {
     } catch {
       // Fall back to the static description.
     } finally {
-      setLoadingFeature(featureSlug);
+      setLoadingFeature(null);
     }
   };
 
