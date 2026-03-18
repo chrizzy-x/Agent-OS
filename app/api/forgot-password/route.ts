@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { hashPassword } from '@/src/auth/password';
+import {
+  buildPasswordResetUrl,
+  createPasswordResetRecord,
+  createPasswordResetToken,
+  shouldExposePasswordResetLink,
+} from '@/src/auth/password-reset';
 
 export const runtime = 'nodejs';
 
@@ -17,41 +22,52 @@ export async function POST(req: NextRequest) {
   }
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
-
   if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
   }
 
-  if (!newPassword || newPassword.length < 8) {
-    return NextResponse.json({ error: 'New password must be at least 8 characters' }, { status: 400 });
+  const supabase = getSupabaseAdmin();
+  const { data: agents, error: lookupError, count } = await supabase
+    .from('agents')
+    .select('id, metadata', { count: 'exact' })
+    .eq('metadata->>email', email)
+    .limit(2);
+
+  if (lookupError) {
+    console.error('[forgot-password] lookup error:', lookupError);
+    return NextResponse.json({ error: 'Failed to request a reset link. Please try again.' }, { status: 500 });
   }
 
-  const supabase = getSupabaseAdmin();
-
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('id, metadata')
-    .eq('metadata->>email', email)
-    .maybeSingle();
-
-  if (!agent) {
-    // Don't reveal whether email exists
+  if ((count ?? agents?.length ?? 0) > 1) {
+    console.error(`[forgot-password] duplicate agent accounts detected for email ${email}; refusing password reset request.`);
     return NextResponse.json({ success: true });
   }
 
-  const newHash = await hashPassword(newPassword);
-  const updatedMetadata = { ...(agent.metadata as Record<string, unknown>), password_hash: newHash };
+  if (!agents?.[0]) {
+    return NextResponse.json({ success: true });
+  }
 
-  const { error } = await supabase
+  const agent = agents[0];
+  const token = createPasswordResetToken();
+  const updatedMetadata = {
+    ...((agent.metadata as Record<string, unknown> | null | undefined) ?? {}),
+    password_reset: createPasswordResetRecord(token),
+  };
+
+  const { error: updateError } = await supabase
     .from('agents')
     .update({ metadata: updatedMetadata })
     .eq('id', agent.id);
 
-  if (error) {
-    console.error('[forgot-password] reset error:', error);
-    return NextResponse.json({ error: 'Failed to reset password. Please try again.' }, { status: 500 });
+  if (updateError) {
+    console.error('[forgot-password] request error:', updateError);
+    return NextResponse.json({ error: 'Failed to request a reset link. Please try again.' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  const response: Record<string, unknown> = { success: true };
+  if (shouldExposePasswordResetLink()) {
+    response.resetUrl = buildPasswordResetUrl(email, token);
+  }
+
+  return NextResponse.json(response);
 }

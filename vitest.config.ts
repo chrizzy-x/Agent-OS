@@ -1,6 +1,15 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { defineConfig } from 'vitest/config';
 
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(rootDir),
+    },
+  },
   test: {
     globals: true,
     environment: 'node',
@@ -11,7 +20,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.d.ts'],
     },
-    // Set test timeout to 10s to account for async operations
     testTimeout: 10_000,
   },
 });

@@ -1,4 +1,5 @@
-import { AuthError } from '../utils/errors.js';
+import { getSupabaseAdmin } from '../storage/supabase.js';
+import { AuthError, PermissionError } from '../utils/errors.js';
 import type { AgentContext } from './permissions.js';
 import { extractBearerToken, verifyAgentToken } from './agent-identity.js';
 import { getAdminToken, getCronSecret } from '../config/env.js';
@@ -33,6 +34,46 @@ export function hasAdminAccess(headers: Headers | globalThis.Headers): boolean {
 export function requireAdminAccess(headers: Headers | globalThis.Headers): void {
   if (!hasAdminAccess(headers)) {
     throw new AuthError('Invalid admin token');
+  }
+}
+
+function isOpsAdminMetadata(metadata: Record<string, unknown> | null | undefined): boolean {
+  return metadata?.ops_admin === true || metadata?.role === 'platform_admin';
+}
+
+export async function requireOpsAdminAccess(headers: Headers | globalThis.Headers): Promise<void> {
+  if (hasAdminAccess(headers)) {
+    return;
+  }
+
+  const agentContext = requireAgentContext(headers);
+  const supabase = getSupabaseAdmin();
+  const { data: agent, error } = await supabase
+    .from('agents')
+    .select('id, metadata')
+    .eq('id', agentContext.agentId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load agent record: ${error.message}`);
+  }
+
+  if (!agent) {
+    throw new AuthError('Unknown agent');
+  }
+
+  const metadata = (agent.metadata as Record<string, unknown> | null | undefined) ?? {};
+  if (!isOpsAdminMetadata(metadata)) {
+    throw new PermissionError('Ops admin access required');
+  }
+}
+
+export async function hasOpsAdminAccess(headers: Headers | globalThis.Headers): Promise<boolean> {
+  try {
+    await requireOpsAdminAccess(headers);
+    return true;
+  } catch {
+    return false;
   }
 }
 

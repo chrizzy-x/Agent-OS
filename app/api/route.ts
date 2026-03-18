@@ -16,8 +16,12 @@ export async function GET() {
       'POST /mcp': 'Universal MCP tool execution (Bearer token required)',
       'GET  /api/mcp': 'Universal MCP registry and active external servers',
       'POST /api/mcp': 'JSON-RPC MCP entrypoint (Bearer token required)',
+      'GET  /studio': 'Terminal-style Studio for guided agent setup and operations',
+      'POST /api/studio/command': 'Studio command execution and mutation previews (Bearer token required)',
       'GET  /ops': 'Autonomous crew console',
       'GET  /docs/features': 'Complete plain-English feature catalog',
     },
   });
 }
+
+

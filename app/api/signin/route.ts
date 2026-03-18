@@ -29,26 +29,36 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin();
-
-  const { data: agent } = await supabase
+  const { data: agents, error: lookupError, count } = await supabase
     .from('agents')
-    .select('id, name, metadata')
+    .select('id, name, metadata', { count: 'exact' })
     .eq('metadata->>email', email)
-    .maybeSingle();
+    .limit(2);
 
-  if (!agent) {
+  if (lookupError) {
+    console.error('Signin lookup error:', lookupError);
+    return NextResponse.json({ error: 'Failed to look up this account. Please try again.' }, { status: 500 });
+  }
+
+  if ((count ?? agents?.length ?? 0) === 0 || !agents?.[0]) {
     return NextResponse.json(
       { error: 'No account found for that email. Please sign up first.' },
       { status: 404 }
     );
   }
 
-  // Verify password
-  const passwordHash = (agent.metadata as Record<string, string>)?.password_hash;
-  if (!passwordHash) {
-    // Legacy account without password — reject and prompt them to reset
+  if ((count ?? agents.length) > 1) {
     return NextResponse.json(
-      { error: 'This account requires a password reset. Please sign up again with a new password.' },
+      { error: 'Multiple accounts share this email. Contact support to restore access safely.' },
+      { status: 409 }
+    );
+  }
+
+  const agent = agents[0];
+  const passwordHash = (agent.metadata as Record<string, string> | null | undefined)?.password_hash;
+  if (!passwordHash) {
+    return NextResponse.json(
+      { error: 'This account requires a password reset. Request a reset link to continue.' },
       { status: 401 }
     );
   }

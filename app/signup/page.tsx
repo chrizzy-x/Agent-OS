@@ -115,9 +115,10 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
           { href: '/dashboard', label: 'Dashboard', primary: true },
+          { href: '/studio', label: 'Studio', primary: false },
           { href: '/docs', label: 'Docs', primary: false },
           { href: '/marketplace', label: 'Skills', primary: false },
         ].map(button => (
@@ -385,3 +386,4 @@ export default function SignupPage() {
     </div>
   );
 }
+

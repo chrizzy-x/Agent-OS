@@ -1,22 +1,13 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { performFailover } from '@/src/ops/service';
-import { hasAdminAccess, requireAgentContext } from '@/src/auth/request';
+import { requireOpsAdminAccess } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
-function canWrite(headers: Headers) {
-  if (hasAdminAccess(headers)) {
-    return true;
-  }
-
-  requireAgentContext(headers);
-  return true;
-}
-
 export async function POST(request: NextRequest) {
   try {
-    canWrite(request.headers);
+    await requireOpsAdminAccess(request.headers);
     const body = await request.json() as { featureSlug?: string; reason?: string };
     if (!body.featureSlug) {
       return NextResponse.json({ error: 'featureSlug is required' }, { status: 400 });

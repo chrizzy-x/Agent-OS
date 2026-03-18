@@ -37,14 +37,18 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabaseAdmin();
 
-  // Check for existing registration
-  const { data: existing } = await supabase
+  const { data: existingAgents, error: existingError, count } = await supabase
     .from('agents')
-    .select('id')
+    .select('id', { count: 'exact' })
     .eq('metadata->>email', email)
-    .maybeSingle();
+    .limit(2);
 
-  if (existing) {
+  if (existingError) {
+    console.error('[signup] lookup error:', existingError);
+    return NextResponse.json({ error: 'Failed to verify account uniqueness. Please try again.' }, { status: 500 });
+  }
+
+  if ((count ?? existingAgents?.length ?? 0) > 0) {
     return NextResponse.json(
       { error: 'An account with this email already exists. Please sign in.' },
       { status: 409 }
@@ -55,7 +59,6 @@ export async function POST(req: NextRequest) {
   const name = agentName || `Agent ${agentId.slice(0, 12)}`;
   const passwordHash = await hashPassword(password);
 
-  // Insert agent record into Supabase
   const { error: insertError } = await supabase.from('agents').insert({
     id: agentId,
     name,
@@ -65,16 +68,20 @@ export async function POST(req: NextRequest) {
 
   if (insertError) {
     console.error('[signup] insert error:', insertError);
+    if (insertError.code === '23505') {
+      return NextResponse.json(
+        { error: 'An account with this email already exists. Please sign in.' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: 'Failed to create account. Please try again.' }, { status: 500 });
   }
 
-  // Create JWT token (this is the API key users will use as Bearer token)
   let apiKey: string;
   try {
     apiKey = createAgentToken(agentId, { expiresIn: '90d' });
   } catch (err) {
     console.error('[signup] token creation error:', err);
-    // Clean up the inserted agent on failure
     await supabase.from('agents').delete().eq('id', agentId);
     return NextResponse.json({ error: 'Failed to generate credentials. Please try again.' }, { status: 500 });
   }

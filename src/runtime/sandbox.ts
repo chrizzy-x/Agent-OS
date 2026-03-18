@@ -12,6 +12,9 @@ const LANGUAGE_COMMANDS: Record<SupportedLanguage, { cmd: string; fileExt: strin
   bash: { cmd: 'bash', fileExt: 'sh' },
 };
 
+const WINDOWS_ENV_KEYS = ['PATH', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'ComSpec', 'WINDIR'];
+const POSIX_ENV_KEYS = ['PATH', 'LANG', 'LC_ALL', 'SHELL'];
+
 export interface ExecutionResult {
   stdout: string;
   stderr: string;
@@ -47,6 +50,33 @@ export async function executeCode(
   }
 }
 
+export function buildSandboxEnv(cwd: string): NodeJS.ProcessEnv {
+  const inheritedKeys = process.platform === 'win32' ? WINDOWS_ENV_KEYS : POSIX_ENV_KEYS;
+  const env: NodeJS.ProcessEnv = {
+    HOME: cwd,
+    TMPDIR: cwd,
+    TEMP: cwd,
+    TMP: cwd,
+    NODE_ENV: 'production',
+    NO_COLOR: '1',
+    PYTHONNOUSERSITE: '1',
+    PIP_DISABLE_PIP_VERSION_CHECK: '1',
+  };
+
+  for (const key of inheritedKeys) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.length > 0) {
+      env[key] = value;
+    }
+  }
+
+  if (!env.PATH) {
+    env.PATH = process.env.PATH ?? '';
+  }
+
+  return env;
+}
+
 async function runProcess(
   cmd: string,
   args: string[],
@@ -57,18 +87,9 @@ async function runProcess(
     const start = Date.now();
     const maxOutput = 1024 * 1024;
 
-    const childEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      PATH: process.env.PATH ?? '',
-      HOME: cwd,
-      TMPDIR: cwd,
-      TEMP: cwd,
-      TMP: cwd,
-    };
-
     const child = spawn(cmd, args, {
       cwd,
-      env: childEnv,
+      env: buildSandboxEnv(cwd),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -116,4 +137,3 @@ async function runProcess(
     });
   });
 }
-

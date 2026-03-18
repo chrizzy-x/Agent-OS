@@ -1,6 +1,6 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getCrewSettings, updateCrewSettings } from '@/src/ops/service';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireOpsAdminAccess } from '@/src/auth/request';
 import { isFfpEnabled } from '@/src/config/env';
 import { toErrorResponse } from '@/src/utils/errors';
 
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    requireAgentContext(request.headers);
+    await requireOpsAdminAccess(request.headers);
     const body = await request.json() as {
       operationMode?: 'single_agent' | 'multi_agent';
       consensusModeEnabled?: boolean;

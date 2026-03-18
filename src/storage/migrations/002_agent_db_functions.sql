@@ -1,6 +1,6 @@
 -- AgentOS Migration 002: PostgreSQL Functions for Agent-Scoped Database Operations
 -- These functions are called via Supabase RPC from the db primitive.
--- They enforce schema isolation — each agent has its own PostgreSQL schema.
+-- They enforce schema isolation - each agent has its own PostgreSQL schema.
 
 -- Ensure an agent's private schema exists.
 -- Safe to call multiple times (idempotent).
@@ -105,6 +105,8 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_query   JSONB;
+  v_sql     TEXT;
+  v_params  JSONB;
   v_results JSONB := '[]'::JSONB;
   v_count   INTEGER;
   i         INTEGER;
@@ -114,17 +116,66 @@ BEGIN
     RAISE EXCEPTION 'Invalid schema name: %', p_schema;
   END IF;
 
+  IF p_queries IS NULL OR jsonb_typeof(p_queries) <> 'array' THEN
+    RAISE EXCEPTION 'Queries must be a JSON array';
+  END IF;
+
+  IF jsonb_array_length(p_queries) = 0 THEN
+    RETURN v_results;
+  END IF;
+
   EXECUTE format('SET LOCAL search_path TO %I, public', p_schema);
 
   FOR i IN 0 .. jsonb_array_length(p_queries) - 1 LOOP
     v_query := p_queries->i;
+    v_sql := v_query->>'sql';
+    v_params := COALESCE(v_query->'params', '[]'::JSONB);
+
+    IF v_sql IS NULL OR btrim(v_sql) = '' THEN
+      RAISE EXCEPTION 'Missing SQL in statement %', i;
+    END IF;
+
+    IF jsonb_typeof(v_params) <> 'array' THEN
+      RAISE EXCEPTION 'Statement % params must be a JSON array', i;
+    END IF;
 
     -- Block system catalog access in each statement
-    IF (v_query->>'sql') ~* 'pg_catalog|information_schema|pg_shadow|pg_authid' THEN
+    IF v_sql ~* 'pg_catalog|information_schema|pg_shadow|pg_authid|pg_toast' THEN
       RAISE EXCEPTION 'SQL references restricted system catalog in statement %', i;
     END IF;
 
-    EXECUTE v_query->>'sql';
+    CASE jsonb_array_length(v_params)
+      WHEN 0 THEN EXECUTE v_sql;
+      WHEN 1 THEN EXECUTE v_sql USING
+        v_params->>0;
+      WHEN 2 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1;
+      WHEN 3 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2;
+      WHEN 4 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2, v_params->>3;
+      WHEN 5 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2, v_params->>3, v_params->>4;
+      WHEN 6 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2, v_params->>3, v_params->>4,
+        v_params->>5;
+      WHEN 7 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2, v_params->>3, v_params->>4,
+        v_params->>5, v_params->>6;
+      WHEN 8 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2, v_params->>3, v_params->>4,
+        v_params->>5, v_params->>6, v_params->>7;
+      WHEN 9 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2, v_params->>3, v_params->>4,
+        v_params->>5, v_params->>6, v_params->>7, v_params->>8;
+      WHEN 10 THEN EXECUTE v_sql USING
+        v_params->>0, v_params->>1, v_params->>2, v_params->>3, v_params->>4,
+        v_params->>5, v_params->>6, v_params->>7, v_params->>8, v_params->>9;
+      ELSE
+        RAISE EXCEPTION 'Too many parameters in statement %: max 10, got %',
+          i, jsonb_array_length(v_params);
+    END CASE;
+
     GET DIAGNOSTICS v_count = ROW_COUNT;
 
     v_results := v_results || jsonb_build_array(jsonb_build_object('rowCount', v_count));
@@ -135,7 +186,7 @@ END;
 $$;
 
 -- Execute a DDL statement (CREATE TABLE, ALTER TABLE, etc.) in an agent schema.
--- Only called by db.create_table — not exposed to agent-provided SQL.
+-- Only called by db.create_table - not exposed to agent-provided SQL.
 CREATE OR REPLACE FUNCTION execute_ddl(
   p_schema TEXT,
   p_sql    TEXT
@@ -177,7 +228,6 @@ DECLARE
   v_sql     TEXT;
   v_result  JSONB;
   v_key     TEXT;
-  i         INTEGER := 1;
 BEGIN
   -- Validate schema and table name
   IF p_schema !~ '^agent_[a-zA-Z0-9_]+$' THEN
