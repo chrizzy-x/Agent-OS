@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import { STUDIO_COMMAND_DEFINITIONS } from '@/src/studio/catalog';
 import {
   clampStudioTranscriptHistory,
@@ -21,16 +22,6 @@ type StudioContextState = {
   toolCount: number;
   installedSkillCount: number;
 };
-
-function decodeJwt(token: string): Record<string, unknown> | null {
-  try {
-    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
-    return JSON.parse(atob(padded));
-  } catch {
-    return null;
-  }
-}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -64,8 +55,7 @@ function formatResult(value: unknown): string {
 
 export default function StudioPage() {
   const router = useRouter();
-  const [apiKey, setApiKey] = useState('');
-  const [agentId, setAgentId] = useState('');
+  const [session, setSession] = useState<BrowserSession | null>(null);
   const [command, setCommand] = useState('help');
   const [history, setHistory] = useState<StudioTranscriptEntry[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -76,25 +66,21 @@ export default function StudioPage() {
   const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [sessionNotice, setSessionNotice] = useState('');
 
+  const agentId = session?.agentId ?? '';
   const advancedEnabled = isStudioAdvancedSessionActive(advancedSession);
 
   useEffect(() => {
-    const storedKey = localStorage.getItem('apiKey') || '';
-    if (!storedKey) {
-      router.replace('/signin');
-      return;
-    }
-
-    setApiKey(storedKey);
-    const payload = decodeJwt(storedKey);
-    const id = typeof payload?.sub === 'string' ? payload.sub : '';
-    if (!id) {
-      router.replace('/signin');
-      return;
-    }
-
-    setAgentId(id);
-    setLoading(false);
+    let active = true;
+    void fetchBrowserSession().then(currentSession => {
+      if (!active) return;
+      if (!currentSession) {
+        router.replace('/signin');
+        return;
+      }
+      setSession(currentSession);
+      setLoading(false);
+    });
+    return () => { active = false; };
   }, [router]);
 
   useEffect(() => {
@@ -151,18 +137,16 @@ export default function StudioPage() {
   }, [agentId]);
 
   useEffect(() => {
-    if (!apiKey) return;
-    void loadContext(apiKey);
-  }, [apiKey]);
+    if (!agentId) return;
+    void loadContext();
+  }, [agentId]);
 
   const selectedEntry = useMemo(() => history.find(entry => entry.id === selectedId) ?? history.at(-1) ?? null, [history, selectedId]);
 
-  async function loadContext(token = apiKey) {
-    if (!token) return;
-
+  async function loadContext() {
     try {
       const [skillsRes, toolsRes] = await Promise.all([
-        fetch('/api/skills/installed', { headers: { Authorization: `Bearer ${token}` } }),
+        fetch('/api/skills/installed'),
         fetch('/tools'),
       ]);
 
@@ -195,7 +179,7 @@ export default function StudioPage() {
 
   async function runCommand(commandText = command, confirmToken?: string) {
     const trimmed = commandText.trim();
-    if (!trimmed || !apiKey) return;
+    if (!trimmed) return;
 
     if (trimmed.startsWith('advanced run ') && !advancedEnabled && !confirmToken) {
       setShowAdvancedModal(true);
@@ -209,7 +193,6 @@ export default function StudioPage() {
       const response = await fetch('/api/studio/command', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -223,7 +206,7 @@ export default function StudioPage() {
       appendHistory(trimmed, body);
 
       if (body.kind === 'result' || body.kind === 'help') {
-        await loadContext(apiKey);
+        await loadContext();
       }
     } catch {
       appendHistory(trimmed, {
@@ -239,9 +222,9 @@ export default function StudioPage() {
 
   function enableAdvancedMode() {
     if (!agentId) return;
-    const session = createStudioAdvancedSession();
-    sessionStorage.setItem(getStudioAdvancedSessionKey(agentId), JSON.stringify(session));
-    setAdvancedSession(session);
+    const sessionState = createStudioAdvancedSession();
+    sessionStorage.setItem(getStudioAdvancedSessionKey(agentId), JSON.stringify(sessionState));
+    setAdvancedSession(sessionState);
     setShowAdvancedModal(false);
     setSessionNotice('Advanced mode is enabled for this browser session for 15 minutes.');
   }
@@ -258,7 +241,7 @@ export default function StudioPage() {
     await runCommand(entry.command, entry.response.confirmToken);
   }
 
-  if (loading) {
+  if (loading || !session) {
     return <div className="min-h-screen" style={{ background: 'var(--bg)' }} />;
   }
 

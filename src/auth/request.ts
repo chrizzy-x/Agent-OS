@@ -2,14 +2,23 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 import { AuthError, PermissionError } from '../utils/errors.js';
 import type { AgentContext } from './permissions.js';
 import { extractBearerToken, verifyAgentToken } from './agent-identity.js';
+import { extractSessionTokenFromCookie } from './session-cookie.js';
 import { getAdminToken, getCronSecret } from '../config/env.js';
 
 function readAuthorization(headers: Headers | globalThis.Headers): string | undefined {
   return headers.get('authorization') ?? headers.get('Authorization') ?? undefined;
 }
 
+function readCookie(headers: Headers | globalThis.Headers): string | undefined {
+  return headers.get('cookie') ?? headers.get('Cookie') ?? undefined;
+}
+
+function readAgentToken(headers: Headers | globalThis.Headers): string | undefined {
+  return extractBearerToken(readAuthorization(headers)) ?? extractSessionTokenFromCookie(readCookie(headers));
+}
+
 export function requireAgentContext(headers: Headers | globalThis.Headers): AgentContext {
-  const token = extractBearerToken(readAuthorization(headers));
+  const token = readAgentToken(headers);
   if (!token) {
     throw new AuthError('Authorization bearer token required');
   }

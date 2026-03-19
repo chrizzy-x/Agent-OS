@@ -34,6 +34,16 @@ describe('request auth helpers', () => {
     expect(ctx.agentId).toBe('agent-from-jwt');
   });
 
+  it('accepts the secure session cookie as agent auth for same-origin web requests', () => {
+    const token = createAgentToken('agent-from-cookie', { expiresIn: '1h' });
+    const headers = new Headers({
+      Cookie: `agent_session=${token}`,
+    });
+
+    const ctx = requireAgentContext(headers);
+    expect(ctx.agentId).toBe('agent-from-cookie');
+  });
+
   it('recognizes valid agent bearer tokens', () => {
     const token = createAgentToken('agent-from-jwt', { expiresIn: '1h' });
     const headers = new Headers({ Authorization: `Bearer ${token}` });
@@ -56,7 +66,7 @@ describe('request auth helpers', () => {
     expect(hasCronAccess(headers)).toBe(true);
   });
 
-  it('rejects missing bearer tokens for agent auth', () => {
+  it('rejects missing agent credentials', () => {
     expect(() => requireAgentContext(new Headers())).toThrow(AuthError);
   });
 

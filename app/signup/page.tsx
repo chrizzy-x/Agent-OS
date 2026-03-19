@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { APP_URL } from '@/lib/config';
+import { fetchBrowserSession } from '@/src/auth/browser-session';
 
 interface Credentials {
   agentId: string;
-  apiKey: string;
+  bearerToken: string;
+  apiKey?: string;
   expiresIn: string;
 }
 
@@ -35,14 +37,15 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 }
 
 function CredentialsPanel({ credentials }: { credentials: Credentials }) {
+  const bearerToken = credentials.bearerToken || credentials.apiKey || '';
   const quickstart = `const AGENT_OS_URL = '${APP_URL}';
-const API_KEY = '${credentials.apiKey}';
+const BEARER_TOKEN = '${bearerToken}';
 
 // Store a value in memory
 await fetch(\`\${AGENT_OS_URL}/mcp\`, {
   method: 'POST',
   headers: {
-    'Authorization': \`Bearer \${API_KEY}\`,
+    'Authorization': \`Bearer \${BEARER_TOKEN}\`,
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
@@ -64,7 +67,7 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
         </div>
         <div>
           <h2 className="text-lg font-black">Agent created!</h2>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Save your credentials before closing.</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Your browser session is active. Save the bearer token for external tools and SDKs.</p>
         </div>
       </div>
 
@@ -76,12 +79,12 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
           <svg width="15" height="15" fill="currentColor" viewBox="0 0 20 20" className="flex-shrink-0 mt-0.5">
             <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
           </svg>
-          Your API key is shown <strong>only once</strong>. Copy and store it securely.
+          Your bearer token is shown <strong>only once</strong>. Copy and store it securely.
         </div>
 
         {[
           { label: 'Agent ID', value: credentials.agentId },
-          { label: 'API Key', value: credentials.apiKey },
+          { label: 'Bearer Token', value: bearerToken },
         ].map(field => (
           <div key={field.label} className="space-y-1.5">
             <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{field.label}</div>
@@ -269,7 +272,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
               </svg>
               Creating agent...
             </span>
-          ) : 'Create agent ->'}
+          ) : 'Create agent'}
         </button>
 
         <p className="text-xs text-center" style={{ color: 'var(--text-dim)' }}>
@@ -292,15 +295,14 @@ export default function SignupPage() {
   const [credentials, setCredentials] = useState<Credentials | null>(null);
 
   useEffect(() => {
-    if (localStorage.getItem('apiKey')) router.replace('/dashboard');
+    let active = true;
+    void fetchBrowserSession().then(session => {
+      if (active && session) {
+        router.replace('/dashboard');
+      }
+    });
+    return () => { active = false; };
   }, [router]);
-
-  useEffect(() => {
-    if (credentials?.apiKey) {
-      localStorage.setItem('apiKey', credentials.apiKey);
-      localStorage.setItem('agentId', credentials.agentId);
-    }
-  }, [credentials]);
 
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
@@ -340,7 +342,7 @@ export default function SignupPage() {
             {[
               'All 6 primitives included',
               'No credit card required',
-              'API key valid for 90 days',
+              'Bearer token valid for 90 days',
               'MIT license, self-hostable',
             ].map(item => (
               <div key={item} className="flex items-center gap-3 text-sm">

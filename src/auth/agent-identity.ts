@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { AgentContext, AgentQuotas, DEFAULT_QUOTAS } from './permissions.js';
 import { AuthError } from '../utils/errors.js';
 
-interface AgentTokenPayload {
+export interface AgentTokenPayload {
   sub: string; // agentId
   allowedDomains?: string[];
   quotas?: Partial<AgentQuotas>;
@@ -18,9 +18,8 @@ function getJwtSecret(): string {
   return secret;
 }
 
-// Verify a JWT bearer token and extract the AgentContext from its claims.
-// Throws AuthError if the token is missing, malformed, or expired.
-export function verifyAgentToken(token: string): AgentContext {
+// Verify a JWT bearer token and return its validated claims.
+export function verifyAgentTokenClaims(token: string): AgentTokenPayload {
   let payload: AgentTokenPayload;
 
   try {
@@ -39,6 +38,14 @@ export function verifyAgentToken(token: string): AgentContext {
     throw new AuthError('Token missing agent ID (sub claim)');
   }
 
+  return payload;
+}
+
+// Verify a JWT bearer token and extract the AgentContext from its claims.
+// Throws AuthError if the token is missing, malformed, or expired.
+export function verifyAgentToken(token: string): AgentContext {
+  const payload = verifyAgentTokenClaims(token);
+
   return {
     agentId: payload.sub,
     allowedDomains: payload.allowedDomains ?? [],
@@ -49,7 +56,7 @@ export function verifyAgentToken(token: string): AgentContext {
   };
 }
 
-// Create a signed JWT for an agent — used in admin agent creation and testing.
+// Create a signed JWT for an agent - used in admin agent creation and testing.
 export function createAgentToken(
   agentId: string,
   options?: {

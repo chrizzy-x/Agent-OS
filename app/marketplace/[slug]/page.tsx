@@ -68,21 +68,18 @@ export default function SkillDetailPage() {
   const handleInstall = async () => {
     setInstalling(true);
     setInstallError('');
-    const apiKey = typeof window !== 'undefined' ? localStorage.getItem('apiKey') : '';
-    if (!apiKey) {
-      setInstallError('Sign up to install skills.');
-      setInstalling(false);
-      return;
-    }
     try {
       const res = await fetch('/api/skills/install', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skill_id: skill!.id }),
       });
       const data = await res.json();
-      if (!res.ok) { setInstallError(data.error || 'Installation failed'); }
-      else { setInstalled(true); }
+      if (!res.ok) {
+        setInstallError(res.status === 401 ? 'Sign in to install skills.' : (data.error || 'Installation failed'));
+      } else {
+        setInstalled(true);
+      }
     } catch {
       setInstallError('Network error. Please try again.');
     } finally {
@@ -96,19 +93,19 @@ export default function SkillDetailPage() {
       ? Object.entries(cap.params).map(([k]) => `    ${k}: 'your-${k}'`).join(',\n')
       : '';
     return `const AGENT_OS_URL = '${APP_URL}';
-const API_KEY = 'your-api-key';
+const BEARER_TOKEN = 'your-bearer-token';
 
 // 1. Install the skill
 await fetch(\`\${AGENT_OS_URL}/api/skills/install\`, {
   method: 'POST',
-  headers: { Authorization: \`Bearer \${API_KEY}\`, 'Content-Type': 'application/json' },
+  headers: { Authorization: \`Bearer \${BEARER_TOKEN}\`, 'Content-Type': 'application/json' },
   body: JSON.stringify({ skill_id: '${s.id}' }),
 });
 
 // 2. Use the skill
 const result = await fetch(\`\${AGENT_OS_URL}/api/skills/use\`, {
   method: 'POST',
-  headers: { Authorization: \`Bearer \${API_KEY}\`, 'Content-Type': 'application/json' },
+  headers: { Authorization: \`Bearer \${BEARER_TOKEN}\`, 'Content-Type': 'application/json' },
   body: JSON.stringify({
     skill_slug: '${s.slug}',
     capability: '${cap?.name ?? 'capability_name'}',
@@ -124,7 +121,7 @@ console.log(result.result);`;
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading skill…</div>
+        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading skillâ€¦</div>
       </div>
     );
   }
@@ -132,10 +129,10 @@ console.log(result.result);`;
   if (!skill) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: 'var(--bg)' }}>
-        <div className="text-4xl">🔍</div>
+        <div className="text-4xl">ðŸ”</div>
         <p className="font-medium">Skill not found</p>
         <Link href="/marketplace" className="text-sm hover:underline" style={{ color: '#a855f7' }}>
-          ← Back to Marketplace
+          â† Back to Marketplace
         </Link>
       </div>
     );
@@ -156,7 +153,7 @@ console.log(result.result);`;
           </Link>
           <div className="flex items-center gap-6">
             <Link href="/marketplace" className="text-sm transition-colors hover:text-white" style={{ color: '#a855f7' }}>
-              ← Marketplace
+              â† Marketplace
             </Link>
             <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
           </div>
@@ -168,21 +165,21 @@ console.log(result.result);`;
         <div className="card p-8 mb-6">
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div className="flex items-start gap-5 flex-1">
-              <span className="text-5xl">{skill.icon || '📦'}</span>
+              <span className="text-5xl">{skill.icon || 'ðŸ“¦'}</span>
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   <h1 className="text-2xl font-black">{skill.name}</h1>
-                  {skill.verified && <span className="badge badge-green text-xs">✓ Official</span>}
+                  {skill.verified && <span className="badge badge-green text-xs">âœ“ Official</span>}
                   <span className="badge badge-purple text-xs">{skill.category}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm flex-wrap mb-3" style={{ color: 'var(--text-muted)' }}>
                   <span>by @{skill.author_name}</span>
-                  <span>·</span>
+                  <span>Â·</span>
                   <span>v{skill.version}</span>
                   {skill.rating > 0 && (
                     <>
-                      <span>·</span>
-                      <span>⭐ {Number(skill.rating).toFixed(1)} ({skill.review_count})</span>
+                      <span>Â·</span>
+                      <span>â­ {Number(skill.rating).toFixed(1)} ({skill.review_count})</span>
                     </>
                   )}
                 </div>
@@ -207,7 +204,7 @@ console.log(result.result);`;
               <button onClick={handleInstall} disabled={installing || installed}
                 className="btn-primary w-full py-2.5 mb-2"
                 style={{ opacity: (installing || installed) ? 0.7 : 1 }}>
-                {installed ? '✓ Installed' : installing ? 'Installing…' : 'Install Skill'}
+                {installed ? 'âœ“ Installed' : installing ? 'Installingâ€¦' : 'Install Skill'}
               </button>
               {installError && (
                 <p className="text-xs mt-1" style={{ color: '#fca5a5' }}>{installError}</p>
@@ -238,7 +235,7 @@ console.log(result.result);`;
                     <div className="font-mono text-sm mb-1">
                       <span style={{ color: '#a855f7' }}>{cap.name}</span>
                       <span style={{ color: 'var(--text-muted)' }}>({Object.keys(cap.params || {}).join(', ')})</span>
-                      {cap.returns && <span style={{ color: '#67e8f9' }}> → {cap.returns}</span>}
+                      {cap.returns && <span style={{ color: '#67e8f9' }}> â†’ {cap.returns}</span>}
                     </div>
                     <div className="text-sm mb-2" style={{ color: 'var(--text-muted)' }}>{cap.description}</div>
                     {Object.keys(cap.params || {}).length > 0 && (
@@ -279,9 +276,9 @@ console.log(result.result);`;
                   {skill.reviews.slice(0, 5).map((review, i) => (
                     <div key={i} className="pb-4 last:pb-0" style={{ borderBottom: i < Math.min(4, skill.reviews!.length - 1) ? '1px solid var(--border)' : 'none' }}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span>{'⭐'.repeat(review.rating)}</span>
+                        <span>{'â­'.repeat(review.rating)}</span>
                         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          @{review.agent_id.slice(0, 14)}…
+                          @{review.agent_id.slice(0, 14)}â€¦
                         </span>
                       </div>
                       {review.review_title && (
@@ -313,7 +310,7 @@ console.log(result.result);`;
                 {skill.rating > 0 && (
                   <div className="flex justify-between">
                     <span style={{ color: 'var(--text-muted)' }}>Rating</span>
-                    <span className="font-semibold">⭐ {Number(skill.rating).toFixed(1)}/5</span>
+                    <span className="font-semibold">â­ {Number(skill.rating).toFixed(1)}/5</span>
                   </div>
                 )}
               </div>
@@ -354,13 +351,13 @@ console.log(result.result);`;
                   {skill.homepage_url && (
                     <a href={skill.homepage_url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 hover:underline" style={{ color: '#a855f7' }}>
-                      🌐 Homepage
+                      ðŸŒ Homepage
                     </a>
                   )}
                   {skill.repository_url && (
                     <a href={skill.repository_url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 hover:underline" style={{ color: '#a855f7' }}>
-                      📦 Repository
+                      ðŸ“¦ Repository
                     </a>
                   )}
                 </div>
@@ -372,3 +369,5 @@ console.log(result.result);`;
     </div>
   );
 }
+
+

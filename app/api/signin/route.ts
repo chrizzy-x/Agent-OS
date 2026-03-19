@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
+import { setAgentSessionCookie } from '@/src/auth/session-cookie';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { verifyPassword } from '@/src/auth/password';
 
@@ -71,20 +72,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let apiKey: string;
+  let bearerToken: string;
   try {
-    apiKey = createAgentToken(agent.id, { expiresIn: '90d' });
+    bearerToken = createAgentToken(agent.id, { expiresIn: '90d' });
   } catch (err) {
     console.error('[signin] token creation error:', err);
     return NextResponse.json({ error: 'Failed to generate credentials. Please try again.' }, { status: 500 });
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     success: true,
     credentials: {
       agentId: agent.id,
-      apiKey,
+      bearerToken,
+      apiKey: bearerToken,
       agentName: agent.name,
+      expiresIn: '90 days',
     },
   });
+  setAgentSessionCookie(response, bearerToken);
+  return response;
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { fetchBrowserSession } from '@/src/auth/browser-session';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -11,11 +12,14 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Already signed in? Go straight to dashboard
   useEffect(() => {
-    if (localStorage.getItem('apiKey')) {
-      router.replace('/dashboard');
-    }
+    let active = true;
+    void fetchBrowserSession().then(session => {
+      if (active && session) {
+        router.replace('/dashboard');
+      }
+    });
+    return () => { active = false; };
   }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,8 +41,6 @@ export default function SignInPage() {
         return;
       }
 
-      localStorage.setItem('apiKey', data.credentials.apiKey);
-      localStorage.setItem('agentId', data.credentials.agentId);
       router.push('/dashboard');
     } catch {
       setError('Network error. Check your connection and try again.');
@@ -49,7 +51,6 @@ export default function SignInPage() {
 
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
-      {/* Left panel */}
       <div className="hidden lg:flex flex-col justify-between w-[440px] flex-shrink-0 relative overflow-hidden p-10 bg-grid"
         style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
         <div className="absolute top-[-80px] left-[-80px] w-72 h-72 rounded-full"
@@ -72,7 +73,7 @@ export default function SignInPage() {
             <br />that ships with you.
           </h2>
           <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--text-muted)' }}>
-            Access your dashboard, manage API keys, monitor activity logs, and install skills from the marketplace.
+            Sign in once, keep a secure browser session, then generate a bearer token only when you need external API access.
           </p>
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -95,10 +96,9 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <div className="relative text-xs" style={{ color: 'var(--text-dim)' }}>MIT License · Open Source</div>
+        <div className="relative text-xs" style={{ color: 'var(--text-dim)' }}>MIT License Â· Open Source</div>
       </div>
 
-      {/* Right panel */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
         <Link href="/" className="flex items-center gap-2 mb-10 lg:hidden">
           <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
@@ -114,7 +114,7 @@ export default function SignInPage() {
             <div className="space-y-1.5">
               <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-widest"
                 style={{ color: 'var(--text-muted)' }}>Email</label>
-              <input id="email" type="email" required autoFocus
+              <input id="email" type="email" required autoFocus autoComplete="email"
                 value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com" className="input-dark" />
             </div>
@@ -128,7 +128,7 @@ export default function SignInPage() {
                   Forgot password?
                 </Link>
               </div>
-              <input id="password" type="password" required
+              <input id="password" type="password" required autoComplete="current-password"
                 value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password" className="input-dark" />
             </div>
@@ -154,7 +154,7 @@ export default function SignInPage() {
                   </svg>
                   Signing in...
                 </span>
-              ) : 'Sign in →'}
+              ) : 'Sign in'}
             </button>
           </form>
 
@@ -170,3 +170,4 @@ export default function SignInPage() {
     </div>
   );
 }
+

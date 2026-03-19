@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
 type CrewPair = {
   status: string;
@@ -73,25 +74,22 @@ type SettingsResponse = {
 };
 
 export default function OpsPage() {
+  const [session, setSession] = useState<BrowserSession | null>(null);
   const [crew, setCrew] = useState<CrewResponse | null>(null);
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
-  const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
 
-  async function loadAll(token = apiKey) {
+  async function loadAll() {
     setLoading(true);
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-      const requestInit = headers ? { headers } : undefined;
-
       const [crewRes, metricsRes, settingsRes] = await Promise.all([
-        fetch('/api/ops/crew', requestInit),
-        fetch('/api/ops/metrics', requestInit),
-        fetch('/api/ops/settings', requestInit),
+        fetch('/api/ops/crew', { cache: 'no-store' }),
+        fetch('/api/ops/metrics', { cache: 'no-store' }),
+        fetch('/api/ops/settings', { cache: 'no-store' }),
       ]);
 
       const [crewData, metricsData, settingsData] = await Promise.all([
@@ -109,13 +107,21 @@ export default function OpsPage() {
   }
 
   useEffect(() => {
-    const storedKey = localStorage.getItem('apiKey') || '';
-    setApiKey(storedKey);
-    void loadAll(storedKey);
+    let active = true;
+
+    async function bootstrap() {
+      const currentSession = await fetchBrowserSession();
+      if (!active) return;
+      setSession(currentSession);
+      await loadAll();
+    }
+
+    void bootstrap();
+    return () => { active = false; };
   }, []);
 
   async function saveSettings(next: { operationMode?: 'single_agent' | 'multi_agent'; consensusModeEnabled?: boolean }) {
-    if (!apiKey) {
+    if (!session) {
       setMessage('Sign in first to update ops settings.');
       return;
     }
@@ -127,7 +133,6 @@ export default function OpsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(next),
       });
@@ -137,7 +142,7 @@ export default function OpsPage() {
       }
       setSettings({ settings: data.settings, ffpEnabled: data.ffpEnabled });
       setMessage('Ops settings updated.');
-      await loadAll(apiKey);
+      await loadAll();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : 'Failed to update settings');
     } finally {
@@ -146,7 +151,7 @@ export default function OpsPage() {
   }
 
   async function runAction(path: string, body?: Record<string, unknown>) {
-    if (!apiKey) {
+    if (!session) {
       setMessage('Sign in first to run ops actions.');
       return;
     }
@@ -158,7 +163,6 @@ export default function OpsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(body ?? {}),
       });
@@ -167,7 +171,7 @@ export default function OpsPage() {
         throw new Error(data.error || 'Action failed');
       }
       setMessage('Action completed.');
-      await loadAll(apiKey);
+      await loadAll();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : 'Action failed');
     } finally {
@@ -191,7 +195,7 @@ export default function OpsPage() {
   const consensusEnabled = settings?.settings.consensus_mode_enabled ?? false;
   const ffpEnabled = settings?.ffpEnabled ?? false;
   const canToggleConsensus = operationMode === 'multi_agent' && ffpEnabled;
-  const signedOutDetails = crew?.requiresAuthForDetails && !apiKey;
+  const signedOutDetails = crew?.requiresAuthForDetails && !session;
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -207,7 +211,7 @@ export default function OpsPage() {
           <div className="flex items-center gap-5 text-sm">
             <Link href="/dashboard" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Dashboard</Link>
             <Link href="/docs/features" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Feature Catalog</Link>
-            <button onClick={() => void loadAll(apiKey)} className="btn-outline text-xs px-4 py-2">Refresh</button>
+            <button onClick={() => void loadAll()} className="btn-outline text-xs px-4 py-2">Refresh</button>
           </div>
         </div>
       </nav>
@@ -222,8 +226,8 @@ export default function OpsPage() {
             </p>
           </div>
           <div className="flex gap-3 flex-wrap">
-            <button onClick={() => void runAction('/api/ops/crew/bootstrap')} className="btn-outline text-sm px-4 py-2" disabled={saving}>Bootstrap Coverage</button>
-            <button onClick={() => void runAction('/api/ops/crew/cron')} className="btn-primary text-sm px-4 py-2" disabled={saving}>Run Cron Cycle</button>
+            <button onClick={() => void runAction('/api/ops/crew/bootstrap')} className="btn-outline text-sm px-4 py-2" disabled={saving || !session}>Bootstrap Coverage</button>
+            <button onClick={() => void runAction('/api/ops/crew/cron')} className="btn-primary text-sm px-4 py-2" disabled={saving || !session}>Run Cron Cycle</button>
           </div>
         </section>
 
@@ -233,7 +237,7 @@ export default function OpsPage() {
 
         {signedOutDetails && (
           <div className="card p-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Signed-out view hides the per-item infrastructure matrix and incident history. Sign in with an ops-admin bearer token to inspect and operate the full control plane.
+            Signed-out view hides the per-item infrastructure matrix and incident history. Sign in to open a secure browser session, then use your ops-admin access to inspect and operate the full control plane.
           </div>
         )}
 
@@ -274,7 +278,7 @@ export default function OpsPage() {
             <div className="flex gap-2 mb-4">
               <button
                 onClick={() => void saveSettings({ operationMode: 'single_agent', consensusModeEnabled: false })}
-                disabled={saving}
+                disabled={saving || !session}
                 className="btn-outline text-sm px-4 py-2"
                 style={operationMode === 'single_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
               >
@@ -282,7 +286,7 @@ export default function OpsPage() {
               </button>
               <button
                 onClick={() => void saveSettings({ operationMode: 'multi_agent' })}
-                disabled={saving}
+                disabled={saving || !session}
                 className="btn-outline text-sm px-4 py-2"
                 style={operationMode === 'multi_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
               >
@@ -299,9 +303,9 @@ export default function OpsPage() {
                 </div>
                 <button
                   onClick={() => void saveSettings({ consensusModeEnabled: !consensusEnabled })}
-                  disabled={!canToggleConsensus || saving}
+                  disabled={!canToggleConsensus || saving || !session}
                   className="btn-primary text-sm px-4 py-2"
-                  style={!canToggleConsensus ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                  style={!canToggleConsensus || !session ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
                 >
                   {consensusEnabled ? 'Consensus On' : 'Consensus Off'}
                 </button>
@@ -342,7 +346,7 @@ export default function OpsPage() {
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading operations data...</div>
             ) : signedOutDetails ? (
               <div className="rounded-xl p-5 text-sm" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                The public ops surface intentionally stops at aggregate coverage and health. Use an ops-admin bearer token to inspect feature-by-feature assignments, live queue details, and force failover actions.
+                The public ops surface intentionally stops at aggregate coverage and health. Sign in with ops-admin access to inspect feature-by-feature assignments, live queue details, and force failover actions.
               </div>
             ) : filteredItems.length === 0 ? (
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>No features or runtime functions match your search.</div>
@@ -366,7 +370,7 @@ export default function OpsPage() {
                         <button
                           onClick={() => void runAction('/api/ops/crew/failover', { featureSlug: item.feature.slug })}
                           className="btn-outline text-xs px-3 py-2"
-                          disabled={saving || !apiKey}
+                          disabled={saving || !session}
                         >
                           Force failover
                         </button>

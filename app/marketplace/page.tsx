@@ -2,18 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-
-const CATEGORIES = [
-  'All',
-  'Documents',
-  'Web & Browser',
-  'AI & ML',
-  'Finance & Crypto',
-  'Communication',
-  'Data & Analytics',
-  'Cloud & Deploy',
-  'Security',
-];
+import { MARKETPLACE_CATEGORIES, getOfficialSkillCount } from '@/src/skills/official-catalog';
 
 interface Skill {
   id: string;
@@ -33,6 +22,8 @@ interface Skill {
   tags: string[];
 }
 
+const OFFICIAL_COUNT = getOfficialSkillCount();
+
 export default function MarketplacePage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +35,7 @@ export default function MarketplacePage() {
   const fetchSkills = useCallback(async (searchTerm?: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ sort });
+      const params = new URLSearchParams({ sort, limit: '50' });
       if (category !== 'All') params.set('category', category);
       if (searchTerm !== undefined ? searchTerm : search) {
         params.set('search', searchTerm !== undefined ? searchTerm : search);
@@ -60,11 +51,11 @@ export default function MarketplacePage() {
     }
   }, [category, sort, search]);
 
-  useEffect(() => { fetchSkills(); }, [fetchSkills]);
+  useEffect(() => { void fetchSkills(); }, [fetchSkills]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchSkills(search);
+    void fetchSkills(search);
   };
 
   const pricingLabel = (skill: Skill) => {
@@ -74,7 +65,6 @@ export default function MarketplacePage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      {/* Nav */}
       <nav className="sticky top-0 z-40 backdrop-blur-md"
         style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -95,19 +85,20 @@ export default function MarketplacePage() {
       </nav>
 
       <div className="max-w-6xl mx-auto px-4 py-10">
-        {/* Header */}
         <div className="mb-8">
           <div className="badge badge-purple mb-4">Community Skills</div>
           <h1 className="text-3xl font-black mb-2">
             Skills <span className="gradient-text">Marketplace</span>
           </h1>
           <p style={{ color: 'var(--text-muted)' }}>
-            Extend Agent OS with community-built skills.
+            Extend Agent OS with community-built and official verified skills.
             {total > 0 && <span className="ml-1">{total} skills available.</span>}
+          </p>
+          <p className="text-sm mt-3" style={{ color: 'var(--text-dim)' }}>
+            Official verified catalog coverage: {OFFICIAL_COUNT} free maintained skills across AI, support, research, finance, security, deployment, and communication packs.
           </p>
         </div>
 
-        {/* Search + Sort */}
         <form onSubmit={handleSearch} className="flex gap-3 mb-4">
           <input
             type="text"
@@ -129,9 +120,8 @@ export default function MarketplacePage() {
           </select>
         </form>
 
-        {/* Category filter */}
         <div className="flex gap-2 flex-wrap mb-8">
-          {CATEGORIES.map(cat => (
+          {MARKETPLACE_CATEGORIES.map(cat => (
             <button
               key={cat}
               onClick={() => setCategory(cat)}
@@ -151,7 +141,6 @@ export default function MarketplacePage() {
           ))}
         </div>
 
-        {/* Skills grid */}
         {loading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[...Array(6)].map((_, i) => (
@@ -165,7 +154,7 @@ export default function MarketplacePage() {
           </div>
         ) : skills.length === 0 ? (
           <div className="card p-20 text-center">
-            <div className="text-4xl mb-3">🔍</div>
+            <div className="text-4xl mb-3">Search</div>
             <p className="font-medium mb-1">No skills found</p>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Try a different search or category.</p>
           </div>
@@ -179,10 +168,10 @@ export default function MarketplacePage() {
                 style={{ textDecoration: 'none' }}
               >
                 <div className="flex items-start justify-between mb-3">
-                  <span className="text-3xl">{skill.icon || '📦'}</span>
+                  <span className="text-3xl">{skill.icon || '[]'}</span>
                   <div className="flex items-center gap-1.5">
                     {skill.verified && (
-                      <span className="badge badge-green text-xs">✓ Official</span>
+                      <span className="badge badge-green text-xs">Official</span>
                     )}
                     <span className="badge badge-purple text-xs">{skill.category}</span>
                   </div>
@@ -199,7 +188,7 @@ export default function MarketplacePage() {
                   <div className="flex items-center gap-3">
                     {skill.rating > 0 && (
                       <span className="flex items-center gap-0.5">
-                        ⭐ {Number(skill.rating).toFixed(1)}
+                        Rating {Number(skill.rating).toFixed(1)}
                         {skill.review_count > 0 && <span className="ml-0.5">({skill.review_count})</span>}
                       </span>
                     )}

@@ -8,6 +8,42 @@ describe('POST /api/signup', () => {
     vi.clearAllMocks();
   });
 
+  it('starts a browser session and returns a bearer token for successful signups', async () => {
+    const existingLookup = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null, count: 0 }),
+    };
+
+    const insertBuilder = {
+      insert: vi.fn().mockResolvedValue({ error: null }),
+    };
+
+    mockSupabase.from
+      .mockReturnValueOnce(existingLookup)
+      .mockReturnValueOnce(insertBuilder);
+
+    const request = new NextRequest('http://localhost/api/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'new@example.com',
+        password: 'strongpass123',
+        agentName: 'New Agent',
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.credentials.agentId).toMatch(/^agent_/);
+    expect(body.credentials.bearerToken).toBeTruthy();
+    expect(body.credentials.apiKey).toBe(body.credentials.bearerToken);
+    expect(response.headers.get('set-cookie')).toContain('agent_session=');
+    expect(response.headers.get('set-cookie')).toContain('HttpOnly');
+  });
+
   it('returns 409 when the database rejects a duplicate email at insert time', async () => {
     const existingLookup = {
       select: vi.fn().mockReturnThis(),

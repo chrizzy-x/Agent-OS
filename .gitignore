@@ -6,3 +6,4 @@ dist/
 .env.local
 *.tsbuildinfo
 .npm-cache/
+.env.skill-verify
