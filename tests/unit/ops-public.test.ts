@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toPublicCrewOverview, toPublicOpsMetrics } from '../../src/ops/public.js';
 
 describe('public ops views', () => {
-  it('redacts internal crew identities for anonymous responses', () => {
+  it('removes the per-item crew matrix for anonymous responses', () => {
     const overview = {
       project: { name: 'Agent OS' },
       summary: { platformFeatures: 70, runtimeFunctions: 32, totalCatalogItems: 102 },
@@ -38,11 +38,15 @@ describe('public ops views', () => {
     const result = toPublicCrewOverview(overview);
 
     expect(result.requiresAuthForDetails).toBe(true);
-    expect(result.items[0]?.activePair?.infra_agent?.name).toBe('Primary coverage');
-    expect(result.items[0]?.standbyPair?.infra_agent?.name).toBe('Standby coverage');
-    expect(result.items[0]).not.toHaveProperty('openTasks');
-    expect(result.items[0]?.openTaskCount).toBe(1);
-    expect(result.failoverEvents).toEqual([]);
+    expect(result.coverage).toEqual({
+      totalCatalogItems: 1,
+      fullyCovered: 1,
+      degradedCoverage: 0,
+      uncovered: 0,
+    });
+    expect(result.protectedSummary).toMatch(/authenticated ops access/i);
+    expect(result).not.toHaveProperty('items');
+    expect(result).not.toHaveProperty('failoverEvents');
     expect(result).not.toHaveProperty('project');
   });
 

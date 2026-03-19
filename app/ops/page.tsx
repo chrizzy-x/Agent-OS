@@ -42,8 +42,15 @@ type CrewItem = {
 type CrewResponse = {
   summary: { platformFeatures: number; runtimeFunctions: number; totalCatalogItems: number };
   settings: { operation_mode: 'single_agent' | 'multi_agent'; consensus_mode_enabled: boolean };
-  items: CrewItem[];
-  failoverEvents: { id: string; feature_slug: string; reason: string; created_at: string }[];
+  coverage?: {
+    totalCatalogItems: number;
+    fullyCovered: number;
+    degradedCoverage: number;
+    uncovered: number;
+  };
+  protectedSummary?: string;
+  items?: CrewItem[];
+  failoverEvents?: { id: string; feature_slug: string; reason: string; created_at: string }[];
   requiresAuthForDetails?: boolean;
 };
 
@@ -168,7 +175,7 @@ export default function OpsPage() {
     }
   }
 
-  const filteredItems = crew?.items.filter(item => {
+  const filteredItems = (crew?.items ?? []).filter(item => {
     const term = search.trim().toLowerCase();
     if (!term) {
       return true;
@@ -178,12 +185,13 @@ export default function OpsPage() {
       item.feature.slug.toLowerCase().includes(term) ||
       item.feature.categoryName.toLowerCase().includes(term)
     );
-  }) ?? [];
+  });
 
   const operationMode = settings?.settings.operation_mode ?? 'single_agent';
   const consensusEnabled = settings?.settings.consensus_mode_enabled ?? false;
   const ffpEnabled = settings?.ffpEnabled ?? false;
   const canToggleConsensus = operationMode === 'multi_agent' && ffpEnabled;
+  const signedOutDetails = crew?.requiresAuthForDetails && !apiKey;
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -223,9 +231,9 @@ export default function OpsPage() {
           <div className="card p-4 text-sm" style={{ color: 'var(--text-muted)' }}>{message}</div>
         )}
 
-        {crew?.requiresAuthForDetails && !apiKey && (
+        {signedOutDetails && (
           <div className="card p-4 text-sm" style={{ color: 'var(--text-muted)' }}>
-            Signed-out view hides individual infrastructure agent identities and incident details. Sign in to inspect and operate the full control plane.
+            Signed-out view hides the per-item infrastructure matrix and incident history. Sign in with an ops-admin bearer token to inspect and operate the full control plane.
           </div>
         )}
 
@@ -242,6 +250,23 @@ export default function OpsPage() {
             </div>
           ))}
         </section>
+
+        {signedOutDetails && crew?.coverage && (
+          <section className="grid md:grid-cols-3 gap-4">
+            <div className="card p-5">
+              <div className="text-2xl font-black gradient-text mb-1">{crew.coverage.fullyCovered}</div>
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Fully covered items</div>
+            </div>
+            <div className="card p-5">
+              <div className="text-2xl font-black gradient-text mb-1">{crew.coverage.degradedCoverage}</div>
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Degraded coverage items</div>
+            </div>
+            <div className="card p-5">
+              <div className="text-2xl font-black gradient-text mb-1">{crew.coverage.uncovered}</div>
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Uncovered items</div>
+            </div>
+          </section>
+        )}
 
         <section className="grid xl:grid-cols-[1.1fr,2fr] gap-4">
           <div className="card p-6">
@@ -297,7 +322,9 @@ export default function OpsPage() {
               <div>
                 <h2 className="text-xl font-bold">Coverage Matrix</h2>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Every item should always keep one active agent and one standby agent assigned.
+                  {signedOutDetails
+                    ? crew?.protectedSummary ?? 'Sign in to inspect the per-item active and standby matrix.'
+                    : 'Every item should always keep one active agent and one standby agent assigned.'}
                 </p>
               </div>
               <input
@@ -307,11 +334,18 @@ export default function OpsPage() {
                 placeholder="Search features or functions"
                 className="input-dark"
                 style={{ width: '280px' }}
+                disabled={signedOutDetails}
               />
             </div>
 
             {loading ? (
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading operations data...</div>
+            ) : signedOutDetails ? (
+              <div className="rounded-xl p-5 text-sm" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                The public ops surface intentionally stops at aggregate coverage and health. Use an ops-admin bearer token to inspect feature-by-feature assignments, live queue details, and force failover actions.
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>No features or runtime functions match your search.</div>
             ) : (
               <div className="space-y-3 max-h-[900px] overflow-y-auto pr-1">
                 {filteredItems.map(item => {
