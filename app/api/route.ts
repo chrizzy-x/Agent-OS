@@ -23,8 +23,8 @@ export async function GET() {
       'POST /api/studio/command': 'Studio command execution and mutation previews (Bearer token required)',
       'GET  /ops': 'Autonomous crew console',
       'GET  /docs/features': 'Complete plain-English feature catalog',
-      'GET  /docs/social-ops': 'User-facing social operations guide',
-      'GET  /api/social/platforms': 'Live social platform catalog and readiness state',
+      'GET  /docs/social-ops': 'Optional example integration guide for social automation',
+      'GET  /api/social/platforms': 'Optional example integration catalog for social connectors',
     },
   });
 }

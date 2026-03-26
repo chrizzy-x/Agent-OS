@@ -76,12 +76,12 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/social/platforms', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Return the Social Ops platform catalog, including which networks are live, which credential families are configured, and how many X accounts are currently connected.',
+    desc: 'Optional example integration route: return the social-platform catalog, including which connectors are live and how many X accounts are currently connected.',
     response: '{ "platforms": [{ "id": "x", "status": "live", "connectorReady": true, "connectedCount": 1 }, { "id": "facebook", "status": "scaffolded", "connectorReady": false, "connectedCount": 0 }] }',
   },
   {
     method: 'POST', path: '/api/x/connect', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Start the X OAuth authorization flow for the current operator session.',
+    desc: 'Optional example integration route: start the X OAuth authorization flow for the current operator session.',
     body: [
       { field: 'redirectTo', type: 'string', required: false, desc: 'Optional in-app path to return to after OAuth completes' },
     ],
@@ -89,22 +89,22 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/x/accounts', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'List connected X accounts visible to the current operator, including owner and child-agent mapping.',
+    desc: 'Optional example integration route: list connected X accounts visible to the current operator, including owner and child-agent mapping.',
     response: '{ "accounts": [{ "id": "...", "username": "brand_handle", "child_agent_id": "x_brand_...", "status": "active" }] }',
   },
   {
     method: 'GET', path: '/api/x/drafts', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'List X drafts awaiting review, including guardrail status, reasons, and approval state.',
+    desc: 'Optional example integration route: list X drafts awaiting review, including guardrail status, reasons, and approval state.',
     response: '{ "drafts": [{ "id": "...", "kind": "post", "approval_status": "required", "guardrail_status": "review", "guardrail_reasons": ["..."], "similarity_score": 0.14 }] }',
   },
   {
     method: 'GET', path: '/api/x/queue', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'List queued, published, failed, or canceled X publish items for the authenticated operator.',
+    desc: 'Optional example integration route: list queued, published, failed, or canceled X publish items for the authenticated operator.',
     response: '{ "queue": [{ "id": "...", "publish_status": "queued", "scheduled_for": "...", "account": { "username": "brand_handle" } }] }',
   },
   {
     method: 'POST', path: '/api/x/publish', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Publish an approved X draft immediately or force a queued publish item to run now.',
+    desc: 'Optional example integration route: publish an approved X draft immediately or force a queued publish item to run now.',
     body: [
       { field: 'draftId', type: 'string', required: false, desc: 'Draft UUID to publish immediately' },
       { field: 'queueId', type: 'string', required: false, desc: 'Queue UUID to publish immediately' },
@@ -230,7 +230,6 @@ export default function ApiReferencePage() {
           <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <Link href="/docs" className="text-blue-600">Docs</Link>
-            <Link href="/docs/social-ops" className="hover:text-gray-900">Social Ops</Link>
             <Link href="/docs/launch" className="hover:text-gray-900">Launch Notes</Link>
             <Link href="/docs/audit" className="hover:text-gray-900">Audit</Link>
             <Link href="/connect" className="hover:text-gray-900">Connect</Link>
@@ -252,6 +251,10 @@ export default function ApiReferencePage() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-10 text-sm text-blue-800">
           <strong>Canonical production URL:</strong> <code className="font-mono bg-blue-100 px-1 rounded">{BASE}</code>.
           The custom domain <code className="font-mono bg-blue-100 px-1 rounded">https://agentos.service</code> is still activating until the apex DNS A record points to Vercel.
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-10 text-sm text-gray-700">
+          <strong>Product direction:</strong> Agent OS is infrastructure first. Any social or X routes listed below are optional example integrations, not required parts of the core agent runtime.
         </div>
 
         <div className="bg-gray-950 text-green-400 font-mono text-sm px-5 py-3 rounded-lg mb-10">

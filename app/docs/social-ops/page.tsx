@@ -55,7 +55,7 @@ const platforms = [
 
 const operatorFlow = [
   {
-    title: '1. Open Social Ops',
+    title: '1. Open Example Dashboard',
     body: 'Use the Social Ops dashboard to see every supported network in one place, including which connectors are live, which credentials are configured, and how many accounts are currently connected.',
   },
   {
@@ -178,10 +178,10 @@ export default function SocialOpsDocsPage() {
       <div className="max-w-6xl mx-auto px-4 py-12 space-y-12">
         <section className="grid lg:grid-cols-[1.1fr_0.9fr] gap-6 items-start">
           <div>
-            <div className="badge badge-purple mb-4">User Guide</div>
-            <h1 className="text-4xl font-black mb-4">Social Ops documentation for operators and end users</h1>
+            <div className="badge badge-purple mb-4">Optional Example Module</div>
+            <h1 className="text-4xl font-black mb-4">Social Ops example integration documentation</h1>
             <p className="text-lg max-w-3xl" style={{ color: 'var(--text-muted)' }}>
-              Social Ops is the multi-network management layer inside Agent OS. It gives operators one place to connect accounts, review drafts, control publishing, and stage new social connectors without hiding what is live versus what is still under construction.
+              Social Ops is an optional example module built on top of Agent OS primitives, auth, MCP routing, and operator workflows. It is not part of the core infrastructure story, but it remains useful as a reference for teams building domain-specific agent products on top of Agent OS.
             </p>
             <div className="flex flex-wrap gap-3 mt-6">
               <Link href="/dashboard/social" className="btn-primary px-5 py-2.5 text-sm">Open Social Ops</Link>
@@ -193,7 +193,7 @@ export default function SocialOpsDocsPage() {
             <div className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Current implementation status</div>
             <div className="space-y-3 text-sm" style={{ color: 'var(--text-muted)' }}>
               <p><strong style={{ color: 'var(--text)' }}>Live today:</strong> X account connection, draft review, queue control, manual publish, and background sync.</p>
-              <p><strong style={{ color: 'var(--text)' }}>Scaffolded next:</strong> Facebook, Instagram, Telegram, YouTube, and WhatsApp are visible in the control plane, but their connectors are not yet live.</p>
+              <p><strong style={{ color: 'var(--text)' }}>Why it stays here:</strong> this module demonstrates how a vertical product can be built on Agent OS without changing the core platform direction.</p>
               <p><strong style={{ color: 'var(--text)' }}>Canonical app URL:</strong> <code>{APP_URL}</code></p>
             </div>
           </div>
@@ -204,7 +204,7 @@ export default function SocialOpsDocsPage() {
             <div>
               <h2 className="text-3xl font-black mb-2">Platform matrix</h2>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Every network supported by the social control plane, including how it authenticates and what kind of account it manages.
+                Every network supported by this example integration, including how it authenticates and what kind of account it manages.
               </p>
             </div>
             <Link href="/api/social/platforms" className="btn-outline text-xs px-4 py-2">Open live catalog</Link>

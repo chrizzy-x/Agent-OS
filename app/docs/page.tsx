@@ -12,7 +12,7 @@ const sections = [
   {
     title: 'API Reference',
     href: '/docs/api',
-    desc: 'Live route contracts for signup, signin, Studio, MCP, skills, social ops, and ops.',
+    desc: 'Live route contracts for signup, signin, Studio, MCP, skills, and ops.',
     badge: null,
   },
   {
@@ -20,12 +20,6 @@ const sections = [
     href: '/connect',
     desc: 'Register any external agent, capture its bearer token once, and test the universal MCP endpoint live.',
     badge: 'v3',
-  },
-  {
-    title: 'Social Ops',
-    href: '/docs/social-ops',
-    desc: 'User-facing guide for running X now and staging Facebook, Instagram, Telegram, YouTube, and WhatsApp next.',
-    badge: 'New',
   },
   {
     title: 'Launch Notes',
@@ -91,7 +85,7 @@ export default function DocsPage() {
             <span className="gradient-text">Documentation</span>
           </h1>
           <p className="text-xl" style={{ color: 'var(--text-muted)' }}>
-            Live developer docs for building, operating, and extending autonomous agents and multi-network social operations on Agent OS.
+            Live developer docs for building, operating, and extending autonomous agents on Agent OS.
           </p>
         </div>
 

@@ -197,7 +197,6 @@ export default function DashboardPage() {
               <Link href="/connect" className="hover:text-white transition-colors">Connect</Link>
               <Link href="/studio" className="hover:text-white transition-colors">Studio</Link>
               <Link href="/developer" className="hover:text-white transition-colors">Developer</Link>
-              <Link href="/dashboard/social" className="hover:text-white transition-colors">Social Ops</Link>
               <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             </div>
           </div>
@@ -270,7 +269,6 @@ export default function DashboardPage() {
                   </h2>
                   <div className="grid sm:grid-cols-2 xl:grid-cols-6 gap-3">
                     {[
-                      { href: '/dashboard/social', label: 'Social Ops', color: '#f97316' },
                       { href: '/marketplace', label: 'Browse Skills', color: '#a855f7' },
                       { href: '/developer', label: 'Publish Skill', color: '#06b6d4' },
                       { href: '/docs', label: 'Read Docs', color: '#22c55e' },
