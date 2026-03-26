@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
 import { executeUniversalToolCall, listUniversalMcpTools } from '@/src/mcp/registry';
+import { assertExternalAgentToolAccess, trackExternalAgentCall } from '@/src/external-agents/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
 
@@ -60,6 +61,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'params.name is required' }, { status: 400 });
       }
 
+      await assertExternalAgentToolAccess(agentContext.agentId, toolName);
+
       const result = await executeUniversalToolCall({
         agentContext,
         name: toolName,
@@ -67,10 +70,13 @@ export async function POST(req: NextRequest) {
         arguments: params.arguments ?? {},
       });
 
+      void trackExternalAgentCall(agentContext.agentId).catch(() => {});
+
       return NextResponse.json({
         jsonrpc: '2.0',
         id: body.id ?? 1,
         result,
+        success: true,
       });
     }
 

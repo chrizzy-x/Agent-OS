@@ -4,6 +4,7 @@ import { dbQuery, dbTransaction, dbCreateTable, dbInsert, dbUpdate, dbDelete } f
 import { netHttpGet, netHttpPost, netHttpPut, netHttpDelete, netDnsResolve } from './primitives/net.js';
 import { eventsPublish, eventsSubscribe, eventsUnsubscribe, eventsListTopics } from './primitives/events.js';
 import { procExecute, procSchedule, procSpawn, procKill, procList } from './primitives/proc.js';
+import { xAccountsList, xDraftCreate, xMentionsPull, xMetricsSync, xPublishNow, xQueueApprove, xQueueSchedule } from './integrations/x/service.js';
 import type { AgentContext } from './auth/permissions.js';
 
 export type ToolHandler = (ctx: AgentContext, input: unknown) => Promise<unknown>;
@@ -52,4 +53,13 @@ export const TOOLS: Record<string, ToolHandler> = {
   proc_spawn: procSpawn,
   proc_kill: procKill,
   proc_list: procList,
+
+  // X account management tools
+  x_accounts_list: xAccountsList,
+  x_draft_create: xDraftCreate,
+  x_mentions_pull: xMentionsPull,
+  x_metrics_sync: xMetricsSync,
+  x_publish_now: xPublishNow,
+  x_queue_approve: xQueueApprove,
+  x_queue_schedule: xQueueSchedule,
 };

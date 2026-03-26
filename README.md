@@ -12,8 +12,25 @@ AgentOS is a stateless server that gives any app or service a safe, isolated env
 
 ## What it does
 
-Apps and services call tools via HTTP. Most integrations are stateless — they process a request and forget everything. AgentOS gives any client **persistent state and system access** by exposing six OS primitives as tools:
+AgentOS is a universal MCP aggregator and agent infrastructure layer.
 
+Connect your agent once - get access to everything:
+
+- **32 built-in primitives** (`agentos.*`) - memory, filesystem, database, network, events, and sandboxed code execution
+- **Skills marketplace** (`agentos.skill.*`) - install and call pre-built capabilities on demand
+- **Any external MCP server** (`mcp.*`) - Gmail, Slack, Stripe, GitHub, or any MCP-compatible service registered in your `mcp_servers` table
+
+Any agent, any language, any framework. If it can make an HTTP request, it can use AgentOS.
+
+**Tool naming:**
+
+| Source | Format | Example |
+|---|---|---|
+| Built-in primitives | `agentos.{tool}` | `agentos.net_http_get` |
+| Skills marketplace | `agentos.skill.{slug}.{capability}` | `agentos.skill.pdf-reader.extract_text` |
+| External MCP servers | `mcp.{server}.{tool}` | `mcp.gmail.send_email` |
+
+One endpoint handles all three: `POST /mcp`
 | Primitive | What it gives agents | Backed by |
 |-----------|---------------------|-----------|
 | **mem** | Key-value store (set, get, list, increment, expire) | Redis |

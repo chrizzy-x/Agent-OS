@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 
 interface AuditEntry {
   agentId: string;
-  primitive: 'fs' | 'net' | 'proc' | 'mem' | 'db' | 'events';
+  primitive: 'fs' | 'net' | 'proc' | 'mem' | 'db' | 'events' | 'x';
   operation: string;
   success: boolean;
   durationMs?: number;
@@ -11,7 +11,7 @@ interface AuditEntry {
 }
 
 // Write a single audit log entry to Supabase.
-// This is fire-and-forget — audit failures should never block the main operation.
+// This is fire-and-forget - audit failures should never block the main operation.
 export async function logOperation(entry: AuditEntry): Promise<void> {
   try {
     const supabase = getSupabaseAdmin();
@@ -25,7 +25,7 @@ export async function logOperation(entry: AuditEntry): Promise<void> {
       error: entry.error,
     });
   } catch (err) {
-    // Log to stderr but don't propagate — audit failure must not break agent operations
+    // Log to stderr but don't propagate - audit failure must not break agent operations
     console.error('[audit] failed to write log entry:', err instanceof Error ? err.message : err);
   }
 }

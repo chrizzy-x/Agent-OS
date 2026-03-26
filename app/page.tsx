@@ -175,6 +175,7 @@ export default function HomePage() {
           {/* Links */}
           <div className="hidden md:flex items-center gap-6 text-sm" style={{ color: 'var(--text-muted)' }}>
             <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
+            <Link href="/connect" className="hover:text-white transition-colors">Connect Your Agent</Link>
             <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             <Link href="/developer" className="hover:text-white transition-colors">Developers</Link>
           </div>
@@ -540,6 +541,7 @@ export default function HomePage() {
           <div className="flex items-center gap-6 text-sm" style={{ color: 'var(--text-muted)' }}>
             <a href="https://github.com/chrizzy-x/Agent-OS" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">GitHub</a>
             <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
+            <Link href="/connect" className="hover:text-white transition-colors">Connect Your Agent</Link>
             <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             <Link href="/developer" className="hover:text-white transition-colors">Developer</Link>
             <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
@@ -550,3 +552,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+

@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+﻿import { vi } from 'vitest';
 
 process.env.JWT_SECRET = 'test-jwt-secret-must-be-at-least-32-bytes-long-for-hs256';
 process.env.ADMIN_TOKEN = 'test-admin-token';
@@ -10,6 +10,12 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 process.env.SUPABASE_SERVICE_KEY = 'test-service-role-key';
 process.env.NEXT_PUBLIC_APP_URL = 'https://agentos-app.vercel.app';
 process.env.ALLOWED_DOMAINS = 'httpbin.org,api.example.com';
+process.env.X_CLIENT_ID = 'test-x-client-id';
+process.env.X_CLIENT_SECRET = 'test-x-client-secret';
+process.env.X_REDIRECT_URI = 'https://agentos-app.vercel.app/api/x/callback';
+process.env.SOCIAL_TOKEN_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+process.env.X_TOKEN_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+process.env.X_OAUTH_SCOPES = 'tweet.read tweet.write users.read offline.access';
 
 export const mockRedis = {
   get: vi.fn(),
@@ -79,3 +85,4 @@ vi.mock('../src/storage/supabase.js', () => ({
   STORAGE_BUCKET: 'agent-files',
   storagePath: (agentId: string, path: string) => `${agentId}/${path}`,
 }));
+

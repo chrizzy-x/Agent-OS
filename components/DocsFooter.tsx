@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 
 export default function DocsFooter() {
   return (
@@ -8,6 +8,7 @@ export default function DocsFooter() {
         <div className="flex items-center gap-5 flex-wrap justify-center">
           <Link href="/docs" className="hover:text-gray-700">Docs</Link>
           <Link href="/docs/api" className="hover:text-gray-700">API Reference</Link>
+          <Link href="/docs/social-ops" className="hover:text-gray-700">Social Ops</Link>
           <Link href="/docs/launch" className="hover:text-gray-700">Launch Notes</Link>
           <Link href="/docs/audit" className="hover:text-gray-700">Audit</Link>
           <Link href="/docs/primitives" className="hover:text-gray-700">Primitives</Link>

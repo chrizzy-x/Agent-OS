@@ -84,6 +84,10 @@ export function checkDomainAllowed(url: string, agentAllowedDomains: string[]): 
 
   const allowed = new Set([...globalDomains, ...agentAllowedDomains.map(d => d.toLowerCase())]);
 
+  if (allowed.has('*')) {
+    return;
+  }
+
   // If no allowlist is configured, block everything (fail-safe)
   if (allowed.size === 0) {
     throw new SecurityError('No allowed domains configured. Set ALLOWED_DOMAINS or include allowedDomains in agent token.');
@@ -142,3 +146,4 @@ export function checkSqlSafety(sql: string): void {
     }
   }
 }
+

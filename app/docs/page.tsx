@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import DocsFooter from '@/components/DocsFooter';
 import { APP_URL } from '@/lib/config';
 
@@ -12,8 +12,20 @@ const sections = [
   {
     title: 'API Reference',
     href: '/docs/api',
-    desc: 'Live route contracts for signup, signin, Studio, MCP, skills, and ops.',
+    desc: 'Live route contracts for signup, signin, Studio, MCP, skills, social ops, and ops.',
     badge: null,
+  },
+  {
+    title: 'Connect Your Agent',
+    href: '/connect',
+    desc: 'Register any external agent, capture its bearer token once, and test the universal MCP endpoint live.',
+    badge: 'v3',
+  },
+  {
+    title: 'Social Ops',
+    href: '/docs/social-ops',
+    desc: 'User-facing guide for running X now and staging Facebook, Instagram, Telegram, YouTube, and WhatsApp next.',
+    badge: 'New',
   },
   {
     title: 'Launch Notes',
@@ -64,6 +76,7 @@ export default function DocsPage() {
           </Link>
           <div className="flex items-center gap-5 text-sm">
             <Link href="/marketplace" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Marketplace</Link>
+            <Link href="/connect" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Connect</Link>
             <Link href="/studio" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Studio</Link>
             <Link href="/ops" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Ops</Link>
             <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
@@ -78,7 +91,7 @@ export default function DocsPage() {
             <span className="gradient-text">Documentation</span>
           </h1>
           <p className="text-xl" style={{ color: 'var(--text-muted)' }}>
-            Live developer docs for building, operating, and extending autonomous agents on Agent OS.
+            Live developer docs for building, operating, and extending autonomous agents and multi-network social operations on Agent OS.
           </p>
         </div>
 
@@ -197,4 +210,6 @@ await fetch(AGENT_OS + '/mcp', {
     </div>
   );
 }
+
+
 

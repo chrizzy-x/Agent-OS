@@ -23,6 +23,24 @@ const endpoints: Endpoint[] = [
     response: '{ "tools": [{ "name": "agentos.mem_set", "description": "...", "inputSchema": {...} }] }',
   },
   {
+    method: 'POST', path: '/register', auth: 'None',
+    desc: 'Self-service external-agent registration. Creates a registry record and returns a 90-day bearer token for universal MCP access.',
+    body: [
+      { field: 'agentId', type: 'string', required: true, desc: 'Lowercase agent identifier using letters, numbers, and hyphens only' },
+      { field: 'name', type: 'string', required: true, desc: 'Human-readable agent name' },
+      { field: 'description', type: 'string', required: false, desc: 'Optional summary of what the agent does' },
+      { field: 'ownerEmail', type: 'string', required: false, desc: 'Optional owner contact email' },
+      { field: 'allowedDomains', type: 'string[]', required: false, desc: 'Optional outbound domain allowlist. Empty means all domains allowed.' },
+      { field: 'allowedTools', type: 'string[]', required: false, desc: 'Optional tool permission list. Defaults to all built-in agentos.* primitives.' },
+    ],
+    response: '{ "agentId": "external-agent", "token": "eyJ...", "expiresIn": "90d", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
+  },
+  {
+    method: 'GET', path: '/agent/me', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Return the current external-agent registration details without reissuing the token.',
+    response: '{ "agentId": "external-agent", "name": "My Agent", "status": "active", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "totalCalls": 1, "lastActiveAt": "...", "createdAt": "...", "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
+  },
+  {
     method: 'POST', path: '/api/signup', auth: 'None',
     desc: 'Create an agent account, start a secure browser session, and return a 90-day bearer token for external use.',
     body: [
@@ -57,6 +75,43 @@ const endpoints: Endpoint[] = [
     response: '{ "success": true, "credentials": { "agentId": "agent_...", "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
   },
   {
+    method: 'GET', path: '/api/social/platforms', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Return the Social Ops platform catalog, including which networks are live, which credential families are configured, and how many X accounts are currently connected.',
+    response: '{ "platforms": [{ "id": "x", "status": "live", "connectorReady": true, "connectedCount": 1 }, { "id": "facebook", "status": "scaffolded", "connectorReady": false, "connectedCount": 0 }] }',
+  },
+  {
+    method: 'POST', path: '/api/x/connect', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Start the X OAuth authorization flow for the current operator session.',
+    body: [
+      { field: 'redirectTo', type: 'string', required: false, desc: 'Optional in-app path to return to after OAuth completes' },
+    ],
+    response: '{ "authorizationUrl": "https://x.com/i/oauth2/authorize?..." }',
+  },
+  {
+    method: 'GET', path: '/api/x/accounts', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List connected X accounts visible to the current operator, including owner and child-agent mapping.',
+    response: '{ "accounts": [{ "id": "...", "username": "brand_handle", "child_agent_id": "x_brand_...", "status": "active" }] }',
+  },
+  {
+    method: 'GET', path: '/api/x/drafts', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List X drafts awaiting review, including guardrail status, reasons, and approval state.',
+    response: '{ "drafts": [{ "id": "...", "kind": "post", "approval_status": "required", "guardrail_status": "review", "guardrail_reasons": ["..."], "similarity_score": 0.14 }] }',
+  },
+  {
+    method: 'GET', path: '/api/x/queue', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List queued, published, failed, or canceled X publish items for the authenticated operator.',
+    response: '{ "queue": [{ "id": "...", "publish_status": "queued", "scheduled_for": "...", "account": { "username": "brand_handle" } }] }',
+  },
+  {
+    method: 'POST', path: '/api/x/publish', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Publish an approved X draft immediately or force a queued publish item to run now.',
+    body: [
+      { field: 'draftId', type: 'string', required: false, desc: 'Draft UUID to publish immediately' },
+      { field: 'queueId', type: 'string', required: false, desc: 'Queue UUID to publish immediately' },
+    ],
+    response: '{ "draftId": "...", "queueId": "...", "postId": "...", "publishedAt": "..." }',
+  },
+  {
     method: 'POST', path: '/api/forgot-password', auth: 'None',
     desc: 'Request a password reset. Production returns a generic success response even when the account does not exist.',
     body: [
@@ -83,7 +138,7 @@ const endpoints: Endpoint[] = [
       { field: 'arguments', type: 'object', required: false, desc: 'Alias for input' },
       { field: 'server', type: 'string', required: false, desc: 'Optional MCP server hint for legacy clients' },
     ],
-    response: '{ "result": <tool-specific result> }',
+    response: '{ "success": true, "result": <tool-specific result> }',
   },
   {
     method: 'POST', path: '/api/studio/command', auth: 'Browser Session or Bearer (Agent)',
@@ -175,8 +230,10 @@ export default function ApiReferencePage() {
           <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <Link href="/docs" className="text-blue-600">Docs</Link>
+            <Link href="/docs/social-ops" className="hover:text-gray-900">Social Ops</Link>
             <Link href="/docs/launch" className="hover:text-gray-900">Launch Notes</Link>
             <Link href="/docs/audit" className="hover:text-gray-900">Audit</Link>
+            <Link href="/connect" className="hover:text-gray-900">Connect</Link>
             <Link href="/studio" className="hover:text-gray-900">Studio</Link>
           </div>
         </div>
@@ -255,3 +312,5 @@ export default function ApiReferencePage() {
     </div>
   );
 }
+
+

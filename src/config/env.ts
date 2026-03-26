@@ -1,6 +1,7 @@
 ﻿import { ValidationError } from '../utils/errors.js';
 
 const DEFAULT_APP_URL = 'https://agentos-app.vercel.app';
+const DEFAULT_X_OAUTH_SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access'];
 
 function getEnv(...keys: string[]): string | undefined {
   for (const key of keys) {
@@ -60,6 +61,90 @@ export function getConsensusDefaultThreshold(): number {
     throw new ValidationError('MCP_CONSENSUS_DEFAULT_THRESHOLD must be between 0 and 1');
   }
   return parsed;
+}
+
+export function getXClientId(): string {
+  return requireEnv('X client ID', 'X_CLIENT_ID');
+}
+
+export function getXClientSecret(): string | undefined {
+  return getEnv('X_CLIENT_SECRET');
+}
+
+export function getXRedirectUri(): string {
+  return requireEnv('X redirect URI', 'X_REDIRECT_URI');
+}
+
+export function getSocialTokenEncryptionKey(): string {
+  return requireEnv('Social token encryption key', 'SOCIAL_TOKEN_ENCRYPTION_KEY', 'X_TOKEN_ENCRYPTION_KEY');
+}
+
+export function getXTokenEncryptionKey(): string {
+  return getSocialTokenEncryptionKey();
+}
+
+export function hasXOAuthConfig(): boolean {
+  return Boolean(getEnv('X_CLIENT_ID') && getEnv('X_REDIRECT_URI'));
+}
+
+export function getMetaAppId(): string | undefined {
+  return getEnv('META_APP_ID');
+}
+
+export function getMetaAppSecret(): string | undefined {
+  return getEnv('META_APP_SECRET');
+}
+
+export function getMetaRedirectUri(): string | undefined {
+  return getEnv('META_REDIRECT_URI');
+}
+
+export function hasMetaOAuthConfig(): boolean {
+  return Boolean(getMetaAppId() && getMetaAppSecret() && getMetaRedirectUri());
+}
+
+export function getTelegramBotToken(): string | undefined {
+  return getEnv('TELEGRAM_BOT_TOKEN');
+}
+
+export function getTelegramBotUsername(): string | undefined {
+  return getEnv('TELEGRAM_BOT_USERNAME');
+}
+
+export function hasTelegramBotConfig(): boolean {
+  return Boolean(getTelegramBotToken());
+}
+
+export function getGoogleClientId(): string | undefined {
+  return getEnv('GOOGLE_CLIENT_ID');
+}
+
+export function getGoogleClientSecret(): string | undefined {
+  return getEnv('GOOGLE_CLIENT_SECRET');
+}
+
+export function getGoogleRedirectUri(): string | undefined {
+  return getEnv('GOOGLE_REDIRECT_URI');
+}
+
+export function hasGoogleOAuthConfig(): boolean {
+  return Boolean(getGoogleClientId() && getGoogleClientSecret() && getGoogleRedirectUri());
+}
+
+export function getXOAuthScopes(): string[] {
+  const raw = getEnv('X_OAUTH_SCOPES');
+  if (!raw) return [...DEFAULT_X_OAUTH_SCOPES];
+
+  const scopes = raw
+    .split(/[\s,]+/)
+    .map(scope => scope.trim())
+    .filter(Boolean);
+
+  if (scopes.length === 0) {
+    throw new ValidationError('X_OAUTH_SCOPES must contain at least one scope');
+  }
+
+  return scopes;
 }
 
 export function isFfpEnabled(): boolean {

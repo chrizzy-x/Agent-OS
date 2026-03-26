@@ -51,13 +51,17 @@ describe('universal MCP registry', () => {
   it('publishes standardized primitive tool names with legacy aliases', () => {
     const tools = buildPrimitiveToolCatalog();
     const memSet = tools.find(tool => tool.name === 'agentos.mem_set');
+    const xAccounts = tools.find(tool => tool.name === 'agentos.x_accounts_list');
     expect(memSet).toBeDefined();
     expect(memSet?.aliases).toContain('mem_set');
+    expect(xAccounts).toBeDefined();
+    expect(xAccounts?.aliases).toContain('x_accounts_list');
   });
 
   it('merges primitive, skill, and external tool catalogs into one registry', async () => {
     const tools = await listUniversalMcpTools();
     expect(tools.some(tool => tool.name === 'agentos.mem_set')).toBe(true);
+    expect(tools.some(tool => tool.name === 'agentos.x_publish_now')).toBe(true);
     expect(tools.some(tool => tool.name === 'agentos.skill.pdf-processor.read_pdf')).toBe(true);
     expect(tools.some(tool => tool.name === 'mcp.gmail.send_email')).toBe(true);
   });

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -92,7 +92,7 @@ function SessionTokenPanel() {
           <div className="flex items-center gap-2">
             <div className="flex-1 font-mono text-xs px-3 py-2.5 rounded-lg truncate"
               style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-bright)', color: '#a78bfa' }}>
-              {shown ? bearerToken : `${bearerToken.slice(0, 12)}â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢`}
+              {shown ? bearerToken : `${bearerToken.slice(0, 12)}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢`}
             </div>
             <button onClick={() => setShown(value => !value)} className="text-xs px-3 py-2.5 rounded-lg transition-all"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-bright)', color: 'var(--text-muted)' }}>
@@ -194,15 +194,17 @@ export default function DashboardPage() {
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
               <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
+              <Link href="/connect" className="hover:text-white transition-colors">Connect</Link>
               <Link href="/studio" className="hover:text-white transition-colors">Studio</Link>
               <Link href="/developer" className="hover:text-white transition-colors">Developer</Link>
+              <Link href="/dashboard/social" className="hover:text-white transition-colors">Social Ops</Link>
               <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden sm:block font-mono text-xs px-2.5 py-1.5 rounded-lg"
               style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}>
-              {session.agentId.slice(0, 22)}â€¦
+              {session.agentId.slice(0, 22)}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦
             </span>
             <button onClick={() => void handleSignOut()} className="btn-outline text-sm px-3 py-1.5 rounded-lg">
               Sign out
@@ -266,8 +268,9 @@ export default function DashboardPage() {
                   <h2 className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--text-muted)' }}>
                     Quick Actions
                   </h2>
-                  <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-3">
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-6 gap-3">
                     {[
+                      { href: '/dashboard/social', label: 'Social Ops', color: '#f97316' },
                       { href: '/marketplace', label: 'Browse Skills', color: '#a855f7' },
                       { href: '/developer', label: 'Publish Skill', color: '#06b6d4' },
                       { href: '/docs', label: 'Read Docs', color: '#22c55e' },
@@ -404,7 +407,7 @@ export default function DashboardPage() {
               <div>
                 <div className="flex items-center justify-between mb-5">
                   <h2 className="font-black text-lg">Recent Activity</h2>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Audit log Â· Agent OS</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Audit log Ãƒâ€šÃ‚Â· Agent OS</span>
                 </div>
 
                 {recentAudit.length === 0 ? (
@@ -488,4 +491,5 @@ function CredRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
 

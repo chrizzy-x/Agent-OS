@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
+import { assertExternalAgentToolAccess, trackExternalAgentCall } from '@/src/external-agents/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    await assertExternalAgentToolAccess(agentContext.agentId, toolName);
+
     const result = await executeUniversalToolCall({
       agentContext,
       name: toolName,
@@ -30,7 +33,9 @@ export async function POST(req: NextRequest) {
       arguments: body.input ?? body.arguments ?? {},
     });
 
-    return NextResponse.json({ result });
+    void trackExternalAgentCall(agentContext.agentId).catch(() => {});
+
+    return NextResponse.json({ success: true, result });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err }, { status: err.statusCode });
