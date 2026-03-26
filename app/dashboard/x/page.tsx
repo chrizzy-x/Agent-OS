@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -301,7 +301,7 @@ function DashboardXPageContent() {
               <span className="font-mono font-bold text-sm">X<span className="gradient-text">Ops</span></span>
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
-              <Link href="/dashboard/social" className="hover:text-white transition-colors">Social Ops</Link>
+              <Link href="/dashboard/social" className="hover:text-white transition-colors">Example Hub</Link>
               <Link href="/studio" className="hover:text-white transition-colors">Studio</Link>
               <Link href="/ops" className="hover:text-white transition-colors">Ops</Link>
               <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
@@ -324,7 +324,7 @@ function DashboardXPageContent() {
               <div className="badge badge-amber mb-3">Approval-first control plane</div>
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-3">Review drafts, manage queue, and publish intentionally.</h1>
               <p className="text-sm sm:text-base leading-7" style={{ color: 'var(--text-muted)' }}>
-                Connected X accounts use dedicated child agents, encrypted OAuth storage, and explicit operator review before publishing. This screen is the X moderation layer inside the broader social control plane.
+                Connected X accounts use dedicated child agents, encrypted OAuth storage, and explicit operator review before publishing. This screen is the X moderation layer inside the broader example integration control plane.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -586,3 +586,4 @@ export default function DashboardXPage() {
     </Suspense>
   );
 }
+

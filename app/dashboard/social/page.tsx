@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -60,7 +60,7 @@ export default function DashboardSocialPage() {
 
         if (!active) return;
         if (!response.ok) {
-          throw new Error(body.error || 'Failed to load social platform catalog');
+          throw new Error(body.error || 'Failed to load example integration catalog');
         }
 
         setPlatforms(Array.isArray(body.platforms) ? body.platforms : []);
@@ -68,7 +68,7 @@ export default function DashboardSocialPage() {
       } catch (err) {
         if (!active) return;
         setPlatforms([]);
-        setError(err instanceof Error ? err.message : 'Failed to load social platform catalog');
+        setError(err instanceof Error ? err.message : 'Failed to load example integration catalog');
       } finally {
         if (active) {
           setLoading(false);
@@ -102,12 +102,12 @@ export default function DashboardSocialPage() {
       const response = await fetch('/api/social/platforms', { cache: 'no-store' });
       const body = await response.json();
       if (!response.ok) {
-        throw new Error(body.error || 'Failed to reload social platform catalog');
+        throw new Error(body.error || 'Failed to reload example integration catalog');
       }
       setPlatforms(Array.isArray(body.platforms) ? body.platforms : []);
       setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reload social platform catalog');
+      setError(err instanceof Error ? err.message : 'Failed to reload example integration catalog');
     } finally {
       setRefreshing(false);
     }
@@ -135,7 +135,7 @@ export default function DashboardSocialPage() {
               <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs" style={{ background: 'linear-gradient(135deg, #3b82f6, #10b981)', boxShadow: '0 0 12px rgba(59,130,246,0.35)' }}>
                 S
               </div>
-              <span className="font-mono font-bold text-sm">Social<span className="gradient-text">Ops</span></span>
+              <span className="font-mono font-bold text-sm">Example<span className="gradient-text">Hub</span></span>
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
               <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
@@ -159,7 +159,7 @@ export default function DashboardSocialPage() {
           <div className="absolute -bottom-28 -left-10 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.16), transparent 62%)', filter: 'blur(10px)' }} />
           <div className="relative flex flex-col xl:flex-row xl:items-end justify-between gap-6">
             <div className="max-w-3xl">
-              <div className="badge badge-purple mb-3">Multi-network control plane</div>
+              <div className="badge badge-purple mb-3">Optional example control plane</div>
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-3">Operate X now, then extend into Facebook, Instagram, Telegram, YouTube, and WhatsApp.</h1>
               <p className="text-sm sm:text-base leading-7" style={{ color: 'var(--text-muted)' }}>
                 This hub tracks live connector state, credential readiness, and rollout order across every network you want this platform to manage. X remains the only active connector today; the others are scaffolded and visible so you can extend from one place.
@@ -170,7 +170,7 @@ export default function DashboardSocialPage() {
                 {refreshing ? 'Refreshing...' : 'Refresh catalog'}
               </button>
               <Link href="/docs/social-ops" className="btn-outline rounded-lg px-5 py-3 text-sm">
-                User guide
+                Example guide
               </Link>
               <Link href="/dashboard/x" className="btn-outline rounded-lg px-5 py-3 text-sm">
                 Open X Ops
@@ -275,5 +275,6 @@ export default function DashboardSocialPage() {
     </div>
   );
 }
+
 
 

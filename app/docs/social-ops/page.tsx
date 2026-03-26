@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import DocsFooter from '@/components/DocsFooter';
 import { APP_URL } from '@/lib/config';
 
@@ -56,7 +56,7 @@ const platforms = [
 const operatorFlow = [
   {
     title: '1. Open Example Dashboard',
-    body: 'Use the Social Ops dashboard to see every supported network in one place, including which connectors are live, which credentials are configured, and how many accounts are currently connected.',
+    body: 'Use the example integration dashboard to see every supported network in one place, including which connectors are live, which credentials are configured, and how many accounts are currently connected.',
   },
   {
     title: '2. Connect accounts intentionally',
@@ -85,7 +85,7 @@ const liveRoutes = [
   {
     method: 'GET',
     path: '/api/social/platforms',
-    desc: 'Returns the multi-network catalog used by the Social Ops dashboard, including connector readiness and the live X connection count.',
+    desc: 'Returns the multi-network catalog used by the example integration dashboard, including connector readiness and the live X connection count.',
   },
   {
     method: 'POST',
@@ -179,12 +179,12 @@ export default function SocialOpsDocsPage() {
         <section className="grid lg:grid-cols-[1.1fr_0.9fr] gap-6 items-start">
           <div>
             <div className="badge badge-purple mb-4">Optional Example Module</div>
-            <h1 className="text-4xl font-black mb-4">Social Ops example integration documentation</h1>
+            <h1 className="text-4xl font-black mb-4">Example integration documentation for social automation</h1>
             <p className="text-lg max-w-3xl" style={{ color: 'var(--text-muted)' }}>
-              Social Ops is an optional example module built on top of Agent OS primitives, auth, MCP routing, and operator workflows. It is not part of the core infrastructure story, but it remains useful as a reference for teams building domain-specific agent products on top of Agent OS.
+              This social automation surface is an optional example module built on top of Agent OS primitives, auth, MCP routing, and operator workflows. It is not part of the core infrastructure story, but it remains useful as a reference for teams building domain-specific agent products on top of Agent OS.
             </p>
             <div className="flex flex-wrap gap-3 mt-6">
-              <Link href="/dashboard/social" className="btn-primary px-5 py-2.5 text-sm">Open Social Ops</Link>
+              <Link href="/dashboard/social" className="btn-primary px-5 py-2.5 text-sm">Open Example Dashboard</Link>
               <Link href="/docs/api" className="btn-outline px-5 py-2.5 text-sm">Read API Reference</Link>
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function SocialOpsDocsPage() {
           <div className="card p-6">
             <h2 className="text-2xl font-black mb-4">Required configuration</h2>
             <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-              Social Ops reads environment variables from the main application runtime. Configure the relevant credential family before you expect a scaffolded connector to report as ready.
+              This example integration reads environment variables from the main application runtime. Configure the relevant credential family before you expect a scaffolded connector to report as ready.
             </p>
             <div className="space-y-4">
               {envGroups.map(group => (
@@ -313,3 +313,4 @@ export default function SocialOpsDocsPage() {
     </div>
   );
 }
+

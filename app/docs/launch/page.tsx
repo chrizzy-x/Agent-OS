@@ -12,6 +12,7 @@ const releaseHighlights = [
   'The universal MCP layer, marketplace skills, public docs, and ops crew now ship together in one product surface.',
   'Browser session auth is now the default web experience; bearer tokens are generated on demand for external tools and SDKs.',
   'Password reset, ops-admin mutation guards, sandbox environment stripping, and database email-uniqueness hardening are in production.',
+  'External agents can now self-register, receive scoped bearer tokens, inspect their connection state, and call Agent OS through one MCP endpoint.',
 ];
 
 const changelog = [
@@ -20,6 +21,7 @@ const changelog = [
   'Expanded the official verified free skill catalog into multiple maintained packs across AI, support, research, finance, communication, deployment, security, and analytics.',
   'Restricted ops mutations to ops-admin callers and reduced public ops routes to aggregate visibility only.',
   'Standardized MCP routing so primitives, installed skills, and external MCP tools all execute through one registry.',
+  'Added self-service external agent registration, /agent/me introspection, and the /connect dashboard so any agent can attach to Agent OS without admin intervention.',
 ];
 
 const startLinks = [
@@ -50,9 +52,9 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-purple mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v2 is live for developers</h1>
+          <h1 className="text-4xl font-black mb-3">Agent OS v3 is live for developers</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            Agent OS v2 is live at <code>{APP_URL}</code>. It gives developers one production platform for hosted primitives, universal MCP routing, verified skills, a guarded Studio console, and an autonomous ops crew instead of a stack of disconnected tools.
+            Agent OS v3 is live at <code>{APP_URL}</code>. It gives developers one production platform for hosted primitives, universal MCP routing, verified skills, external-agent connection, a guarded Studio console, and an autonomous ops crew instead of a stack of disconnected tools.
           </p>
         </section>
 
@@ -60,10 +62,10 @@ export default function LaunchNotesPage() {
           <h2 className="text-2xl font-bold mb-4">Short launch post</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              Agent OS is a production platform for building and operating autonomous agents with real infrastructure behind them. You can sign up, keep a secure browser session, open Studio, execute primitives or MCP tools, install verified skills, and inspect platform coverage without wiring your own storage, cache, queue, or control plane first.
+              Agent OS is a production platform for building and operating autonomous agents with real infrastructure behind them. You can sign up, keep a secure browser session, open Studio, execute primitives or MCP tools, install verified skills, connect external agents through one MCP endpoint, and inspect platform coverage without wiring your own storage, cache, queue, or control plane first.
             </p>
             <p>
-              What matters in the live system today is concrete coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, and {officialSkillCount} official verified free skills grouped into {OFFICIAL_SKILL_PACKS.length} maintained packs. Production remains canonical on <code>{APP_URL}</code> while <code>https://agentos.service</code> finishes DNS activation.
+              What matters in the live system today is concrete coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills grouped into {OFFICIAL_SKILL_PACKS.length} maintained packs, and a self-service connection path for agents built outside the platform. Production remains canonical on <code>{APP_URL}</code> while <code>https://agentos.service</code> finishes DNS activation.
             </p>
           </div>
         </section>
@@ -84,6 +86,7 @@ export default function LaunchNotesPage() {
               <li>Generate a fresh bearer token only when you need CLI, SDK, or external API access.</li>
               <li>Use Studio to run guided commands and preview mutating operations before they execute.</li>
               <li>Install from official verified skill packs or publish your own extensions to the marketplace.</li>
+              <li>Register any external agent once, receive a scoped token, and use the same MCP endpoint for primitives, skills, and external connectors.</li>
             </ul>
           </div>
         </section>
@@ -130,3 +133,5 @@ export default function LaunchNotesPage() {
     </div>
   );
 }
+
+
