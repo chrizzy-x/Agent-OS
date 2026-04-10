@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { AuthError, PermissionError } from '../utils/errors.js';
 import type { AgentContext } from './permissions.js';
-import { extractBearerToken, verifyAgentToken } from './agent-identity.js';
+import { extractBearerToken, verifyAgentToken, verifyAgentTokenWithTier } from './agent-identity.js';
 import { extractSessionTokenFromCookie } from './session-cookie.js';
 import { getAdminToken, getCronSecret } from '../config/env.js';
 
@@ -23,6 +23,15 @@ export function requireAgentContext(headers: Headers | globalThis.Headers): Agen
     throw new AuthError('Authorization bearer token required');
   }
   return verifyAgentToken(token);
+}
+
+// Async variant — enriches context with tier from DB.
+export async function requireAgentContextWithTier(headers: Headers | globalThis.Headers): Promise<AgentContext> {
+  const token = readAgentToken(headers);
+  if (!token) {
+    throw new AuthError('Authorization bearer token required');
+  }
+  return verifyAgentTokenWithTier(token);
 }
 
 export function hasAgentAccess(headers: Headers | globalThis.Headers): boolean {

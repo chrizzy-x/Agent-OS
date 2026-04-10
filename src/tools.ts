@@ -1,4 +1,5 @@
 import { memSet, memGet, memDelete, memList, memIncr, memExpire } from './primitives/mem.js';
+import { semanticMemRemember, semanticMemRecall, semanticMemForget, semanticMemList } from './primitives/semantic-mem.js';
 import { fsWrite, fsRead, fsList, fsDelete, fsMkdir, fsStat } from './primitives/fs.js';
 import { dbQuery, dbTransaction, dbCreateTable, dbInsert, dbUpdate, dbDelete } from './primitives/db.js';
 import { netHttpGet, netHttpPost, netHttpPut, netHttpDelete, netDnsResolve } from './primitives/net.js';
@@ -10,13 +11,19 @@ import type { AgentContext } from './auth/permissions.js';
 export type ToolHandler = (ctx: AgentContext, input: unknown) => Promise<unknown>;
 
 export const TOOLS: Record<string, ToolHandler> = {
-  // Memory primitive
+  // Memory primitive (Redis — TTL-based)
   mem_set: memSet,
   mem_get: memGet,
   mem_delete: memDelete,
   mem_list: memList,
   mem_incr: memIncr,
   mem_expire: memExpire,
+
+  // Semantic memory primitive (Supabase — persistent, searchable)
+  mem_remember: semanticMemRemember,
+  mem_recall:   semanticMemRecall,
+  mem_forget:   semanticMemForget,
+  mem_history:  semanticMemList,
 
   // Filesystem primitive
   fs_write: fsWrite,

@@ -1,6 +1,10 @@
 // Agent context is threaded through every primitive call.
 // It carries everything needed to enforce security and quotas without extra DB lookups.
 
+import type { AgentTier } from './tiers.js';
+
+export type { AgentTier };
+
 export interface AgentQuotas {
   // Maximum total storage in bytes across all files (default: 1GB)
   storageQuotaBytes: number;
@@ -18,6 +22,8 @@ export interface AgentContext {
   allowedDomains: string[];
   // Resource quotas for this agent
   quotas: AgentQuotas;
+  // Capability tier: free | pro | hyper
+  tier: AgentTier;
 }
 
 // Default quotas applied when not overridden in agent record

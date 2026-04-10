@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { AgentContext, AgentQuotas, DEFAULT_QUOTAS } from './permissions.js';
+import { isValidTier, TIER_QUOTAS } from './tiers.js';
 import { AuthError } from '../utils/errors.js';
+import { getSupabaseAdmin } from '../storage/supabase.js';
 
 export interface AgentTokenPayload {
   sub: string; // agentId
@@ -43,6 +45,7 @@ export function verifyAgentTokenClaims(token: string): AgentTokenPayload {
 
 // Verify a JWT bearer token and extract the AgentContext from its claims.
 // Throws AuthError if the token is missing, malformed, or expired.
+// Tier defaults to 'free' — use verifyAgentTokenWithTier for DB-enriched context.
 export function verifyAgentToken(token: string): AgentContext {
   const payload = verifyAgentTokenClaims(token);
 
@@ -53,6 +56,40 @@ export function verifyAgentToken(token: string): AgentContext {
       ...DEFAULT_QUOTAS,
       ...payload.quotas,
     },
+    tier: 'free',
+  };
+}
+
+// Verify a JWT bearer token and enrich the AgentContext with the agent's tier from DB.
+// Merges TIER_QUOTAS[tier] as baseline, then applies any JWT custom quota overrides.
+export async function verifyAgentTokenWithTier(token: string): Promise<AgentContext> {
+  const payload = verifyAgentTokenClaims(token);
+
+  let tier: AgentContext['tier'] = 'free';
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase
+      .from('agents')
+      .select('tier')
+      .eq('id', payload.sub)
+      .maybeSingle();
+    if (data && isValidTier(data.tier)) {
+      tier = data.tier;
+    }
+  } catch {
+    // Non-fatal — default to free tier on lookup failure
+  }
+
+  const tierQuotas = TIER_QUOTAS[tier];
+
+  return {
+    agentId: payload.sub,
+    allowedDomains: payload.allowedDomains ?? [],
+    quotas: {
+      ...tierQuotas,
+      ...payload.quotas, // JWT custom quotas override tier baseline
+    },
+    tier,
   };
 }
 

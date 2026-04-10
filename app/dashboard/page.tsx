@@ -130,6 +130,41 @@ function SessionTokenPanel() {
   );
 }
 
+type AgentTier = 'free' | 'pro' | 'hyper';
+
+interface AgentProfile {
+  tier: AgentTier;
+  quotas: { storageQuotaBytes: number; memoryQuotaBytes: number; rateLimitPerMin: number };
+}
+
+function TierBadge({ tier }: { tier: AgentTier }) {
+  if (tier === 'hyper') {
+    return (
+      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+        style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)', color: 'white' }}>
+        HYPER
+      </span>
+    );
+  }
+  if (tier === 'pro') {
+    return (
+      <span className="badge badge-purple text-xs font-bold">PRO</span>
+    );
+  }
+  return (
+    <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+      style={{ background: 'rgba(100,116,139,0.15)', border: '1px solid rgba(100,116,139,0.3)', color: '#94a3b8' }}>
+      FREE
+    </span>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(0)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
@@ -140,6 +175,7 @@ export default function DashboardPage() {
   const [ffpAudit, setFfpAudit] = useState<FfpOperation[]>([]);
   const [ffpConsensus, setFfpConsensus] = useState<FfpProposal[]>([]);
   const [ffpLoading, setFfpLoading] = useState(false);
+  const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -155,10 +191,17 @@ export default function DashboardPage() {
 
       setSession(currentSession);
       try {
-        const res = await fetch('/api/skills/installed');
-        const data = await res.json();
+        const [skillsRes, profileRes] = await Promise.all([
+          fetch('/api/skills/installed'),
+          fetch('/api/agent/me'),
+        ]);
+        const skillsData = await skillsRes.json();
+        const profileData = await profileRes.json();
         if (active) {
-          setInstalledSkills(data.installed_skills ?? []);
+          setInstalledSkills(skillsData.installed_skills ?? []);
+          if (profileData.tier) {
+            setAgentProfile({ tier: profileData.tier, quotas: profileData.quotas });
+          }
         }
       } catch {
         if (active) {
@@ -261,7 +304,10 @@ export default function DashboardPage() {
               {initials}
             </div>
             <div>
-              <div className="font-bold">{session.agentName || 'My Agent'}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold">{session.agentName || 'My Agent'}</span>
+                {agentProfile && <TierBadge tier={agentProfile.tier} />}
+              </div>
               <div className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
                 {session.agentId}
               </div>
@@ -271,7 +317,8 @@ export default function DashboardPage() {
             {[
               { val: installedSkills.length.toString(), label: 'Skills' },
               { val: '90d', label: 'Session TTL' },
-              { val: '1 GB', label: 'Storage' },
+              { val: agentProfile ? formatBytes(agentProfile.quotas.storageQuotaBytes) : '1 GB', label: 'Storage' },
+              { val: agentProfile ? `${agentProfile.quotas.rateLimitPerMin}/min` : '60/min', label: 'Rate limit' },
             ].map(s => (
               <div key={s.label} className="text-center">
                 <div className="text-xl font-black gradient-text">{s.val}</div>

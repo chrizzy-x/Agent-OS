@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
   const { error: insertError } = await supabase.from('agents').insert({
     id: agentId,
     name,
+    tier: 'free',
     quotas: {},
     metadata: { email, password_hash: passwordHash, signup_source: 'web' },
   });

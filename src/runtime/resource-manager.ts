@@ -1,7 +1,8 @@
 import { getRedisClient, agentKey } from '../storage/redis.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
-import { QuotaError, RateLimitError } from '../utils/errors.js';
+import { QuotaError, RateLimitError, PermissionError } from '../utils/errors.js';
 import type { AgentContext } from '../auth/permissions.js';
+import { TIER_CAPABILITIES } from '../auth/tiers.js';
 
 // Rate limit using a sliding window counter in Redis.
 // Allows up to `limit` requests per minute, using 1-minute buckets.
@@ -80,6 +81,17 @@ export async function adjustMemoryUsage(agentId: string, delta: number): Promise
     await redis.incrby(usageKey, delta);
   } else if (delta < 0) {
     await redis.decrby(usageKey, Math.abs(delta));
+  }
+}
+
+// Check whether this agent's tier grants access to a given capability/primitive.
+// Throws PermissionError if the primitive is not in the tier's capability list.
+export function checkCapability(ctx: AgentContext, primitive: string): void {
+  const allowed = TIER_CAPABILITIES[ctx.tier] ?? TIER_CAPABILITIES['free'];
+  if (!allowed.includes(primitive)) {
+    throw new PermissionError(
+      `Your ${ctx.tier} plan does not include access to "${primitive}". Upgrade to unlock this capability.`
+    );
   }
 }
 
