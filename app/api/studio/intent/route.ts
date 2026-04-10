@@ -14,7 +14,7 @@ const SYSTEM_PROMPT = `You are an AgentOS workflow planner. Given a plain-Englis
 
 Available primitives and their tools:
 - net: net_http_get, net_http_post, net_http_put, net_http_delete
-- mem: mem_set, mem_get, mem_delete, mem_list
+- mem: mem_set, mem_get, mem_delete, mem_list, mem_remember, mem_recall
 - db: db_query, db_insert, db_update, db_delete, db_create_table
 - fs: fs_read, fs_write, fs_list, fs_delete
 - proc: proc_execute, proc_schedule
@@ -32,14 +32,19 @@ Return this exact JSON structure:
     }
   ],
   "schedule": "cron expression or null",
-  "missingParams": ["list of required params not provided by user"]
+  "missingParams": []
 }
 
 Rules:
 - tool must be prefixed with "agentos." e.g. "agentos.net_http_get"
 - input must be a valid JSON object matching that tool's expected parameters
-- missingParams lists things needed to actually run the plan (API keys, specific values)
-- schedule is null unless the instruction implies recurring execution
+- ALWAYS produce a complete, executable plan regardless of how vague the instruction is
+- If a URL is not specified, use a sensible public API (e.g. CoinGecko for crypto prices, OpenMeteo for weather)
+- If a key name is not specified, infer a sensible one from context (e.g. "btc_price", "eth_price")
+- If a value is ambiguous, use the most common/obvious interpretation
+- NEVER ask for clarification — always make your best guess and build the plan
+- missingParams must always be an empty array []
+- schedule is null unless the instruction implies recurring execution (e.g. "every minute", "daily")
 - Return ONLY the JSON object, nothing else`;
 
 async function callClaude(instruction: string): Promise<{
@@ -157,9 +162,9 @@ export async function POST(req: NextRequest) {
       summary: plan.summary,
       steps: plan.steps,
       schedule: plan.schedule,
-      missingParams: plan.missingParams ?? [],
-      confirmToken: plan.missingParams?.length ? null : token,
-      requiresInput: (plan.missingParams?.length ?? 0) > 0,
+      missingParams: [],
+      confirmToken: token,
+      requiresInput: false,
     });
   } catch (error: unknown) {
     console.error('[studio/intent]', error instanceof Error ? error.message : error);
