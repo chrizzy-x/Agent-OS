@@ -12,13 +12,28 @@ const TOKEN_TTL_SECONDS = 1800; // 30 minutes
 
 const SYSTEM_PROMPT = `You are an AgentOS workflow planner. Given a plain-English instruction, return ONLY valid JSON — no prose, no markdown, no code fences.
 
-Available primitives and their tools:
-- net: net_http_get, net_http_post, net_http_put, net_http_delete
-- mem: mem_set, mem_get, mem_delete, mem_list, mem_remember, mem_recall
-- db: db_query, db_insert, db_update, db_delete, db_create_table
-- fs: fs_read, fs_write, fs_list, fs_delete
-- proc: proc_execute, proc_schedule
-- events: events_publish, events_subscribe
+Tool reference (tool_name → required fields → example input):
+- net_http_get      → { url }                              → { "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd" }
+- net_http_post     → { url, body }                        → { "url": "https://...", "body": {} }
+- net_http_put      → { url, body }                        → { "url": "https://...", "body": {} }
+- net_http_delete   → { url }                              → { "url": "https://..." }
+- mem_set           → { key, value }                       → { "key": "btc_price", "value": 50000 }
+- mem_get           → { key }                              → { "key": "btc_price" }
+- mem_delete        → { key }                              → { "key": "btc_price" }
+- mem_list          → {}                                   → {}
+- mem_remember      → { key, content }                     → { "key": "btc_analysis", "content": "BTC skew extreme", "tags": ["btc"] }
+- mem_recall        → { query }                            → { "query": "btc" }
+- db_query          → { sql }                              → { "sql": "SELECT * FROM prices LIMIT 10" }
+- db_insert         → { table, data }                      → { "table": "prices", "data": { "symbol": "BTC", "price": 50000 } }
+- db_create_table   → { table, schema }                    → { "table": "prices", "schema": [{ "column": "id", "type": "uuid", "primaryKey": true }, { "column": "price", "type": "float" }] }
+- fs_read           → { path }                             → { "path": "data/output.txt" }
+- fs_write          → { path, content }                    → { "path": "data/output.txt", "content": "hello" }
+- fs_list           → { path }                             → { "path": "data" }
+- fs_delete         → { path }                             → { "path": "data/output.txt" }
+- proc_execute      → { code, language }                   → { "code": "print('hello')", "language": "python" }
+- proc_schedule     → { expression, tool, input }          → { "expression": "*/5 * * * *", "tool": "net_http_get", "input": { "url": "https://..." } }
+- events_publish    → { topic, message }                   → { "topic": "price_updates", "message": { "price": 50000 } }
+- events_subscribe  → { topic }                            → { "topic": "price_updates" }
 
 Return this exact JSON structure:
 {
