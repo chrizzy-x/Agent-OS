@@ -88,9 +88,9 @@ export function checkDomainAllowed(url: string, agentAllowedDomains: string[]): 
     return;
   }
 
-  // If no allowlist is configured, block everything (fail-safe)
+  // If no allowlist is configured, allow all external domains (SSRF protection above handles private IPs)
   if (allowed.size === 0) {
-    throw new SecurityError('No allowed domains configured. Set ALLOWED_DOMAINS or include allowedDomains in agent token.');
+    return;
   }
 
   // Check if hostname matches any allowed domain (exact or subdomain)
