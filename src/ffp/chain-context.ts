@@ -25,6 +25,7 @@ export function buildChainScopedContext(chainId: string, agentId: string): Agent
     agentId: scopedAgentId,
     allowedDomains: [], // falls back to global ALLOWED_DOMAINS env var
     quotas: { ...DEFAULT_QUOTAS },
+    tier: 'hyper', // FFP chain executions are always hyper-tier
   };
 }
 
