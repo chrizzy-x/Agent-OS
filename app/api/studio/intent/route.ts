@@ -8,7 +8,7 @@ import { executeUniversalToolCall } from '@/src/mcp/registry';
 export const runtime = 'nodejs';
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-const TOKEN_TTL_SECONDS = 300; // 5 minutes
+const TOKEN_TTL_SECONDS = 1800; // 30 minutes
 
 const SYSTEM_PROMPT = `You are an AgentOS workflow planner. Given a plain-English instruction, return ONLY valid JSON — no prose, no markdown, no code fences.
 
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     // ── CONFIRM EXECUTION ───────────────────────────────────────────────────
     if (confirm && confirmToken) {
       const stored = await redis.get(`intent:token:${confirmToken}`);
-      if (!stored) return NextResponse.json({ error: 'Confirm token expired or invalid' }, { status: 400 });
+      if (!stored) return NextResponse.json({ error: 'Plan expired — please re-submit your instruction and confirm within 30 minutes.' }, { status: 400 });
 
       const plan = JSON.parse(stored) as {
         summary: string;
