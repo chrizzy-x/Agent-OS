@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { APP_URL } from '@/lib/config';
 
@@ -47,14 +47,106 @@ interface Skill {
   reviews?: Review[];
 }
 
+function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('agentos_token');
+}
+
+interface CryptoInfo {
+  wallet: string;
+  amountUsdc: string;
+  network: string;
+  reference: string;
+  skillId: string;
+  skillSlug: string;
+}
+
+function CryptoPayModal({ info, onConfirm, onClose, busy, errorMsg }: {
+  info: CryptoInfo;
+  onConfirm: (txHash: string) => void;
+  onClose: () => void;
+  busy: boolean;
+  errorMsg: string;
+}) {
+  const [txHash, setTxHash] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const copyWallet = () => {
+    navigator.clipboard.writeText(info.wallet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
+      <div className="w-full max-w-sm rounded-2xl p-6"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <p className="font-bold">Complete payment</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              {info.network === 'solana' ? 'Solana' : 'Base'} · USDC
+            </p>
+          </div>
+          <button onClick={onClose} className="text-xl w-7 h-7 flex items-center justify-center rounded-lg"
+            style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)' }}>×</button>
+        </div>
+
+        {/* Amount */}
+        <div className="rounded-xl px-4 py-3 mb-4 text-center"
+          style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+          <p className="text-2xl font-black" style={{ color: '#22c55e' }}>{info.amountUsdc} USDC</p>
+        </div>
+
+        {/* Wallet */}
+        <p className="text-xs mb-1.5" style={{ color: 'var(--text-muted)' }}>Send to:</p>
+        <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 mb-4"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
+          <code className="text-xs flex-1 break-all" style={{ color: '#a855f7' }}>{info.wallet}</code>
+          <button onClick={copyWallet} className="text-xs flex-shrink-0 px-2 py-1 rounded font-medium"
+            style={{ background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(168,85,247,0.15)', color: copied ? '#86efac' : '#a855f7' }}>
+            {copied ? '✓' : 'Copy'}
+          </button>
+        </div>
+
+        {/* TX input */}
+        <input
+          type="text"
+          value={txHash}
+          onChange={e => setTxHash(e.target.value)}
+          placeholder="Paste transaction signature after paying..."
+          className="w-full px-3 py-2.5 rounded-lg text-sm mb-3"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', color: 'var(--text)' }}
+        />
+
+        {errorMsg && <p className="text-xs mb-3" style={{ color: '#fca5a5' }}>{errorMsg}</p>}
+
+        <button
+          onClick={() => txHash.trim() && onConfirm(txHash.trim())}
+          disabled={busy || !txHash.trim()}
+          className="btn-primary w-full py-3 text-sm font-semibold"
+          style={{ opacity: busy || !txHash.trim() ? 0.6 : 1 }}>
+          {busy ? 'Verifying...' : 'Confirm'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SkillDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const slug = params?.slug as string;
+
   const [skill, setSkill] = useState<Skill | null>(null);
   const [loading, setLoading] = useState(true);
-  const [installing, setInstalling] = useState(false);
-  const [installed, setInstalled] = useState(false);
-  const [installError, setInstallError] = useState('');
+  const [actionState, setActionState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [cryptoInfo, setCryptoInfo] = useState<{ wallet: string; amountUsdc: string; network: string; reference: string; skillId: string; skillSlug: string } | null>(null);
+
+  const isFree = !skill || skill.pricing_model === 'free' || skill.price_per_call === 0;
 
   useEffect(() => {
     if (!slug) return;
@@ -66,25 +158,102 @@ export default function SkillDetailPage() {
   }, [slug]);
 
   const handleInstall = async () => {
-    setInstalling(true);
-    setInstallError('');
+    if (!skill) return;
+
+    const token = getToken();
+    if (!token) {
+      router.push(`/signin?next=/marketplace/${slug}`);
+      return;
+    }
+
+    setActionState('busy');
+    setErrorMsg('');
     try {
       const res = await fetch('/api/skills/install', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ skill_id: skill!.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ skill_id: skill.id }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setInstallError(res.status === 401 ? 'Sign in to install skills.' : (data.error || 'Installation failed'));
+        if (res.status === 401) {
+          router.push(`/signin?next=/marketplace/${slug}`);
+          return;
+        }
+        setErrorMsg(data.error || 'Installation failed');
+        setActionState('error');
       } else {
-        setInstalled(true);
+        setActionState('done');
       }
     } catch {
-      setInstallError('Network error. Please try again.');
-    } finally {
-      setInstalling(false);
+      setErrorMsg('Network error. Please try again.');
+      setActionState('error');
     }
+  };
+
+  const handleBuy = async (method: 'paypal' | 'crypto') => {
+    if (!skill) return;
+
+    const token = getToken();
+    if (!token) {
+      router.push(`/signin?next=/marketplace/${slug}`);
+      return;
+    }
+
+    setActionState('busy');
+    setErrorMsg('');
+    setCryptoInfo(null);
+    try {
+      const res = await fetch('/api/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ skillId: skill.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) { router.push(`/signin?next=/marketplace/${slug}`); return; }
+        setErrorMsg(data.error || 'Could not start checkout');
+        setActionState('error');
+      } else if (data.wallet) {
+        setCryptoInfo({
+          wallet: data.wallet,
+          amountUsdc: data.amountUsdc,
+          network: data.network,
+          reference: data.reference,
+          skillId: skill.id,
+          skillSlug: skill.slug,
+        });
+        setActionState('idle');
+      } else {
+        setErrorMsg('Something went wrong. Try again.');
+        setActionState('error');
+      }
+    } catch {
+      setErrorMsg('Network error. Please try again.');
+      setActionState('error');
+    }
+  };
+
+  const handleCryptoConfirm = async (txHash: string) => {
+    if (!cryptoInfo) return;
+    const token = getToken();
+    if (!token) { router.push(`/signin?next=/marketplace/${slug}`); return; }
+    setActionState('busy');
+    try {
+      const params = new URLSearchParams({
+        tx: txHash,
+        wallet: cryptoInfo.wallet,
+        amount: cryptoInfo.amountUsdc,
+        network: cryptoInfo.network,
+        reference: cryptoInfo.reference,
+        skill_id: cryptoInfo.skillId,
+        skill_slug: cryptoInfo.skillSlug,
+      });
+      router.push(`/marketplace/success?${params.toString()}`);
+    } catch { setErrorMsg('Network error.'); setActionState('error'); }
   };
 
   const exampleCode = (s: Skill) => {
@@ -121,7 +290,7 @@ console.log(result.result);`;
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading skillâ€¦</div>
+        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading skill...</div>
       </div>
     );
   }
@@ -129,10 +298,10 @@ console.log(result.result);`;
   if (!skill) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: 'var(--bg)' }}>
-        <div className="text-4xl">ðŸ”</div>
+        <div className="text-4xl">🔍</div>
         <p className="font-medium">Skill not found</p>
         <Link href="/marketplace" className="text-sm hover:underline" style={{ color: '#a855f7' }}>
-          â† Back to Marketplace
+          ← Back to Marketplace
         </Link>
       </div>
     );
@@ -153,7 +322,7 @@ console.log(result.result);`;
           </Link>
           <div className="flex items-center gap-6">
             <Link href="/marketplace" className="text-sm transition-colors hover:text-white" style={{ color: '#a855f7' }}>
-              â† Marketplace
+              ← Marketplace
             </Link>
             <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
           </div>
@@ -165,23 +334,25 @@ console.log(result.result);`;
         <div className="card p-8 mb-6">
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div className="flex items-start gap-5 flex-1">
-              <span className="text-5xl">{skill.icon || 'ðŸ“¦'}</span>
+              <span className="text-5xl">{skill.icon || '📦'}</span>
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   <h1 className="text-2xl font-black">{skill.name}</h1>
-                  {skill.verified && <span className="badge badge-green text-xs">âœ“ Official</span>}
+                  {skill.verified && <span className="badge badge-green text-xs">✓ Official</span>}
                   <span className="badge badge-purple text-xs">{skill.category}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm flex-wrap mb-3" style={{ color: 'var(--text-muted)' }}>
                   <span>by @{skill.author_name}</span>
-                  <span>Â·</span>
+                  <span>·</span>
                   <span>v{skill.version}</span>
                   {skill.rating > 0 && (
                     <>
-                      <span>Â·</span>
-                      <span>â­ {Number(skill.rating).toFixed(1)} ({skill.review_count})</span>
+                      <span>·</span>
+                      <span>⭐ {Number(skill.rating).toFixed(1)} ({skill.review_count})</span>
                     </>
                   )}
+                  <span>·</span>
+                  <span>{skill.total_installs.toLocaleString()} installs</span>
                 </div>
                 <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
                   {skill.description}
@@ -189,29 +360,75 @@ console.log(result.result);`;
               </div>
             </div>
 
-            <div className="flex-shrink-0 text-right min-w-[160px]">
-              <div className="text-2xl font-black mb-1">
-                {skill.pricing_model === 'free'
-                  ? <span style={{ color: '#22c55e' }}>Free</span>
-                  : <span style={{ color: '#a855f7' }}>${skill.price_per_call}<span className="text-sm font-normal" style={{ color: 'var(--text-muted)' }}>/call</span></span>
-                }
+            {/* Install / Buy panel */}
+            <div className="flex-shrink-0 min-w-[180px]">
+              {/* Price display */}
+              <div className="text-right mb-3">
+                {isFree ? (
+                  <span className="text-2xl font-black" style={{ color: '#22c55e' }}>Free</span>
+                ) : (
+                  <div>
+                    <span className="text-2xl font-black" style={{ color: '#a855f7' }}>
+                      ${skill.price_per_call}
+                    </span>
+                    <span className="text-sm font-normal" style={{ color: 'var(--text-muted)' }}>/mo</span>
+                  </div>
+                )}
+                {!isFree && skill.free_tier_calls > 0 && (
+                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    First {skill.free_tier_calls} calls free
+                  </div>
+                )}
               </div>
-              {skill.pricing_model !== 'free' && skill.free_tier_calls > 0 && (
-                <div className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-                  First {skill.free_tier_calls} calls free
-                </div>
+
+              {/* CTA button */}
+              {isFree ? (
+                <button
+                  onClick={() => void handleInstall()}
+                  disabled={actionState === 'busy' || actionState === 'done'}
+                  className="btn-primary w-full py-2.5"
+                  style={{ opacity: actionState === 'busy' || actionState === 'done' ? 0.7 : 1 }}>
+                  {actionState === 'done'
+                    ? 'Installed ✓'
+                    : actionState === 'busy'
+                    ? 'Installing...'
+                    : 'Install Free'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => void handleBuy('crypto')}
+                  disabled={actionState === 'busy'}
+                  className="btn-primary w-full py-2.5"
+                  style={{ opacity: actionState === 'busy' ? 0.7 : 1 }}>
+                  {actionState === 'busy' ? 'Loading...' : `Buy — $${skill.price_per_call}/mo`}
+                </button>
               )}
-              <button onClick={handleInstall} disabled={installing || installed}
-                className="btn-primary w-full py-2.5 mb-2"
-                style={{ opacity: (installing || installed) ? 0.7 : 1 }}>
-                {installed ? 'âœ“ Installed' : installing ? 'Installingâ€¦' : 'Install Skill'}
-              </button>
-              {installError && (
-                <p className="text-xs mt-1" style={{ color: '#fca5a5' }}>{installError}</p>
+
+              {actionState === 'error' && errorMsg && (
+                <p className="text-xs mt-2 text-right" style={{ color: '#fca5a5' }}>{errorMsg}</p>
+              )}
+
+              {actionState === 'done' && (
+                <Link href="/dashboard"
+                  className="block text-center text-xs mt-2 hover:underline"
+                  style={{ color: '#86efac' }}>
+                  View in dashboard →
+                </Link>
               )}
             </div>
           </div>
         </div>
+
+        {/* Crypto payment panel */}
+        {cryptoInfo && (
+          <CryptoPayModal
+            info={cryptoInfo}
+            onConfirm={handleCryptoConfirm}
+            onClose={() => setCryptoInfo(null)}
+            busy={actionState === 'busy'}
+            errorMsg={errorMsg}
+          />
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left column */}
@@ -235,7 +452,7 @@ console.log(result.result);`;
                     <div className="font-mono text-sm mb-1">
                       <span style={{ color: '#a855f7' }}>{cap.name}</span>
                       <span style={{ color: 'var(--text-muted)' }}>({Object.keys(cap.params || {}).join(', ')})</span>
-                      {cap.returns && <span style={{ color: '#67e8f9' }}> â†’ {cap.returns}</span>}
+                      {cap.returns && <span style={{ color: '#67e8f9' }}> → {cap.returns}</span>}
                     </div>
                     <div className="text-sm mb-2" style={{ color: 'var(--text-muted)' }}>{cap.description}</div>
                     {Object.keys(cap.params || {}).length > 0 && (
@@ -274,11 +491,12 @@ console.log(result.result);`;
                 <h2 className="font-bold mb-4">Reviews ({skill.review_count})</h2>
                 <div className="space-y-4">
                   {skill.reviews.slice(0, 5).map((review, i) => (
-                    <div key={i} className="pb-4 last:pb-0" style={{ borderBottom: i < Math.min(4, skill.reviews!.length - 1) ? '1px solid var(--border)' : 'none' }}>
+                    <div key={i} className="pb-4 last:pb-0"
+                      style={{ borderBottom: i < Math.min(4, skill.reviews!.length - 1) ? '1px solid var(--border)' : 'none' }}>
                       <div className="flex items-center gap-2 mb-1">
-                        <span>{'â­'.repeat(review.rating)}</span>
+                        <span>{'⭐'.repeat(review.rating)}</span>
                         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          @{review.agent_id.slice(0, 14)}â€¦
+                          @{review.agent_id.slice(0, 14)}…
                         </span>
                       </div>
                       {review.review_title && (
@@ -307,12 +525,30 @@ console.log(result.result);`;
                   <span style={{ color: 'var(--text-muted)' }}>API Calls</span>
                   <span className="font-semibold">{skill.total_calls.toLocaleString()}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--text-muted)' }}>Version</span>
+                  <span className="font-semibold">v{skill.version}</span>
+                </div>
                 {skill.rating > 0 && (
                   <div className="flex justify-between">
                     <span style={{ color: 'var(--text-muted)' }}>Rating</span>
-                    <span className="font-semibold">â­ {Number(skill.rating).toFixed(1)}/5</span>
+                    <span className="font-semibold">⭐ {Number(skill.rating).toFixed(1)}/5</span>
                   </div>
                 )}
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--text-muted)' }}>Author</span>
+                  <span className="font-semibold">@{skill.author_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--text-muted)' }}>Category</span>
+                  <span className="font-semibold">{skill.category}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--text-muted)' }}>Pricing</span>
+                  <span className="font-semibold" style={{ color: isFree ? '#86efac' : '#c084fc' }}>
+                    {isFree ? 'Free' : `$${skill.price_per_call}/mo`}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -351,13 +587,13 @@ console.log(result.result);`;
                   {skill.homepage_url && (
                     <a href={skill.homepage_url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 hover:underline" style={{ color: '#a855f7' }}>
-                      ðŸŒ Homepage
+                      🌐 Homepage
                     </a>
                   )}
                   {skill.repository_url && (
                     <a href={skill.repository_url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-2 hover:underline" style={{ color: '#a855f7' }}>
-                      ðŸ“¦ Repository
+                      📦 Repository
                     </a>
                   )}
                 </div>
@@ -369,5 +605,3 @@ console.log(result.result);`;
     </div>
   );
 }
-
-

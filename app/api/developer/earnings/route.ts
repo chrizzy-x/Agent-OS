@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       skill_slug: skill.slug,
       icon: skill.icon,
       total_calls: perSkillMap[skill.id]?.calls ?? 0,
-      total_revenue: ((perSkillMap[skill.id]?.revenue ?? 0) * 0.7).toFixed(4),
+      total_revenue: ((perSkillMap[skill.id]?.revenue ?? 0) * 0.7).toFixed(2),
     }));
 
     return NextResponse.json({

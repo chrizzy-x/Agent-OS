@@ -1,16 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { fetchBrowserSession } from '@/src/auth/browser-session';
 
-export default function SignInPage() {
+const LINK_ERRORS: Record<string, string> = {
+  invalid_link: 'This login link is invalid.',
+  link_expired: 'This login link has expired. Generate a new one from your SDK.',
+  server_error: 'Something went wrong. Please sign in manually or try again.',
+};
+
+function SignInContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    const code = searchParams.get('error');
+    return code ? (LINK_ERRORS[code] ?? 'Login link failed. Please sign in manually.') : '';
+  });
 
   useEffect(() => {
     let active = true;
@@ -168,6 +178,14 @@ export default function SignInPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" style={{ background: 'var(--bg)' }} />}>
+      <SignInContent />
+    </Suspense>
   );
 }
 

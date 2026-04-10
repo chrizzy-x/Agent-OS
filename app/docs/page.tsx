@@ -4,39 +4,39 @@ import { APP_URL } from '@/lib/config';
 
 const sections = [
   {
+    title: 'Complete Guide',
+    href: '/docs/guide',
+    desc: 'Plain-English walkthrough from zero to running — real use cases, every feature explained, no experience needed.',
+    badge: 'Start here',
+  },
+  {
     title: 'Quick Start',
     href: '/docs/sdk',
-    desc: 'Create your agent, get credentials, and make your first API call in under 5 minutes.',
-    badge: 'Start here',
+    desc: 'Create your agent, get credentials, make your first API call, and access your dashboard — all in under 5 minutes.',
+    badge: null,
+  },
+  {
+    title: 'Templates',
+    href: '/docs/templates',
+    desc: 'Copy, paste your API key, change 1–2 lines. Price alerts, research agents, portfolio trackers — done in 5 min.',
+    badge: 'New',
   },
   {
     title: 'API Reference',
     href: '/docs/api',
-    desc: 'Live route contracts for signup, signin, Studio, MCP, skills, and ops.',
+    desc: 'Live route contracts for signup, signin, Studio, MCP, skills, workflows, kernel, and ops.',
     badge: null,
   },
   {
     title: 'Connect Your Agent',
     href: '/connect',
     desc: 'Register any external agent, capture its bearer token once, and test the universal MCP endpoint live.',
-    badge: 'v3',
-  },
-  {
-    title: 'Launch Notes',
-    href: '/docs/launch',
-    desc: 'Developer-first launch summary, changelog, and the real production URL status.',
-    badge: 'Live',
-  },
-  {
-    title: 'Production Audit',
-    href: '/docs/audit',
-    desc: 'Findings-first report from the March 19, 2026 live audit, with fixes and open DNS work.',
-    badge: 'Verified',
+    badge: null,
   },
   {
     title: 'Primitives',
     href: '/docs/primitives',
-    desc: 'Deep dive into mem, fs, db, net, proc, and events.',
+    desc: 'Deep dive into mem, fs, db, net, proc, and events — all 30 tools.',
     badge: null,
   },
   {
@@ -44,6 +44,18 @@ const sections = [
     href: '/docs/skills',
     desc: 'Install marketplace skills, publish your own, and meter usage.',
     badge: null,
+  },
+  {
+    title: 'FFP / Consensus Mode',
+    href: '/docs/ffp',
+    desc: 'Immutable audit trail and multi-party consensus for critical operations. View your audit history in the dashboard.',
+    badge: 'Advanced',
+  },
+  {
+    title: 'Launch Notes',
+    href: '/docs/launch',
+    desc: 'v5 Ares — FFP Multi-Chain Router. v4 Hermes — NL Studio, Workflow Library, SDK Kernel.',
+    badge: 'v5 Ares',
   },
 ];
 
@@ -89,20 +101,6 @@ export default function DocsPage() {
           </p>
         </div>
 
-        <div className="card p-6 mb-10">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold mb-2">Production status</h2>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Canonical live URL: <code>{APP_URL}</code>. The custom domain <code>https://agentos.service</code> is still activating and needs the apex DNS record <code>A @ -&gt; 76.76.21.21</code>.
-              </p>
-            </div>
-            <div className="flex gap-3 flex-wrap">
-              <Link href="/docs/launch" className="btn-outline text-xs px-4 py-2">Launch Notes</Link>
-              <Link href="/docs/audit" className="btn-outline text-xs px-4 py-2">Production Audit</Link>
-            </div>
-          </div>
-        </div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-14">
           {sections.map(section => (
@@ -158,7 +156,7 @@ export default function DocsPage() {
             {APP_URL}
           </code>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            All API requests use this base URL. Authentication is via Bearer token. Ops-control mutations require an ops-admin bearer token or the admin token.
+            All API requests use this base URL. Authenticate with your Bearer token.
           </p>
         </div>
 

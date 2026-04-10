@@ -60,6 +60,7 @@ export default function DeveloperPage() {
   const [publishError, setPublishError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [payoutEmail, setPayoutEmail] = useState('');
+  const [payoutWallet, setPayoutWallet] = useState('');
   const [payoutMethod, setPayoutMethod] = useState('paypal');
   const [payoutSaving, setPayoutSaving] = useState(false);
   const [payoutMsg, setPayoutMsg] = useState('');
@@ -116,11 +117,18 @@ export default function DeveloperPage() {
       if (res.ok) {
         const data = await res.json();
         setPayoutEmail(data.payout_email ?? '');
+        setPayoutWallet(data.payout_wallet ?? '');
         setPayoutMethod(data.payout_method ?? 'paypal');
         setPayoutRequested(data.payout_requested ?? false);
+      } else {
+        setPayoutEmail('');
+        setPayoutWallet('');
+        setPayoutMethod('paypal');
       }
     } catch {
-      // silent
+      setPayoutEmail('');
+      setPayoutWallet('');
+      setPayoutMethod('paypal');
     }
   };
 
@@ -132,7 +140,12 @@ export default function DeveloperPage() {
       const res = await fetch('/api/developer/payout-settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payout_email: payoutEmail, payout_method: payoutMethod, request_payout: requestPayout }),
+        body: JSON.stringify({
+          payout_email: payoutMethod !== 'crypto' ? payoutEmail : undefined,
+          payout_wallet: payoutMethod === 'crypto' ? payoutWallet : undefined,
+          payout_method: payoutMethod,
+          request_payout: requestPayout,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setPayoutMsg(data.error ?? 'Failed to save'); return; }
@@ -254,7 +267,7 @@ export default function DeveloperPage() {
 
         {!session && (
           <div className="card p-12 text-center">
-            <div className="text-5xl mb-4">??</div>
+            <div className="text-5xl mb-4">🔐</div>
             <h2 className="text-lg font-bold mb-2">Sign in to publish skills</h2>
             <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
               Sign in once to open a secure browser session, then publish skills without pasting a bearer token into the web UI.
@@ -343,7 +356,7 @@ export default function DeveloperPage() {
 
               {publishError && <div className="rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}>{publishError}</div>}
               <button type="submit" disabled={publishing} className="btn-primary w-full py-3" style={{ opacity: publishing ? 0.5 : 1, cursor: publishing ? 'not-allowed' : 'pointer' }}>
-                {publishing ? 'Publishingâ€¦' : 'Publish to Marketplace'}
+                {publishing ? 'Publishing...' : 'Publish to Marketplace'}
               </button>
             </form>
           </div>
@@ -351,7 +364,7 @@ export default function DeveloperPage() {
 
         {publishSuccess && (
           <div className="rounded-lg px-4 py-3 text-sm mb-6" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', color: '#86efac' }}>
-            ? {publishSuccess}
+            ✓ {publishSuccess}
           </div>
         )}
 
@@ -373,7 +386,7 @@ export default function DeveloperPage() {
               </div>
             ) : mySkills.length === 0 ? (
               <div className="card p-12 text-center">
-                <div className="text-5xl mb-4">???</div>
+                <div className="text-5xl mb-4">🛠️</div>
                 <h3 className="font-bold mb-2">No skills published yet</h3>
                 <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
                   Build a skill and share it with the Agent OS community.
@@ -398,11 +411,11 @@ export default function DeveloperPage() {
                         <div className="flex items-center gap-5 text-sm">
                           <div><span style={{ color: 'var(--text-muted)' }}>Installs</span><span className="ml-1.5 font-semibold">{skill.total_installs.toLocaleString()}</span></div>
                           <div><span style={{ color: 'var(--text-muted)' }}>API Calls</span><span className="ml-1.5 font-semibold">{skill.total_calls.toLocaleString()}</span></div>
-                          {skill.rating > 0 && <div><span style={{ color: 'var(--text-muted)' }}>Rating</span><span className="ml-1.5 font-semibold">? {Number(skill.rating).toFixed(1)}</span></div>}
+                          {skill.rating > 0 && <div><span style={{ color: 'var(--text-muted)' }}>Rating</span><span className="ml-1.5 font-semibold">⭐ {Number(skill.rating).toFixed(1)}</span></div>}
                         </div>
                       </div>
                       <Link href={`/marketplace/${skill.slug}`} className="text-sm flex-shrink-0 hover:underline" style={{ color: '#a855f7' }}>
-                        View ?
+                        View →
                       </Link>
                     </div>
                   </div>
@@ -420,21 +433,48 @@ export default function DeveloperPage() {
             </p>
             <form onSubmit={(e) => handleSavePayoutSettings(e, false)} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>Payout Email</label>
-                <input type="email" className="input-dark w-full" placeholder="your@email.com" value={payoutEmail} onChange={e => setPayoutEmail(e.target.value)} />
-              </div>
-              <div>
                 <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>Payment Method</label>
-                <select className="input-dark w-full" value={payoutMethod} onChange={e => setPayoutMethod(e.target.value)}>
+                <select className="input-dark w-full" value={payoutMethod} onChange={e => { setPayoutMethod(e.target.value); setPayoutMsg(''); }}>
                   <option value="paypal">PayPal</option>
                   <option value="bank_transfer">Bank Transfer (ACH/Wire)</option>
                   <option value="crypto">Crypto (USDC)</option>
                 </select>
               </div>
-              {payoutMsg && <p className="text-sm" style={{ color: payoutMsg.includes('error') || payoutMsg.includes('Failed') ? '#f87171' : '#4ade80' }}>{payoutMsg}</p>}
+              {payoutMethod === 'crypto' ? (
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>Wallet Address (Solana / USDC)</label>
+                  <input
+                    type="text"
+                    className="input-dark w-full font-mono text-xs"
+                    placeholder="e.g. 7xKX..."
+                    value={payoutWallet}
+                    onChange={e => setPayoutWallet(e.target.value)}
+                  />
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>Enter your USDC-compatible wallet address. Payments are sent in USDC on Solana.</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>
+                    {payoutMethod === 'paypal' ? 'PayPal Email' : 'Account Email'}
+                  </label>
+                  <input type="email" className="input-dark w-full" placeholder="your@email.com" value={payoutEmail} onChange={e => setPayoutEmail(e.target.value)} />
+                </div>
+              )}
+              {payoutMsg && (
+                <p className="text-sm" style={{ color: payoutMsg.includes('error') || payoutMsg.includes('Failed') ? '#f87171' : '#4ade80' }}>
+                  {payoutMsg}
+                </p>
+              )}
               <div className="flex gap-3 flex-wrap">
-                <button type="submit" className="btn-primary text-sm px-4 py-2" disabled={payoutSaving}>{payoutSaving ? 'Savingâ€¦' : 'Save Settings'}</button>
-                <button type="button" className="btn-outline text-sm px-4 py-2" disabled={payoutSaving || payoutRequested || !earnings || earnings.all_time === '0.00'} onClick={(e) => handleSavePayoutSettings(e as unknown as React.FormEvent, true)} style={payoutRequested ? { opacity: 0.5, cursor: 'not-allowed' } : {}}>
+                <button type="submit" className="btn-primary text-sm px-4 py-2" disabled={payoutSaving}>
+                  {payoutSaving ? 'Saving...' : 'Save Settings'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline text-sm px-4 py-2"
+                  disabled={payoutSaving || payoutRequested || !earnings || earnings.all_time === '0.00'}
+                  onClick={(e) => handleSavePayoutSettings(e as unknown as React.FormEvent, true)}
+                  style={payoutRequested ? { opacity: 0.5, cursor: 'not-allowed' } : {}}>
                   {payoutRequested ? 'Payout Requested' : 'Request Payout'}
                 </button>
               </div>

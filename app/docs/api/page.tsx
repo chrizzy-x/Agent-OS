@@ -249,8 +249,7 @@ export default function ApiReferencePage() {
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-10 text-sm text-blue-800">
-          <strong>Canonical production URL:</strong> <code className="font-mono bg-blue-100 px-1 rounded">{BASE}</code>.
-          The custom domain <code className="font-mono bg-blue-100 px-1 rounded">https://agentos.service</code> is still activating until the apex DNS A record points to Vercel.
+          <strong>Base URL:</strong> <code className="font-mono bg-blue-100 px-1 rounded">{BASE}</code>
         </div>
 
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-10 text-sm text-gray-700">

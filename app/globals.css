@@ -22,11 +22,15 @@
 /* ─── Base ─── */
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
 
 body {
   background-color: var(--bg);
   color: var(--text);
+  overflow-x: hidden;
 }
 
 /* ─── Scrollbar ─── */
@@ -219,6 +223,21 @@ body {
   font-family: 'SF Mono', 'Fira Code', 'Fira Mono', ui-monospace, monospace;
   font-size: 0.8rem;
   line-height: 1.7;
+  max-width: 100%;
+}
+
+.terminal pre,
+.terminal code {
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* ensure inner padding divs scroll horizontally on mobile */
+.terminal > div > div,
+.terminal .overflow-auto {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .terminal-header {

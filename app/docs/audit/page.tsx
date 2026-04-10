@@ -31,14 +31,6 @@ const findings: AuditFinding[] = [
     risk: 'Developers could copy invalid request payloads or expect fields that the live API does not return.',
     recommendation: 'Document only the route contracts that were re-verified against production. This fix is already live.',
   },
-  {
-    severity: 'P2',
-    status: 'Open',
-    surface: 'https://agentos.service',
-    observed: 'The custom domain is attached in Vercel but the apex DNS record does not yet resolve publicly.',
-    risk: 'The branded production hostname is unavailable, so launch traffic must stay on the Vercel hostname until DNS propagates.',
-    recommendation: 'Create the apex DNS record A @ -> 76.76.21.21 at the current DNS provider. Keep the canonical production URL on agentos-app.vercel.app until agentos.service resolves and serves HTTPS.',
-  },
 ];
 
 const verifiedRoutes = [
@@ -137,7 +129,7 @@ export default function AuditPage() {
         <section className="card p-6">
           <h2 className="text-xl font-bold mb-3">Readiness assessment</h2>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Agent OS is ready for public traffic on <code>{APP_URL}</code>. The remaining operational blocker is external to the codebase: add the apex DNS record for <code>agentos.service</code> and then re-verify HTTPS before switching the canonical hostname.
+            Agent OS is live and ready for public traffic.
           </p>
         </section>
       </div>

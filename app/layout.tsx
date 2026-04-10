@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { APP_URL } from '@/lib/config';
 
@@ -23,6 +23,12 @@ export const metadata: Metadata = {
     title: 'Agent OS',
     description: 'Universal MCP, skills, consensus, and production infrastructure for AI agents.',
   },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

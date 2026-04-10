@@ -38,6 +38,24 @@ interface AuditEntry {
   error?: string;
 }
 
+interface FfpOperation {
+  id?: string;
+  chain_id?: string;
+  tool?: string;
+  status?: string;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+interface FfpProposal {
+  id?: string;
+  status?: string;
+  votes?: number;
+  threshold?: number;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
 const PRIM_COLORS: Record<string, string> = {
   fs: '#06b6d4', net: '#22c55e', proc: '#f59e0b',
   mem: '#a855f7', db: '#3b82f6', events: '#ec4899',
@@ -92,7 +110,7 @@ function SessionTokenPanel() {
           <div className="flex items-center gap-2">
             <div className="flex-1 font-mono text-xs px-3 py-2.5 rounded-lg truncate"
               style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-bright)', color: '#a78bfa' }}>
-              {shown ? bearerToken : `${bearerToken.slice(0, 12)}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢`}
+              {shown ? bearerToken : `${bearerToken.slice(0, 12)}••••••••••••••••••••`}
             </div>
             <button onClick={() => setShown(value => !value)} className="text-xs px-3 py-2.5 rounded-lg transition-all"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-bright)', color: 'var(--text-muted)' }}>
@@ -118,7 +136,10 @@ export default function DashboardPage() {
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
   const [recentAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'activity' | 'ffp'>('overview');
+  const [ffpAudit, setFfpAudit] = useState<FfpOperation[]>([]);
+  const [ffpConsensus, setFfpConsensus] = useState<FfpProposal[]>([]);
+  const [ffpLoading, setFfpLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -154,6 +175,22 @@ export default function DashboardPage() {
     return () => { active = false; };
   }, [router]);
 
+  const loadFfp = async () => {
+    if (ffpLoading) return;
+    setFfpLoading(true);
+    try {
+      const [auditRes, consensusRes] = await Promise.all([
+        fetch('/api/agent/ffp/audit'),
+        fetch('/api/agent/ffp/consensus'),
+      ]);
+      const auditData = await auditRes.json();
+      const consensusData = await consensusRes.json();
+      setFfpAudit(auditData.operations ?? []);
+      setFfpConsensus(consensusData.proposals ?? []);
+    } catch { /* keep existing */ }
+    finally { setFfpLoading(false); }
+  };
+
   const handleSignOut = async () => {
     await destroyBrowserSession();
     router.push('/signin');
@@ -161,15 +198,19 @@ export default function DashboardPage() {
 
   const uninstallSkill = async (skillId: string) => {
     if (!confirm('Uninstall this skill?')) return;
+    const previous = installedSkills;
+    setInstalledSkills(current => current.filter(item => item.skill.id !== skillId));
     try {
-      await fetch('/api/skills/uninstall', {
+      const res = await fetch('/api/skills/uninstall', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ skill_id: skillId }),
       });
-      setInstalledSkills(current => current.filter(item => item.skill.id !== skillId));
+      if (!res.ok) {
+        setInstalledSkills(previous);
+      }
     } catch {
-      // silent
+      setInstalledSkills(previous);
     }
   };
 
@@ -203,7 +244,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <span className="hidden sm:block font-mono text-xs px-2.5 py-1.5 rounded-lg"
               style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}>
-              {session.agentId.slice(0, 22)}ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦
+              {session.agentId.slice(0, 22)}…
             </span>
             <button onClick={() => void handleSignOut()} className="btn-outline text-sm px-3 py-1.5 rounded-lg">
               Sign out
@@ -240,15 +281,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="flex gap-1 mb-6 p-1 rounded-lg w-fit"
+        <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-lg w-fit"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          {(['overview', 'skills', 'activity'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
+          {(['overview', 'skills', 'activity', 'ffp'] as const).map(tab => (
+            <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); }}
               className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-all"
               style={activeTab === tab
                 ? { background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: 'white', boxShadow: '0 0 16px rgba(124,58,237,0.3)' }
                 : { color: 'var(--text-muted)' }}>
-              {tab}
+              {tab === 'ffp' ? 'FFP' : tab}
             </button>
           ))}
         </div>
@@ -274,8 +315,9 @@ export default function DashboardPage() {
                       { href: '/docs', label: 'Read Docs', color: '#22c55e' },
                       { href: '/studio', label: 'Studio Console', color: '#8b5cf6' },
                       { href: '/ops', label: 'Ops Console', color: '#f59e0b' },
+                      { href: '#ffp', label: 'FFP & Consensus', color: '#22c55e' },
                     ].map(a => (
-                      <Link key={a.href} href={a.href} className="card p-5 flex flex-col items-start gap-3 group">
+                      <Link key={a.href} href={a.href} onClick={a.href === '#ffp' ? (e) => { e.preventDefault(); setActiveTab('ffp'); void loadFfp(); } : undefined} className="card p-5 flex flex-col items-start gap-3 group">
                         <div className="w-9 h-9 rounded-lg" style={{ background: `${a.color}12`, border: `1px solid ${a.color}25` }} />
                         <span className="text-sm font-medium group-hover:text-white transition-colors" style={{ color: 'var(--text-muted)' }}>
                           {a.label}
@@ -401,11 +443,106 @@ export default function DashboardPage() {
               </div>
             )}
 
+            {activeTab === 'ffp' && (
+              <div className="space-y-6">
+                {ffpLoading ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {[...Array(4)].map((_, i) => <div key={i} className="card h-24 animate-pulse" />)}
+                  </div>
+                ) : (
+                  <>
+                    {/* Audit Trail */}
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-black text-lg">Audit Trail</h2>
+                        <button onClick={() => void loadFfp()} className="btn-outline text-xs px-3 py-1.5 rounded-lg">Refresh</button>
+                      </div>
+                      {ffpAudit.length === 0 ? (
+                        <div className="card p-10 text-center">
+                          <p className="font-bold mb-1">No operations recorded</p>
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                            FFP will log every tool call your agent makes once it is enabled and configured.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {ffpAudit.map((op, i) => (
+                            <div key={op.id ?? i} className="card p-4 flex items-center gap-4">
+                              <div className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ background: op.status === 'approved' ? '#22c55e' : op.status === 'rejected' ? '#ef4444' : '#f59e0b' }} />
+                              <div className="flex-1">
+                                <div className="font-mono text-sm font-semibold">{op.tool ?? 'unknown'}</div>
+                                {op.chain_id && <div className="text-xs" style={{ color: 'var(--text-dim)' }}>chain: {String(op.chain_id)}</div>}
+                              </div>
+                              <span className="text-xs px-2 py-0.5 rounded font-medium"
+                                style={op.status === 'approved'
+                                  ? { background: 'rgba(34,197,94,0.1)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
+                                  : op.status === 'rejected'
+                                  ? { background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)' }
+                                  : { background: 'rgba(245,158,11,0.1)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.25)' }}>
+                                {String(op.status ?? 'pending')}
+                              </span>
+                              {op.created_at && (
+                                <span className="text-xs hidden sm:block" style={{ color: 'var(--text-dim)' }}>
+                                  {new Date(String(op.created_at)).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Consensus History */}
+                    <div>
+                      <h2 className="font-black text-lg mb-4">Consensus History</h2>
+                      {ffpConsensus.length === 0 ? (
+                        <div className="card p-10 text-center">
+                          <p className="font-bold mb-1">No consensus proposals yet</p>
+                          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                            Sensitive operations will appear here when they require multi-party approval.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {ffpConsensus.map((p, i) => (
+                            <div key={p.id ?? i} className="card p-4 flex items-center gap-4">
+                              <div className="flex-1">
+                                <div className="font-mono text-sm font-semibold">{p.id ? `Proposal ${String(p.id).slice(0, 8)}` : `Proposal #${i + 1}`}</div>
+                                {p.votes !== undefined && p.threshold !== undefined && (
+                                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                                    {String(p.votes)} / {String(p.threshold)} votes
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-xs px-2 py-0.5 rounded font-medium"
+                                style={p.status === 'approved'
+                                  ? { background: 'rgba(34,197,94,0.1)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
+                                  : p.status === 'rejected'
+                                  ? { background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)' }
+                                  : { background: 'rgba(245,158,11,0.1)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.25)' }}>
+                                {String(p.status ?? 'pending')}
+                              </span>
+                              {p.created_at && (
+                                <span className="text-xs hidden sm:block" style={{ color: 'var(--text-dim)' }}>
+                                  {new Date(String(p.created_at)).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {activeTab === 'activity' && (
               <div>
                 <div className="flex items-center justify-between mb-5">
                   <h2 className="font-black text-lg">Recent Activity</h2>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Audit log Ãƒâ€šÃ‚Â· Agent OS</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Audit log · Agent OS</span>
                 </div>
 
                 {recentAudit.length === 0 ? (

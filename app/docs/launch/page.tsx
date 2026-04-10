@@ -8,20 +8,34 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'Studio is live as a terminal-style agent console without exposing a raw host shell.',
-  'The universal MCP layer, marketplace skills, public docs, and ops crew now ship together in one product surface.',
-  'Browser session auth is now the default web experience; bearer tokens are generated on demand for external tools and SDKs.',
-  'Password reset, ops-admin mutation guards, sandbox environment stripping, and database email-uniqueness hardening are in production.',
-  'External agents can now self-register, receive scoped bearer tokens, inspect their connection state, and call Agent OS through one MCP endpoint.',
+  'v5 "Ares" — FFP Multi-Chain Router: FFP sector chains (Finance, Health, Metaverse, etc.) reach consensus on decisions, AgentOS executes them via a cryptographically verified bridge.',
+  'POST /api/ffp/execute: consensus proof verification (HMAC-SHA256, threshold, 5-min expiry, input hash) → chain-scoped execution → immutable log in ffp_chain_executions.',
+  'GET /api/ffp/chains: public discovery endpoint — lists all active FFP sector chains with execution stats.',
+  'Chain-scoped isolation: agentId = "ffp:{chainId}:{agentId}" auto-namespaces all 6 primitives per chain without touching primitive code.',
+  'v4 "Hermes" — Natural Language Studio: describe a workflow in plain English, Claude plans it, you confirm, it executes and saves.',
+  'Workflow Library: every executed plan is saved with name, schedule, and status. Pause, resume, or delete from the dashboard.',
+  'SDK Kernel Command Layer: SDK products register command + status topics and receive dispatched commands via the Redis events bus.',
+  'FFP tab in dashboard: agents can now view their own audit trail and consensus history without admin access.',
+  'SDK dashboard login: POST /api/session/from-key with your API key → get a one-time login link → full dashboard including FFP.',
+  'Full mobile responsiveness: viewport meta, overflow fixes, responsive nav across all pages.',
+  'Crypto-only payments: Solana and Base network USDC, verified on-chain without a payment processor.',
 ];
 
 const changelog = [
-  'Added the Studio page and the /api/studio/command backend with preview-and-confirm execution for mutating commands.',
-  'Moved the browser UX onto secure session cookies so users do not have to paste bearer tokens into the web app.',
-  'Expanded the official verified free skill catalog into multiple maintained packs across AI, support, research, finance, communication, deployment, security, and analytics.',
-  'Restricted ops mutations to ops-admin callers and reduced public ops routes to aggregate visibility only.',
-  'Standardized MCP routing so primitives, installed skills, and external MCP tools all execute through one registry.',
-  'Added self-service external agent registration, /agent/me introspection, and the /connect dashboard so any agent can attach to Agent OS without admin intervention.',
+  'Created POST /api/ffp/execute — FFP bridge endpoint: requireAgentContext → verifyConsensusProof → buildChainScopedContext → executeUniversalToolCall → log to ffp_chain_executions.',
+  'Created GET /api/ffp/chains — public chain discovery: aggregates execution count, success/fail stats, and last execution per chain_id.',
+  'Created src/ffp/chain-verifier.ts — HMAC-SHA256 consensus proof verification with constant-time comparison, input hash check, 5-min expiry, threshold enforcement.',
+  'Created src/ffp/chain-context.ts — buildChainScopedContext sets agentId = "ffp:{chainId}:{agentId}", auto-namespacing all 6 primitives.',
+  'Created ffp_chain_executions table in Supabase — indexed on chain_id, agent_id, executed_at.',
+  'Created POST /api/studio/intent — NL intent parser backed by claude-sonnet-4-6, plan stored in Redis with 5-min TTL confirm token.',
+  'Created GET+POST /api/agent/workflows and PATCH+DELETE /api/agent/workflows/:id — full workflow CRUD.',
+  'Created POST /api/kernel/register, GET /api/kernel/registry, POST /api/kernel/command, GET /api/kernel/status/:product.',
+  'Created GET /api/agent/ffp/audit and GET /api/agent/ffp/consensus — agent-scoped FFP routes (no admin required).',
+  'Created POST /api/session/from-key and GET /api/session/from-key/callback — SDK to browser session bridge.',
+  'Updated Studio UI with NL mode toggle, workflow library panel, and kernel status panel with 15s auto-refresh.',
+  'Added FFP tab to dashboard with audit trail, consensus history, and refresh.',
+  'Added viewport meta tag, overflow-x: hidden on html/body, responsive nav.',
+  'Rewrote payments to crypto-only: Solana RPC getTransaction + Base eth_getTransactionReceipt verification.',
 ];
 
 const startLinks = [
@@ -29,9 +43,9 @@ const startLinks = [
   { label: 'Sign in', href: '/signin' },
   { label: 'Open Studio', href: '/studio' },
   { label: 'Browse skills', href: '/marketplace' },
-  { label: 'Skills docs', href: '/docs/skills' },
+  { label: 'Quick Start', href: '/docs/sdk' },
   { label: 'API reference', href: '/docs/api' },
-  { label: 'Health check', href: '/health' },
+  { label: 'FFP docs', href: '/docs/ffp' },
   { label: 'Ops summary', href: '/api/ops/metrics' },
 ];
 
@@ -52,20 +66,20 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-purple mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v3 is live for developers</h1>
+          <h1 className="text-4xl font-black mb-3">Agent OS v5 <span className="gradient-text">&ldquo;Ares&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            Agent OS v3 is live at <code>{APP_URL}</code>. It gives developers one production platform for hosted primitives, universal MCP routing, verified skills, external-agent connection, a guarded Studio console, and an autonomous ops crew instead of a stack of disconnected tools.
+            v5 ships the FFP Multi-Chain Router — FFP sector chains reach consensus, AgentOS verifies and executes. Built on top of v4&apos;s NL Studio, Workflow Library, SDK Kernel, and the 6 core primitives. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">Short launch post</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v5</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              Agent OS is a production platform for building and operating autonomous agents with real infrastructure behind them. You can sign up, keep a secure browser session, open Studio, execute primitives or MCP tools, install verified skills, connect external agents through one MCP endpoint, and inspect platform coverage without wiring your own storage, cache, queue, or control plane first.
+              AgentOS is a production infrastructure layer for autonomous agents. One API key gives you 6 primitives (mem, fs, db, net, events, proc), a skills marketplace, universal MCP routing to external services, FFP audit + consensus, a Natural Language Studio, and now a full FFP Multi-Chain Router so sector chains can execute tools through AgentOS as a verified bridge.
             </p>
             <p>
-              What matters in the live system today is concrete coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills grouped into {OFFICIAL_SKILL_PACKS.length} maintained packs, and a self-service connection path for agents built outside the platform. Production remains canonical on <code>{APP_URL}</code> while <code>https://agentos.service</code> finishes DNS activation.
+              Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.
             </p>
           </div>
         </section>
@@ -92,7 +106,7 @@ export default function LaunchNotesPage() {
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">Technical release notes / changelog</h2>
+          <h2 className="text-2xl font-bold mb-4">v5 Ares — changelog</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>Stack: {PROJECT_DETAILS.stack.join('; ')}.</p>
             <ul className="space-y-2">
@@ -107,12 +121,6 @@ export default function LaunchNotesPage() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
-            </div>
-            <div className="pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-              <div className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Known limitation</div>
-              <p>
-                The canonical production hostname remains <code>{APP_URL}</code> until the apex DNS record for <code>agentos.service</code> is added as <code>A @ -&gt; 76.76.21.21</code> and Vercel finishes HTTPS issuance.
-              </p>
             </div>
           </div>
         </section>

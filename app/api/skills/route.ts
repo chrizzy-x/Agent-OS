@@ -82,13 +82,22 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+
+    // Fetch agent's actual name from DB
+    const { data: agentRow } = await supabase
+      .from('agents')
+      .select('name')
+      .eq('id', agentCtx.agentId)
+      .single();
+    const authorName = (agentRow?.name as string | undefined)?.trim() || agentCtx.agentId.slice(0, 16);
+
     const { data, error } = await supabase
       .from('skills')
       .insert({
         name,
         slug,
         author_id: agentCtx.agentId,
-        author_name: agentCtx.agentId.slice(0, 16),
+        author_name: authorName,
         category,
         description: description || null,
         long_description: long_description || null,

@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     const meta = (data.metadata as Record<string, unknown>) ?? {};
     return NextResponse.json({
       payout_email: (meta.payout_email as string) ?? '',
+      payout_wallet: (meta.payout_wallet as string) ?? '',
       payout_method: (meta.payout_method as string) ?? 'paypal',
       payout_requested: (meta.payout_requested as boolean) ?? false,
     });
@@ -43,22 +44,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const payoutEmail = typeof body.payout_email === 'string' ? body.payout_email.trim() : '';
     const payoutMethod = typeof body.payout_method === 'string' ? body.payout_method : 'paypal';
     const requestPayout = body.request_payout === true;
-
-    if (!payoutEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payoutEmail)) {
-      return NextResponse.json({ error: 'Valid payout email required' }, { status: 400 });
-    }
 
     const allowed = ['paypal', 'bank_transfer', 'crypto'];
     if (!allowed.includes(payoutMethod)) {
       return NextResponse.json({ error: 'Invalid payout method' }, { status: 400 });
     }
 
+    // Validate based on payment method
+    let payoutEmail = '';
+    let payoutWallet = '';
+
+    if (payoutMethod === 'crypto') {
+      payoutWallet = typeof body.payout_wallet === 'string' ? body.payout_wallet.trim() : '';
+      if (!payoutWallet || payoutWallet.length < 32) {
+        return NextResponse.json({ error: 'Valid wallet address required for crypto payouts' }, { status: 400 });
+      }
+    } else {
+      payoutEmail = typeof body.payout_email === 'string' ? body.payout_email.trim() : '';
+      if (!payoutEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payoutEmail)) {
+        return NextResponse.json({ error: 'Valid payout email required' }, { status: 400 });
+      }
+    }
+
     const supabase = getSupabaseAdmin();
 
-    // Fetch existing metadata to merge
     const { data: existing, error: fetchErr } = await supabase
       .from('agents')
       .select('metadata')
@@ -70,8 +81,9 @@ export async function POST(req: NextRequest) {
     const meta = (existing.metadata as Record<string, unknown>) ?? {};
     const updatedMeta = {
       ...meta,
-      payout_email: payoutEmail,
       payout_method: payoutMethod,
+      payout_email: payoutMethod !== 'crypto' ? payoutEmail : (meta.payout_email ?? ''),
+      payout_wallet: payoutMethod === 'crypto' ? payoutWallet : (meta.payout_wallet ?? ''),
       ...(requestPayout ? { payout_requested: true, payout_requested_at: new Date().toISOString() } : {}),
     };
 
@@ -87,7 +99,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      payout_email: payoutEmail,
+      payout_email: updatedMeta.payout_email,
+      payout_wallet: updatedMeta.payout_wallet,
       payout_method: payoutMethod,
       payout_requested: updatedMeta.payout_requested ?? false,
     });

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import CodeBlock from '@/components/CodeBlock';
 import { APP_URL } from '@/lib/config';
 import { FeatureShowcase } from '@/components/FeatureShowcase';
+import TokenSection from '@/components/TokenSection';
 
 const CODE_EXAMPLE = `import { AgentOS } from '@agentos/sdk';
 
@@ -180,8 +181,8 @@ export default function HomePage() {
             <Link href="/developer" className="hover:text-white transition-colors">Developers</Link>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/signin" className="btn-outline text-sm px-4 py-2 rounded-lg">Sign in</Link>
-            <Link href="/signup" className="btn-primary text-sm px-4 py-2 rounded-lg">Get started</Link>
+            <Link href="/signin" className="hidden sm:inline-flex btn-outline text-sm px-4 py-2 rounded-lg">Sign in</Link>
+            <Link href="/signup" className="btn-primary text-sm px-3 py-2 rounded-lg">Get started</Link>
           </div>
         </div>
       </nav>
@@ -194,7 +195,7 @@ export default function HomePage() {
         <div className="orb w-[500px] h-[500px] top-[-100px] right-[-150px]"
           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 70%)' }} />
 
-        <div className="relative max-w-6xl mx-auto px-5 pt-24 pb-20">
+        <div className="relative max-w-6xl mx-auto px-5 pt-14 sm:pt-20 lg:pt-24 pb-16 sm:pb-20">
           <div className="grid lg:grid-cols-[1fr_1fr] gap-12 items-center">
             {/* Left: copy */}
             <div>
@@ -203,7 +204,7 @@ export default function HomePage() {
                 Open source · MIT License
               </div>
 
-              <h1 className="text-5xl sm:text-6xl font-black leading-[1.05] mb-5 tracking-tight">
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.05] mb-5 tracking-tight">
                 <span className="gradient-text">Operating system</span>
                 <br />
                 <span style={{ color: 'var(--text)' }}>for AI agents.</span>
@@ -251,8 +252,27 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right: terminal window */}
-            <div className="animate-float">
+            {/* Mobile: compact curl example */}
+            <div className="lg:hidden mt-4">
+              <div className="terminal">
+                <div className="terminal-header">
+                  <div className="terminal-dot" style={{ background: '#ef4444' }} />
+                  <div className="terminal-dot" style={{ background: '#f59e0b' }} />
+                  <div className="terminal-dot" style={{ background: '#22c55e' }} />
+                  <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>quick start</span>
+                </div>
+                <div className="p-4 overflow-x-auto">
+                  <pre className="text-xs leading-relaxed" style={{ color: '#94a3b8', fontFamily: 'inherit' }}>{`curl -X POST ${APP_URL}/mcp \\
+  -H "Authorization: Bearer $KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"tool":"agentos.mem_set",
+       "input":{"key":"hello","value":"world"}}'`}</pre>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: terminal window — hidden on mobile/tablet, shown on large screens */}
+            <div className="hidden lg:block animate-float">
               <div className="terminal glow-purple">
                 <div className="terminal-header">
                   <div className="terminal-dot" style={{ background: '#ef4444' }} />
@@ -311,9 +331,9 @@ export default function HomePage() {
       {/* ── Problem / Solution ── */}
       <section className="relative py-20" style={{ background: 'var(--surface)' }}>
         <div className="max-w-6xl mx-auto px-5">
-          <div className="text-center mb-14">
+          <div className="text-center mb-10">
             <div className="badge badge-cyan inline-flex mb-4">The problem</div>
-            <h2 className="text-3xl sm:text-4xl font-black mb-3">Stop reinventing infrastructure</h2>
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mb-3">Stop reinventing infrastructure</h2>
             <p style={{ color: 'var(--text-muted)' }}>Every agent team rebuilds the same boilerplate. Agent OS ships it once.</p>
           </div>
           <div className="grid md:grid-cols-2 gap-5">
@@ -525,6 +545,13 @@ export default function HomePage() {
         </div>
       </section>
 
+      <div className="section-divider" />
+
+      {/* ── Token ── */}
+      <TokenSection />
+
+      <div className="section-divider" />
+
       {/* ── Feature Showcase ── */}
       <section className="max-w-6xl mx-auto px-5 py-24">
         <FeatureShowcase />
@@ -532,16 +559,16 @@ export default function HomePage() {
 
       {/* ── Footer ── */}
       <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-        <div className="max-w-6xl mx-auto px-5 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto px-5 py-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded flex items-center justify-center text-xs font-black font-mono"
               style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>A</div>
             <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
           </div>
-          <div className="flex items-center gap-6 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 justify-center sm:justify-end text-sm" style={{ color: 'var(--text-muted)' }}>
             <a href="https://github.com/chrizzy-x/Agent-OS" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">GitHub</a>
             <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
-            <Link href="/connect" className="hover:text-white transition-colors">Connect Your Agent</Link>
+            <Link href="/connect" className="hover:text-white transition-colors">Connect</Link>
             <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             <Link href="/developer" className="hover:text-white transition-colors">Developer</Link>
             <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>

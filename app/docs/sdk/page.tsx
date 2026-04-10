@@ -23,7 +23,7 @@ export default function SdkPage() {
         </div>
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Quick Start</h1>
         <p className="text-lg text-gray-500 mb-10">
-          Get your agent up and running in under 5 minutes. No SDK required — just HTTP.
+          Get your agent up and running in under 5 minutes.
         </p>
 
         {/* Step 1 */}
@@ -186,6 +186,32 @@ async function mcp(tool, input) {
 await mcp('mem_set', { key: 'x', value: 42 });
 await mcp('fs_write', { path: '/out.txt', data: btoa('hello') });
 await mcp('db_insert', { table: 'logs', data: { msg: 'started' } });`}</Code>
+        </div>
+
+        {/* Dashboard access */}
+        <div className="mt-10 bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-1">Access your dashboard from the SDK</h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Use your API key to generate a one-time login link. Open it in a browser to get full dashboard access —
+            including FFP audit trail, consensus controls, workflows, and agent metrics.
+            The link expires in 5 minutes and is single-use.
+          </p>
+          <Code>{`// Generate a login link with your API key
+const res = await fetch('${APP_URL}/api/session/from-key', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ apiKey: process.env.AGENT_OS_KEY }),
+});
+
+const { loginUrl } = await res.json();
+
+// Open loginUrl in a browser — you're logged in.
+// Works in Node.js, Bun, Deno, any runtime.
+console.log('Dashboard:', loginUrl);`}</Code>
+          <Result>{`{
+  "loginUrl": "${APP_URL}/api/session/from-key/callback?st=a3f9...",
+  "expiresIn": 300
+}`}</Result>
         </div>
 
         {/* What's next */}

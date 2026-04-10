@@ -1,291 +1,227 @@
 # AgentOS
 
-> Built by **riz**
+> Built by **riz** · v5 "Ares"
 
-**OS-level primitives for apps and services — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
+**OS-level primitives for AI agents — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
 
 🚀 **Live:** [agentos-app.vercel.app](https://agentos-app.vercel.app) · [Get started free →](https://agentos-app.vercel.app/signup)
 
-AgentOS is a stateless server that gives any app or service a safe, isolated environment to persist data, run code, make HTTP requests, and communicate — without touching the host system directly. Each client gets its own namespace, enforced quotas, and a full audit trail.
+AgentOS is a production infrastructure layer that gives any agent or app a safe, isolated environment to persist data, run code, make HTTP requests, publish events, and coordinate with other agents — without touching the host system. Each client gets its own namespace, enforced quotas, rate limits, and a full audit trail.
 
 ---
 
-## What it does
+## What's inside
 
-AgentOS is a universal MCP aggregator and agent infrastructure layer.
+### 6 Core Primitives
 
-Connect your agent once - get access to everything:
+| Primitive | What it does | Backed by |
+|-----------|-------------|-----------|
+| **mem** | Key-value cache with TTL (set, get, list, increment, expire) | Redis |
+| **fs** | File read/write/list/delete/stat — isolated per agent | Supabase Storage |
+| **db** | Private SQL database — create tables, query, insert, update, delete | PostgreSQL |
+| **net** | Outbound HTTP + DNS resolution with SSRF protection | Node.js fetch |
+| **events** | Pub/sub messaging between agents via Redis topics | Redis |
+| **proc** | Sandboxed code execution (Python, JS, Bash) + cron scheduling | Sandboxed subprocess |
 
-- **32 built-in primitives** (`agentos.*`) - memory, filesystem, database, network, events, and sandboxed code execution
-- **Skills marketplace** (`agentos.skill.*`) - install and call pre-built capabilities on demand
-- **Any external MCP server** (`mcp.*`) - Gmail, Slack, Stripe, GitHub, or any MCP-compatible service registered in your `mcp_servers` table
+### Skills Marketplace
+Install pre-built capabilities from the marketplace. Developers earn 70% revenue share.
 
-Any agent, any language, any framework. If it can make an HTTP request, it can use AgentOS.
+### Universal MCP Router
+One endpoint routes to built-in primitives, installed skills, or any external MCP server (Gmail, Slack, GitHub, etc.).
 
-**Tool naming:**
+| Source | Tool format | Example |
+|--------|-------------|---------|
+| Primitives | `agentos.{tool}` | `agentos.net_http_get` |
+| Skills | `agentos.skill.{slug}.{capability}` | `agentos.skill.pdf-reader.extract_text` |
+| External MCP | `mcp.{server}.{tool}` | `mcp.gmail.send_email` |
 
-| Source | Format | Example |
-|---|---|---|
-| Built-in primitives | `agentos.{tool}` | `agentos.net_http_get` |
-| Skills marketplace | `agentos.skill.{slug}.{capability}` | `agentos.skill.pdf-reader.extract_text` |
-| External MCP servers | `mcp.{server}.{tool}` | `mcp.gmail.send_email` |
+### FFP (Furge Fabric Protocol)
+Every agent operation can be logged to an immutable audit chain. Sensitive operations can require multi-party consensus before executing. View your audit trail and consensus history directly in the dashboard under the FFP tab.
 
-One endpoint handles all three: `POST /mcp`
-| Primitive | What it gives agents | Backed by |
-|-----------|---------------------|-----------|
-| **mem** | Key-value store (set, get, list, increment, expire) | Redis |
-| **fs** | File read/write/list/delete/stat | Supabase Storage |
-| **db** | Private SQL database (create tables, query, insert, update, delete) | PostgreSQL (Supabase) |
-| **net** | Outbound HTTP requests + DNS resolution | Node.js `fetch` |
-| **events** | Pub/sub messaging between agents | Redis |
-| **proc** | Code execution (Python, JavaScript, Bash) + cron scheduling + child agents | Sandboxed subprocess |
+### Studio v4 — Natural Language Workflows
+Describe what you want in plain English. Claude maps it to primitives, returns a step-by-step plan, you confirm, it executes and saves as a reusable workflow.
 
-Every operation is scoped to the calling client's identity, quota-checked, rate-limited, and written to an immutable audit log.
+```
+POST /api/studio/intent
+{ "instruction": "Fetch ETH price every minute and store in memory" }
+→ returns plan with steps + confirmToken
+→ POST with { "confirm": true, "confirmToken": "..." } to execute
+```
+
+### SDK Kernel Command Layer
+SDK products (Mezzy, Derek, deZypher) register a command topic and status topic. AgentOS routes commands through the Redis events bus.
+
+```
+POST /api/kernel/register   # register your product
+POST /api/kernel/command    # dispatch a command
+GET  /api/kernel/status/:product  # heartbeat + available commands
+```
+
+---
+
+## Quickstart
+
+### Option A: Hosted
+
+[Sign up at agentos-app.vercel.app/signup](https://agentos-app.vercel.app/signup) — get your Agent ID and API key in 30 seconds. No credit card required.
+
+```bash
+# Store a value
+curl -X POST https://agentos-app.vercel.app/mcp \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"agentos.mem_set","input":{"key":"hello","value":"world","ttl":3600}}'
+
+# Fetch live data
+curl -X POST https://agentos-app.vercel.app/mcp \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"agentos.net_http_get","input":{"url":"https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"}}'
+```
+
+### Option B: Self-host
+
+```bash
+git clone https://github.com/chrizzy-x/Agent-OS.git
+cd Agent-OS
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Required env vars:
+
+```env
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=
+REDIS_URL=
+JWT_SECRET=
+ENCRYPTION_KEY=
+ADMIN_TOKEN=
+ANTHROPIC_API_KEY=        # required for Studio NL mode
+NEXT_PUBLIC_APP_URL=
+```
+
+---
+
+## Dashboard Access for SDK Users
+
+SDK users access the full dashboard (FFP audit trail, consensus, workflows) using their API key:
+
+```js
+const res = await fetch('https://agentos-app.vercel.app/api/session/from-key', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ apiKey: process.env.AGENT_OS_KEY }),
+});
+const { loginUrl } = await res.json();
+// Open loginUrl in browser — full dashboard, expires in 5 minutes
+```
+
+---
+
+## API Reference
+
+All tool calls:
+
+```
+POST /mcp
+Authorization: Bearer <api_key>
+{ "tool": "agentos.{tool_name}", "input": { ... } }
+```
+
+### mem
+| Tool | Input | Returns |
+|------|-------|---------|
+| `mem_set` | `key, value, ttl?` | `true` |
+| `mem_get` | `key` | value or null |
+| `mem_delete` | `key` | `true` |
+| `mem_list` | `prefix?` | string[] |
+| `mem_incr` | `key, by?` | new value |
+
+### fs
+| Tool | Input | Returns |
+|------|-------|---------|
+| `fs_write` | `path, data (base64)` | `true` |
+| `fs_read` | `path` | base64 data |
+| `fs_list` | `path?` | file list |
+| `fs_delete` | `path` | `true` |
+| `fs_mkdir` | `path` | `true` |
+
+### db
+| Tool | Input | Returns |
+|------|-------|---------|
+| `db_query` | `sql, params?` | rows[] |
+| `db_insert` | `table, data` | inserted row |
+| `db_update` | `table, data, where` | updated rows |
+| `db_delete` | `table, where` | deleted count |
+| `db_create_table` | `table, schema[]` | `true` |
+
+### net
+| Tool | Input | Returns |
+|------|-------|---------|
+| `net_http_get` | `url, headers?` | `{ status, body }` |
+| `net_http_post` | `url, body, headers?` | `{ status, body }` |
+| `net_http_put` | `url, body, headers?` | `{ status, body }` |
+| `net_http_delete` | `url, headers?` | `{ status, body }` |
+| `net_dns_resolve` | `hostname` | IP addresses |
+
+### events
+| Tool | Input | Returns |
+|------|-------|---------|
+| `events_publish` | `topic, payload` | `true` |
+| `events_subscribe` | `topic, limit?` | events[] |
+| `events_list_topics` | — | topic names |
+
+### proc
+| Tool | Input | Returns |
+|------|-------|---------|
+| `proc_execute` | `language, code, timeout?` | `{ stdout, stderr, exitCode }` |
+| `proc_schedule` | `cron, tool, input` | schedule ID |
+
+---
+
+## Workflow Library API
+
+```
+GET    /api/agent/workflows           # list all saved workflows
+POST   /api/agent/workflows           # create manually
+PATCH  /api/agent/workflows/:id       # pause / resume / update schedule
+DELETE /api/agent/workflows/:id       # delete
+```
 
 ---
 
 ## Architecture
 
 ```
-Client App / Service
-   │  Authorization: Bearer <jwt>
-   ▼
-POST /mcp  { "tool": "mem_set", "input": { "key": "...", "value": "..." } }
-   │
-   ├── JWT verification (jsonwebtoken)
-   ├── Rate limit check (Redis sliding window)
-   │
-   ├── mem_*     → Redis (ioredis)
-   ├── fs_*      → Supabase Storage
-   ├── db_*      → PostgreSQL via Supabase RPC (agent-scoped schema)
-   ├── net_*     → fetch() with SSRF protection + domain allowlist
-   ├── events_*  → Redis lists + pub/sub
-   └── proc_*    → Sandboxed child process (isolated tmpdir, stripped env)
-        │
-        └── Audit log → Supabase (async, fire-and-forget)
+Client (any language) → POST /mcp  { "tool": "...", "input": {} }
+                           │
+                           ├── JWT verification
+                           ├── Rate limit check (Redis)
+                           ├── Quota enforcement
+                           │
+                           ├── agentos.*        → 6 primitives
+                           ├── agentos.skill.*  → skills marketplace
+                           └── mcp.*            → external MCP servers
+                                    │
+                                    └── Audit log → Supabase (async)
+                                    └── FFP chain → optional consensus gate
 ```
-
-Deployed as a single Vercel serverless function. No persistent processes, no shared state between requests.
-
----
-
-## Quickstart
-
-### Option A: Use the hosted version
-
-[Sign up at agentos-app.vercel.app/signup](https://agentos-app.vercel.app/signup) — get your Agent ID and API key in 30 seconds, no credit card required.
-
-### Option B: Self-host
-
-#### 1. Clone and install
-
-```bash
-git clone https://github.com/chrizzy-x/Agent-OS.git
-cd Agent-OS
-npm install
-```
-
-#### 2. Set environment variables
-
-Copy the example and fill in your values (see below for where to get each one):
-
-```bash
-cp .env.example .env
-```
-
-#### 3. Run the database migrations
-
-In your Supabase project → **SQL Editor** → run these in order:
-
-```
-src/storage/migrations/001_initial.sql
-src/storage/migrations/002_agent_db_functions.sql
-src/storage/migrations/003_scheduled_task_runner.sql
-```
-
-#### 4. Run locally
-
-```bash
-npm run dev
-```
-
-Server starts on `http://localhost:3000`.
-
-#### 5. Create your first agent
-
-```bash
-curl -X POST http://localhost:3000/admin/agents \
-  -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"agentId": "my-agent", "allowedDomains": ["api.openai.com"]}'
-```
-
-Response:
-```json
-{
-  "agentId": "my-agent",
-  "token": "eyJ...",
-  "expiresIn": "30d"
-}
-```
-
-#### 6. Call a tool
-
-```bash
-curl -X POST http://localhost:3000/mcp \
-  -H "Authorization: Bearer eyJ..." \
-  -H "Content-Type: application/json" \
-  -d '{"tool": "mem_set", "input": {"key": "counter", "value": 0}}'
-```
-
----
-
-## All 27 tools
-
-### Memory (`mem_*`)
-| Tool | Description |
-|------|-------------|
-| `mem_set` | Store any JSON value under a key, with optional TTL |
-| `mem_get` | Retrieve a stored value |
-| `mem_delete` | Delete a key |
-| `mem_list` | List keys by prefix (max 1000) |
-| `mem_incr` | Atomically increment a numeric counter |
-| `mem_expire` | Update the TTL on an existing key |
-
-### Filesystem (`fs_*`)
-| Tool | Description |
-|------|-------------|
-| `fs_write` | Write a file (base64-encoded, max 100MB) |
-| `fs_read` | Read a file (returns base64) |
-| `fs_list` | List files and directories |
-| `fs_delete` | Delete a file |
-| `fs_mkdir` | Create a directory |
-| `fs_stat` | Get file metadata (size, content type, timestamps) |
-
-### Database (`db_*`)
-| Tool | Description |
-|------|-------------|
-| `db_query` | Run a parameterized SQL query |
-| `db_transaction` | Run multiple statements atomically |
-| `db_create_table` | Create a table in the agent's private schema |
-| `db_insert` | Insert a row |
-| `db_update` | Update rows matching a condition |
-| `db_delete` | Delete rows matching a condition |
-
-### Network (`net_*`)
-| Tool | Description |
-|------|-------------|
-| `net_http_get` | Make an HTTPS GET request |
-| `net_http_post` | Make an HTTPS POST request |
-| `net_http_put` | Make an HTTPS PUT request |
-| `net_http_delete` | Make an HTTPS DELETE request |
-| `net_dns_resolve` | Resolve a hostname to IP addresses |
-
-### Events (`events_*`)
-| Tool | Description |
-|------|-------------|
-| `events_publish` | Publish a message to a topic |
-| `events_subscribe` | Subscribe and fetch recent messages |
-| `events_unsubscribe` | Remove a subscription |
-| `events_list_topics` | List topics with messages |
-
-### Process (`proc_*`)
-| Tool | Description |
-|------|-------------|
-| `proc_execute` | Run code synchronously (Python/JS/Bash) |
-| `proc_schedule` | Register a cron job |
-| `proc_spawn` | Create a child agent with its own identity |
-| `proc_kill` | Kill a process or disable a scheduled task |
-| `proc_list` | List running and scheduled processes |
-
----
-
-## Security
-
-Security is the core design constraint. Every tool call goes through:
-
-1. **JWT authentication** — every request must carry a signed token
-2. **SSRF protection** — all outbound URLs are DNS-resolved and checked against blocked IP ranges (RFC1918, loopback, link-local, cloud metadata endpoints)
-3. **Domain allowlist** — agents can only reach domains explicitly listed in their token or the global `ALLOWED_DOMAINS` env var
-4. **Namespace isolation** — Redis keys, file paths, and database schemas are all prefixed with the agent ID derived from the verified token
-5. **Path traversal prevention** — `../` sequences in file paths are detected and rejected before any storage call
-6. **Parameterized queries only** — all database operations use PostgreSQL stored procedures with parameterized inputs; user strings are never interpolated into SQL
-7. **Rate limiting** — sliding window counter in Redis, configurable per agent
-8. **Quota enforcement** — storage and memory usage tracked and capped per agent
-9. **Audit logging** — every operation (success or failure) recorded to Supabase with duration, metadata, and error details
-10. **Sandbox isolation** — `proc_execute` runs code in a stripped subprocess with an isolated tmpdir, no inherited env vars, and a hard kill timeout
-
-See [docs/security.md](docs/security.md) for the full threat model.
-
----
-
-## Environment variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `SUPABASE_URL` | ✅ | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service role key (bypasses RLS). Legacy alias `SUPABASE_SERVICE_KEY` is also accepted. |
-| `REDIS_URL` | ✅ | Redis connection string (e.g. from Upstash) |
-| `JWT_SECRET` | ✅ | Secret for signing agent tokens — generate with `openssl rand -hex 32` |
-| `ADMIN_TOKEN` | ✅ | Password for the agent creation endpoint |
-| `ALLOWED_DOMAINS` | ❌ | Comma-separated list of domains agents may call via `net_*` |
-| `NODE_ENV` | ❌ | Set to `production` on Vercel |
-| `CRON_SECRET` | ❌ | Secret for verifying scheduled cron requests |
-| `STORAGE_QUOTA_GB` | ❌ | Default storage quota per agent (default: `1`) |
-| `MEMORY_QUOTA_MB` | ❌ | Default Redis memory quota per agent (default: `100`) |
-| `RATE_LIMIT_PER_MIN` | ❌ | Default rate limit per agent (default: `100`) |
-| `FFP_MODE` | ❌ | Set to `enabled` to activate Furge Fabric Protocol (default: disabled) |
-| `FFP_CHAIN_ID` | ❌ | FFP chain identifier (required when `FFP_MODE=enabled`) |
-| `FFP_NODE_URL` | ❌ | FFP node endpoint URL (required when `FFP_MODE=enabled`) |
-| `FFP_AGENT_ID` | ❌ | FFP agent identifier (required when `FFP_MODE=enabled`) |
-| `FFP_REQUIRE_CONSENSUS` | ❌ | Set to `true` to gate critical operations behind FFP consensus |
-
----
-
-## Deployment
-
-### Deploy to Vercel (recommended)
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/chrizzy-x/Agent-OS)
-
-Or manually:
-```bash
-npm install -g vercel
-vercel --prod
-```
-
-Set all environment variables in **Vercel → Project → Settings → Environment Variables** before deploying.
-
-### Self-hosted
-
-```bash
-npm run build
-npm start
-```
-
-Requires Node.js 20+.
-
----
-
-## Documentation
-
-| Doc | Description |
-|-----|-------------|
-| **[docs/overview.md](docs/overview.md)** | Product overview, use cases, architecture, and quick start guide |
-| **[docs/api.md](docs/api.md)** | Full tool schemas, error codes, and request/response examples |
-| **[docs/security.md](docs/security.md)** | Threat model and security controls |
 
 ---
 
 ## Development
 
 ```bash
-npm run dev          # start local server on :3000
-npm run build        # compile TypeScript
-npm run lint         # type-check without emitting
-npm test             # run all tests
-npm run test:watch   # re-run tests on file change
-npm run test:coverage # generate coverage report
+npm run dev           # Next.js on :3000
+npm run dev:api       # API server via tsx
+npm run build         # production build
+npm run lint          # TypeScript type check
+npm test              # run all tests
+npm run test:watch    # watch mode
+npm run test:coverage # coverage report
 ```
 
 ---
@@ -294,75 +230,39 @@ npm run test:coverage # generate coverage report
 
 ```
 Agent-OS/
+├── app/                          # Next.js app router pages + API routes
+│   ├── api/
+│   │   ├── studio/intent/        # NL intent parser (v4 Hermes)
+│   │   ├── agent/workflows/      # Workflow library CRUD
+│   │   ├── agent/ffp/            # FFP audit + consensus (agent-scoped)
+│   │   ├── kernel/               # SDK kernel command layer
+│   │   ├── session/from-key/     # SDK → dashboard login link
+│   │   ├── payments/             # Crypto payments (Solana + Base USDC)
+│   │   ├── skills/               # Marketplace routes
+│   │   └── mcp/                  # Universal MCP router
+│   ├── studio/                   # Studio UI (NL + Advanced modes)
+│   ├── dashboard/                # Dashboard (Skills, FFP, Activity tabs)
+│   ├── marketplace/              # Skills marketplace
+│   └── docs/                     # Documentation pages
 ├── src/
-│   ├── index.ts                  # HTTP server + request router
-│   ├── tools.ts                  # Tool registry (MCP tool list)
-│   ├── auth/
-│   │   ├── agent-identity.ts     # JWT creation + verification
-│   │   ├── agent-context.ts      # AsyncLocalStorage for request context
-│   │   └── permissions.ts        # AgentContext type + default quotas
-│   ├── catalog/
-│   │   └── feature-catalog.ts    # Feature definitions for the docs UI
-│   ├── config/
-│   │   └── env.ts                # Environment variable helpers
-│   ├── ffp/
-│   │   └── client.ts             # Furge Fabric Protocol client (log + consensus)
-│   ├── mcp/
-│   │   └── registry.ts           # MCP server registry
-│   ├── ops/
-│   │   ├── public.ts             # Public ops endpoints
-│   │   └── service.ts            # Autonomous crew service
-│   ├── primitives/
-│   │   ├── mem.ts                # Memory primitive (Redis)
-│   │   ├── fs.ts                 # Filesystem primitive (Supabase Storage)
-│   │   ├── db.ts                 # Database primitive (PostgreSQL)
-│   │   ├── net.ts                # Network primitive (fetch + SSRF guard)
-│   │   ├── events.ts             # Events primitive (Redis pub/sub)
-│   │   └── proc.ts               # Process primitive (sandbox + cron)
-│   ├── runtime/
-│   │   ├── audit.ts              # Audit logging with withAudit() wrapper
-│   │   ├── resource-manager.ts   # Rate limits + quota enforcement
-│   │   ├── sandbox.ts            # Sandboxed code execution
-│   │   └── security.ts           # SSRF checks + path/SQL validation
-│   ├── skills/
-│   │   ├── executor.ts           # Skill execution engine
-│   │   └── service.ts            # Skill management service
-│   ├── storage/
-│   │   ├── redis.ts              # Redis client singleton
-│   │   ├── supabase.ts           # Supabase client singleton
-│   │   └── migrations/           # PostgreSQL migration SQL files
-│   └── utils/
-│       ├── errors.ts             # Typed error hierarchy
-│       ├── metrics.ts            # Timing utilities
-│       └── validation.ts         # Zod schemas + sanitization helpers
-├── tests/
-│   ├── setup.ts                  # Global mock setup
-│   ├── unit/primitives/          # Unit tests for all 6 primitives
-│   ├── integration/              # Auth + storage integration tests
-│   └── e2e/                      # Full HTTP server end-to-end tests
-├── docs/
-│   ├── overview.md               # Product overview, use cases, architecture
-│   ├── api.md                    # Complete tool reference
-│   └── security.md               # Threat model + security controls
-├── .github/workflows/
-│   ├── ci.yml                    # Type check + build + audit on PRs
-│   ├── deploy.yml                # Auto-deploy to Vercel on main
-│   └── security-scan.yml         # Weekly CodeQL + secret scanning
-└── vercel.json                   # Vercel deployment config
+│   ├── auth/                     # JWT, session cookies, permissions
+│   ├── ffp/                      # Furge Fabric Protocol client
+│   ├── mcp/                      # Universal MCP router + registry
+│   ├── primitives/               # 6 core primitives
+│   ├── skills/                   # Skill execution engine
+│   ├── storage/                  # Redis + Supabase singletons
+│   └── utils/                    # Errors, validation, metrics
+└── tests/                        # Unit, integration, e2e tests
 ```
 
 ---
 
 ## Modes
 
-AgentOS runs in two modes controlled by a single environment variable:
-
 | Mode | Config | Description |
-|---|---|---|
-| **Standalone** (default) | `FFP_MODE=disabled` | Self-contained AgentOS — no external dependencies beyond Supabase + Redis |
-| **FFP Router** | `FFP_MODE=enabled` | Connects to the Furge Fabric Protocol network; all operations are logged to FFP chains with optional consensus gates for critical calls |
-
-See [FFP_INTEGRATION.md](./FFP_INTEGRATION.md) for the full setup guide.
+|------|--------|-------------|
+| **Standalone** (default) | `FFP_MODE=disabled` | No external dependencies beyond Supabase + Redis |
+| **FFP Router** | `FFP_MODE=enabled` | Logs to FFP audit chains with optional consensus gates |
 
 ---
 
