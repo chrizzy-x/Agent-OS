@@ -1,0 +1,11 @@
+node_modules
+.npm-cache
+.next
+.next.stale*
+.next-dev*.log
+next-dev*.log
+tsconfig.tsbuildinfo
+.claude
+agentos-artifacts
+agentos-v3-demo-60s.mp4
+.vercel/output
