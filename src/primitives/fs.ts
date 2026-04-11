@@ -220,20 +220,30 @@ export async function fsList(ctx: AgentContext, input: unknown): Promise<{ path:
 
   return withAudit({ agentId: ctx.agentId, primitive: 'fs', operation: 'list', metadata: { path } }, async () => {
     return withFsFallback(async () => {
-      const normalizedPath = path === '/' ? '' : checkFilePath(path);
+      const normalizedPath = normalizeFsPath(path);
       const supabase = getSupabaseAdmin();
-      const storagePath = normalizedPath ? `${ctx.agentId}/${normalizedPath}` : ctx.agentId;
-      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).list(storagePath);
+      const { data, error } = await supabase
+        .from('agent_files')
+        .select('path, size_bytes')
+        .eq('agent_id', ctx.agentId);
 
       if (error) {
         throw new Error(`Failed to list directory: ${error.message}`);
       }
 
-      const entries = (data ?? []).map(item => ({
-        name: item.name,
-        path: normalizedPath ? `${normalizedPath}/${item.name}` : item.name,
-        sizeBytes: item.metadata?.size ?? 0,
-        type: (item.id ? 'file' : 'directory') as 'file' | 'directory',
+      const rows = ((data ?? []) as Array<{ path: string; size_bytes: number | null }>)
+        .map(row => ({
+          path: normalizeFsPath(row.path),
+          sizeBytes: row.size_bytes ?? 0,
+        }));
+      const directories = rows.reduce<string[]>((accumulator, row) => registerDirectoryPaths(accumulator, row.path), []);
+      const filePaths = rows
+        .map(row => row.path)
+        .filter(filePath => filePath !== '.keep' && !filePath.endsWith('/.keep'));
+      const fileSizes = new Map(rows.map(row => [row.path, row.sizeBytes]));
+      const entries = listLocalEntries(filePaths, directories, normalizedPath).map(entry => ({
+        ...entry,
+        sizeBytes: entry.type === 'file' ? (fileSizes.get(entry.path) ?? 0) : entry.sizeBytes,
       }));
 
       return { path, entries };
