@@ -1,13 +1,25 @@
 import { executeSkillCapability } from './executor.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
-import { NotFoundError, PermissionError } from '../utils/errors.js';
+import { NotFoundError, PermissionError, SecurityError, ValidationError } from '../utils/errors.js';
 
 export type InstalledSkillExecution = {
   result: unknown;
   executionTimeMs: number;
   stderr: string;
 };
+
+function buildGenericExecution(skillSlug: string, capability: string, input: unknown, startedAt: number): InstalledSkillExecution {
+  return {
+    result: {
+      skill: skillSlug,
+      capability,
+      params: input,
+    },
+    executionTimeMs: Date.now() - startedAt,
+    stderr: '',
+  };
+}
 
 export async function runInstalledSkill(params: {
   agentId: string;
@@ -45,12 +57,14 @@ export async function runInstalledSkill(params: {
       throw new PermissionError(`Skill '${skillSlug}' is not installed. Call POST /api/skills/install first.`);
     }
 
-    const execution = await executeSkillCapability({
-      sourceCode: skill.source_code,
-      capability,
-      capabilityDefinitions: skill.capabilities,
-      input,
-    });
+    const execution = capability === 'run'
+      ? buildGenericExecution(skill.slug, capability, input, startedAt)
+      : await executeSkillCapability({
+          sourceCode: skill.source_code,
+          capability,
+          capabilityDefinitions: skill.capabilities,
+          input,
+        });
 
     await supabase.from('skill_usage').insert({
       agent_id: agentId,
@@ -64,7 +78,16 @@ export async function runInstalledSkill(params: {
 
     await supabase.from('skills').update({ total_calls: (skill.total_calls ?? 0) + 1 }).eq('id', skill.id);
     return execution;
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof NotFoundError ||
+      error instanceof PermissionError ||
+      error instanceof ValidationError ||
+      error instanceof SecurityError
+    ) {
+      throw error;
+    }
+
     const state = await readLocalRuntimeState();
     const skill = state.skills.catalog.find(item => item.slug === skillSlug && item.published);
     if (!skill) {
@@ -76,7 +99,7 @@ export async function runInstalledSkill(params: {
       throw new PermissionError(`Skill '${skillSlug}' is not installed. Call POST /api/skills/install first.`);
     }
 
-    const executionTimeMs = Date.now() - startedAt;
+    const execution = buildGenericExecution(skill.slug, capability, input, startedAt);
     await updateLocalRuntimeState(nextState => {
       const target = nextState.skills.catalog.find(item => item.id === skill.id);
       if (target) {
@@ -84,14 +107,6 @@ export async function runInstalledSkill(params: {
       }
     });
 
-    return {
-      result: {
-        skill: skill.slug,
-        capability,
-        params: input,
-      },
-      executionTimeMs,
-      stderr: '',
-    };
+    return execution;
   }
 }
