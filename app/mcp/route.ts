@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
+import {
+  buildCanonicalToolError,
+  normalizeCanonicalToolInput,
+  normalizeCanonicalToolName,
+  normalizeCanonicalToolResult,
+} from '@/src/mcp/canonical';
 import { assertExternalAgentToolAccess, trackExternalAgentCall } from '@/src/external-agents/service';
-import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  let toolName = '';
+
   try {
     const agentContext = requireAgentContext(req.headers);
     const body = await req.json() as {
@@ -16,28 +23,31 @@ export async function POST(req: NextRequest) {
       server?: string;
     };
 
-    const toolName = typeof body.tool === 'string' ? body.tool : '';
+    toolName = typeof body.tool === 'string' ? body.tool : '';
     if (!toolName) {
       return NextResponse.json(
-        { error: { code: 'VALIDATION_ERROR', message: 'Request must include "tool" field' } },
+        { error: 'validation_error', message: 'Request must include "tool" field' },
         { status: 400 },
       );
     }
+
+    const normalizedTool = normalizeCanonicalToolName(toolName);
+    const normalizedInput = normalizeCanonicalToolInput(normalizedTool, body.input ?? body.arguments ?? {});
 
     await assertExternalAgentToolAccess(agentContext.agentId, toolName);
 
     const result = await executeUniversalToolCall({
       agentContext,
-      name: toolName,
+      name: normalizedTool,
       server: typeof body.server === 'string' ? body.server : undefined,
-      arguments: body.input ?? body.arguments ?? {},
+      arguments: normalizedInput,
     });
 
     void trackExternalAgentCall(agentContext.agentId).catch(() => {});
 
-    return NextResponse.json({ success: true, result });
+    return NextResponse.json({ success: true, result: normalizeCanonicalToolResult(normalizedTool, result) });
   } catch (error: unknown) {
-    const err = toErrorResponse(error);
-    return NextResponse.json({ error: err }, { status: err.statusCode });
+    const failure = buildCanonicalToolError(toolName, error);
+    return NextResponse.json(failure.body, { status: failure.status });
   }
 }

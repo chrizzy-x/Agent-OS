@@ -8,8 +8,8 @@ import { ValidationError } from '../utils/errors.js';
 import { getFFPClient } from '../ffp/client.js';
 import type { AgentContext } from '../auth/permissions.js';
 
-const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
-const REQUEST_TIMEOUT = 30_000; // 30 seconds
+const MAX_RESPONSE_SIZE = 10 * 1024 * 1024;
+const REQUEST_TIMEOUT = 30_000;
 const USER_AGENT = 'AgentOS/1.0 by riz (+https://github.com/chrizzy-x/Agent-OS)';
 
 interface HttpResponse {
@@ -19,20 +19,17 @@ interface HttpResponse {
   contentType: string;
 }
 
-// Shared logic for all HTTP methods: security checks, rate limiting, fetch, response handling
 async function makeRequest(
   ctx: AgentContext,
   method: string,
   url: string,
   headers: Record<string, string>,
-  body?: unknown
+  body?: unknown,
 ): Promise<HttpResponse> {
-  // Run security checks before rate limit — no point counting blocked requests
   await checkSsrf(url);
   checkDomainAllowed(url, ctx.allowedDomains);
   await checkRateLimit(ctx);
 
-  // FFP consensus gate — blocks critical outbound calls until network approves
   const ffp = getFFPClient();
   if (ffp.isCriticalUrl(url)) {
     const approved = await ffp.consensus({
@@ -49,14 +46,14 @@ async function makeRequest(
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const reqHeaders: Record<string, string> = {
+    const requestHeaders: Record<string, string> = {
       'User-Agent': USER_AGENT,
       ...headers,
     };
 
     const fetchOptions: RequestInit = {
       method,
-      headers: reqHeaders,
+      headers: requestHeaders,
       signal: controller.signal,
     };
 
@@ -64,14 +61,18 @@ async function makeRequest(
       if (typeof body === 'string') {
         fetchOptions.body = body;
       } else {
+        requestHeaders['Content-Type'] = requestHeaders['Content-Type'] ?? 'application/json';
         fetchOptions.body = JSON.stringify(body);
-        reqHeaders['Content-Type'] = reqHeaders['Content-Type'] ?? 'application/json';
       }
     }
 
-    const response = await fetch(url, fetchOptions);
+    let response: Response;
+    try {
+      response = await fetch(url, fetchOptions);
+    } catch (error) {
+      throw new ValidationError(error instanceof Error ? error.message : 'Outbound request failed');
+    }
 
-    // Read response body with size limit
     const reader = response.body?.getReader();
     if (!reader) {
       return {
@@ -84,10 +85,11 @@ async function makeRequest(
 
     let totalBytes = 0;
     const chunks: Uint8Array[] = [];
-
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        break;
+      }
 
       totalBytes += value.length;
       if (totalBytes > MAX_RESPONSE_SIZE) {
@@ -97,17 +99,14 @@ async function makeRequest(
       chunks.push(value);
     }
 
-    const bodyBuffer = Buffer.concat(chunks.map(c => Buffer.from(c)));
+    const buffer = Buffer.concat(chunks.map(chunk => Buffer.from(chunk)));
     const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
-
-    // Return body as string — binary responses are base64-encoded
     const isText = contentType.includes('text') || contentType.includes('json') || contentType.includes('xml');
-    const bodyStr = isText ? bodyBuffer.toString('utf8') : bodyBuffer.toString('base64');
 
     return {
       status: response.status,
       headers: Object.fromEntries(response.headers.entries()),
-      body: bodyStr,
+      body: isText ? buffer.toString('utf8') : buffer.toString('base64'),
       contentType,
     };
   } finally {
@@ -116,89 +115,53 @@ async function makeRequest(
 }
 
 export async function netHttpGet(ctx: AgentContext, input: unknown): Promise<HttpResponse> {
-  const { url, headers } = validate(
-    z.object({ url: urlSchema, headers: headersSchema }),
-    input
-  );
-
-  return withAudit(
-    { agentId: ctx.agentId, primitive: 'net', operation: 'http_get', metadata: { url } },
-    async () => {
-      const result = await makeRequest(ctx, 'GET', url, headers ?? {});
-      void getFFPClient().log({ primitive: 'net', action: 'http_get', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
-      return result;
-    }
-  );
+  const { url, headers } = validate(z.object({ url: urlSchema, headers: headersSchema }), input);
+  return withAudit({ agentId: ctx.agentId, primitive: 'net', operation: 'http_get', metadata: { url } }, async () => {
+    const result = await makeRequest(ctx, 'GET', url, headers ?? {});
+    void getFFPClient().log({ primitive: 'net', action: 'http_get', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
+  });
 }
 
 export async function netHttpPost(ctx: AgentContext, input: unknown): Promise<HttpResponse> {
-  const { url, body, headers } = validate(
-    z.object({ url: urlSchema, body: z.unknown(), headers: headersSchema }),
-    input
-  );
-
-  return withAudit(
-    { agentId: ctx.agentId, primitive: 'net', operation: 'http_post', metadata: { url } },
-    async () => {
-      const result = await makeRequest(ctx, 'POST', url, headers ?? {}, body);
-      void getFFPClient().log({ primitive: 'net', action: 'http_post', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
-      return result;
-    }
-  );
+  const { url, body, headers } = validate(z.object({ url: urlSchema, body: z.unknown(), headers: headersSchema }), input);
+  return withAudit({ agentId: ctx.agentId, primitive: 'net', operation: 'http_post', metadata: { url } }, async () => {
+    const result = await makeRequest(ctx, 'POST', url, headers ?? {}, body);
+    void getFFPClient().log({ primitive: 'net', action: 'http_post', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
+  });
 }
 
 export async function netHttpPut(ctx: AgentContext, input: unknown): Promise<HttpResponse> {
-  const { url, body, headers } = validate(
-    z.object({ url: urlSchema, body: z.unknown(), headers: headersSchema }),
-    input
-  );
-
-  return withAudit(
-    { agentId: ctx.agentId, primitive: 'net', operation: 'http_put', metadata: { url } },
-    async () => {
-      const result = await makeRequest(ctx, 'PUT', url, headers ?? {}, body);
-      void getFFPClient().log({ primitive: 'net', action: 'http_put', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
-      return result;
-    }
-  );
+  const { url, body, headers } = validate(z.object({ url: urlSchema, body: z.unknown(), headers: headersSchema }), input);
+  return withAudit({ agentId: ctx.agentId, primitive: 'net', operation: 'http_put', metadata: { url } }, async () => {
+    const result = await makeRequest(ctx, 'PUT', url, headers ?? {}, body);
+    void getFFPClient().log({ primitive: 'net', action: 'http_put', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
+  });
 }
 
 export async function netHttpDelete(ctx: AgentContext, input: unknown): Promise<HttpResponse> {
-  const { url, headers } = validate(
-    z.object({ url: urlSchema, headers: headersSchema }),
-    input
-  );
-
-  return withAudit(
-    { agentId: ctx.agentId, primitive: 'net', operation: 'http_delete', metadata: { url } },
-    async () => {
-      const result = await makeRequest(ctx, 'DELETE', url, headers ?? {});
-      void getFFPClient().log({ primitive: 'net', action: 'http_delete', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
-      return result;
-    }
-  );
+  const { url, headers } = validate(z.object({ url: urlSchema, headers: headersSchema }), input);
+  return withAudit({ agentId: ctx.agentId, primitive: 'net', operation: 'http_delete', metadata: { url } }, async () => {
+    const result = await makeRequest(ctx, 'DELETE', url, headers ?? {});
+    void getFFPClient().log({ primitive: 'net', action: 'http_delete', params: { url }, result: { status: result.status }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
+  });
 }
 
-// Resolve a hostname to its IP addresses
 export async function netDnsResolve(
   ctx: AgentContext,
-  input: unknown
+  input: unknown,
 ): Promise<{ hostname: string; addresses: string[] }> {
-  const { hostname } = validate(
-    z.object({ hostname: z.string().min(1).max(253) }),
-    input
-  );
-
-  return withAudit(
-    { agentId: ctx.agentId, primitive: 'net', operation: 'dns_resolve', metadata: { hostname } },
-    async () => {
-      await checkRateLimit(ctx);
-
+  const { hostname } = validate(z.object({ hostname: z.string().min(1).max(253) }), input);
+  return withAudit({ agentId: ctx.agentId, primitive: 'net', operation: 'dns_resolve', metadata: { hostname } }, async () => {
+    await checkRateLimit(ctx);
+    try {
       const results = await lookup(hostname, { all: true });
-      return {
-        hostname,
-        addresses: results.map(r => r.address),
-      };
+      return { hostname, addresses: results.map(result => result.address) };
+    } catch (error) {
+      throw new ValidationError(error instanceof Error ? error.message : 'DNS lookup failed');
     }
-  );
+  });
 }

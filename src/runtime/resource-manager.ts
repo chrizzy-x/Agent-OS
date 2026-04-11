@@ -4,24 +4,64 @@ import { QuotaError, RateLimitError, PermissionError } from '../utils/errors.js'
 import type { AgentContext } from '../auth/permissions.js';
 import { TIER_CAPABILITIES } from '../auth/tiers.js';
 
-// Rate limit using a sliding window counter in Redis.
-// Allows up to `limit` requests per minute, using 1-minute buckets.
-export async function checkRateLimit(ctx: AgentContext): Promise<void> {
-  const redis = getRedisClient();
-  const bucketKey = agentKey('rate', ctx.agentId, currentMinuteBucket());
-  const limit = ctx.quotas.rateLimitPerMin;
+type LocalRateLimitBucket = {
+  count: number;
+  expiresAt: number;
+};
 
-  // Atomic increment + expire
-  const count = await redis.incr(bucketKey);
-  if (count === 1) {
-    // First request in this bucket — set TTL of 2 minutes (bucket + buffer)
-    await redis.expire(bucketKey, 120);
+const localRateLimitBuckets = new Map<string, LocalRateLimitBucket>();
+
+function pruneLocalRateLimitBuckets(now: number): void {
+  for (const [key, bucket] of localRateLimitBuckets.entries()) {
+    if (bucket.expiresAt <= now) {
+      localRateLimitBuckets.delete(key);
+    }
   }
+}
+
+function checkLocalRateLimit(ctx: AgentContext, limit: number): void {
+  const now = Date.now();
+  pruneLocalRateLimitBuckets(now);
+
+  const bucketKey = agentKey('rate', ctx.agentId, currentMinuteBucket());
+  const existing = localRateLimitBuckets.get(bucketKey);
+  const count = existing && existing.expiresAt > now ? existing.count + 1 : 1;
+
+  localRateLimitBuckets.set(bucketKey, {
+    count,
+    expiresAt: now + (2 * 60 * 1000),
+  });
 
   if (count > limit) {
     throw new RateLimitError(
-      `Rate limit exceeded: ${count}/${limit} requests this minute. Try again in the next minute.`
+      `Rate limit exceeded: ${count}/${limit} requests this minute. Try again in the next minute.`,
     );
+  }
+}
+
+// Rate limit using a sliding window counter in Redis.
+// Allows up to `limit` requests per minute, using 1-minute buckets.
+export async function checkRateLimit(ctx: AgentContext): Promise<void> {
+  const bucketKey = agentKey('rate', ctx.agentId, currentMinuteBucket());
+  const limit = ctx.quotas.rateLimitPerMin;
+
+  try {
+    const redis = getRedisClient();
+
+    // Atomic increment + expire
+    const count = await redis.incr(bucketKey);
+    if (count === 1) {
+      // First request in this bucket - set TTL of 2 minutes (bucket + buffer)
+      await redis.expire(bucketKey, 120);
+    }
+
+    if (count > limit) {
+      throw new RateLimitError(
+        `Rate limit exceeded: ${count}/${limit} requests this minute. Try again in the next minute.`,
+      );
+    }
+  } catch {
+    checkLocalRateLimit(ctx, limit);
   }
 }
 
@@ -47,7 +87,7 @@ export async function checkStorageQuota(ctx: AgentContext, additionalBytes: numb
     const usedMB = (usedBytes / 1024 / 1024).toFixed(1);
     const limitMB = (ctx.quotas.storageQuotaBytes / 1024 / 1024).toFixed(1);
     throw new QuotaError(
-      `Storage quota exceeded: using ${usedMB}MB, limit is ${limitMB}MB`
+      `Storage quota exceeded: using ${usedMB}MB, limit is ${limitMB}MB`,
     );
   }
 }
@@ -66,7 +106,7 @@ export async function checkMemoryQuota(ctx: AgentContext, additionalBytes: numbe
     const usedMB = (currentBytes / 1024 / 1024).toFixed(1);
     const limitMB = (ctx.quotas.memoryQuotaBytes / 1024 / 1024).toFixed(1);
     throw new QuotaError(
-      `Memory quota exceeded: using ${usedMB}MB, limit is ${limitMB}MB`
+      `Memory quota exceeded: using ${usedMB}MB, limit is ${limitMB}MB`,
     );
   }
 }
@@ -87,10 +127,10 @@ export async function adjustMemoryUsage(agentId: string, delta: number): Promise
 // Check whether this agent's tier grants access to a given capability/primitive.
 // Throws PermissionError if the primitive is not in the tier's capability list.
 export function checkCapability(ctx: AgentContext, primitive: string): void {
-  const allowed = TIER_CAPABILITIES[ctx.tier] ?? TIER_CAPABILITIES['free'];
+  const allowed = TIER_CAPABILITIES[ctx.tier] ?? TIER_CAPABILITIES.free;
   if (!allowed.includes(primitive)) {
     throw new PermissionError(
-      `Your ${ctx.tier} plan does not include access to "${primitive}". Upgrade to unlock this capability.`
+      `Your ${ctx.tier} plan does not include access to "${primitive}". Upgrade to unlock this capability.`,
     );
   }
 }

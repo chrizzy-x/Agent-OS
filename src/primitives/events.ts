@@ -1,17 +1,17 @@
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { getRedisClient, agentKey } from '../storage/redis.js';
 import { withAudit } from '../runtime/audit.js';
 import { validate, keySchema } from '../utils/validation.js';
 import { ValidationError } from '../utils/errors.js';
 import { getFFPClient } from '../ffp/client.js';
+import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import type { AgentContext } from '../auth/permissions.js';
 
-const MAX_MESSAGE_SIZE = 1 * 1024 * 1024; // 1MB
-const MESSAGE_RETENTION_SECONDS = 60 * 60 * 24; // 24 hours
-const MAX_TOPIC_MESSAGES = 1000; // max messages retained per topic
+const MAX_MESSAGE_SIZE = 1 * 1024 * 1024;
+const MESSAGE_RETENTION_SECONDS = 60 * 60 * 24;
+const MAX_TOPIC_MESSAGES = 1000;
 
-// Build a Redis key for a topic.
-// Private topics are scoped to the agent; public topics are shared across agents.
 function topicKey(agentId: string, topic: string, isPublic: boolean): string {
   if (isPublic) {
     return `events:public:${topic}`;
@@ -19,19 +19,28 @@ function topicKey(agentId: string, topic: string, isPublic: boolean): string {
   return agentKey('events', agentId, topic);
 }
 
-// Publish a message to a topic.
-// Messages are stored in a Redis list for retrieval, and published to Redis pub/sub channel.
-export async function eventsPublish(
-  ctx: AgentContext,
-  input: unknown
-): Promise<{ topic: string; messageId: string }> {
+async function getEventsRedisClient() {
+  const redis = getRedisClient();
+  await redis.ping();
+  return redis;
+}
+
+async function withEventsFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
+  try {
+    return await primary();
+  } catch {
+    return fallback();
+  }
+}
+
+export async function eventsPublish(ctx: AgentContext, input: unknown): Promise<{ topic: string; messageId: string }> {
   const { topic, message, isPublic } = validate(
     z.object({
       topic: keySchema,
       message: z.unknown(),
       isPublic: z.boolean().default(false),
     }),
-    input
+    input,
   );
 
   const serialized = JSON.stringify(message);
@@ -40,39 +49,54 @@ export async function eventsPublish(
   }
 
   return withAudit({ agentId: ctx.agentId, primitive: 'events', operation: 'publish', metadata: { topic, isPublic } }, async () => {
-    const redis = getRedisClient();
-    const messageId = `${Date.now()}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const result = await withEventsFallback(async () => {
+      const redis = await getEventsRedisClient();
+      const messageId = `${Date.now()}-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+      const envelope = JSON.stringify({
+        id: messageId,
+        topic,
+        agentId: ctx.agentId,
+        message,
+        timestamp: new Date().toISOString(),
+      });
+      const listKey = topicKey(ctx.agentId, topic, isPublic ?? false);
+      const channelKey = `${listKey}:channel`;
+      await redis.pipeline().lpush(listKey, envelope).ltrim(listKey, 0, MAX_TOPIC_MESSAGES - 1).expire(listKey, MESSAGE_RETENTION_SECONDS).publish(channelKey, envelope).exec();
+      return { topic, messageId };
+    }, async () => {
+      const messageId = `${Date.now()}-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+      await updateLocalRuntimeState(state => {
+        const envelope = {
+          id: messageId,
+          topic,
+          agentId: ctx.agentId,
+          message,
+          timestamp: new Date().toISOString(),
+          isPublic: isPublic ?? false,
+        };
 
-    const envelope = JSON.stringify({
-      id: messageId,
-      topic,
-      agentId: ctx.agentId,
-      message,
-      timestamp: new Date().toISOString(),
+        if (isPublic) {
+          state.publicEvents[topic] ??= [];
+          state.publicEvents[topic].unshift(envelope);
+          state.publicEvents[topic] = state.publicEvents[topic].slice(0, MAX_TOPIC_MESSAGES);
+        } else {
+          state.privateEvents[ctx.agentId] ??= {};
+          state.privateEvents[ctx.agentId][topic] ??= [];
+          state.privateEvents[ctx.agentId][topic].unshift(envelope);
+          state.privateEvents[ctx.agentId][topic] = state.privateEvents[ctx.agentId][topic].slice(0, MAX_TOPIC_MESSAGES);
+        }
+      });
+      return { topic, messageId };
     });
 
-    const listKey = topicKey(ctx.agentId, topic, isPublic ?? false);
-    const channelKey = `${listKey}:channel`;
-
-    // Push to list (for polling/history) and publish to channel (for real-time)
-    await redis.pipeline()
-      .lpush(listKey, envelope)
-      .ltrim(listKey, 0, MAX_TOPIC_MESSAGES - 1)
-      .expire(listKey, MESSAGE_RETENTION_SECONDS)
-      .publish(channelKey, envelope)
-      .exec();
-
-    void getFFPClient().log({ primitive: 'events', action: 'publish', params: { topic, isPublic }, result: { messageId }, timestamp: Date.now(), agentId: ctx.agentId });
-    return { topic, messageId };
+    void getFFPClient().log({ primitive: 'events', action: 'publish', params: { topic, isPublic }, result: { messageId: result.messageId }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
-// Subscribe to a topic — returns subscription metadata and recent messages.
-// Because this is a stateless HTTP API, "subscription" means registering interest
-// and getting a handle to poll for new messages. Real-time requires SSE or WebSocket.
 export async function eventsSubscribe(
   ctx: AgentContext,
-  input: unknown
+  input: unknown,
 ): Promise<{ subscriptionId: string; topic: string; recentMessages: unknown[] }> {
   const { topic, isPublic, limit } = validate(
     z.object({
@@ -80,84 +104,156 @@ export async function eventsSubscribe(
       isPublic: z.boolean().default(false),
       limit: z.number().int().min(1).max(100).default(10),
     }),
-    input
+    input,
   );
 
   return withAudit({ agentId: ctx.agentId, primitive: 'events', operation: 'subscribe', metadata: { topic } }, async () => {
-    const redis = getRedisClient();
-    const listKey = topicKey(ctx.agentId, topic, isPublic ?? false);
+    const result = await withEventsFallback(async () => {
+      const redis = await getEventsRedisClient();
+      const listKey = topicKey(ctx.agentId, topic, isPublic ?? false);
+      const subscriptionId = `sub_${ctx.agentId}_${topic}_${Date.now()}_${randomUUID()}`;
+      const subKey = agentKey('subscriptions', ctx.agentId, subscriptionId);
+      await redis.set(subKey, JSON.stringify({ topic, isPublic, createdAt: Date.now() }), 'EX', MESSAGE_RETENTION_SECONDS);
+      const rawMessages = await redis.lrange(listKey, 0, (limit ?? 10) - 1);
+      const recentMessages = rawMessages.map(item => {
+        try {
+          return JSON.parse(item) as unknown;
+        } catch {
+          return item;
+        }
+      });
+      return { subscriptionId, topic, recentMessages };
+    }, async () => {
+      const subscriptionId = `sub_${ctx.agentId}_${topic}_${Date.now()}_${randomUUID()}`;
+      const state = await readLocalRuntimeState();
+      const recentMessages = isPublic
+        ? (state.publicEvents[topic] ?? []).slice(0, limit)
+        : (state.privateEvents[ctx.agentId]?.[topic] ?? []).slice(0, limit);
 
-    // Store subscription record so agent can poll for new messages
-    const subscriptionId = `sub_${ctx.agentId}_${topic}_${Date.now()}_${crypto.randomUUID()}`;
-    const subKey = agentKey('subscriptions', ctx.agentId, subscriptionId);
+      await updateLocalRuntimeState(nextState => {
+        nextState.subscriptions[ctx.agentId] ??= {};
+        nextState.subscriptions[ctx.agentId][subscriptionId] = {
+          subscriptionId,
+          topic,
+          isPublic: isPublic ?? false,
+          createdAt: new Date().toISOString(),
+        };
+      });
 
-    await redis.set(subKey, JSON.stringify({ topic, isPublic, createdAt: Date.now() }), 'EX', MESSAGE_RETENTION_SECONDS);
-
-    // Return recent messages from the topic history
-    const rawMessages = await redis.lrange(listKey, 0, (limit ?? 10) - 1);
-    const recentMessages = rawMessages.map(m => {
-      try { return JSON.parse(m); } catch { return m; }
+      return { subscriptionId, topic, recentMessages };
     });
 
-    void getFFPClient().log({ primitive: 'events', action: 'subscribe', params: { topic }, result: { subscriptionId }, timestamp: Date.now(), agentId: ctx.agentId });
-    return { subscriptionId, topic, recentMessages };
+    void getFFPClient().log({ primitive: 'events', action: 'subscribe', params: { topic }, result: { subscriptionId: result.subscriptionId }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
-// Unsubscribe from a topic by deleting the subscription record.
 export async function eventsUnsubscribe(
   ctx: AgentContext,
-  input: unknown
+  input: unknown,
 ): Promise<{ subscriptionId: string; unsubscribed: boolean }> {
-  const { subscriptionId } = validate(
-    z.object({ subscriptionId: z.string().min(1).max(256) }),
-    input
+  const { subscriptionId, topic } = validate(
+    z.object({
+      subscriptionId: z.string().min(1).max(256).optional(),
+      topic: keySchema.optional(),
+    }).refine(value => Boolean(value.subscriptionId || value.topic), 'subscriptionId or topic is required'),
+    input,
   );
 
-  return withAudit({ agentId: ctx.agentId, primitive: 'events', operation: 'unsubscribe', metadata: { subscriptionId } }, async () => {
-    const redis = getRedisClient();
-    const subKey = agentKey('subscriptions', ctx.agentId, subscriptionId);
-    const deleted = await redis.del(subKey);
-    void getFFPClient().log({ primitive: 'events', action: 'unsubscribe', params: { subscriptionId }, result: { unsubscribed: deleted > 0 }, timestamp: Date.now(), agentId: ctx.agentId });
-    return { subscriptionId, unsubscribed: deleted > 0 };
+  return withAudit({ agentId: ctx.agentId, primitive: 'events', operation: 'unsubscribe', metadata: { subscriptionId, topic } }, async () => {
+    const result = await withEventsFallback(async () => {
+      if (subscriptionId) {
+        const redis = await getEventsRedisClient();
+        const subKey = agentKey('subscriptions', ctx.agentId, subscriptionId);
+        const deleted = await redis.del(subKey);
+        return { subscriptionId, unsubscribed: deleted > 0 };
+      }
+
+      return { subscriptionId: topic ?? '', unsubscribed: true };
+    }, async () => {
+      return updateLocalRuntimeState(state => {
+        state.subscriptions[ctx.agentId] ??= {};
+        if (subscriptionId) {
+          const existed = Boolean(state.subscriptions[ctx.agentId][subscriptionId]);
+          delete state.subscriptions[ctx.agentId][subscriptionId];
+          return { subscriptionId, unsubscribed: existed };
+        }
+
+        let removed = false;
+        for (const [id, subscription] of Object.entries(state.subscriptions[ctx.agentId])) {
+          if (subscription.topic === topic) {
+            delete state.subscriptions[ctx.agentId][id];
+            removed = true;
+          }
+        }
+
+        return { subscriptionId: topic ?? '', unsubscribed: removed };
+      });
+    });
+
+    void getFFPClient().log({ primitive: 'events', action: 'unsubscribe', params: { subscriptionId: result.subscriptionId }, result: { unsubscribed: result.unsubscribed }, timestamp: Date.now(), agentId: ctx.agentId });
+    return result;
   });
 }
 
-// List topics that have recent messages accessible to this agent.
 export async function eventsListTopics(
   ctx: AgentContext,
-  _input: unknown
+  _input: unknown,
 ): Promise<{ topics: Array<{ topic: string; messageCount: number; isPublic: boolean }> }> {
   return withAudit({ agentId: ctx.agentId, primitive: 'events', operation: 'list_topics' }, async () => {
-    const redis = getRedisClient();
+    return withEventsFallback(async () => {
+      const redis = await getEventsRedisClient();
+      const privatePattern = agentKey('events', ctx.agentId, '*');
+      const publicPattern = 'events:public:*';
+      const [privateKeys, publicKeys] = await Promise.all([
+        redis.keys(privatePattern),
+        redis.keys(publicPattern),
+      ]);
 
-    // Get agent's private topics
-    const privatePattern = agentKey('events', ctx.agentId, '*');
-    const publicPattern = 'events:public:*';
+      const allKeys = [
+        ...privateKeys.filter(key => !key.endsWith(':channel')).map(key => ({ key, isPublic: false })),
+        ...publicKeys.filter(key => !key.endsWith(':channel')).map(key => ({ key, isPublic: true })),
+      ];
 
-    const [privateKeys, publicKeys] = await Promise.all([
-      redis.keys(privatePattern),
-      redis.keys(publicPattern),
-    ]);
-
-    // Filter out channel keys (those ending in :channel)
-    const allKeys = [
-      ...privateKeys.filter(k => !k.endsWith(':channel')).map(k => ({ key: k, isPublic: false })),
-      ...publicKeys.filter(k => !k.endsWith(':channel')).map(k => ({ key: k, isPublic: true })),
-    ];
-
-    const topics = await Promise.all(
-      allKeys.map(async ({ key, isPublic }) => {
-        const count = await redis.llen(key);
-        const prefix = isPublic ? 'events:public:' : agentKey('events', ctx.agentId, '');
+      const topics = await Promise.all(allKeys.map(async item => {
+        const count = await redis.llen(item.key);
+        const prefix = item.isPublic ? 'events:public:' : agentKey('events', ctx.agentId, '');
         return {
-          topic: key.slice(prefix.length),
+          topic: item.key.slice(prefix.length),
           messageCount: count,
-          isPublic,
+          isPublic: item.isPublic,
         };
-      })
-    );
+      }));
 
-    return { topics };
+      if (topics.length > 0) {
+        return { topics };
+      }
+
+      const state = await readLocalRuntimeState();
+      const privateTopics = Object.entries(state.privateEvents[ctx.agentId] ?? {}).map(([topic, events]) => ({
+        topic,
+        messageCount: events.length,
+        isPublic: false,
+      }));
+      const publicTopics = Object.entries(state.publicEvents).map(([topic, events]) => ({
+        topic,
+        messageCount: events.length,
+        isPublic: true,
+      }));
+      return { topics: [...privateTopics, ...publicTopics] };
+    }, async () => {
+      const state = await readLocalRuntimeState();
+      const privateTopics = Object.entries(state.privateEvents[ctx.agentId] ?? {}).map(([topic, events]) => ({
+        topic,
+        messageCount: events.length,
+        isPublic: false,
+      }));
+      const publicTopics = Object.entries(state.publicEvents).map(([topic, events]) => ({
+        topic,
+        messageCount: events.length,
+        isPublic: true,
+      }));
+      return { topics: [...privateTopics, ...publicTopics] };
+    });
   });
 }

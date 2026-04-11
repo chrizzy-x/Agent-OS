@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
 import { setAgentSessionCookie } from '@/src/auth/session-cookie';
-import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { hashPassword } from '@/src/auth/password';
+import { createAgentAccount, findAccountsByEmail } from '@/src/auth/agent-store';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: 'invalid_json', message: 'Invalid JSON body' }, { status: 400 });
   }
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
@@ -29,63 +29,41 @@ export async function POST(req: NextRequest) {
   const agentName = typeof body.agentName === 'string' ? body.agentName.trim() : '';
 
   if (!email || !isValidEmail(email)) {
-    return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
+    return NextResponse.json({ error: 'invalid_email', message: 'Valid email required' }, { status: 400 });
   }
 
   if (!password || password.length < 8) {
-    return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+    return NextResponse.json({ error: 'invalid_password', message: 'Password must be at least 8 characters' }, { status: 400 });
   }
 
-  const supabase = getSupabaseAdmin();
-
-  const { data: existingAgents, error: existingError, count } = await supabase
-    .from('agents')
-    .select('id', { count: 'exact' })
-    .eq('metadata->>email', email)
-    .limit(2);
-
-  if (existingError) {
-    console.error('[signup] lookup error:', existingError);
-    return NextResponse.json({ error: 'Failed to verify account uniqueness. Please try again.' }, { status: 500 });
-  }
-
-  if ((count ?? existingAgents?.length ?? 0) > 0) {
+  const existingAccounts = await findAccountsByEmail(email);
+  if (existingAccounts.length > 0) {
     return NextResponse.json(
-      { error: 'An account with this email already exists. Please sign in.' },
-      { status: 409 }
+      { error: 'conflict', message: 'An account with this email already exists. Please sign in.' },
+      { status: 409 },
     );
   }
 
   const agentId = generateAgentId();
   const name = agentName || `Agent ${agentId.slice(0, 12)}`;
   const passwordHash = await hashPassword(password);
+  const created = await createAgentAccount({ id: agentId, name, email, passwordHash });
 
-  const { error: insertError } = await supabase.from('agents').insert({
-    id: agentId,
-    name,
-    tier: 'free',
-    quotas: {},
-    metadata: { email, password_hash: passwordHash, signup_source: 'web' },
-  });
-
-  if (insertError) {
-    console.error('[signup] insert error:', insertError);
-    if (insertError.code === '23505') {
-      return NextResponse.json(
-        { error: 'An account with this email already exists. Please sign in.' },
-        { status: 409 }
-      );
-    }
-    return NextResponse.json({ error: 'Failed to create account. Please try again.' }, { status: 500 });
+  if (created.duplicate) {
+    return NextResponse.json(
+      { error: 'conflict', message: 'An account with this email already exists. Please sign in.' },
+      { status: 409 },
+    );
   }
 
   let bearerToken: string;
   try {
     bearerToken = createAgentToken(agentId, { expiresIn: '90d' });
-  } catch (err) {
-    console.error('[signup] token creation error:', err);
-    await supabase.from('agents').delete().eq('id', agentId);
-    return NextResponse.json({ error: 'Failed to generate credentials. Please try again.' }, { status: 500 });
+  } catch {
+    return NextResponse.json(
+      { error: 'credentials_unavailable', message: 'Failed to generate credentials. Please try again.' },
+      { status: 400 },
+    );
   }
 
   const response = NextResponse.json(
@@ -98,7 +76,7 @@ export async function POST(req: NextRequest) {
         expiresIn: '90 days',
       },
     },
-    { status: 201 }
+    { status: 201 },
   );
   setAgentSessionCookie(response, bearerToken);
   return response;

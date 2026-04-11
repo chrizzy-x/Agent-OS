@@ -4,6 +4,12 @@ import { createAgentToken, extractBearerToken, verifyAgentToken } from './auth/a
 import { getFFPClient } from './ffp/client.js';
 import { assertExternalAgentToolAccess, trackExternalAgentCall } from './external-agents/service.js';
 import { executeUniversalToolCall, listUniversalMcpTools } from './mcp/registry.js';
+import {
+  buildCanonicalToolError,
+  normalizeCanonicalToolInput,
+  normalizeCanonicalToolName,
+  normalizeCanonicalToolResult,
+} from './mcp/canonical.js';
 import { handleAgentMe } from './routes/agent-me.js';
 import { readJsonBody, sendJson } from './routes/http.js';
 import { handleRegister } from './routes/register.js';
@@ -31,7 +37,7 @@ function validateEnv(): void {
 async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const token = extractBearerToken(req.headers.authorization);
   if (!token) {
-    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Authorization: Bearer <token> header required' } });
+    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Authorization: Bearer <token> header required' }, message: 'Authorization: Bearer <token> header required' });
     return;
   }
 
@@ -40,7 +46,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
     agentContext = verifyAgentToken(token);
   } catch (error) {
     const err = toErrorResponse(error);
-    sendJson(res, err.statusCode, { error: err });
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
     return;
   }
 
@@ -49,31 +55,34 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
     body = await readJsonBody(req);
   } catch (error) {
     const err = toErrorResponse(error);
-    sendJson(res, 400, { error: err });
+    sendJson(res, 400, { error: err, code: err.code, message: err.message });
     return;
   }
 
-  const toolName = typeof body.tool === 'string' ? body.tool : '';
-  if (!toolName) {
-    sendJson(res, 400, { error: { code: 'VALIDATION_ERROR', message: 'Request must include "tool" field' } });
+  const requestedTool = typeof body.tool === 'string' ? body.tool : '';
+  if (!requestedTool) {
+    sendJson(res, 400, { error: 'validation_error', message: 'Request must include "tool" field' });
     return;
   }
+
+  const toolName = normalizeCanonicalToolName(requestedTool);
+  const normalizedInput = normalizeCanonicalToolInput(toolName, (body.input ?? body.arguments ?? {}) as Record<string, unknown>);
 
   try {
-    await assertExternalAgentToolAccess(agentContext.agentId, toolName);
+    await assertExternalAgentToolAccess(agentContext.agentId, requestedTool);
     const result = await executeUniversalToolCall({
       agentContext,
       name: toolName,
       server: typeof body.server === 'string' ? body.server : undefined,
-      arguments: (body.input ?? body.arguments ?? {}) as Record<string, unknown>,
+      arguments: normalizedInput,
     });
 
     void trackExternalAgentCall(agentContext.agentId).catch(() => {});
 
-    sendJson(res, 200, { success: true, result });
+    sendJson(res, 200, { success: true, result: normalizeCanonicalToolResult(toolName, result) });
   } catch (error) {
-    const err = toErrorResponse(error);
-    sendJson(res, err.statusCode, { error: err });
+    const failure = buildCanonicalToolError(requestedTool, error);
+    sendJson(res, failure.status, failure.body);
   }
 }
 
@@ -108,13 +117,13 @@ function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
 async function handleCreateAgent(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const adminToken = process.env.ADMIN_TOKEN;
   if (!adminToken) {
-    sendJson(res, 503, { error: { code: 'CONFIGURATION_ERROR', message: 'Admin token not configured' } });
+    sendJson(res, 400, { error: 'configuration_error', message: 'Admin token not configured' });
     return;
   }
 
   const token = extractBearerToken(req.headers.authorization);
   if (token !== adminToken) {
-    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } });
+    sendJson(res, 401, { error: 'unauthorized', message: 'Invalid admin token' });
     return;
   }
 
@@ -122,7 +131,8 @@ async function handleCreateAgent(req: IncomingMessage, res: ServerResponse): Pro
   try {
     body = await readJsonBody(req);
   } catch (error) {
-    sendJson(res, 400, { error: toErrorResponse(error) });
+    const err = toErrorResponse(error);
+    sendJson(res, 400, { error: err, code: err.code, message: err.message });
     return;
   }
 
@@ -143,7 +153,7 @@ async function handleTools(_req: IncomingMessage, res: ServerResponse): Promise<
     sendJson(res, 200, { tools });
   } catch (error) {
     const err = toErrorResponse(error);
-    sendJson(res, err.statusCode, { error: err });
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
   }
 }
 
@@ -151,7 +161,7 @@ async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, agentId
   const adminToken = process.env.ADMIN_TOKEN;
   const token = extractBearerToken(req.headers.authorization);
   if (token !== adminToken) {
-    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } });
+    sendJson(res, 401, { error: 'unauthorized', message: 'Invalid admin token' });
     return;
   }
 
@@ -165,7 +175,7 @@ async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, agentId
     sendJson(res, 200, { agentId, operations, total: operations.length });
   } catch (error) {
     const err = toErrorResponse(error);
-    sendJson(res, err.statusCode, { error: err });
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
   }
 }
 
@@ -173,7 +183,7 @@ async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, age
   const adminToken = process.env.ADMIN_TOKEN;
   const token = extractBearerToken(req.headers.authorization);
   if (token !== adminToken) {
-    sendJson(res, 401, { error: { code: 'UNAUTHORIZED', message: 'Invalid admin token' } });
+    sendJson(res, 401, { error: 'unauthorized', message: 'Invalid admin token' });
     return;
   }
 
@@ -182,7 +192,7 @@ async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, age
     sendJson(res, 200, { agentId, proposals, total: proposals.length });
   } catch (error) {
     const err = toErrorResponse(error);
-    sendJson(res, err.statusCode, { error: err });
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
   }
 }
 
@@ -254,10 +264,11 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
       return;
     }
 
-    sendJson(res, 404, { error: { code: 'NOT_FOUND', message: `${method} ${pathname} not found` } });
+    sendJson(res, 404, { error: 'not_found', message: `${method} ${pathname} not found` });
   } catch (error) {
+    const err = toErrorResponse(error);
     console.error('[router] unhandled error:', error);
-    sendJson(res, 500, { error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } });
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
   }
 }
 

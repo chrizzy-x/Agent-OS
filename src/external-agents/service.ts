@@ -1,5 +1,10 @@
 import { createAgentToken } from '../auth/agent-identity.js';
 import { getPublicAppUrl } from '../config/env.js';
+import {
+  readLocalRuntimeState,
+  updateLocalRuntimeState,
+  type LocalExternalAgentRegistrationRecord,
+} from '../storage/local-state.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { AuthError, NotFoundError, PermissionError, ValidationError } from '../utils/errors.js';
 import {
@@ -101,7 +106,7 @@ function normalizeAllowedTools(value: unknown): string[] {
 }
 
 function normalizeAgentId(agentId: unknown): string {
-  if (typeof agentId !== 'string' || typeof agentId !== 'string') {
+  if (typeof agentId !== 'string') {
     throw new ValidationError('agentId and name are required');
   }
 
@@ -146,6 +151,52 @@ function matchesPermission(permission: string, toolName: string): boolean {
   return toolName.startsWith(prefix);
 }
 
+function toExternalAgentRegistration(
+  registration: LocalExternalAgentRegistrationRecord,
+): ExternalAgentRegistrationRow {
+  return {
+    agent_id: registration.agent_id,
+    name: registration.name,
+    description: registration.description,
+    owner_email: registration.owner_email,
+    allowed_domains: registration.allowed_domains,
+    allowed_tools: registration.allowed_tools,
+    status: registration.status,
+    total_calls: registration.total_calls,
+    last_active_at: registration.last_active_at,
+    created_at: registration.created_at,
+  };
+}
+
+function buildExternalAgentRegistrationRecord(
+  registration: ExternalAgentRegistrationRow,
+): LocalExternalAgentRegistrationRecord {
+  return {
+    agent_id: registration.agent_id,
+    name: registration.name,
+    description: registration.description,
+    owner_email: registration.owner_email,
+    allowed_domains: registration.allowed_domains ?? [],
+    allowed_tools: registration.allowed_tools ?? [],
+    status: registration.status ?? ACTIVE_REGISTRATION_STATUS,
+    total_calls: registration.total_calls ?? 0,
+    last_active_at: registration.last_active_at,
+    created_at: registration.created_at,
+  };
+}
+
+async function getLocalExternalAgentRegistration(agentId: string): Promise<ExternalAgentRegistrationRow | null> {
+  const state = await readLocalRuntimeState();
+  const registration = state.externalAgents[agentId];
+  return registration ? toExternalAgentRegistration(registration) : null;
+}
+
+async function writeLocalExternalAgentRegistration(registration: ExternalAgentRegistrationRow): Promise<void> {
+  await updateLocalRuntimeState(state => {
+    state.externalAgents[registration.agent_id] = buildExternalAgentRegistrationRecord(registration);
+  });
+}
+
 export function normalizeRequestedToolName(toolName: string): string {
   const normalized = toolName.trim();
   if (!normalized) {
@@ -173,18 +224,28 @@ export function normalizeRequestedToolName(toolName: string): string {
 }
 
 export async function getExternalAgentRegistration(agentId: string): Promise<ExternalAgentRegistrationRow | null> {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('external_agent_registrations')
-    .select('agent_id, name, description, owner_email, allowed_domains, allowed_tools, status, total_calls, last_active_at, created_at')
-    .eq('agent_id', agentId)
-    .maybeSingle();
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('external_agent_registrations')
+      .select('agent_id, name, description, owner_email, allowed_domains, allowed_tools, status, total_calls, last_active_at, created_at')
+      .eq('agent_id', agentId)
+      .maybeSingle();
 
-  if (error) {
-    throw new Error(`Failed to load external agent registration: ${error.message}`);
+    if (!error && data) {
+      const registration = data as ExternalAgentRegistrationRow;
+      await writeLocalExternalAgentRegistration(registration);
+      return registration;
+    }
+
+    if (!error) {
+      return await getLocalExternalAgentRegistration(agentId);
+    }
+  } catch {
+    // Fall back to local state below.
   }
 
-  return (data as ExternalAgentRegistrationRow | null) ?? null;
+  return await getLocalExternalAgentRegistration(agentId);
 }
 
 export async function registerExternalAgent(input: RegisterExternalAgentInput): Promise<RegisterExternalAgentResult> {
@@ -194,7 +255,18 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
   const ownerEmail = normalizeOptionalString(input.ownerEmail)?.toLowerCase() ?? null;
   const allowedDomains = normalizeAllowedDomains(input.allowedDomains);
   const allowedTools = normalizeAllowedTools(input.allowedTools);
-  const supabase = getSupabaseAdmin();
+  const registration: ExternalAgentRegistrationRow = {
+    agent_id: agentId,
+    name,
+    description,
+    owner_email: ownerEmail,
+    allowed_domains: allowedDomains,
+    allowed_tools: allowedTools,
+    status: ACTIVE_REGISTRATION_STATUS,
+    total_calls: 0,
+    last_active_at: null,
+    created_at: new Date().toISOString(),
+  };
 
   const existing = await getExternalAgentRegistration(agentId);
   if (existing) {
@@ -203,26 +275,49 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
     throw error;
   }
 
-  const { error } = await supabase
-    .from('external_agent_registrations')
-    .insert({
-      agent_id: agentId,
-      name,
-      description,
-      owner_email: ownerEmail,
-      allowed_domains: allowedDomains,
-      allowed_tools: allowedTools,
-      status: ACTIVE_REGISTRATION_STATUS,
-    });
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('external_agent_registrations')
+      .insert({
+        agent_id: agentId,
+        name,
+        description,
+        owner_email: ownerEmail,
+        allowed_domains: allowedDomains,
+        allowed_tools: allowedTools,
+        status: ACTIVE_REGISTRATION_STATUS,
+      });
 
-  if (error) {
-    if (error.code === '23505') {
-      const duplicate = new Error('Agent ID already registered');
-      (duplicate as Error & { statusCode?: number }).statusCode = 409;
-      throw duplicate;
+    if (error) {
+      if (error.code === '23505') {
+        const duplicate = new Error('Agent ID already registered');
+        (duplicate as Error & { statusCode?: number }).statusCode = 409;
+        throw duplicate;
+      }
+
+      throw error;
+    }
+  } catch (error) {
+    const duplicateError = error as { code?: string; statusCode?: number };
+    if (duplicateError.code === '23505' || duplicateError.statusCode === 409) {
+      throw error;
+    }
+  }
+
+  const duplicate = await updateLocalRuntimeState(state => {
+    if (state.externalAgents[agentId]) {
+      return true;
     }
 
-    throw new Error('Registration failed');
+    state.externalAgents[agentId] = buildExternalAgentRegistrationRecord(registration);
+    return false;
+  });
+
+  if (duplicate) {
+    const error = new Error('Agent ID already registered');
+    (error as Error & { statusCode?: number }).statusCode = 409;
+    throw error;
   }
 
   return {
@@ -277,8 +372,21 @@ export async function assertExternalAgentToolAccess(agentId: string, toolName: s
 }
 
 export async function trackExternalAgentCall(agentId: string): Promise<void> {
-  const supabase = getSupabaseAdmin();
-  await supabase.rpc('increment_ext_agent_calls', { row_agent_id: agentId });
+  try {
+    const supabase = getSupabaseAdmin();
+    await supabase.rpc('increment_ext_agent_calls', { row_agent_id: agentId });
+    return;
+  } catch {
+    await updateLocalRuntimeState(state => {
+      const registration = state.externalAgents[agentId];
+      if (!registration) {
+        return;
+      }
+
+      registration.total_calls += 1;
+      registration.last_active_at = new Date().toISOString();
+    });
+  }
 }
 
 export function requireBearerToken(authHeader: string | undefined): string {

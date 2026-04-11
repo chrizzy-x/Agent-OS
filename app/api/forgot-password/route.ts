@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/src/storage/supabase';
 import {
   buildPasswordResetUrl,
   createPasswordResetRecord,
   createPasswordResetToken,
   shouldExposePasswordResetLink,
 } from '@/src/auth/password-reset';
+import { findAccountsByEmail, setPasswordResetToken } from '@/src/auth/agent-store';
 
 export const runtime = 'nodejs';
 
@@ -18,50 +18,28 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return NextResponse.json({ error: 'invalid_json', message: 'Invalid JSON body' }, { status: 400 });
   }
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   if (!email || !isValidEmail(email)) {
-    return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
+    return NextResponse.json({ error: 'invalid_email', message: 'Valid email required' }, { status: 400 });
   }
 
-  const supabase = getSupabaseAdmin();
-  const { data: agents, error: lookupError, count } = await supabase
-    .from('agents')
-    .select('id, metadata', { count: 'exact' })
-    .eq('metadata->>email', email)
-    .limit(2);
-
-  if (lookupError) {
-    console.error('[forgot-password] lookup error:', lookupError);
-    return NextResponse.json({ error: 'Failed to request a reset link. Please try again.' }, { status: 500 });
-  }
-
-  if ((count ?? agents?.length ?? 0) > 1) {
-    console.error(`[forgot-password] duplicate agent accounts detected for email ${email}; refusing password reset request.`);
+  const accounts = await findAccountsByEmail(email);
+  if (accounts.length > 1 || accounts.length === 0) {
     return NextResponse.json({ success: true });
   }
 
-  if (!agents?.[0]) {
-    return NextResponse.json({ success: true });
-  }
-
-  const agent = agents[0];
   const token = createPasswordResetToken();
-  const updatedMetadata = {
-    ...((agent.metadata as Record<string, unknown> | null | undefined) ?? {}),
-    password_reset: createPasswordResetRecord(token),
-  };
+  const record = createPasswordResetRecord(token);
+  const updated = await setPasswordResetToken(email, record.token_hash, record.expires_at, record.requested_at);
 
-  const { error: updateError } = await supabase
-    .from('agents')
-    .update({ metadata: updatedMetadata })
-    .eq('id', agent.id);
-
-  if (updateError) {
-    console.error('[forgot-password] request error:', updateError);
-    return NextResponse.json({ error: 'Failed to request a reset link. Please try again.' }, { status: 500 });
+  if (!updated) {
+    return NextResponse.json(
+      { error: 'reset_unavailable', message: 'Failed to request a reset link. Please try again.' },
+      { status: 400 },
+    );
   }
 
   const response: Record<string, unknown> = { success: true };

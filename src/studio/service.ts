@@ -4,6 +4,7 @@ import { getPublicAppUrl } from '../config/env.js';
 import { listUniversalMcpTools, executeUniversalToolCall } from '../mcp/registry.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { getRedisClient, agentKey } from '../storage/redis.js';
+import { readLocalRuntimeState } from '../storage/local-state.js';
 import { runInstalledSkill } from '../skills/service.js';
 import { STUDIO_COMMAND_DEFINITIONS } from './catalog.js';
 import type { StudioCommandResponse, StudioPreview } from './types.js';
@@ -280,7 +281,7 @@ export function parseStudioCommand(command: string): ParsedStudioCommand {
   assertNoShellSyntax(head);
 
   if (head === 'help') return { type: 'help' };
-  if (head === 'agent status') return { type: 'agent-status' };
+  if (head === 'agent status' || head === 'status') return { type: 'agent-status' };
   if (head === 'tools list') return { type: 'tools-list' };
   if (head === 'mcp list') return { type: 'mcp-list' };
   if (head === 'deploy snippet') return { type: 'deploy-snippet' };
@@ -535,17 +536,22 @@ async function resolveSkill(reference: string): Promise<SkillSummary> {
 }
 
 async function listInstalledSkillCount(agentId: string): Promise<number> {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('skill_installations')
-    .select('id')
-    .eq('agent_id', agentId);
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('skill_installations')
+      .select('id')
+      .eq('agent_id', agentId);
 
-  if (error) {
-    throw new Error(`Failed to load installed skills: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to load installed skills: ${error.message}`);
+    }
+
+    return data?.length ?? 0;
+  } catch {
+    const state = await readLocalRuntimeState();
+    return state.skills.installations[agentId]?.length ?? 0;
   }
-
-  return data?.length ?? 0;
 }
 
 async function searchSkills(query: string): Promise<SkillSummary[]> {
@@ -985,3 +991,4 @@ export async function executeStudioCommand(params: {
     warnings: executed.warnings,
   };
 }
+

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const skillSlug = typeof body.skill_slug === 'string' ? body.skill_slug : '';
     const capability = typeof body.capability === 'string' ? body.capability : '';
     if (!skillSlug || !capability) {
-      return NextResponse.json({ error: 'skill_slug and capability are required' }, { status: 400 });
+      return NextResponse.json({ error: 'validation_error', message: 'skill_slug and capability are required' }, { status: 400 });
     }
 
     const execution = await runInstalledSkill({
@@ -34,6 +34,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

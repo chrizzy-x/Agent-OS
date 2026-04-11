@@ -329,13 +329,17 @@ export async function buildExternalToolCatalog(): Promise<StandardToolDefinition
 }
 
 export async function listUniversalMcpTools(): Promise<StandardToolDefinition[]> {
-  const [primitives, skills, external] = await Promise.all([
+  const [primitives, skills, external] = await Promise.allSettled([
     Promise.resolve(buildPrimitiveToolCatalog()),
     buildSkillToolCatalog(),
     buildExternalToolCatalog(),
   ]);
 
-  const ordered = [...primitives, ...skills, ...external].sort((left, right) => left.name.localeCompare(right.name));
+  const primitiveTools = primitives.status === 'fulfilled' ? primitives.value : buildPrimitiveToolCatalog();
+  const skillTools = skills.status === 'fulfilled' ? skills.value : [];
+  const externalTools = external.status === 'fulfilled' ? external.value : [];
+
+  const ordered = [...primitiveTools, ...skillTools, ...externalTools].sort((left, right) => left.name.localeCompare(right.name));
   const unique = new Map<string, StandardToolDefinition>();
   for (const tool of ordered) {
     if (!unique.has(tool.name)) {
@@ -436,4 +440,5 @@ export async function executeUniversalToolCall(params: {
     arguments: input,
   });
 }
+
 

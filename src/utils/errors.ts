@@ -4,14 +4,13 @@ export class AgentOSError extends Error {
   constructor(
     message: string,
     public readonly code: string,
-    public readonly statusCode: number = 500
+    public readonly statusCode: number = 400,
   ) {
     super(message);
     this.name = 'AgentOSError';
   }
 }
 
-// Agent attempted an operation that would exceed their allocated quota
 export class QuotaError extends AgentOSError {
   constructor(message: string) {
     super(message, 'QUOTA_EXCEEDED', 429);
@@ -19,7 +18,6 @@ export class QuotaError extends AgentOSError {
   }
 }
 
-// Request was blocked due to a security policy violation
 export class SecurityError extends AgentOSError {
   constructor(message: string) {
     super(message, 'SECURITY_VIOLATION', 403);
@@ -27,7 +25,6 @@ export class SecurityError extends AgentOSError {
   }
 }
 
-// Requested resource does not exist
 export class NotFoundError extends AgentOSError {
   constructor(message: string) {
     super(message, 'NOT_FOUND', 404);
@@ -35,7 +32,6 @@ export class NotFoundError extends AgentOSError {
   }
 }
 
-// Agent lacks permission for the requested operation
 export class PermissionError extends AgentOSError {
   constructor(message: string) {
     super(message, 'PERMISSION_DENIED', 403);
@@ -43,7 +39,6 @@ export class PermissionError extends AgentOSError {
   }
 }
 
-// Input validation failed
 export class ValidationError extends AgentOSError {
   constructor(message: string) {
     super(message, 'VALIDATION_ERROR', 400);
@@ -51,7 +46,6 @@ export class ValidationError extends AgentOSError {
   }
 }
 
-// Authentication token is missing or invalid
 export class AuthError extends AgentOSError {
   constructor(message: string) {
     super(message, 'UNAUTHORIZED', 401);
@@ -59,7 +53,6 @@ export class AuthError extends AgentOSError {
   }
 }
 
-// Rate limit exceeded
 export class RateLimitError extends AgentOSError {
   constructor(message: string) {
     super(message, 'RATE_LIMITED', 429);
@@ -67,7 +60,6 @@ export class RateLimitError extends AgentOSError {
   }
 }
 
-// Serialize any error to a safe JSON-compatible response object
 export function toErrorResponse(error: unknown): { code: string; message: string; statusCode: number } {
   if (error instanceof AgentOSError) {
     return {
@@ -79,15 +71,15 @@ export function toErrorResponse(error: unknown): { code: string; message: string
 
   if (error instanceof Error) {
     return {
-      code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred',
-      statusCode: 500,
+      code: 'REQUEST_FAILED',
+      message: error.message || 'Request failed',
+      statusCode: 400,
     };
   }
 
   return {
     code: 'UNKNOWN_ERROR',
     message: 'An unknown error occurred',
-    statusCode: 500,
+    statusCode: 400,
   };
 }
