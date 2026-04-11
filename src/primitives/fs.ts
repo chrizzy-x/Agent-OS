@@ -18,6 +18,20 @@ type FsEntry = {
   type: 'file' | 'directory';
 };
 
+type FsMetadata = {
+  inline_data?: string;
+  storage_backend?: 'inline' | 'storage';
+};
+
+function readInlineData(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+
+  const inlineData = (metadata as FsMetadata).inline_data;
+  return typeof inlineData === 'string' ? inlineData : null;
+}
+
 function buildPath(agentId: string, userPath: string): string {
   const sanitized = checkFilePath(userPath);
   return `${agentId}/${sanitized}`;
@@ -126,23 +140,30 @@ export async function fsWrite(ctx: AgentContext, input: unknown): Promise<{ path
     const result = await withFsFallback(async () => {
       const storagePath = buildPath(ctx.agentId, path);
       const supabase = getSupabaseAdmin();
+      const now = new Date().toISOString();
 
-      const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, buffer, {
+      const upload = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, buffer, {
         contentType,
         upsert: true,
       });
 
-      if (error) {
-        throw new Error(`Storage write failed: ${error.message}`);
-      }
+      const metadata: FsMetadata = upload.error
+        ? { inline_data: data, storage_backend: 'inline' }
+        : { storage_backend: 'storage' };
 
-      await supabase.from('agent_files').upsert({
+      const fileRecord = await supabase.from('agent_files').upsert({
         agent_id: ctx.agentId,
         path,
         size_bytes: buffer.length,
         content_type: contentType,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
+        metadata,
       }, { onConflict: 'agent_id,path' });
+
+      if (fileRecord.error) {
+        const message = upload.error?.message ?? fileRecord.error.message;
+        throw new Error(`Storage write failed: ${message}`);
+      }
 
       return { path, sizeBytes: buffer.length };
     }, async () => {
@@ -174,6 +195,23 @@ export async function fsRead(ctx: AgentContext, input: unknown): Promise<{ path:
     const result = await withFsFallback(async () => {
       const storagePath = buildPath(ctx.agentId, path);
       const supabase = getSupabaseAdmin();
+      const { data: meta } = await supabase
+        .from('agent_files')
+        .select('content_type, size_bytes, metadata')
+        .eq('agent_id', ctx.agentId)
+        .eq('path', path)
+        .maybeSingle();
+
+      const inlineData = readInlineData(meta?.metadata);
+      if (typeof inlineData === 'string') {
+        return {
+          path,
+          data: inlineData,
+          contentType: meta?.content_type ?? 'application/octet-stream',
+          sizeBytes: meta?.size_bytes ?? Buffer.from(inlineData, 'base64').length,
+        };
+      }
+
       const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(storagePath);
 
       if (error || !data) {
@@ -181,18 +219,11 @@ export async function fsRead(ctx: AgentContext, input: unknown): Promise<{ path:
       }
 
       const buffer = Buffer.from(await data.arrayBuffer());
-      const { data: meta } = await supabase
-        .from('agent_files')
-        .select('content_type, size_bytes')
-        .eq('agent_id', ctx.agentId)
-        .eq('path', path)
-        .single();
-
       return {
         path,
         data: buffer.toString('base64'),
         contentType: meta?.content_type ?? 'application/octet-stream',
-        sizeBytes: buffer.length,
+        sizeBytes: meta?.size_bytes ?? buffer.length,
       };
     }, async () => {
       const normalizedPath = checkFilePath(path);
@@ -265,12 +296,12 @@ export async function fsDelete(ctx: AgentContext, input: unknown): Promise<{ pat
     const result = await withFsFallback(async () => {
       const storagePath = buildPath(ctx.agentId, path);
       const supabase = getSupabaseAdmin();
-      const { error } = await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
-      if (error) {
-        throw new Error(`Failed to delete file: ${error.message}`);
+      const deletion = await supabase.from('agent_files').delete().eq('agent_id', ctx.agentId).eq('path', path);
+      if (deletion.error) {
+        throw new Error(`Failed to delete file: ${deletion.error.message}`);
       }
 
-      await supabase.from('agent_files').delete().eq('agent_id', ctx.agentId).eq('path', path);
+      await supabase.storage.from(STORAGE_BUCKET).remove([storagePath]);
       return { path, deleted: true };
     }, async () => {
       return updateLocalRuntimeState(state => {
