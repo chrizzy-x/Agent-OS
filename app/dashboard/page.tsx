@@ -335,7 +335,8 @@ export default function DashboardPage() {
               className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-all"
               style={activeTab === tab
                 ? { background: 'var(--accent)', color: 'var(--bg-primary)', boxShadow: '0 0 16px var(--accent-glow)' }
-                : { color: 'var(--text-secondary)' }>
+                : { color: 'var(--text-secondary)' }}
+            >
               {tab === 'ffp' ? 'FFP' : tab}
             </button>
           ))}
