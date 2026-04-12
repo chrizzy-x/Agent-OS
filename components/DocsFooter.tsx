@@ -1,20 +1,65 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 
 export default function DocsFooter() {
+  const links = [
+    { href: '/docs', label: 'Docs' },
+    { href: '/docs/api', label: 'API Reference' },
+    { href: '/docs/launch', label: 'Launch Notes' },
+    { href: '/docs/audit', label: 'Audit' },
+    { href: '/docs/primitives', label: 'Primitives' },
+    { href: '/docs/skills', label: 'Skills' },
+    { href: '/marketplace', label: 'Marketplace' },
+  ];
+
   return (
-    <footer className="border-t border-gray-100 mt-16 py-8">
-      <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
-        <Link href="/" className="font-mono font-bold text-gray-900">Agent OS</Link>
-        <div className="flex items-center gap-5 flex-wrap justify-center">
-          <Link href="/docs" className="hover:text-gray-700">Docs</Link>
-          <Link href="/docs/api" className="hover:text-gray-700">API Reference</Link>
-          <Link href="/docs/launch" className="hover:text-gray-700">Launch Notes</Link>
-          <Link href="/docs/audit" className="hover:text-gray-700">Audit</Link>
-          <Link href="/docs/primitives" className="hover:text-gray-700">Primitives</Link>
-          <Link href="/docs/skills" className="hover:text-gray-700">Skills</Link>
-          <Link href="/marketplace" className="hover:text-gray-700">Marketplace</Link>
+    <footer style={{
+      borderTop: '1px solid var(--border)',
+      marginTop: '64px',
+      padding: '32px 0',
+    }}>
+      <div style={{
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: '0 24px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '16px',
+      }}>
+        <Link href="/" style={{
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontWeight: 700,
+          fontSize: '14px',
+          color: 'var(--text-primary)',
+          textDecoration: 'none',
+        }}>AgentOS</Link>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0', flexWrap: 'wrap' }}>
+          {links.map(link => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="hover-text-secondary"
+              style={{
+                fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                fontSize: '13px',
+                color: 'var(--text-tertiary)',
+                textDecoration: 'none',
+                padding: '4px 12px',
+                transition: 'color 150ms',
+              }}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
-        <span>MIT License</span>
+
+        <span style={{
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontSize: '12px',
+          color: 'var(--text-tertiary)',
+        }}>MIT License</span>
       </div>
     </footer>
   );

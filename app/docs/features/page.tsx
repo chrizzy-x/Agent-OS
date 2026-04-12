@@ -22,11 +22,11 @@ export default function FeatureCatalogPage() {
       <nav className="sticky top-0 z-40 backdrop-blur-md" style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
+            <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
               A
             </div>
-            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+            <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
           </Link>
           <div className="flex items-center gap-5 text-sm">
             <Link href="/ops" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Ops</Link>
@@ -38,7 +38,7 @@ export default function FeatureCatalogPage() {
 
       <div className="max-w-6xl mx-auto px-4 py-12 space-y-12">
         <section>
-          <div className="badge badge-purple mb-4">Plain-English Catalog</div>
+          <div className="badge badge-accent mb-4">Plain-English Catalog</div>
           <h1 className="text-4xl font-black mb-4">Agent OS project details and every feature in one place</h1>
           <p className="text-lg max-w-4xl" style={{ color: 'var(--text-muted)' }}>
             This page lists every platform feature and runtime function, explains it in simple English, gives two real-world uses, and compares Agent OS to the closest alternative.
@@ -84,7 +84,7 @@ export default function FeatureCatalogPage() {
           {FEATURE_SHOWCASE_CATEGORIES.map(category => (
             <section key={category.key} className="space-y-4">
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="badge badge-purple text-xs">{category.badge}</span>
+                <span className="badge badge-accent text-xs">{category.badge}</span>
                 <h3 className="text-2xl font-bold">{category.name}</h3>
               </div>
               <p className="text-sm max-w-4xl" style={{ color: 'var(--text-muted)' }}>{category.description}</p>
@@ -92,7 +92,7 @@ export default function FeatureCatalogPage() {
                 {category.features.map(feature => (
                   <article key={feature.slug} className="card p-6">
                     <div className="flex items-center gap-3 mb-3 flex-wrap">
-                      <span className="text-xs font-mono" style={{ color: '#a855f7' }}>#{feature.id}</span>
+                      <span className="text-xs font-mono" style={{ color: 'var(--accent)' }}>#{feature.id}</span>
                       <h4 className="text-lg font-semibold">{feature.name}</h4>
                     </div>
                     <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{feature.details}</p>
@@ -136,7 +136,7 @@ export default function FeatureCatalogPage() {
                 {section.items.map(feature => (
                   <article key={feature.slug} className="card p-6">
                     <div className="flex items-center gap-3 mb-3 flex-wrap">
-                      <span className="text-xs font-mono" style={{ color: '#06b6d4' }}>#{feature.id}</span>
+                      <span className="text-xs font-mono" style={{ color: 'var(--text-secondary)' }}>#{feature.id}</span>
                       <h4 className="text-lg font-semibold">{feature.name}</h4>
                     </div>
                     <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{feature.details}</p>

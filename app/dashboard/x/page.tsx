@@ -64,8 +64,8 @@ function DraftStatusBadge({ status }: { status: string }) {
   const className =
     status === 'required' ? 'badge badge-amber' :
     status === 'approved' || status === 'auto_approved' ? 'badge badge-green' :
-    status === 'blocked' ? 'badge badge-cyan' :
-    'badge badge-purple';
+    status === 'blocked' ? 'badge badge-danger' :
+    'badge badge-dim';
 
   return <span className={className}>{status.replace(/_/g, ' ')}</span>;
 }
@@ -74,8 +74,8 @@ function QueueStatusBadge({ status }: { status: string }) {
   const className =
     status === 'queued' ? 'badge badge-amber' :
     status === 'published' ? 'badge badge-green' :
-    status === 'failed' || status === 'canceled' ? 'badge badge-cyan' :
-    'badge badge-purple';
+    status === 'failed' || status === 'canceled' ? 'badge badge-danger' :
+    'badge badge-dim';
 
   return <span className={className}>{status}</span>;
 }
@@ -295,10 +295,10 @@ function DashboardXPageContent() {
         <div className="max-w-7xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/dashboard/social" className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs" style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)', boxShadow: '0 0 12px rgba(249,115,22,0.35)' }}>
+              <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs" style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
                 X
               </div>
-              <span className="font-mono font-bold text-sm">X<span className="gradient-text">Ops</span></span>
+              <span className="font-mono font-bold text-sm">X<span style={{ color: 'var(--accent)' }}>Ops</span></span>
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
               <Link href="/dashboard/social" className="hover:text-white transition-colors">Example Hub</Link>
@@ -513,7 +513,7 @@ function DashboardXPageContent() {
                           <div className="flex items-center gap-2 flex-wrap mb-2">
                             <span className="font-semibold">@{draft.account?.username || 'account'}</span>
                             <DraftStatusBadge status={draft.approval_status} />
-                            <span className="badge badge-purple">{draft.guardrail_status}</span>
+                            <span className="badge badge-dim">{draft.guardrail_status}</span>
                             <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                               {draft.kind}
                             </span>

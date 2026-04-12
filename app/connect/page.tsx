@@ -1,7 +1,8 @@
 'use client';
 
+import { useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { useMemo, useState, type CSSProperties, type FormEvent } from 'react';
+import Nav from '@/components/Nav';
 import {
   DEFAULT_CONNECT_TEST_TOOL,
   DEFAULT_EXTERNAL_AGENT_TOOLS,
@@ -11,15 +12,6 @@ import {
 } from '@/src/external-agents/catalog';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'https://agentos-app.vercel.app';
-const PRIMARY = '#6366f1';
-const BG = '#0a0a0a';
-const SURFACE = '#111111';
-const BORDER = '#222222';
-const TEXT = '#f9fafb';
-const TEXT_SECONDARY = '#9ca3af';
-const SUCCESS = '#22c55e';
-const WARNING = '#f59e0b';
-const ERROR = '#ef4444';
 
 type RegistrationResponse = {
   agentId: string;
@@ -40,12 +32,12 @@ type OutputState = {
 
 const languageTags = ['Python', 'Node.js', 'Rust', 'Go', 'Any language'];
 const capabilityCards = [
-  { icon: '\u26A1', title: 'Primitives', subtitle: '32 built-in tools', detail: 'for any agent' },
-  { icon: '\uD83C\uDF10', title: 'External MCPs', subtitle: 'Gmail, Slack, Stripe', detail: 'and any MCP server' },
-  { icon: '\uD83D\uDEE0\uFE0F', title: 'Skills Marketplace', subtitle: 'Install capabilities', detail: 'on demand' },
-  { icon: '\uD83D\uDCC4', title: 'Database', subtitle: 'Private SQL per', detail: 'agent' },
-  { icon: '\uD83D\uDCE1', title: 'Events', subtitle: 'Pub/sub between', detail: 'agents' },
-  { icon: '\u2699\uFE0F', title: 'Code Execution', subtitle: 'Run Python, JS,', detail: 'Bash in sandbox' },
+  { icon: '⚡', title: 'Primitives', subtitle: '32 built-in tools', detail: 'for any agent' },
+  { icon: '🌐', title: 'External MCPs', subtitle: 'Gmail, Slack, Stripe', detail: 'and any MCP server' },
+  { icon: '🛠️', title: 'Skills Marketplace', subtitle: 'Install capabilities', detail: 'on demand' },
+  { icon: '📄', title: 'Database', subtitle: 'Private SQL per', detail: 'agent' },
+  { icon: '📡', title: 'Events', subtitle: 'Pub/sub between', detail: 'agents' },
+  { icon: '⚙️', title: 'Code Execution', subtitle: 'Run Python, JS,', detail: 'Bash in sandbox' },
 ];
 
 function getToolExample(toolName: string): string {
@@ -53,35 +45,38 @@ function getToolExample(toolName: string): string {
 }
 
 function buildSnippet(tab: 'env' | 'node' | 'python' | 'curl', token: string): string {
-  if (tab === 'env') {
-    return `AGENTOS_TOKEN=${token}\nAGENTOS_MCP_ENDPOINT=${APP_URL}/mcp`;
-  }
-
+  if (tab === 'env') return `AGENTOS_TOKEN=${token}\nAGENTOS_MCP_ENDPOINT=${APP_URL}/mcp`;
   if (tab === 'node') {
     return `// Call any AgentOS tool - primitives, skills, or external MCP\nconst res = await fetch('${APP_URL}/mcp', {\n  method: 'POST',\n  headers: {\n    'Authorization': 'Bearer ${token}',\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    tool: 'agentos.net_http_get', // or 'mcp.gmail.send_email'\n    input: { url: 'https://api.example.com/data' }\n  })\n});\nconst data = await res.json();`;
   }
-
   if (tab === 'python') {
     return `import requests\n\nres = requests.post(\n    '${APP_URL}/mcp',\n    headers={\n        'Authorization': 'Bearer ${token}',\n        'Content-Type': 'application/json'\n    },\n    json={\n        'tool': 'agentos.net_http_get', # or 'mcp.gmail.send_email'\n        'input': {'url': 'https://api.example.com/data'}\n    }\n)\ndata = res.json()`;
   }
-
   return `curl -X POST ${APP_URL}/mcp \\\n  -H "Authorization: Bearer ${token}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"tool":"agentos.net_http_get","input":{"url":"https://httpbin.org/get"}}'`;
 }
 
 function parseDomains(value: string): string[] {
-  return value
-    .split(',')
-    .map(part => part.trim())
-    .filter(Boolean);
+  return value.split(',').map(part => part.trim()).filter(Boolean);
 }
 
 function sortTools(tools: string[]): string[] {
-  return [...tools].sort((left, right) => left.localeCompare(right));
+  return [...tools].sort((l, r) => l.localeCompare(r));
 }
 
 function getPrimitiveTools(tools: string[]): string[] {
-  return tools.filter(tool => tool.startsWith('agentos.') && !tool.startsWith('agentos.skill.'));
+  return tools.filter(t => t.startsWith('agentos.') && !t.startsWith('agentos.skill.'));
 }
+
+const fieldLabelStyle = {
+  display: 'block' as const,
+  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+  fontSize: '11px',
+  fontWeight: 500,
+  color: 'var(--text-secondary)',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.06em',
+  marginBottom: '6px',
+};
 
 export default function ConnectPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -106,15 +101,11 @@ export default function ConnectPage() {
   const primitiveTools = useMemo(() => getPrimitiveTools(registration?.allowedTools ?? selectedTools), [registration, selectedTools]);
   const currentSnippet = registration ? buildSnippet(snippetTab, registration.token) : '';
 
-  function isToolSelected(tool: string): boolean {
-    return selectedTools.includes(tool);
-  }
+  function isToolSelected(tool: string) { return selectedTools.includes(tool); }
 
   function markCopied(key: string) {
     setCopiedKey(key);
-    window.setTimeout(() => {
-      setCopiedKey(current => current === key ? null : current);
-    }, 2000);
+    window.setTimeout(() => setCopiedKey(c => c === key ? null : c), 2000);
   }
 
   async function copyText(key: string, value: string) {
@@ -123,269 +114,245 @@ export default function ConnectPage() {
   }
 
   function toggleTool(tool: string) {
-    setSelectedTools(current => current.includes(tool)
-      ? current.filter(item => item !== tool)
-      : sortTools([...current, tool]));
+    setSelectedTools(c => c.includes(tool) ? c.filter(i => i !== tool) : sortTools([...c, tool]));
   }
 
   function toggleGroup(groupTools: readonly string[]) {
-    const allSelected = groupTools.every(tool => selectedTools.includes(tool));
-    setSelectedTools(current => {
-      if (allSelected) {
-        return current.filter(tool => !groupTools.includes(tool));
-      }
-      return sortTools([...new Set([...current, ...groupTools])]);
-    });
+    const allSelected = groupTools.every(t => selectedTools.includes(t));
+    setSelectedTools(c => allSelected ? c.filter(t => !groupTools.includes(t)) : sortTools([...new Set([...c, ...groupTools])]));
   }
 
   function toggleAllTools() {
-    const allPrimitiveTools = DEFAULT_EXTERNAL_AGENT_TOOLS.every(tool => selectedTools.includes(tool));
-    const allToolsSelected = allPrimitiveTools && selectedTools.includes(EXTERNAL_MCP_WILDCARD);
-
-    if (allToolsSelected) {
-      setSelectedTools([]);
-      return;
-    }
-
-    setSelectedTools(sortTools([...DEFAULT_EXTERNAL_AGENT_TOOLS, EXTERNAL_MCP_WILDCARD]));
+    const all = DEFAULT_EXTERNAL_AGENT_TOOLS.every(t => selectedTools.includes(t)) && selectedTools.includes(EXTERNAL_MCP_WILDCARD);
+    setSelectedTools(all ? [] : sortTools([...DEFAULT_EXTERNAL_AGENT_TOOLS, EXTERNAL_MCP_WILDCARD]));
   }
 
   function resetFlow() {
-    setStep(1);
-    setAgentId('');
-    setName('');
-    setDescription('');
-    setOwnerEmail('');
-    setAllowedDomains('');
-    setSelectedTools([...DEFAULT_EXTERNAL_AGENT_TOOLS]);
-    setAgentIdError('');
-    setSubmitError('');
-    setLoading(false);
-    setRegistration(null);
-    setCopiedKey(null);
-    setSnippetTab('env');
-    setTestTool(DEFAULT_CONNECT_TEST_TOOL);
-    setTestInput(getToolExample(DEFAULT_CONNECT_TEST_TOOL));
-    setTestLoading(false);
-    setOutput(null);
-    setHasSuccessfulTest(false);
+    setStep(1); setAgentId(''); setName(''); setDescription(''); setOwnerEmail('');
+    setAllowedDomains(''); setSelectedTools([...DEFAULT_EXTERNAL_AGENT_TOOLS]);
+    setAgentIdError(''); setSubmitError(''); setLoading(false); setRegistration(null);
+    setCopiedKey(null); setSnippetTab('env'); setTestTool(DEFAULT_CONNECT_TEST_TOOL);
+    setTestInput(getToolExample(DEFAULT_CONNECT_TEST_TOOL)); setTestLoading(false);
+    setOutput(null); setHasSuccessfulTest(false);
   }
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setAgentIdError('');
-    setSubmitError('');
-
+    setAgentIdError(''); setSubmitError('');
     const trimmedAgentId = agentId.trim();
     if (!/^[a-z0-9-]+$/.test(trimmedAgentId)) {
       setAgentIdError('Agent ID must be lowercase letters, numbers, or hyphens only.');
       return;
     }
-
     setLoading(true);
-
     try {
       const response = await fetch('/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          agentId: trimmedAgentId,
-          name: name.trim(),
+          agentId: trimmedAgentId, name: name.trim(),
           description: description.trim() || undefined,
           ownerEmail: ownerEmail.trim() || undefined,
           allowedDomains: parseDomains(allowedDomains),
           allowedTools: selectedTools,
         }),
       });
-
       const data = await response.json();
-      if (response.status === 409) {
-        setAgentIdError('This Agent ID is already taken.');
-        return;
-      }
-
-      if (!response.ok) {
-        setSubmitError(data.error || 'Registration failed');
-        return;
-      }
-
+      if (response.status === 409) { setAgentIdError('This Agent ID is already taken.'); return; }
+      if (!response.ok) { setSubmitError(data.error || 'Registration failed'); return; }
       const result = data as RegistrationResponse;
       const nextTools = getPrimitiveTools(result.allowedTools);
       const nextTool = nextTools.includes(DEFAULT_CONNECT_TEST_TOOL) ? DEFAULT_CONNECT_TEST_TOOL : nextTools[0] ?? DEFAULT_CONNECT_TEST_TOOL;
-      setRegistration(result);
-      setTestTool(nextTool);
-      setTestInput(getToolExample(nextTool));
-      setStep(2);
+      setRegistration(result); setTestTool(nextTool); setTestInput(getToolExample(nextTool)); setStep(2);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Registration failed');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   async function runTest() {
-    if (!registration) {
-      return;
-    }
-
+    if (!registration) return;
     setTestLoading(true);
-
     try {
       const parsedInput = JSON.parse(testInput);
       const response = await fetch('/mcp', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${registration.token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${registration.token}` },
         body: JSON.stringify({ tool: testTool, input: parsedInput }),
       });
-
       const data = await response.json();
-      if (!response.ok) {
-        setOutput({
-          success: false,
-          label: '\u2717 Error',
-          body: JSON.stringify(data, null, 2),
-        });
-        return;
-      }
-
-      setOutput({
-        success: true,
-        label: '\u2713 Connection successful',
-        body: JSON.stringify(data, null, 2),
-      });
+      if (!response.ok) { setOutput({ success: false, label: '✗ Error', body: JSON.stringify(data, null, 2) }); return; }
+      setOutput({ success: true, label: '✓ Connection successful', body: JSON.stringify(data, null, 2) });
       setHasSuccessfulTest(true);
     } catch (error) {
-      setOutput({
-        success: false,
-        label: '\u2717 Error',
-        body: JSON.stringify({ error: error instanceof Error ? error.message : 'Invalid JSON input' }, null, 2),
-      });
-    } finally {
-      setTestLoading(false);
-    }
+      setOutput({ success: false, label: '✗ Error', body: JSON.stringify({ error: error instanceof Error ? error.message : 'Invalid JSON input' }, null, 2) });
+    } finally { setTestLoading(false); }
   }
 
   return (
-    <div style={{ background: BG, color: TEXT, minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <div style={{ maxWidth: 1160, margin: '0 auto', padding: '40px 20px 80px' }}>
-        <div style={{ marginBottom: 28 }}>
-          <Link href="/" style={{ color: TEXT_SECONDARY, fontSize: 14, textDecoration: 'none' }}>\u2190 Back to AgentOS</Link>
-        </div>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+      <Nav activePath="/connect" />
 
-        <section style={{ marginBottom: 36 }}>
-          <h1 style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.05, marginBottom: 16 }}>Connect Any Agent to AgentOS</h1>
-          <p style={{ fontSize: 18, color: TEXT_SECONDARY, maxWidth: 900, lineHeight: 1.6, whiteSpace: 'pre-line', marginBottom: 20 }}>
-            {'One connection. Every capability.\nAgentOS gives your agent access to 32 built-in tools, the skills marketplace,\nand any external MCP server - Gmail, Slack, Stripe, GitHub, and more.\nWhatever your agent does, whatever it\'s built on - connect it in 60 seconds.'}
+      <div style={{ maxWidth: '1160px', margin: '0 auto', padding: '40px 24px 80px' }}>
+
+        {/* Hero */}
+        <section style={{ marginBottom: '48px' }}>
+          <h1 style={{
+            fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+            fontSize: '42px',
+            fontWeight: 700,
+            lineHeight: 1.1,
+            marginBottom: '16px',
+            marginTop: 0,
+            color: 'var(--text-primary)',
+          }}>Connect Any Agent to AgentOS</h1>
+          <p style={{
+            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+            fontSize: '16px',
+            color: 'var(--text-secondary)',
+            maxWidth: '680px',
+            lineHeight: 1.7,
+            marginBottom: '24px',
+          }}>
+            One connection. Every capability. AgentOS gives your agent access to 32 built-in tools, the skills marketplace,
+            and any external MCP server — Gmail, Slack, Stripe, GitHub, and more. Connect in 60 seconds.
           </p>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '32px' }}>
             {languageTags.map(tag => (
-              <span key={tag} style={{ padding: '8px 12px', borderRadius: 999, border: `1px solid ${PRIMARY}`, background: '#1a1a2e', color: TEXT, fontSize: 13 }}>
-                {tag}
-              </span>
+              <span key={tag} style={{
+                padding: '6px 14px',
+                border: '1px solid var(--border-active)',
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: '12px',
+                color: 'var(--text-secondary)',
+              }}>{tag}</span>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)' }}>
             {capabilityCards.map(card => (
-              <div key={card.title} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 18 }}>
-                <div style={{ fontSize: 28, marginBottom: 10 }}>{card.icon}</div>
-                <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{card.title}</div>
-                <div style={{ color: TEXT, fontSize: 14, marginBottom: 4 }}>{card.subtitle}</div>
-                <div style={{ color: TEXT_SECONDARY, fontSize: 13 }}>{card.detail}</div>
+              <div key={card.title} style={{ backgroundColor: 'var(--bg-secondary)', padding: '20px' }}>
+                <div style={{ fontSize: '24px', marginBottom: '10px' }}>{card.icon}</div>
+                <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>{card.title}</div>
+                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>{card.subtitle}</div>
+                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '12px', color: 'var(--text-tertiary)' }}>{card.detail}</div>
               </div>
             ))}
           </div>
         </section>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 28, flexWrap: 'wrap' }}>
-          {[1, 2, 3].map(index => {
-            const active = step === index;
-            const complete = step > index;
-            return (
-              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Step indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '32px', borderBottom: '1px solid var(--border)', paddingBottom: '24px' }}>
+          {[
+            { n: 1, label: 'Register' },
+            { n: 2, label: 'Get Token' },
+            { n: 3, label: 'Test Live' },
+          ].map(({ n, label }, i) => (
+            <div key={n} style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
+              {i > 0 && <div style={{ width: '40px', height: '1px', backgroundColor: step > i ? 'var(--accent)' : 'var(--border)' }} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 4px' }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  backgroundColor: step === n ? 'var(--accent)' : step > n ? 'rgba(0,255,136,0.12)' : 'var(--bg-secondary)',
+                  color: step === n ? 'var(--bg-primary)' : step > n ? 'var(--accent)' : 'var(--text-tertiary)',
+                  border: `1px solid ${step >= n ? 'var(--accent)' : 'var(--border)'}`,
+                  flexShrink: 0,
+                }}>{n}</div>
                 <span style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: '50%',
-                  border: `2px solid ${active || complete ? PRIMARY : TEXT_SECONDARY}`,
-                  background: active || complete ? PRIMARY : 'transparent',
-                  display: 'inline-block',
-                }} />
-                <span style={{ color: active ? TEXT : TEXT_SECONDARY, fontSize: 14 }}>Step {index}</span>
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '13px',
+                  color: step === n ? 'var(--text-primary)' : 'var(--text-secondary)',
+                }}>{label}</span>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
 
+        {/* Step 1: Register */}
         {step === 1 && (
-          <form onSubmit={handleRegister} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: 28 }}>
-            <div style={{ marginBottom: 24 }}>
-              <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Register Your Agent</h2>
-              <p style={{ color: TEXT_SECONDARY, fontSize: 15 }}>Register once, get a token, and start calling AgentOS from any language.</p>
+          <form onSubmit={handleRegister} style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px' }}>
+            <div style={{ marginBottom: '28px' }}>
+              <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '24px', fontWeight: 700, marginBottom: '8px', marginTop: 0 }}>Register Your Agent</h2>
+              <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>Register once, get a token, and start calling AgentOS from any language.</p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, marginBottom: 18 }}>
-              <label style={{ display: 'block' }}>
-                <div style={{ fontSize: 13, color: TEXT, marginBottom: 8, fontWeight: 600 }}>Agent ID</div>
-                <input value={agentId} onChange={event => setAgentId(event.target.value)} placeholder="my-agent" style={inputStyle} required />
-                <div style={{ color: TEXT_SECONDARY, fontSize: 12, marginTop: 6 }}>Lowercase letters, numbers, hyphens only</div>
-                {agentIdError && <div style={{ color: ERROR, fontSize: 12, marginTop: 6 }}>{agentIdError}</div>}
-              </label>
-
-              <label style={{ display: 'block' }}>
-                <div style={{ fontSize: 13, color: TEXT, marginBottom: 8, fontWeight: 600 }}>Agent Name</div>
-                <input value={name} onChange={event => setName(event.target.value)} placeholder="My Trading Agent" style={inputStyle} required />
-              </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+              <div>
+                <label style={fieldLabelStyle}>Agent ID *</label>
+                <input value={agentId} onChange={e => setAgentId(e.target.value)} placeholder="my-agent" className="input-dark" required />
+                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Lowercase letters, numbers, hyphens only</div>
+                {agentIdError && <div style={{ color: 'var(--danger)', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '12px', marginTop: '4px' }}>{agentIdError}</div>}
+              </div>
+              <div>
+                <label style={fieldLabelStyle}>Agent Name *</label>
+                <input value={name} onChange={e => setName(e.target.value)} placeholder="My Trading Agent" className="input-dark" required />
+              </div>
             </div>
 
-            <label style={{ display: 'block', marginBottom: 18 }}>
-              <div style={{ fontSize: 13, color: TEXT, marginBottom: 8, fontWeight: 600 }}>Description</div>
-              <textarea value={description} onChange={event => setDescription(event.target.value)} rows={3} placeholder="What does your agent do?" style={{ ...inputStyle, minHeight: 96, resize: 'vertical' }} />
-            </label>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, marginBottom: 24 }}>
-              <label style={{ display: 'block' }}>
-                <div style={{ fontSize: 13, color: TEXT, marginBottom: 8, fontWeight: 600 }}>Your Email</div>
-                <input type="email" value={ownerEmail} onChange={event => setOwnerEmail(event.target.value)} placeholder="you@example.com" style={inputStyle} />
-              </label>
-
-              <label style={{ display: 'block' }}>
-                <div style={{ fontSize: 13, color: TEXT, marginBottom: 8, fontWeight: 600 }}>Allowed Domains</div>
-                <input value={allowedDomains} onChange={event => setAllowedDomains(event.target.value)} placeholder="api.binance.com, api.coingecko.com" style={inputStyle} />
-                <div style={{ color: TEXT_SECONDARY, fontSize: 12, marginTop: 6 }}>Comma-separated. Leave blank for unrestricted outbound domains, still protected by HTTPS and SSRF rules.</div>
-              </label>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={fieldLabelStyle}>Description</label>
+              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What does your agent do?" className="input-dark" style={{ resize: 'vertical', minHeight: '80px' }} />
             </div>
 
-            <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 24, marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+              <div>
+                <label style={fieldLabelStyle}>Your Email</label>
+                <input type="email" value={ownerEmail} onChange={e => setOwnerEmail(e.target.value)} placeholder="you@example.com" className="input-dark" />
+              </div>
+              <div>
+                <label style={fieldLabelStyle}>Allowed Domains</label>
+                <input value={allowedDomains} onChange={e => setAllowedDomains(e.target.value)} placeholder="api.binance.com, api.coingecko.com" className="input-dark" />
+                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Comma-separated. Leave blank for unrestricted outbound (SSRF protected).</div>
+              </div>
+            </div>
+
+            {/* Tool permissions */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '24px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Tool Permissions</div>
-                  <div style={{ fontSize: 13, color: TEXT_SECONDARY }}>Choose which built-in tools and MCP permissions this agent can use.</div>
+                  <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>Tool Permissions</div>
+                  <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>Choose which built-in tools and MCP permissions this agent can use.</div>
                 </div>
-                <button type="button" onClick={toggleAllTools} style={linkButtonStyle}>
-                  {DEFAULT_EXTERNAL_AGENT_TOOLS.every(tool => selectedTools.includes(tool)) && selectedTools.includes(EXTERNAL_MCP_WILDCARD) ? 'Deselect All' : 'Select All'}
+                <button type="button" onClick={toggleAllTools} style={{
+                  background: 'none', border: 'none',
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '13px', color: 'var(--accent)', cursor: 'pointer', padding: 0,
+                }}>
+                  {DEFAULT_EXTERNAL_AGENT_TOOLS.every(t => selectedTools.includes(t)) && selectedTools.includes(EXTERNAL_MCP_WILDCARD) ? 'Deselect All' : 'Select All'}
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {EXTERNAL_AGENT_TOOL_GROUPS.map(group => {
-                  const groupSelected = group.tools.every(tool => isToolSelected(tool));
+                  const groupSelected = group.tools.every(t => isToolSelected(t));
                   return (
-                    <div key={group.id} style={{ background: '#0d0d0d', border: `1px solid ${BORDER}`, borderRadius: 16, padding: 18 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700 }}>{group.label}</div>
-                        <button type="button" onClick={() => toggleGroup(group.tools)} style={linkButtonStyle}>
+                    <div key={group.id} style={{ background: 'var(--code-bg)', border: '1px solid var(--code-border)', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: 'var(--accent)', letterSpacing: '0.06em' }}>{group.label}</div>
+                        <button type="button" onClick={() => toggleGroup(group.tools)} style={{
+                          background: 'none', border: 'none',
+                          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                          fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0,
+                        }}>
                           {groupSelected ? 'Deselect Group' : 'Select Group'}
                         </button>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
                         {group.tools.map(tool => (
-                          <label key={tool} style={checkboxLabelStyle}>
-                            <input type="checkbox" checked={isToolSelected(tool)} onChange={() => toggleTool(tool)} />
+                          <label key={tool} style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                            fontSize: '12px', color: 'var(--text-primary)', cursor: 'pointer',
+                          }}>
+                            <input type="checkbox" checked={isToolSelected(tool)} onChange={() => toggleTool(tool)}
+                              style={{ accentColor: 'var(--accent)', width: '14px', height: '14px' }} />
                             <span>{tool}</span>
                           </label>
                         ))}
@@ -394,160 +361,180 @@ export default function ConnectPage() {
                   );
                 })}
 
-                <div style={{ background: '#0d0d0d', border: `1px solid ${BORDER}`, borderRadius: 16, padding: 18 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700 }}>EXTERNAL MCP</div>
-                    <button type="button" onClick={() => toggleTool(EXTERNAL_MCP_WILDCARD)} style={linkButtonStyle}>
+                {/* External MCP group */}
+                <div style={{ background: 'var(--code-bg)', border: '1px solid var(--code-border)', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600, color: 'var(--accent)', letterSpacing: '0.06em' }}>EXTERNAL MCP</div>
+                    <button type="button" onClick={() => toggleTool(EXTERNAL_MCP_WILDCARD)} style={{
+                      background: 'none', border: 'none',
+                      fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                      fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0,
+                    }}>
                       {isToolSelected(EXTERNAL_MCP_WILDCARD) ? 'Deselect Group' : 'Select Group'}
                     </button>
                   </div>
-                  <label style={checkboxLabelStyle}>
-                    <input type="checkbox" checked={isToolSelected(EXTERNAL_MCP_WILDCARD)} onChange={() => toggleTool(EXTERNAL_MCP_WILDCARD)} />
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                    fontSize: '12px', color: 'var(--text-primary)', cursor: 'pointer', marginBottom: '8px',
+                  }}>
+                    <input type="checkbox" checked={isToolSelected(EXTERNAL_MCP_WILDCARD)} onChange={() => toggleTool(EXTERNAL_MCP_WILDCARD)}
+                      style={{ accentColor: 'var(--accent)', width: '14px', height: '14px' }} />
                     <span>mcp.*</span>
                   </label>
-                  <div style={{ color: TEXT_SECONDARY, fontSize: 12, marginTop: 10 }}>
-                    External MCP tools (Gmail, Slack, Stripe, etc.) are available once connected servers are configured in your AgentOS dashboard.
+                  <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                    External MCP tools (Gmail, Slack, Stripe, etc.) available once connected servers are configured in your dashboard.
                   </div>
                 </div>
               </div>
             </div>
 
-            {submitError && <div style={{ color: ERROR, fontSize: 13, marginBottom: 14 }}>{submitError}</div>}
+            {submitError && <div style={{ color: 'var(--danger)', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', marginBottom: '16px' }}>{submitError}</div>}
 
-            <button type="submit" disabled={loading} style={{ ...primaryButtonStyle, width: '100%', height: 48, opacity: loading ? 0.7 : 1 }}>
-              {loading ? 'Connecting...' : 'Connect Agent'}
+            <button type="submit" disabled={loading} className="btn-primary"
+              style={{ width: '100%', justifyContent: 'center', height: '48px', opacity: loading ? 0.7 : 1, cursor: loading ? 'not-allowed' : 'pointer', fontSize: '15px' }}>
+              {loading ? 'Connecting...' : 'Connect Agent →'}
             </button>
           </form>
         )}
 
+        {/* Step 2: Token */}
         {step === 2 && registration && (
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: 28 }}>
-            <div style={{ fontSize: 40, color: SUCCESS, marginBottom: 12 }}>\u2713</div>
-            <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Your agent is connected.</h2>
-            <p style={{ color: TEXT_SECONDARY, marginBottom: 24 }}>{registration.message}</p>
+          <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px' }}>
+            <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '28px', marginBottom: '12px' }}>✓</div>
+            <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '24px', fontWeight: 700, marginBottom: '8px', marginTop: 0 }}>Your agent is connected.</h2>
+            <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>{registration.message}</p>
 
-            <div style={{ position: 'relative', background: '#0d1117', border: '1px solid #30363d', borderRadius: 16, padding: 16, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13, color: TEXT, overflowWrap: 'break-word', marginBottom: 14 }}>
-              <button type="button" onClick={() => copyText('token', registration.token)} style={{ ...smallButtonStyle, position: 'absolute', top: 14, right: 14 }}>
-                {copiedKey === 'token' ? 'Copied \u2713' : 'Copy Token'}
+            {/* Token display */}
+            <div style={{ position: 'relative', background: 'var(--code-bg)', border: '1px solid var(--code-border)', padding: '16px', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--accent)', overflowWrap: 'break-word', marginBottom: '12px' }}>
+              <button type="button" onClick={() => copyText('token', registration.token)} style={{
+                position: 'absolute', top: '12px', right: '12px',
+                background: 'none', border: '1px solid var(--border)', borderRadius: '2px',
+                color: copiedKey === 'token' ? 'var(--accent)' : 'var(--text-tertiary)',
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: '11px', padding: '3px 10px', cursor: 'pointer',
+              }}>
+                {copiedKey === 'token' ? 'copied!' : 'copy'}
               </button>
               {registration.token}
             </div>
 
-            <div style={{ background: '#451a03', border: '1px solid #92400e', color: '#fcd34d', borderRadius: 14, padding: 14, fontSize: 13, marginBottom: 20 }}>
-              \u26A0\uFE0F Save this token now. It will not be shown again. Anyone with this token can use your AgentOS agent.
+            {/* Warning */}
+            <div style={{ background: 'rgba(255,170,0,0.06)', border: '1px solid rgba(255,170,0,0.25)', color: 'var(--warning)', padding: '12px 16px', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', marginBottom: '20px' }}>
+              ⚠️ Save this token now. It will not be shown again.
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-              <div style={{ fontSize: 14, color: TEXT_SECONDARY }}>Endpoint: <span style={{ color: TEXT, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{registration.mcpEndpoint}</span></div>
-              <button type="button" onClick={() => copyText('endpoint', registration.mcpEndpoint)} style={smallButtonStyle}>
-                {copiedKey === 'endpoint' ? 'Copied \u2713' : 'Copy'}
-              </button>
+            {/* Endpoint */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+              <span style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>Endpoint:</span>
+              <code style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-primary)', background: 'var(--code-bg)', border: '1px solid var(--code-border)', padding: '4px 10px' }}>{registration.mcpEndpoint}</code>
+              <button type="button" onClick={() => copyText('endpoint', registration.mcpEndpoint)} style={{
+                background: 'none', border: '1px solid var(--border)', borderRadius: '2px',
+                color: copiedKey === 'endpoint' ? 'var(--accent)' : 'var(--text-tertiary)',
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: '11px', padding: '3px 10px', cursor: 'pointer',
+              }}>{copiedKey === 'endpoint' ? 'copied!' : 'copy'}</button>
             </div>
 
-            <div style={{ background: '#0d0d0d', border: `1px solid ${BORDER}`, borderRadius: 16, padding: 18, marginBottom: 24 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>What your agent can access</div>
-              <div style={{ display: 'grid', gap: 8, color: TEXT_SECONDARY, fontSize: 14 }}>
-                <div>\u2713 {registration.allowedTools.filter(tool => tool.startsWith('agentos.') && !tool.startsWith('agentos.skill.')).length} AgentOS primitives (agentos.*)</div>
-                <div>\u2713 Skills marketplace (agentos.skill.*) once you grant or install the capabilities you need</div>
-                <div>\u2713 External MCP servers (mcp.*) when configured</div>
+            {/* Access summary */}
+            <div style={{ background: 'var(--code-bg)', border: '1px solid var(--code-border)', padding: '16px', marginBottom: '24px' }}>
+              <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>What your agent can access</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                <div><span style={{ color: 'var(--accent)', marginRight: '8px' }}>✓</span>{registration.allowedTools.filter(t => t.startsWith('agentos.') && !t.startsWith('agentos.skill.')).length} AgentOS primitives (agentos.*)</div>
+                <div><span style={{ color: 'var(--accent)', marginRight: '8px' }}>✓</span>Skills marketplace (agentos.skill.*) once installed</div>
+                <div><span style={{ color: 'var(--accent)', marginRight: '8px' }}>✓</span>External MCP servers (mcp.*) when configured</div>
               </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                {([
-                  ['env', '.env'],
-                  ['node', 'Node.js'],
-                  ['python', 'Python'],
-                  ['curl', 'curl'],
-                ] as const).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setSnippetTab(key)}
-                    style={{
-                      ...smallButtonStyle,
-                      background: snippetTab === key ? PRIMARY : '#181818',
-                      border: `1px solid ${snippetTab === key ? PRIMARY : BORDER}`,
-                      color: TEXT,
-                    }}
-                  >
-                    {label}
-                  </button>
+            {/* Code snippet tabs */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid var(--border)', marginBottom: '0' }}>
+                {([['env', '.env'], ['node', 'Node.js'], ['python', 'Python'], ['curl', 'curl']] as const).map(([key, label]) => (
+                  <button key={key} type="button" onClick={() => setSnippetTab(key)} style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: snippetTab === key ? '2px solid var(--accent)' : '2px solid transparent',
+                    padding: '8px 16px',
+                    fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                    fontSize: '12px',
+                    color: snippetTab === key ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    marginBottom: '-1px',
+                  }}>{label}</button>
                 ))}
               </div>
-              <div style={{ position: 'relative', background: '#0d1117', border: '1px solid #30363d', borderRadius: 16, padding: 16, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13, color: TEXT, overflowX: 'auto' }}>
-                <button type="button" onClick={() => copyText(`snippet-${snippetTab}`, currentSnippet)} style={{ ...smallButtonStyle, position: 'absolute', top: 14, right: 14 }}>
-                  {copiedKey === `snippet-${snippetTab}` ? 'Copied \u2713' : 'Copy'}
-                </button>
-                <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{currentSnippet}</pre>
+              <div style={{ position: 'relative', background: 'var(--code-bg)', border: '1px solid var(--code-border)', borderTop: 'none', padding: '16px' }}>
+                <button type="button" onClick={() => copyText(`snip-${snippetTab}`, currentSnippet)} style={{
+                  position: 'absolute', top: '12px', right: '12px',
+                  background: 'none', border: '1px solid var(--border)', borderRadius: '2px',
+                  color: copiedKey === `snip-${snippetTab}` ? 'var(--accent)' : 'var(--text-tertiary)',
+                  fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                  fontSize: '11px', padding: '3px 10px', cursor: 'pointer',
+                }}>{copiedKey === `snip-${snippetTab}` ? 'copied!' : 'copy'}</button>
+                <pre style={{ margin: 0, fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)', overflowX: 'auto', whiteSpace: 'pre-wrap' }}>{currentSnippet}</pre>
               </div>
             </div>
 
-            <button type="button" onClick={() => setStep(3)} style={{ ...primaryButtonStyle, width: 220, height: 48 }}>
-              Continue \u2192
+            <button type="button" onClick={() => setStep(3)} className="btn-primary" style={{ padding: '12px 28px', fontSize: '14px' }}>
+              Continue →
             </button>
           </div>
         )}
 
+        {/* Step 3: Test */}
         {step === 3 && registration && (
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, padding: 28 }}>
-            <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Test it live.</h2>
-            <p style={{ color: TEXT_SECONDARY, marginBottom: 24 }}>Run a real tool call right now and confirm your agent is connected.</p>
+          <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px' }}>
+            <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '24px', fontWeight: 700, marginBottom: '8px', marginTop: 0 }}>Test it live.</h2>
+            <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Run a real tool call right now and confirm your agent is connected.</p>
 
-            <div style={{ display: 'grid', gap: 16, marginBottom: 18 }}>
-              <label>
-                <div style={{ fontSize: 13, color: TEXT, marginBottom: 8, fontWeight: 600 }}>Tool</div>
-                <select
-                  value={testTool}
-                  onChange={event => {
-                    const nextTool = event.target.value;
-                    setTestTool(nextTool);
-                    setTestInput(getToolExample(nextTool));
-                  }}
-                  style={inputStyle}
-                >
-                  {primitiveTools.map(tool => (
-                    <option key={tool} value={tool}>{tool}</option>
-                  ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+              <div>
+                <label style={fieldLabelStyle}>Tool</label>
+                <select value={testTool} onChange={e => { setTestTool(e.target.value); setTestInput(getToolExample(e.target.value)); }} className="input-dark">
+                  {primitiveTools.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-              </label>
-
-              <label>
-                <div style={{ fontSize: 13, color: TEXT, marginBottom: 8, fontWeight: 600 }}>Input JSON</div>
-                <textarea value={testInput} onChange={event => setTestInput(event.target.value)} rows={8} style={{ ...inputStyle, minHeight: 200, resize: 'vertical', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }} />
-              </label>
+              </div>
+              <div>
+                <label style={fieldLabelStyle}>Input JSON</label>
+                <textarea value={testInput} onChange={e => setTestInput(e.target.value)} rows={8} className="input-dark"
+                  style={{ minHeight: '180px', resize: 'vertical', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px' }} />
+              </div>
             </div>
 
-            <button type="button" onClick={() => void runTest()} disabled={testLoading || primitiveTools.length === 0} style={{ ...primaryButtonStyle, width: 180, height: 48, opacity: testLoading || primitiveTools.length === 0 ? 0.7 : 1 }}>
+            <button type="button" onClick={() => void runTest()} disabled={testLoading || primitiveTools.length === 0} className="btn-primary"
+              style={{ padding: '12px 28px', fontSize: '14px', opacity: testLoading || primitiveTools.length === 0 ? 0.7 : 1 }}>
               {testLoading ? 'Running...' : 'Run Test'}
             </button>
 
             {primitiveTools.length === 0 && (
-              <div style={{ color: WARNING, fontSize: 13, marginTop: 12 }}>No primitive tools were granted to this agent, so there is nothing to test here yet.</div>
+              <div style={{ color: 'var(--warning)', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', marginTop: '12px' }}>
+                No primitive tools were granted to this agent.
+              </div>
             )}
 
             {output && (
-              <div style={{ marginTop: 24 }}>
-                <div style={{ color: output.success ? SUCCESS : ERROR, fontWeight: 700, marginBottom: 8 }}>{output.label}</div>
-                <div style={{ background: '#0d1117', border: `1px solid ${output.success ? SUCCESS : ERROR}`, borderRadius: 16, padding: 16, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13, color: TEXT }}>
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{output.body}</pre>
+              <div style={{ marginTop: '24px' }}>
+                <div style={{ color: output.success ? 'var(--accent)' : 'var(--danger)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontWeight: 700, marginBottom: '8px', fontSize: '13px' }}>{output.label}</div>
+                <div style={{ background: 'var(--code-bg)', border: `1px solid ${output.success ? 'rgba(0,255,136,0.3)' : 'rgba(255,68,68,0.3)'}`, padding: '16px' }}>
+                  <pre style={{ margin: 0, fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{output.body}</pre>
                 </div>
               </div>
             )}
 
             {hasSuccessfulTest && (
-              <div style={{ marginTop: 28, background: '#0d0d0d', border: `1px solid ${BORDER}`, borderRadius: 16, padding: 18 }}>
-                <div style={{ display: 'grid', gap: 8, marginBottom: 14, fontSize: 14 }}>
-                  <div style={{ color: SUCCESS }}>\u2713 Agent registered</div>
-                  <div style={{ color: SUCCESS }}>\u2713 Token saved</div>
-                  <div style={{ color: SUCCESS }}>\u2713 Connection live</div>
+              <div style={{ marginTop: '32px', background: 'var(--code-bg)', border: '1px solid var(--code-border)', padding: '24px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+                  {['Agent registered', 'Token saved', 'Connection live'].map(item => (
+                    <div key={item} style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--accent)' }}>✓ {item}</div>
+                  ))}
                 </div>
-                <div style={{ color: TEXT, fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Your agent is now powered by AgentOS.</div>
-                <div style={{ color: TEXT_SECONDARY, fontSize: 14, marginBottom: 18 }}>One token. Primitives, skills, and every connected MCP server. Whatever your agent does, wherever it runs.</div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <Link href="/docs" style={{ ...linkAsButtonStyle, background: PRIMARY, border: `1px solid ${PRIMARY}` }}>View Docs</Link>
-                  <button type="button" onClick={resetFlow} style={{ ...linkAsButtonStyle, background: 'transparent', border: `1px solid ${BORDER}` }}>Connect Another Agent</button>
+                <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>Your agent is now powered by AgentOS.</div>
+                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                  One token. Primitives, skills, and every connected MCP server.
+                </div>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <Link href="/docs" className="btn-primary">View Docs</Link>
+                  <button type="button" onClick={resetFlow} className="btn-ghost">Connect Another Agent</button>
                 </div>
               </div>
             )}
@@ -557,66 +544,3 @@ export default function ConnectPage() {
     </div>
   );
 }
-
-const inputStyle: CSSProperties = {
-  width: '100%',
-  background: '#0d0d0d',
-  border: `1px solid ${BORDER}`,
-  borderRadius: 12,
-  color: TEXT,
-  padding: '12px 14px',
-  fontSize: 14,
-  outline: 'none',
-};
-
-const primaryButtonStyle: CSSProperties = {
-  background: PRIMARY,
-  color: TEXT,
-  border: `1px solid ${PRIMARY}`,
-  borderRadius: 12,
-  fontWeight: 700,
-  fontSize: 14,
-  cursor: 'pointer',
-};
-
-const smallButtonStyle: CSSProperties = {
-  background: '#181818',
-  color: TEXT,
-  border: `1px solid ${BORDER}`,
-  borderRadius: 10,
-  fontSize: 12,
-  fontWeight: 600,
-  padding: '8px 12px',
-  cursor: 'pointer',
-};
-
-const linkButtonStyle: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: PRIMARY,
-  cursor: 'pointer',
-  fontSize: 13,
-  padding: 0,
-};
-
-const checkboxLabelStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  color: TEXT,
-  fontSize: 13,
-};
-
-const linkAsButtonStyle: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: 180,
-  minHeight: 44,
-  borderRadius: 12,
-  color: TEXT,
-  textDecoration: 'none',
-  fontWeight: 700,
-  fontSize: 14,
-  padding: '0 18px',
-};

@@ -104,9 +104,9 @@ function CryptoPayModal({ info, onConfirm, onClose, busy, errorMsg }: {
         <p className="text-xs mb-1.5" style={{ color: 'var(--text-muted)' }}>Send to:</p>
         <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 mb-4"
           style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)' }}>
-          <code className="text-xs flex-1 break-all" style={{ color: '#a855f7' }}>{info.wallet}</code>
-          <button onClick={copyWallet} className="text-xs flex-shrink-0 px-2 py-1 rounded font-medium"
-            style={{ background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(168,85,247,0.15)', color: copied ? '#86efac' : '#a855f7' }}>
+          <code className="text-xs flex-1 break-all" style={{ color: 'var(--accent)' }}>{info.wallet}</code>
+          <button onClick={copyWallet} className="text-xs flex-shrink-0 px-2 py-1 font-medium"
+            style={{ background: copied ? 'var(--accent-glow)' : 'transparent', border: `1px solid ${copied ? 'var(--accent)' : 'var(--border-active)'}`, color: copied ? 'var(--accent)' : 'var(--text-secondary)' }}>
             {copied ? '✓' : 'Copy'}
           </button>
         </div>
@@ -300,7 +300,7 @@ console.log(result.result);`;
       <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: 'var(--bg)' }}>
         <div className="text-4xl">🔍</div>
         <p className="font-medium">Skill not found</p>
-        <Link href="/marketplace" className="text-sm hover:underline" style={{ color: '#a855f7' }}>
+        <Link href="/marketplace" className="text-sm hover:underline" style={{ color: 'var(--accent)' }}>
           ← Back to Marketplace
         </Link>
       </div>
@@ -314,14 +314,14 @@ console.log(result.result);`;
         style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
+            <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
               A
             </div>
-            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+            <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
           </Link>
           <div className="flex items-center gap-6">
-            <Link href="/marketplace" className="text-sm transition-colors hover:text-white" style={{ color: '#a855f7' }}>
+            <Link href="/marketplace" className="text-sm transition-colors hover:text-white" style={{ color: 'var(--accent)' }}>
               ← Marketplace
             </Link>
             <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
@@ -339,7 +339,7 @@ console.log(result.result);`;
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   <h1 className="text-2xl font-black">{skill.name}</h1>
                   {skill.verified && <span className="badge badge-green text-xs">✓ Official</span>}
-                  <span className="badge badge-purple text-xs">{skill.category}</span>
+                  <span className="badge badge-accent text-xs">{skill.category}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm flex-wrap mb-3" style={{ color: 'var(--text-muted)' }}>
                   <span>by @{skill.author_name}</span>
@@ -368,7 +368,7 @@ console.log(result.result);`;
                   <span className="text-2xl font-black" style={{ color: '#22c55e' }}>Free</span>
                 ) : (
                   <div>
-                    <span className="text-2xl font-black" style={{ color: '#a855f7' }}>
+                    <span className="text-2xl font-black" style={{ color: 'var(--accent)' }}>
                       ${skill.price_per_call}
                     </span>
                     <span className="text-sm font-normal" style={{ color: 'var(--text-muted)' }}>/mo</span>
@@ -450,7 +450,7 @@ console.log(result.result);`;
                   <div key={i} className="rounded-lg p-4"
                     style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
                     <div className="font-mono text-sm mb-1">
-                      <span style={{ color: '#a855f7' }}>{cap.name}</span>
+                      <span style={{ color: 'var(--accent)' }}>{cap.name}</span>
                       <span style={{ color: 'var(--text-muted)' }}>({Object.keys(cap.params || {}).join(', ')})</span>
                       {cap.returns && <span style={{ color: '#67e8f9' }}> → {cap.returns}</span>}
                     </div>
@@ -557,8 +557,7 @@ console.log(result.result);`;
                 <h3 className="text-sm font-bold mb-3">Required Primitives</h3>
                 <div className="flex flex-wrap gap-1.5">
                   {skill.primitives_required.map(p => (
-                    <span key={p} className="text-xs font-mono rounded px-2 py-0.5"
-                      style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)', color: '#67e8f9' }}>
+                    <span key={p} className="tag text-xs">
                       {p}
                     </span>
                   ))}
@@ -586,13 +585,13 @@ console.log(result.result);`;
                 <div className="space-y-2 text-sm">
                   {skill.homepage_url && (
                     <a href={skill.homepage_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 hover:underline" style={{ color: '#a855f7' }}>
+                      className="flex items-center gap-2 hover:underline" style={{ color: 'var(--accent)' }}>
                       🌐 Homepage
                     </a>
                   )}
                   {skill.repository_url && (
                     <a href={skill.repository_url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 hover:underline" style={{ color: '#a855f7' }}>
+                      className="flex items-center gap-2 hover:underline" style={{ color: 'var(--accent)' }}>
                       📦 Repository
                     </a>
                   )}

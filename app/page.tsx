@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import CodeBlock from '@/components/CodeBlock';
+import Nav from '@/components/Nav';
+import Badge from '@/components/Badge';
+import FadeIn from '@/components/FadeIn';
 import { APP_URL } from '@/lib/config';
-import { FeatureShowcase } from '@/components/FeatureShowcase';
-import TokenSection from '@/components/TokenSection';
 
 const CODE_EXAMPLE = `import { AgentOS } from '@agentos/sdk';
 
@@ -41,9 +41,12 @@ if (signal.output === 'BUY') {
     action: 'BUY',
     price: price.data.price
   });
-}`;
+}
 
-const BEFORE_CODE = `// Before Agent OS
+// Save report
+await os.fs.write('report.json', JSON.stringify(signal));`;
+
+const BEFORE_CODE = `// Before AgentOS
 const redis = new Redis(process.env.REDIS_URL);
 const supabase = createClient(url, key);
 const { exec } = require('child_process');
@@ -53,7 +56,7 @@ const { exec } = require('child_process');
 // Write 500+ lines of infra code
 // before a single line of agent logic.`;
 
-const AFTER_CODE = `// With Agent OS
+const AFTER_CODE = `// With AgentOS
 const os = new AgentOS({ apiKey: process.env.AGENT_OS_KEY });
 
 await os.mem.set('key', value);
@@ -61,262 +64,152 @@ await os.db.insert('table', row);
 await os.proc.execute(code, 'python');
 // Auth, isolation, quotas — included.`;
 
+const HERO_CODE_LINES = [
+  { t: 'comment', v: "import { AgentOS } from '@agentos/sdk';" },
+  { t: 'blank',   v: '' },
+  { t: 'code',    v: 'const os = new AgentOS({ apiKey });' },
+  { t: 'blank',   v: '' },
+  { t: 'comment', v: '// net — fetch live BTC price' },
+  { t: 'code',    v: 'const p = await os.net.http_get(btcUrl);' },
+  { t: 'blank',   v: '' },
+  { t: 'comment', v: '// mem — cache for 60s' },
+  { t: 'code',    v: "await os.mem.set('btc', p.price, 60);" },
+  { t: 'blank',   v: '' },
+  { t: 'comment', v: '// db — persist history' },
+  { t: 'code',    v: "await os.db.insert('prices', row);" },
+  { t: 'blank',   v: '' },
+  { t: 'comment', v: '// proc — run analysis' },
+  { t: 'code',    v: "const sig = await os.proc.execute(py, 'python');" },
+  { t: 'blank',   v: '' },
+  { t: 'comment', v: '// events — broadcast signal' },
+  { t: 'code',    v: "await os.events.publish('signals', sig);" },
+  { t: 'blank',   v: '' },
+  { t: 'comment', v: '// fs — save report' },
+  { t: 'code',    v: "await os.fs.write('report.json', result);" },
+];
+
 const PRIMITIVES = [
-  {
-    key: 'mem',
-    name: 'mem',
-    label: 'Memory',
-    color: '#a855f7',
-    desc: 'Redis-backed key-value store with TTL, namespaced per agent.',
-    tools: ['mem_set', 'mem_get', 'mem_delete', 'mem_list', 'mem_incr'],
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z" />
-        <circle cx="8" cy="12" r="1" fill="currentColor" stroke="none" />
-        <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-        <circle cx="16" cy="12" r="1" fill="currentColor" stroke="none" />
-      </svg>
-    ),
-  },
-  {
-    key: 'fs',
-    name: 'fs',
-    label: 'Filesystem',
-    color: '#06b6d4',
-    desc: 'Cloud file storage backed by Supabase. Each agent gets isolated storage.',
-    tools: ['fs_read', 'fs_write', 'fs_list', 'fs_delete', 'fs_mkdir'],
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-      </svg>
-    ),
-  },
-  {
-    key: 'db',
-    name: 'db',
-    label: 'Database',
-    color: '#3b82f6',
-    desc: 'PostgreSQL with per-agent schema isolation. Queries, transactions, DDL.',
-    tools: ['db_query', 'db_insert', 'db_update', 'db_delete', 'db_transaction'],
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-        <ellipse cx="12" cy="5" rx="9" ry="3" />
-        <path strokeLinecap="round" d="M3 5v14c0 1.657 4.03 3 9 3s9-1.343 9-3V5" />
-        <path strokeLinecap="round" d="M3 12c0 1.657 4.03 3 9 3s9-1.343 9-3" />
-      </svg>
-    ),
-  },
-  {
-    key: 'net',
-    name: 'net',
-    label: 'Network',
-    color: '#22c55e',
-    desc: 'Outbound HTTP with SSRF protection, domain allowlisting, rate limiting.',
-    tools: ['net_http_get', 'net_http_post', 'net_http_put', 'net_dns_resolve'],
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="9" />
-        <path strokeLinecap="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
-      </svg>
-    ),
-  },
-  {
-    key: 'proc',
-    name: 'proc',
-    label: 'Process',
-    color: '#f59e0b',
-    desc: 'Sandboxed code execution: Python, JavaScript, Bash. Timeouts & quotas.',
-    tools: ['proc_execute', 'proc_schedule', 'proc_spawn', 'proc_kill'],
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    ),
-  },
-  {
-    key: 'events',
-    name: 'events',
-    label: 'Events',
-    color: '#ec4899',
-    desc: 'Redis pub/sub messaging. Publish, subscribe, coordinate across agents.',
-    tools: ['events_publish', 'events_subscribe', 'events_list_topics'],
-    icon: (
-      <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.82m5.84-2.56a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 2v5.84m5.96 6.53H3" />
-      </svg>
-    ),
-  },
+  { key: 'mem', name: 'mem', label: 'Memory', desc: 'Redis-backed key-value store with TTL, namespaced per agent.', tools: ['mem_set', 'mem_get', 'mem_delete', 'mem_list', 'mem_incr'] },
+  { key: 'fs', name: 'fs', label: 'Filesystem', desc: 'Cloud file storage backed by Supabase. Each agent gets isolated storage.', tools: ['fs_read', 'fs_write', 'fs_list', 'fs_delete', 'fs_mkdir'] },
+  { key: 'db', name: 'db', label: 'Database', desc: 'PostgreSQL with per-agent schema isolation. Queries, transactions, DDL.', tools: ['db_query', 'db_insert', 'db_update', 'db_delete', 'db_transaction'] },
+  { key: 'net', name: 'net', label: 'Network', desc: 'Outbound HTTP with SSRF protection, domain allowlisting, rate limiting.', tools: ['net_http_get', 'net_http_post', 'net_http_put', 'net_dns_resolve'] },
+  { key: 'proc', name: 'proc', label: 'Process', desc: 'Sandboxed code execution: Python, JavaScript, Bash. Timeouts & quotas.', tools: ['proc_execute', 'proc_schedule', 'proc_spawn', 'proc_kill'] },
+  { key: 'events', name: 'events', label: 'Events', desc: 'Redis pub/sub messaging. Publish, subscribe, coordinate across agents.', tools: ['events_publish', 'events_subscribe', 'events_list_topics'] },
 ];
 
 const USE_CASES = [
-  { title: 'Trading Bot', desc: 'net → mem → db → proc → events', detail: 'Fetch prices, cache data, store history, run signals, broadcast.' },
-  { title: 'Research Assistant', desc: 'net → db → mem → fs', detail: 'Crawl pages, store results, cache context, export reports.' },
-  { title: 'Customer Service', desc: 'db → mem → net → events', detail: 'History in db, context in mem, APIs via net, workflows via events.' },
-  { title: 'Data Pipeline', desc: 'net → fs → proc → db → events', detail: 'Download, write, transform, load, notify downstream.' },
+  { title: 'Trading Bot', chain: 'net → mem → db → proc → events', detail: 'Fetch prices, cache data, store history, run signals, broadcast.' },
+  { title: 'Research Assistant', chain: 'net → db → mem → fs', detail: 'Crawl pages, store results, cache context, export reports.' },
+  { title: 'Customer Service', chain: 'db → mem → net → events', detail: 'History in db, context in mem, APIs via net, workflows via events.' },
+  { title: 'Data Pipeline', chain: 'net → fs → proc → db → events', detail: 'Download, write, transform, load, notify downstream.' },
+];
+
+const MARKETPLACE_SKILLS = [
+  { name: 'JSON Transformer', cat: 'Data', desc: 'Parse, filter, and reshape JSON.', slug: 'json-transformer' },
+  { name: 'Text Utilities', cat: 'Documents', desc: 'Slugify, truncate, extract emails.', slug: 'text-utils' },
+  { name: 'Math & Stats', cat: 'Analytics', desc: 'Mean, median, std dev, averages.', slug: 'math-stats' },
+  { name: 'Date & Time', cat: 'Utilities', desc: 'Parse, format, diff, add dates.', slug: 'date-time' },
+  { name: 'HTTP Builder', cat: 'Web', desc: 'Build headers, encode params.', slug: 'http-request-builder' },
+  { name: 'CSV Processor', cat: 'Documents', desc: 'Parse CSV, filter rows, aggregate.', slug: 'csv-processor' },
 ];
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
-
-      {/* ── Nav ── */}
-      <nav style={{ borderBottom: '1px solid var(--border)', background: 'rgba(3,3,10,0.85)', backdropFilter: 'blur(16px)' }}
-        className="sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-5 py-3.5 flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black font-mono"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.5)' }}>
-              A
-            </div>
-            <span className="font-mono font-bold text-sm tracking-wide" style={{ color: 'var(--text)' }}>
-              Agent<span className="gradient-text">OS</span>
-            </span>
-          </div>
-          {/* Links */}
-          <div className="hidden md:flex items-center gap-6 text-sm" style={{ color: 'var(--text-muted)' }}>
-            <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
-            <Link href="/connect" className="hover:text-white transition-colors">Connect Your Agent</Link>
-            <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
-            <Link href="/developer" className="hover:text-white transition-colors">Developers</Link>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/signin" className="hidden sm:inline-flex btn-outline text-sm px-4 py-2 rounded-lg">Sign in</Link>
-            <Link href="/signup" className="btn-primary text-sm px-3 py-2 rounded-lg">Get started</Link>
-          </div>
-        </div>
-      </nav>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+      <Nav />
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden bg-grid">
-        {/* Background orbs */}
-        <div className="orb w-[600px] h-[600px] top-[-200px] left-[-100px]"
-          style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)' }} />
-        <div className="orb w-[500px] h-[500px] top-[-100px] right-[-150px]"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 70%)' }} />
+      <section style={{
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+      }}>
+        {/* Grid pattern background */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg stroke='%23222222' stroke-width='0.5'%3E%3Cpath d='M0 40L40 0M0 0l40 40'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+          maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
+        }} />
 
-        <div className="relative max-w-6xl mx-auto px-5 pt-14 sm:pt-20 lg:pt-24 pb-16 sm:pb-20">
-          <div className="grid lg:grid-cols-[1fr_1fr] gap-12 items-center">
-            {/* Left: copy */}
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '80px 24px 60px', width: '100%', position: 'relative' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '64px', alignItems: 'center' }}>
+            {/* Left */}
             <div>
-              <div className="badge badge-purple mb-6">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-glow" />
-                Open source · MIT License
+              <div className="animate-fade-up delay-0">
+                <Badge variant="accent" style={{ marginBottom: '24px' }}>
+                  Developer Infrastructure · MIT License
+                </Badge>
               </div>
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.05] mb-5 tracking-tight">
-                <span className="gradient-text">Operating system</span>
-                <br />
-                <span style={{ color: 'var(--text)' }}>for AI agents.</span>
+              <h1 className="animate-fade-up delay-200" style={{
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: 'clamp(36px, 5vw, 64px)',
+                fontWeight: 700,
+                lineHeight: 1.05,
+                color: 'var(--text-primary)',
+                marginBottom: '20px',
+                marginTop: '8px',
+              }}>
+                Operating system<br />for AI agents.
               </h1>
 
-              <p className="text-lg mb-3" style={{ color: 'var(--text-muted)', lineHeight: 1.7 }}>
+              <p className="animate-fade-up delay-400" style={{
+                fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                fontSize: '17px',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.7,
+                marginBottom: '36px',
+                maxWidth: '520px',
+              }}>
                 Six production-ready primitives — filesystem, database, memory,
                 network, processes, and events — secured and isolated per agent.
+                Ship your agent in 5 minutes, not 5 weeks.
               </p>
 
-              <p className="font-mono text-sm mb-10" style={{ color: '#a855f7' }}>
-                <span>6 primitives</span>
-                <span style={{ color: 'var(--text-dim)' }}> · </span>
-                <span style={{ color: '#06b6d4' }}>5 minutes</span>
-                <span style={{ color: 'var(--text-dim)' }}> · </span>
-                <span style={{ color: '#22c55e' }}>production ready</span>
-                <span className="animate-cursor ml-0.5" style={{ color: '#a855f7' }}>▋</span>
-              </p>
-
-              <div className="flex flex-wrap gap-3">
-                <Link href="/signup" className="btn-primary px-6 py-3 rounded-lg text-base">
+              <div className="animate-fade-up delay-600" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <Link href="/signup" className="btn-primary" style={{ fontSize: '15px', padding: '12px 28px' }}>
                   Start building free →
                 </Link>
                 <a href="https://github.com/chrizzy-x/Agent-OS" target="_blank" rel="noopener noreferrer"
-                  className="btn-outline px-6 py-3 rounded-lg text-base flex items-center gap-2">
-                  <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                  </svg>
-                  Star on GitHub
+                  className="btn-outline" style={{ fontSize: '15px', padding: '12px 28px' }}>
+                  View on GitHub ↗
                 </a>
               </div>
-
-              {/* Stats row */}
-              <div className="flex gap-8 mt-10 pt-10" style={{ borderTop: '1px solid var(--border)' }}>
-                {[
-                  { val: '6', label: 'primitives' },
-                  { val: '90d', label: 'token TTL' },
-                  { val: 'MIT', label: 'license' },
-                ].map(s => (
-                  <div key={s.label}>
-                    <div className="text-2xl font-black font-mono gradient-text">{s.val}</div>
-                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
             </div>
 
-            {/* Mobile: compact curl example */}
-            <div className="lg:hidden mt-4">
-              <div className="terminal">
+            {/* Right: hero code */}
+            <div className="animate-fade-up delay-400" style={{ display: 'none' }} id="hero-code-desktop">
+              <div className="terminal" style={{ fontSize: '12px' }}>
                 <div className="terminal-header">
-                  <div className="terminal-dot" style={{ background: '#ef4444' }} />
-                  <div className="terminal-dot" style={{ background: '#f59e0b' }} />
-                  <div className="terminal-dot" style={{ background: '#22c55e' }} />
-                  <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>quick start</span>
+                  <div className="terminal-dot" style={{ background: '#ff5f57' }} />
+                  <div className="terminal-dot" style={{ background: '#febc2e' }} />
+                  <div className="terminal-dot" style={{ background: '#28c840' }} />
+                  <span style={{ marginLeft: '12px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>agent.ts</span>
                 </div>
-                <div className="p-4 overflow-x-auto">
-                  <pre className="text-xs leading-relaxed" style={{ color: '#94a3b8', fontFamily: 'inherit' }}>{`curl -X POST ${APP_URL}/mcp \\
-  -H "Authorization: Bearer $KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{"tool":"agentos.mem_set",
-       "input":{"key":"hello","value":"world"}}'`}</pre>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: terminal window — hidden on mobile/tablet, shown on large screens */}
-            <div className="hidden lg:block animate-float">
-              <div className="terminal glow-purple">
-                <div className="terminal-header">
-                  <div className="terminal-dot" style={{ background: '#ef4444' }} />
-                  <div className="terminal-dot" style={{ background: '#f59e0b' }} />
-                  <div className="terminal-dot" style={{ background: '#22c55e' }} />
-                  <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>agent.ts</span>
-                </div>
-                <div className="p-5 overflow-auto" style={{ maxHeight: '380px' }}>
-                  <pre className="text-xs leading-relaxed" style={{ fontFamily: 'inherit' }}>
-{[
-  { t: 'comment', v: '// All 6 primitives in one agent' },
-  { t: 'blank', v: '' },
-  { t: 'import', v: "import { AgentOS } from '@agentos/sdk';" },
-  { t: 'blank', v: '' },
-  { t: 'const',  v: 'const os = new AgentOS({ apiKey });' },
-  { t: 'blank', v: '' },
-  { t: 'comment', v: '// net — fetch live BTC price' },
-  { t: 'code',   v: "const p = await os.net.http_get(btcUrl);" },
-  { t: 'blank', v: '' },
-  { t: 'comment', v: '// mem — cache for 60s' },
-  { t: 'code',   v: "await os.mem.set('btc', p.price, 60);" },
-  { t: 'blank', v: '' },
-  { t: 'comment', v: '// db — persist history' },
-  { t: 'code',   v: "await os.db.insert('prices', row);" },
-  { t: 'blank', v: '' },
-  { t: 'comment', v: '// proc — run analysis' },
-  { t: 'code',   v: "const sig = await os.proc.execute(py, 'python');" },
-  { t: 'blank', v: '' },
-  { t: 'comment', v: '// events — broadcast signal' },
-  { t: 'code',   v: "await os.events.publish('signals', sig);" },
-  { t: 'blank', v: '' },
-  { t: 'comment', v: '// fs — save report' },
-  { t: 'code',   v: "await os.fs.write('report.json', result);" },
-].map((line, i) => (
-  <div key={i} className="flex">
-    <span className="select-none mr-4 text-right w-4" style={{ color: 'var(--text-dim)', fontSize: '0.7rem' }}>{line.t !== 'blank' ? i + 1 : ''}</span>
-    <span style={{
-      color: line.t === 'comment' ? '#475569'
-           : line.t === 'import'  ? '#a78bfa'
-           : line.t === 'const'   ? '#67e8f9'
-           : '#e2e8f0'
-    }}>{line.v}</span>
-  </div>
-))}
+                <div style={{ padding: '20px', overflowX: 'auto', maxHeight: '420px', overflowY: 'auto' }}>
+                  <pre style={{ margin: 0, fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', lineHeight: 1.7 }}>
+                    {HERO_CODE_LINES.map((line, i) => (
+                      <div key={i} style={{ display: 'flex' }}>
+                        <span style={{
+                          userSelect: 'none',
+                          marginRight: '20px',
+                          textAlign: 'right',
+                          minWidth: '24px',
+                          color: 'var(--text-tertiary)',
+                          fontSize: '11px',
+                          lineHeight: 1.7,
+                        }}>{line.t !== 'blank' ? i + 1 : ''}</span>
+                        <span style={{ color: line.t === 'comment' ? 'var(--text-tertiary)' : line.t === 'blank' ? 'transparent' : 'var(--text-primary)' }}>
+                          {line.v || ' '}
+                        </span>
+                      </div>
+                    ))}
+                    <span className="animate-cursor" style={{ color: 'var(--accent)' }}>▋</span>
                   </pre>
                 </div>
               </div>
@@ -325,259 +218,394 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Divider ── */}
-      <div className="section-divider" />
+      {/* ── Stats bar ── */}
+      <div className="stats-bar">
+        {['6 primitives', '5 min setup', 'MIT License', '90d token TTL'].map((item, i) => (
+          <div key={item} className="stats-bar-item" style={{ borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>
+            {item}
+          </div>
+        ))}
+      </div>
 
       {/* ── Problem / Solution ── */}
-      <section className="relative py-20" style={{ background: 'var(--surface)' }}>
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="text-center mb-10">
-            <div className="badge badge-cyan inline-flex mb-4">The problem</div>
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black mb-3">Stop reinventing infrastructure</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Every agent team rebuilds the same boilerplate. Agent OS ships it once.</p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-5">
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full" style={{ background: '#ef4444' }} />
-                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#f87171' }}>Before Agent OS</span>
-              </div>
-              <div className="terminal" style={{ borderColor: 'rgba(239,68,68,0.2)' }}>
-                <div className="terminal-header">
-                  <div className="terminal-dot" style={{ background: '#ef4444' }} />
-                  <div className="terminal-dot" style={{ background: '#374151' }} />
-                  <div className="terminal-dot" style={{ background: '#374151' }} />
-                  <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>before.ts</span>
+      <FadeIn>
+        <section style={{ padding: '80px 0', backgroundColor: 'var(--bg-secondary)' }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ marginBottom: '40px' }}>
+              <Badge variant="dim" style={{ marginBottom: '16px' }}>The Problem</Badge>
+              <h2 style={{
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: 'clamp(24px, 3vw, 36px)',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                marginBottom: '12px',
+                marginTop: '8px',
+              }}>Stop reinventing infrastructure</h2>
+              <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '15px', color: 'var(--text-secondary)' }}>
+                Every agent team rebuilds the same boilerplate. AgentOS ships it once.
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              {/* Before */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ width: '6px', height: '6px', background: 'var(--danger)' }} />
+                  <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '11px', color: 'var(--danger)', letterSpacing: '0.08em' }}>WITHOUT AGENTOS</span>
                 </div>
-                <div className="p-5">
-                  <CodeBlock code={BEFORE_CODE} language="typescript" />
+                <div style={{ background: 'rgba(255,68,68,0.04)', border: '1px solid rgba(255,68,68,0.2)', padding: '0' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,68,68,0.15)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ff5f57' }} />
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#374151' }} />
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#374151' }} />
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>before.ts</span>
+                  </div>
+                  <pre style={{ margin: 0, padding: '20px', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.7, overflowX: 'auto' }}>{BEFORE_CODE}</pre>
+                </div>
+              </div>
+
+              {/* After */}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ width: '6px', height: '6px', background: 'var(--accent)' }} />
+                  <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '11px', color: 'var(--accent)', letterSpacing: '0.08em' }}>WITH AGENTOS</span>
+                </div>
+                <div style={{ background: 'rgba(0,255,136,0.03)', border: '1px solid rgba(0,255,136,0.2)', padding: '0' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(0,255,136,0.15)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent)' }} />
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent-dim)', opacity: 0.5 }} />
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent-dim)', opacity: 0.3 }} />
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>after.ts</span>
+                  </div>
+                  <pre style={{ margin: 0, padding: '20px', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-primary)', lineHeight: 1.7, overflowX: 'auto' }}>{AFTER_CODE}</pre>
                 </div>
               </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />
-                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#86efac' }}>With Agent OS</span>
-              </div>
-              <div className="terminal" style={{ borderColor: 'rgba(34,197,94,0.2)' }}>
-                <div className="terminal-header">
-                  <div className="terminal-dot" style={{ background: '#22c55e' }} />
-                  <div className="terminal-dot" style={{ background: '#22c55e', opacity: 0.5 }} />
-                  <div className="terminal-dot" style={{ background: '#22c55e', opacity: 0.3 }} />
-                  <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>after.ts</span>
-                </div>
-                <div className="p-5">
-                  <CodeBlock code={AFTER_CODE} language="typescript" />
-                </div>
-              </div>
-            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </FadeIn>
 
       <div className="section-divider" />
 
       {/* ── Primitives ── */}
-      <section className="relative py-20 bg-grid-sm overflow-hidden">
-        <div className="orb w-96 h-96 top-20 right-[-100px]"
-          style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)' }} />
-        <div className="max-w-6xl mx-auto px-5 relative">
-          <div className="text-center mb-14">
-            <div className="badge badge-purple inline-flex mb-4">Primitives</div>
-            <h2 className="text-3xl sm:text-4xl font-black mb-3">6 primitives, infinite possibilities</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Everything an agent needs to read, write, compute, and communicate.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {PRIMITIVES.map((p) => (
-              <div key={p.key} className={`card prim-${p.key} p-5 cursor-default`}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${p.color}15`, border: `1px solid ${p.color}30`, color: p.color }}>
-                    {p.icon}
-                  </div>
-                  <div>
-                    <div className="font-mono font-bold text-sm" style={{ color: p.color }}>os.{p.name}</div>
-                    <div className="text-xs" style={{ color: 'var(--text-dim)' }}>{p.label}</div>
+      <FadeIn>
+        <section style={{ padding: '80px 0' }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ marginBottom: '48px' }}>
+              <Badge variant="dim" style={{ marginBottom: '16px' }}>Primitives</Badge>
+              <h2 style={{
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: 'clamp(24px, 3vw, 36px)',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                marginBottom: '12px',
+                marginTop: '8px',
+              }}>6 primitives, infinite possibilities</h2>
+              <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '15px', color: 'var(--text-secondary)' }}>
+                Everything an agent needs to read, write, compute, and communicate.
+              </p>
+            </div>
+
+            <div className="primitive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)' }}>
+              {PRIMITIVES.map(p => (
+                <div key={p.key} className="hover-surface" style={{ backgroundColor: 'var(--bg-secondary)', padding: '28px', transition: 'background-color 200ms' }}
+                >
+                  <div style={{
+                    fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: 'var(--accent)',
+                    marginBottom: '6px',
+                  }}>os.{p.name}</div>
+                  <div style={{
+                    fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    marginBottom: '10px',
+                  }}>{p.label}</div>
+                  <p style={{
+                    fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                    marginBottom: '16px',
+                  }}>{p.desc}</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    {p.tools.map(t => <span key={t} className="tag">{t}</span>)}
                   </div>
                 </div>
-                <p className="text-sm mb-4" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>{p.desc}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {p.tools.map(t => (
-                    <span key={t} className="font-mono text-xs px-2 py-0.5 rounded"
-                      style={{ background: `${p.color}10`, color: p.color, border: `1px solid ${p.color}20` }}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </FadeIn>
 
       <div className="section-divider" />
 
       {/* ── Full code example ── */}
-      <section className="py-20" style={{ background: 'var(--surface)' }}>
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="text-center mb-12">
-            <div className="badge badge-amber inline-flex mb-4">Live example</div>
-            <h2 className="text-3xl sm:text-4xl font-black mb-3">See all 6 in 40 lines</h2>
-            <p style={{ color: 'var(--text-muted)' }}>A trading agent that monitors BTC and broadcasts buy signals.</p>
-          </div>
-          <div className="terminal glow-purple max-w-3xl mx-auto">
-            <div className="terminal-header">
-              <div className="terminal-dot" style={{ background: '#ef4444' }} />
-              <div className="terminal-dot" style={{ background: '#f59e0b' }} />
-              <div className="terminal-dot" style={{ background: '#22c55e' }} />
-              <span className="ml-auto text-xs" style={{ color: 'var(--text-dim)' }}>trading-agent.ts</span>
+      <FadeIn>
+        <section style={{ padding: '80px 0', backgroundColor: 'var(--bg-secondary)' }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ marginBottom: '40px' }}>
+              <Badge variant="dim" style={{ marginBottom: '16px' }}>Live Example</Badge>
+              <h2 style={{
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: 'clamp(24px, 3vw, 36px)',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                marginBottom: '12px',
+                marginTop: '8px',
+              }}>See all 6 in 40 lines</h2>
+              <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '15px', color: 'var(--text-secondary)' }}>
+                A trading agent that monitors BTC and broadcasts buy signals.
+              </p>
             </div>
-            <div className="p-6">
-              <CodeBlock code={CODE_EXAMPLE} language="typescript" />
+
+            <div style={{ background: 'var(--code-bg)', border: '1px solid var(--code-border)', maxWidth: '800px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--code-border)', background: 'var(--bg-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ff5f57' }} />
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#febc2e' }} />
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#28c840' }} />
+                  <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>trading-agent.ts</span>
+                </div>
+                <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>TypeScript</span>
+              </div>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <pre style={{ margin: 0, padding: '24px', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '13px', lineHeight: 1.7, color: 'var(--text-primary)' }}>{CODE_EXAMPLE}</pre>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </FadeIn>
 
       <div className="section-divider" />
 
       {/* ── Use Cases ── */}
-      <section className="py-20">
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="text-center mb-14">
-            <div className="badge badge-green inline-flex mb-4">Use cases</div>
-            <h2 className="text-3xl sm:text-4xl font-black mb-3">What people build</h2>
-            <p style={{ color: 'var(--text-muted)' }}>Agents that run autonomously in production.</p>
+      <FadeIn>
+        <section style={{ padding: '80px 0' }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ marginBottom: '48px' }}>
+              <Badge variant="dim" style={{ marginBottom: '16px' }}>Use Cases</Badge>
+              <h2 style={{
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: 'clamp(24px, 3vw, 36px)',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                marginBottom: '12px',
+                marginTop: '8px',
+              }}>What people build</h2>
+              <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '15px', color: 'var(--text-secondary)' }}>
+                Agents that run autonomously in production.
+              </p>
+            </div>
+
+            <div className="use-case-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)' }}>
+              {USE_CASES.map(uc => (
+                <div key={uc.title} style={{ backgroundColor: 'var(--bg-secondary)', padding: '28px' }}>
+                  <h3 style={{
+                    fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    marginBottom: '8px',
+                    marginTop: 0,
+                  }}>{uc.title}</h3>
+                  <p style={{
+                    fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                    fontSize: '12px',
+                    color: 'var(--text-secondary)',
+                    marginBottom: '10px',
+                    letterSpacing: '0.02em',
+                  }}>{uc.chain}</p>
+                  <p style={{
+                    fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                    margin: 0,
+                  }}>{uc.detail}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {USE_CASES.map((uc) => (
-              <div key={uc.title} className="card p-6">
-                <h3 className="font-bold text-lg mb-1">{uc.title}</h3>
-                <p className="font-mono text-xs mb-3" style={{ color: '#a855f7' }}>{uc.desc}</p>
-                <p className="text-sm" style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>{uc.detail}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      </FadeIn>
 
       <div className="section-divider" />
 
       {/* ── Marketplace ── */}
-      <section className="py-20" style={{ background: 'var(--surface)' }}>
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="flex items-end justify-between mb-10">
-            <div>
-              <div className="badge badge-purple mb-3">Marketplace</div>
-              <h2 className="text-3xl font-black">Skills Marketplace</h2>
-              <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Community-built capabilities. Install only what you need.</p>
+      <FadeIn>
+        <section style={{ padding: '80px 0', backgroundColor: 'var(--bg-secondary)' }}>
+          <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '40px', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <Badge variant="dim" style={{ marginBottom: '16px' }}>Marketplace</Badge>
+                <h2 style={{
+                  fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                  fontSize: 'clamp(22px, 2.5vw, 32px)',
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  marginBottom: '8px',
+                  marginTop: '8px',
+                }}>Skills Marketplace</h2>
+                <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '15px', color: 'var(--text-secondary)', margin: 0 }}>
+                  Community-built capabilities. Install only what you need.
+                </p>
+              </div>
+              <Link href="/marketplace" className="btn-ghost" style={{ fontSize: '13px', padding: '8px 16px' }}>Browse all →</Link>
             </div>
-            <Link href="/marketplace" className="btn-outline px-4 py-2 rounded-lg text-sm hidden sm:block">
-              Browse all →
-            </Link>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {[
-              { color: '#a855f7', name: 'JSON Transformer', cat: 'Data', desc: 'Parse, filter, and reshape JSON.', slug: 'json-transformer' },
-              { color: '#06b6d4', name: 'Text Utilities', cat: 'Documents', desc: 'Slugify, truncate, extract emails.', slug: 'text-utils' },
-              { color: '#3b82f6', name: 'Math & Stats', cat: 'Analytics', desc: 'Mean, median, std dev, averages.', slug: 'math-stats' },
-              { color: '#22c55e', name: 'Date & Time', cat: 'Utilities', desc: 'Parse, format, diff, add dates.', slug: 'date-time' },
-              { color: '#f59e0b', name: 'HTTP Builder', cat: 'Web', desc: 'Build headers, encode params.', slug: 'http-request-builder' },
-              { color: '#ec4899', name: 'CSV Processor', cat: 'Documents', desc: 'Parse CSV, filter rows, aggregate.', slug: 'csv-processor' },
-            ].map(s => (
-              <Link key={s.slug} href={`/marketplace/${s.slug}`}
-                className="card p-5 block group">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="w-8 h-8 rounded-lg"
-                    style={{ background: `${s.color}15`, border: `1px solid ${s.color}25` }} />
-                  <span className="text-xs px-2 py-0.5 rounded"
-                    style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                    {s.cat}
-                  </span>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)', marginBottom: '24px' }}>
+              {MARKETPLACE_SKILLS.map(s => (
+                <Link key={s.slug} href={`/marketplace/${s.slug}`} className="hover-surface" style={{
+                  display: 'block',
+                  backgroundColor: 'var(--bg-primary)',
+                  padding: '24px',
+                  textDecoration: 'none',
+                  transition: 'background-color 200ms',
+                }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '10px', color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>{s.cat}</span>
+                    <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '11px', color: 'var(--accent)' }}>Free</span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>{s.name}</div>
+                  <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>{s.desc}</div>
+                </Link>
+              ))}
+            </div>
+
+            {/* Developer CTA */}
+            <div style={{
+              padding: '28px 32px',
+              border: '1px solid var(--border-active)',
+              backgroundColor: 'var(--bg-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '16px',
+            }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  Build skills. Earn 70% revenue share.
                 </div>
-                <div className="font-semibold text-sm mb-1 group-hover:text-purple-400 transition-colors">{s.name}</div>
-                <div className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{s.desc}</div>
-                <div className="text-xs font-semibold" style={{ color: '#22c55e' }}>Free</div>
+                <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                  Publish to the marketplace and earn from every API call your skill handles.
+                </p>
+              </div>
+              <Link href="/developer" className="btn-primary" style={{ flexShrink: 0, fontSize: '13px', padding: '10px 20px' }}>
+                Developer Dashboard →
               </Link>
-            ))}
-          </div>
-          {/* Developer CTA */}
-          <div className="rounded-xl p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-            style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(6,182,212,0.08))', border: '1px solid rgba(139,92,246,0.25)' }}>
-            <div>
-              <p className="font-bold mb-1">Build skills. Earn 70% revenue share.</p>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Publish to the marketplace and earn from every API call your skill handles.
-              </p>
             </div>
-            <Link href="/developer" className="btn-primary px-5 py-2.5 rounded-lg text-sm flex-shrink-0">
-              Developer Dashboard →
-            </Link>
           </div>
-        </div>
-      </section>
+        </section>
+      </FadeIn>
+
+      <div className="section-divider" />
 
       {/* ── CTA ── */}
-      <section className="relative py-24 overflow-hidden">
-        <div className="orb w-[800px] h-[400px] top-[-100px] left-1/2 -translate-x-1/2"
-          style={{ background: 'radial-gradient(ellipse, rgba(124,58,237,0.18) 0%, transparent 70%)' }} />
-        <div className="orb w-[400px] h-[400px] bottom-[-150px] left-[-100px]"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 70%)' }} />
-        <div className="relative max-w-3xl mx-auto px-5 text-center">
-          <h2 className="text-4xl sm:text-5xl font-black mb-5">
-            <span className="gradient-text">Ship your agent</span>
-            <br />
-            <span>in 5 minutes.</span>
-          </h2>
-          <p className="text-lg mb-10" style={{ color: 'var(--text-muted)' }}>
-            Create your agent account, get your API key, and start using all 6 primitives immediately.
-            No credit card. No infra setup.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link href="/signup" className="btn-primary px-8 py-3.5 rounded-lg text-base">
-              Get started free →
-            </Link>
-            <a href="https://github.com/chrizzy-x/Agent-OS" target="_blank" rel="noopener noreferrer"
-              className="btn-outline px-8 py-3.5 rounded-lg text-base">
-              View on GitHub
-            </a>
+      <FadeIn>
+        <section style={{ padding: '100px 0', position: 'relative', overflow: 'hidden' }}>
+          {/* Subtle accent glow */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '600px',
+            height: '300px',
+            background: 'radial-gradient(ellipse, rgba(0,255,136,0.06) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+          <div style={{ maxWidth: '640px', margin: '0 auto', padding: '0 24px', textAlign: 'center', position: 'relative' }}>
+            <h2 style={{
+              fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+              fontSize: 'clamp(28px, 4vw, 48px)',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              lineHeight: 1.1,
+              marginBottom: '20px',
+            }}>Ship your agent<br />in 5 minutes.</h2>
+            <p style={{
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '16px',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.7,
+              marginBottom: '40px',
+            }}>
+              Create your agent account, get your API key, and start using all 6 primitives immediately.
+              No credit card. No infra setup.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Link href="/signup" className="btn-primary" style={{ fontSize: '15px', padding: '14px 32px' }}>Get started free →</Link>
+              <a href="https://github.com/chrizzy-x/Agent-OS" target="_blank" rel="noopener noreferrer"
+                className="btn-outline" style={{ fontSize: '15px', padding: '14px 32px' }}>View on GitHub ↗</a>
+            </div>
           </div>
-        </div>
-      </section>
-
-      <div className="section-divider" />
-
-      {/* ── Token ── */}
-      <TokenSection />
-
-      <div className="section-divider" />
-
-      {/* ── Feature Showcase ── */}
-      <section className="max-w-6xl mx-auto px-5 py-24">
-        <FeatureShowcase />
-      </section>
+        </section>
+      </FadeIn>
 
       {/* ── Footer ── */}
-      <footer style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-        <div className="max-w-6xl mx-auto px-5 py-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded flex items-center justify-center text-xs font-black font-mono"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>A</div>
-            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+      <footer style={{ borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '24px', height: '24px', border: '1px solid var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}>A</div>
+            <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>AgentOS</span>
           </div>
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 justify-center sm:justify-end text-sm" style={{ color: 'var(--text-muted)' }}>
-            <a href="https://github.com/chrizzy-x/Agent-OS" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">GitHub</a>
-            <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
-            <Link href="/connect" className="hover:text-white transition-colors">Connect</Link>
-            <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
-            <Link href="/developer" className="hover:text-white transition-colors">Developer</Link>
-            <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0' }}>
+            {[
+              { href: 'https://github.com/chrizzy-x/Agent-OS', label: 'GitHub', external: true },
+              { href: '/marketplace', label: 'Marketplace', external: false },
+              { href: '/connect', label: 'Connect', external: false },
+              { href: '/docs', label: 'Docs', external: false },
+              { href: '/developer', label: 'Developer', external: false },
+              { href: '/token', label: 'Token', external: false },
+            ].map(link => link.external ? (
+              <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer"
+                className="hover-text-secondary"
+                style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-tertiary)', textDecoration: 'none', padding: '4px 12px', transition: 'color 150ms' }}
+              >{link.label}</a>
+            ) : (
+              <Link key={link.label} href={link.href}
+                className="hover-text-secondary"
+                style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-tertiary)', textDecoration: 'none', padding: '4px 12px', transition: 'color 150ms' }}
+              >{link.label}</Link>
+            ))}
           </div>
-          <span className="text-xs" style={{ color: 'var(--text-dim)' }}>MIT License · {new Date().getFullYear()}</span>
+
+          <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+            MIT License · {new Date().getFullYear()}
+          </span>
         </div>
       </footer>
+
+      {/* Responsive hero code block — show on desktop */}
+      <style>{`
+        @media (min-width: 1024px) {
+          #hero-code-desktop { display: block !important; }
+        }
+        @media (max-width: 1023px) {
+          .primitive-grid { grid-template-columns: 1fr 1fr !important; }
+          .use-case-grid { grid-template-columns: 1fr !important; }
+          section > div > div[style*="grid-template-columns: 1fr 1fr"] {
+            grid-template-columns: 1fr !important;
+          }
+          section > div > div[style*="grid-template-columns: repeat(3"] {
+            grid-template-columns: 1fr 1fr !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .primitive-grid { grid-template-columns: 1fr !important; }
+          section > div > div[style*="grid-template-columns: repeat(3"] {
+            grid-template-columns: 1fr !important;
+          }
+          .stats-bar-item { padding: 4px 16px !important; }
+        }
+      `}</style>
     </div>
   );
 }
-
-

@@ -55,9 +55,9 @@ function SuccessContent() {
       <div className="absolute top-0 left-0 right-0 px-6 py-4 flex items-center justify-between"
         style={{ borderBottom: '1px solid var(--border)' }}>
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>A</div>
-          <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+          <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+            style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>A</div>
+          <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
         </Link>
         <Link href="/marketplace" className="text-sm" style={{ color: 'var(--text-muted)' }}>Marketplace</Link>
       </div>
@@ -66,7 +66,7 @@ function SuccessContent() {
         {state === 'confirming' && (
           <div>
             <div className="w-16 h-16 rounded-2xl mx-auto mb-6 animate-pulse"
-              style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)' }} />
+              style={{ background: 'var(--accent-glow)', border: '1px solid var(--border-active)' }} />
             <h1 className="text-2xl font-black mb-2">Activating skill...</h1>
             <p style={{ color: 'var(--text-muted)' }}>Verifying your payment on-chain.</p>
           </div>
@@ -107,7 +107,7 @@ export default function PaymentSuccessPage() {
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
         <div className="w-12 h-12 rounded-xl animate-pulse"
-          style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)' }} />
+          style={{ background: 'var(--accent-glow)', border: '1px solid rgba(0,255,136,0.3)' }} />
       </div>
     }>
       <SuccessContent />

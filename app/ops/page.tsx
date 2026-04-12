@@ -202,11 +202,11 @@ export default function OpsPage() {
       <nav className="sticky top-0 z-40 backdrop-blur-md" style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
+            <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
               A
             </div>
-            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+            <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
           </Link>
           <div className="flex items-center gap-5 text-sm">
             <Link href="/dashboard" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Dashboard</Link>
@@ -219,7 +219,7 @@ export default function OpsPage() {
       <div className="max-w-7xl mx-auto px-4 py-10 space-y-8">
         <section className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
           <div>
-            <div className="badge badge-purple mb-4">Autonomous Infrastructure Crew</div>
+            <div className="badge badge-accent mb-4">Autonomous Infrastructure Crew</div>
             <h1 className="text-4xl font-black mb-3">Active and standby coverage for every feature and function</h1>
             <p className="text-base max-w-4xl" style={{ color: 'var(--text-muted)' }}>
               The ops console confirms pair coverage, health snapshots, failovers, and queued work for every platform feature and runtime function.
@@ -249,7 +249,7 @@ export default function OpsPage() {
             { label: 'Open tasks', value: metrics?.metrics.openTasks ?? 0 },
           ].map(card => (
             <div key={card.label} className="card p-5">
-              <div className="text-3xl font-black gradient-text mb-1">{card.value}</div>
+              <div className="text-3xl font-black mb-1" style={{ color: 'var(--accent)' }}>{card.value}</div>
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{card.label}</div>
             </div>
           ))}
@@ -258,15 +258,15 @@ export default function OpsPage() {
         {signedOutDetails && crew?.coverage && (
           <section className="grid md:grid-cols-3 gap-4">
             <div className="card p-5">
-              <div className="text-2xl font-black gradient-text mb-1">{crew.coverage.fullyCovered}</div>
+              <div className="text-2xl font-black mb-1" style={{ color: 'var(--accent)' }}>{crew.coverage.fullyCovered}</div>
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Fully covered items</div>
             </div>
             <div className="card p-5">
-              <div className="text-2xl font-black gradient-text mb-1">{crew.coverage.degradedCoverage}</div>
+              <div className="text-2xl font-black mb-1" style={{ color: 'var(--accent)' }}>{crew.coverage.degradedCoverage}</div>
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Degraded coverage items</div>
             </div>
             <div className="card p-5">
-              <div className="text-2xl font-black gradient-text mb-1">{crew.coverage.uncovered}</div>
+              <div className="text-2xl font-black mb-1" style={{ color: 'var(--accent)' }}>{crew.coverage.uncovered}</div>
               <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Uncovered items</div>
             </div>
           </section>
@@ -280,7 +280,7 @@ export default function OpsPage() {
                 onClick={() => void saveSettings({ operationMode: 'single_agent', consensusModeEnabled: false })}
                 disabled={saving || !session}
                 className="btn-outline text-sm px-4 py-2"
-                style={operationMode === 'single_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
+                style={operationMode === 'single_agent' ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
               >
                 Single-agent
               </button>
@@ -288,7 +288,7 @@ export default function OpsPage() {
                 onClick={() => void saveSettings({ operationMode: 'multi_agent' })}
                 disabled={saving || !session}
                 className="btn-outline text-sm px-4 py-2"
-                style={operationMode === 'multi_agent' ? { borderColor: '#a855f7', color: '#a855f7' } : undefined}
+                style={operationMode === 'multi_agent' ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
               >
                 Multi-agent
               </button>
@@ -360,7 +360,7 @@ export default function OpsPage() {
                       <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
                         <div>
                           <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="badge badge-purple text-xs">{item.feature.categoryBadge}</span>
+                            <span className="badge badge-accent text-xs">{item.feature.categoryBadge}</span>
                             <span className="text-xs font-mono" style={{ color: 'var(--text-dim)' }}>#{item.feature.id}</span>
                             <span className="text-xs uppercase" style={{ color: 'var(--text-dim)' }}>{item.feature.kind.replace('_', ' ')}</span>
                           </div>
@@ -377,7 +377,7 @@ export default function OpsPage() {
                       </div>
 
                       <div className="grid lg:grid-cols-3 gap-3 text-sm">
-                        <div className="rounded-lg p-3" style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)' }}>
+                        <div className="p-3" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
                           <div className="font-semibold mb-1">Active agent</div>
                           <div>{item.activePair?.infra_agent?.name ?? 'Missing'}</div>
                           <div style={{ color: 'var(--text-muted)' }}>Status: {item.activeHealth?.status ?? item.activePair?.status ?? 'unknown'}</div>
@@ -389,7 +389,7 @@ export default function OpsPage() {
                           <div style={{ color: 'var(--text-muted)' }}>Status: {item.standbyHealth?.status ?? item.standbyPair?.status ?? 'unknown'}</div>
                           <div style={{ color: 'var(--text-muted)' }}>Score: {item.standbyHealth?.health_score ?? 'n/a'}</div>
                         </div>
-                        <div className="rounded-lg p-3" style={{ background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                        <div className="p-3" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
                           <div className="font-semibold mb-1">Queue and coverage</div>
                           <div>Coverage: {item.coverageState}</div>
                           <div style={{ color: 'var(--text-muted)' }}>Open tasks: {openTaskCount}</div>

@@ -329,11 +329,11 @@ export default function TemplatesPage() {
         style={{ background: 'rgba(10,10,20,0.9)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
+            <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
               A
             </div>
-            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+            <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
           </Link>
           <div className="flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
             <Link href="/docs/guide" className="hover:text-white transition-colors">Guide</Link>
@@ -346,9 +346,9 @@ export default function TemplatesPage() {
       <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-10">
-          <div className="badge badge-purple mb-4">Templates</div>
+          <div className="badge badge-accent mb-4">Templates</div>
           <h1 className="text-4xl font-black mb-3">
-            Start in under <span className="gradient-text">5 minutes</span>
+            Start in under <span style={{ color: 'var(--accent)' }}>5 minutes</span>
           </h1>
           <p className="text-lg max-w-2xl" style={{ color: 'var(--text-muted)' }}>
             Copy a template, paste in your API key, change 1–2 lines, run it.
@@ -368,16 +368,16 @@ export default function TemplatesPage() {
         </div>
 
         {/* Step 0 */}
-        <div className="card p-5 mb-8" style={{ borderColor: 'rgba(168,85,247,0.3)' }}>
+        <div className="card p-5 mb-8" style={{ borderColor: 'var(--border-active)' }}>
           <div className="flex items-start gap-4">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>
+            <div className="w-8 h-8 flex items-center justify-center font-black text-sm flex-shrink-0"
+              style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>
               0
             </div>
             <div>
               <div className="font-bold mb-1">Before you start — get your API key</div>
               <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
-                Go to <Link href="/signup" className="text-purple-400 underline">/signup</Link>, enter your email and agent name.
+                Go to <Link href="/signup" style={{ color: 'var(--accent)' }}>/signup</Link>, enter your email and agent name.
                 Copy the API key you receive — you&apos;ll paste it into every template below.
               </p>
               <Link href="/signup" className="btn-primary text-sm px-4 py-2 inline-block">Create free account →</Link>
@@ -395,8 +395,8 @@ export default function TemplatesPage() {
                 onClick={() => setActive(t.id)}
                 className="w-full text-left p-4 rounded-xl transition-all"
                 style={active === t.id
-                  ? { background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.4)' }
-                  : { background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  ? { background: 'var(--accent-glow)', border: '1px solid var(--accent)' }
+                  : { background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xl">{t.emoji}</span>
                   <span className="font-semibold text-sm">{t.title}</span>
@@ -431,7 +431,7 @@ export default function TemplatesPage() {
                   className="text-sm font-semibold px-4 py-2 rounded-lg transition-all flex-shrink-0"
                   style={copied === current.id
                     ? { background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#86efac' }
-                    : { background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc' }}>
+                    : { background: 'transparent', border: '1px solid var(--border-active)', color: 'var(--text-secondary)' }}>
                   {copied === current.id ? '✓ Copied!' : 'Copy code'}
                 </button>
               </div>
@@ -490,7 +490,7 @@ export default function TemplatesPage() {
 
         {/* CTA */}
         <div className="mt-12 rounded-2xl p-8 text-center"
-          style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)' }}>
+          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-active)' }}>
           <h2 className="text-2xl font-black mb-2">Want something custom?</h2>
           <p className="mb-5" style={{ color: 'var(--text-muted)' }}>
             These templates are a starting point. AgentOS can do a lot more — combine any of the primitives to build exactly what you need.

@@ -160,11 +160,11 @@ export default function SocialOpsDocsPage() {
       <nav className="sticky top-0 z-40 backdrop-blur-md" style={{ background: 'rgba(10,10,20,0.88)', borderBottom: '1px solid var(--border)' }}>
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #10b981)', boxShadow: '0 0 12px rgba(59,130,246,0.35)' }}>
+            <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+              style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
               S
             </div>
-            <span className="font-mono font-bold text-sm">Social<span className="gradient-text">Ops</span></span>
+            <span className="font-mono font-bold text-sm">Social<span style={{ color: 'var(--accent)' }}>Ops</span></span>
           </Link>
           <div className="flex items-center gap-5 text-sm">
             <Link href="/docs" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Docs</Link>
@@ -178,7 +178,7 @@ export default function SocialOpsDocsPage() {
       <div className="max-w-6xl mx-auto px-4 py-12 space-y-12">
         <section className="grid lg:grid-cols-[1.1fr_0.9fr] gap-6 items-start">
           <div>
-            <div className="badge badge-purple mb-4">Optional Example Module</div>
+            <div className="badge badge-accent mb-4">Optional Example Module</div>
             <h1 className="text-4xl font-black mb-4">Example integration documentation for social automation</h1>
             <p className="text-lg max-w-3xl" style={{ color: 'var(--text-muted)' }}>
               This social automation surface is an optional example module built on top of Agent OS primitives, auth, MCP routing, and operator workflows. It is not part of the core infrastructure story, but it remains useful as a reference for teams building domain-specific agent products on top of Agent OS.

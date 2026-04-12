@@ -25,9 +25,7 @@ function SignInContent() {
   useEffect(() => {
     let active = true;
     void fetchBrowserSession().then(session => {
-      if (active && session) {
-        router.replace('/dashboard');
-      }
+      if (active && session) router.replace('/dashboard');
     });
     return () => { active = false; };
   }, [router]);
@@ -36,21 +34,17 @@ function SignInContent() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       const res = await fetch('/api/signin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-
       const data = await res.json();
-
       if (!res.ok) {
         setError(data.error || 'Something went wrong. Please try again.');
         return;
       }
-
       router.push('/dashboard');
     } catch {
       setError('Network error. Check your connection and try again.');
@@ -60,132 +54,187 @@ function SignInContent() {
   };
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
-      <div className="hidden lg:flex flex-col justify-between w-[440px] flex-shrink-0 relative overflow-hidden p-10 bg-grid"
-        style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
-        <div className="absolute top-[-80px] left-[-80px] w-72 h-72 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.2) 0%, transparent 70%)', filter: 'blur(60px)' }} />
-        <div className="absolute bottom-[-40px] right-[-40px] w-56 h-56 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.12) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: 'var(--bg-primary)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '24px 16px',
+    }}>
+      {/* Logo */}
+      <Link href="/" style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        textDecoration: 'none',
+        marginBottom: '40px',
+      }}>
+        <div style={{
+          width: '28px',
+          height: '28px',
+          border: '1px solid var(--accent)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontWeight: 700,
+          fontSize: '14px',
+          color: 'var(--accent)',
+        }}>A</div>
+        <span style={{
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontWeight: 600,
+          fontSize: '15px',
+          color: 'var(--text-primary)',
+        }}>AgentOS</span>
+      </Link>
 
-        <Link href="/" className="relative flex items-center gap-2.5 w-fit">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black font-mono text-sm"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 16px rgba(124,58,237,0.5)' }}>
-            A
-          </div>
-          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
-        </Link>
+      {/* Card */}
+      <div style={{
+        width: '100%',
+        maxWidth: '400px',
+        backgroundColor: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        padding: '32px',
+      }}>
+        <h1 style={{
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontSize: '22px',
+          fontWeight: 600,
+          color: 'var(--text-primary)',
+          marginBottom: '6px',
+          marginTop: 0,
+        }}>Welcome back</h1>
+        <p style={{
+          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+          fontSize: '14px',
+          color: 'var(--text-secondary)',
+          marginBottom: '28px',
+          marginTop: 0,
+        }}>Sign in to your agent account.</p>
 
-        <div className="relative">
-          <div className="badge badge-purple mb-5 w-fit">Production-ready infra</div>
-          <h2 className="text-2xl font-black mb-4 leading-snug">
-            <span className="gradient-text">Infrastructure</span>
-            <br />that ships with you.
-          </h2>
-          <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--text-muted)' }}>
-            Sign in once, keep a secure browser session, then generate a bearer token only when you need external API access.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { name: 'os.mem', color: '#a855f7', label: 'Memory cache' },
-              { name: 'os.fs', color: '#06b6d4', label: 'File storage' },
-              { name: 'os.db', color: '#3b82f6', label: 'Database' },
-              { name: 'os.net', color: '#22c55e', label: 'HTTP client' },
-              { name: 'os.proc', color: '#f59e0b', label: 'Code runner' },
-              { name: 'os.events', color: '#ec4899', label: 'Pub/sub' },
-            ].map(p => (
-              <div key={p.name} className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                style={{ background: `${p.color}0d`, border: `1px solid ${p.color}20` }}>
-                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: p.color }} />
-                <div>
-                  <div className="font-mono text-xs font-bold" style={{ color: p.color }}>{p.name}</div>
-                  <div style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>{p.label}</div>
-                </div>
-              </div>
-            ))}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label htmlFor="email" style={{
+              display: 'block',
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: 'var(--text-secondary)',
+              marginBottom: '6px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}>Email</label>
+            <input
+              id="email"
+              type="email"
+              required
+              autoFocus
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="input-dark"
+            />
           </div>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+              <label htmlFor="password" style={{
+                fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}>Password</label>
+              <Link href="/forgot-password" style={{
+                fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                fontSize: '12px',
+                color: 'var(--accent)',
+                textDecoration: 'none',
+              }}>Forgot password?</Link>
+            </div>
+            <input
+              id="password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Your password"
+              className="input-dark"
+            />
+          </div>
+
+          {error && (
+            <div style={{
+              padding: '12px 16px',
+              background: 'rgba(255,68,68,0.08)',
+              border: '1px solid rgba(255,68,68,0.3)',
+              color: 'var(--danger)',
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '13px',
+            }}>
+              {error}
+              {error.includes('sign up') && (
+                <span> <Link href="/signup" style={{ color: 'var(--text-primary)', textDecoration: 'underline' }}>Create account</Link></span>
+              )}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || !email || !password}
+            className="btn-primary"
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              opacity: (loading || !email || !password) ? 0.5 : 1,
+              cursor: (loading || !email || !password) ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {loading ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                <svg style={{ animation: 'spin 1s linear infinite' }} width="14" height="14" fill="none" viewBox="0 0 24 24">
+                  <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Signing in...
+              </span>
+            ) : 'Sign in'}
+          </button>
+        </form>
+
+        <div style={{
+          borderTop: '1px solid var(--border)',
+          marginTop: '24px',
+          paddingTop: '24px',
+          textAlign: 'center',
+          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+          fontSize: '13px',
+          color: 'var(--text-secondary)',
+        }}>
+          No account?{' '}
+          <Link href="/signup" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
+            Sign up free
+          </Link>
         </div>
-
-        <div className="relative text-xs" style={{ color: 'var(--text-dim)' }}>MIT License Â· Open Source</div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
-        <Link href="/" className="flex items-center gap-2 mb-10 lg:hidden">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>A</div>
-          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
-        </Link>
-
-        <div className="w-full max-w-sm">
-          <h1 className="text-2xl font-black mb-1">Welcome back</h1>
-          <p className="text-sm mb-8" style={{ color: 'var(--text-muted)' }}>Sign in to your agent account.</p>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-widest"
-                style={{ color: 'var(--text-muted)' }}>Email</label>
-              <input id="email" type="email" required autoFocus autoComplete="email"
-                value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com" className="input-dark" />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest"
-                  style={{ color: 'var(--text-muted)' }}>Password</label>
-                <Link href="/forgot-password" className="text-xs hover:underline transition-colors"
-                  style={{ color: '#a855f7' }}>
-                  Forgot password?
-                </Link>
-              </div>
-              <input id="password" type="password" required autoComplete="current-password"
-                value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your password" className="input-dark" />
-            </div>
-
-            {error && (
-              <div className="rounded-lg px-4 py-3 text-sm"
-                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}>
-                {error}
-                {error.includes('sign up') && (
-                  <span> <Link href="/signup" className="underline font-medium text-white">Create account</Link></span>
-                )}
-              </div>
-            )}
-
-            <button type="submit" disabled={loading || !email || !password}
-              className="btn-primary w-full py-3 rounded-lg"
-              style={{ opacity: (loading || !email || !password) ? 0.5 : 1, cursor: (loading || !email || !password) ? 'not-allowed' : 'pointer' }}>
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Signing in...
-                </span>
-              ) : 'Sign in'}
-            </button>
-          </form>
-
-          <div className="mt-6 pt-6 text-center text-sm"
-            style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-            No account?{' '}
-            <Link href="/signup" className="font-medium hover:text-white transition-colors" style={{ color: '#a855f7' }}>
-              Sign up free
-            </Link>
-          </div>
-        </div>
-      </div>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
 
 export default function SignInPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen" style={{ background: 'var(--bg)' }} />}>
+    <Suspense fallback={<div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }} />}>
       <SignInContent />
     </Suspense>
   );
 }
-

@@ -73,23 +73,21 @@ function ForgotPasswordPageContent() {
       <div className="hidden lg:flex flex-col justify-between w-[440px] flex-shrink-0 relative overflow-hidden p-10 bg-grid"
         style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}>
         <div className="absolute top-[-80px] left-[-80px] w-72 h-72 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.2) 0%, transparent 70%)', filter: 'blur(60px)' }} />
-        <div className="absolute bottom-[-40px] right-[-40px] w-56 h-56 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.12) 0%, transparent 70%)', filter: 'blur(60px)' }} />
+          style={{ background: 'radial-gradient(circle, var(--accent-glow) 0%, transparent 70%)', filter: 'blur(60px)' }} />
 
         <Link href="/" className="relative flex items-center gap-2.5 w-fit">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black font-mono text-sm"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 16px rgba(124,58,237,0.5)' }}>
+          <div className="w-8 h-8 flex items-center justify-center font-black font-mono text-sm"
+            style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
             A
           </div>
-          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
+          <span className="font-mono font-bold">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
         </Link>
 
         <div className="relative">
-          <div className="badge badge-purple mb-5 w-fit">Account recovery</div>
+          <div className="badge badge-accent mb-5 w-fit">Account recovery</div>
           <h2 className="text-2xl font-black mb-4 leading-snug">
             {confirmMode ? 'Choose a new' : 'Request a'}
-            <br /><span className="gradient-text">password reset.</span>
+            <br /><span style={{ color: 'var(--accent)' }}>password reset.</span>
           </h2>
           <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
             {confirmMode
@@ -103,9 +101,9 @@ function ForgotPasswordPageContent() {
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
         <Link href="/" className="flex items-center gap-2 mb-10 lg:hidden">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>A</div>
-          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
+          <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+            style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>A</div>
+          <span className="font-mono font-bold">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
         </Link>
 
         <div className="w-full max-w-sm">
@@ -115,8 +113,8 @@ function ForgotPasswordPageContent() {
               <h1 className="text-2xl font-black">Request complete</h1>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{successMessage}</p>
               {debugResetUrl && (
-                <div className="rounded-lg p-3 text-left text-xs font-mono break-all"
-                  style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.25)', color: '#67e8f9' }}>
+                <div className="p-3 text-left text-xs font-mono break-all"
+                  style={{ background: 'var(--code-bg)', border: '1px solid var(--code-border)', color: 'var(--accent)' }}>
                   Debug reset link: {debugResetUrl}
                 </div>
               )}
@@ -168,7 +166,7 @@ function ForgotPasswordPageContent() {
                 )}
 
                 <button type="submit" disabled={loading || !email || (confirmMode && (!newPassword || !confirmPassword))}
-                  className="btn-primary w-full py-3 rounded-lg"
+                  className="btn-primary w-full py-3"
                   style={{ opacity: (loading || !email || (confirmMode && (!newPassword || !confirmPassword))) ? 0.5 : 1,
                     cursor: (loading || !email || (confirmMode && (!newPassword || !confirmPassword))) ? 'not-allowed' : 'pointer' }}>
                   {loading ? (
@@ -186,7 +184,7 @@ function ForgotPasswordPageContent() {
               <div className="mt-6 pt-6 text-center text-sm"
                 style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                 Remember your password?{' '}
-                <Link href="/signin" className="font-medium hover:text-white transition-colors" style={{ color: '#a855f7' }}>
+                <Link href="/signin" className="font-medium hover:text-white transition-colors" style={{ color: 'var(--accent)' }}>
                   Sign in
                 </Link>
               </div>

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Nav from '@/components/Nav';
+import Badge from '@/components/Badge';
 import { MARKETPLACE_CATEGORIES, getOfficialSkillCount } from '@/src/skills/official-catalog';
 
 interface Skill {
@@ -24,6 +26,12 @@ interface Skill {
 
 const OFFICIAL_COUNT = getOfficialSkillCount();
 
+const SORT_OPTIONS = [
+  { value: 'popular', label: 'Most Popular' },
+  { value: 'recent', label: 'Newest' },
+  { value: 'rating', label: 'Highest Rated' },
+];
+
 export default function MarketplacePage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,9 +45,8 @@ export default function MarketplacePage() {
     try {
       const params = new URLSearchParams({ sort, limit: '50' });
       if (category !== 'All') params.set('category', category);
-      if (searchTerm !== undefined ? searchTerm : search) {
-        params.set('search', searchTerm !== undefined ? searchTerm : search);
-      }
+      const term = searchTerm !== undefined ? searchTerm : search;
+      if (term) params.set('search', term);
       const res = await fetch(`/api/skills?${params}`);
       const data = await res.json();
       setSkills(data.skills ?? []);
@@ -64,144 +71,272 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <nav className="sticky top-0 z-40 backdrop-blur-md"
-        style={{ background: 'rgba(10,10,20,0.85)', borderBottom: '1px solid var(--border)' }}>
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
-              A
-            </div>
-            <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
-          </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/marketplace" className="text-sm font-medium" style={{ color: '#a855f7' }}>Marketplace</Link>
-            <Link href="/developer" className="text-sm transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Developer</Link>
-            <Link href="/docs" className="text-sm transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Docs</Link>
-            <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
-          </div>
-        </div>
-      </nav>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
+      <Nav activePath="/marketplace" />
 
-      <div className="max-w-6xl mx-auto px-4 py-10">
-        <div className="mb-8">
-          <div className="badge badge-purple mb-4">Community Skills</div>
-          <h1 className="text-3xl font-black mb-2">
-            Skills <span className="gradient-text">Marketplace</span>
-          </h1>
-          <p style={{ color: 'var(--text-muted)' }}>
-            Extend Agent OS with community-built and official verified skills.
-            {total > 0 && <span className="ml-1">{total} skills available.</span>}
-          </p>
-          <p className="text-sm mt-3" style={{ color: 'var(--text-dim)' }}>
-            Official verified catalog coverage: {OFFICIAL_COUNT} free maintained skills across AI, support, research, finance, security, deployment, and communication packs.
-          </p>
-        </div>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
+        <div style={{ display: 'flex', gap: '0', paddingTop: '40px' }}>
 
-        <form onSubmit={handleSearch} className="flex gap-3 mb-4">
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search skills..."
-            className="input-dark flex-1"
-          />
-          <button type="submit" className="btn-primary px-5">Search</button>
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value)}
-            className="input-dark"
-            style={{ width: 'auto', paddingRight: '2rem' }}
-          >
-            <option value="popular">Most Popular</option>
-            <option value="recent">Newest</option>
-            <option value="rating">Highest Rated</option>
-          </select>
-        </form>
-
-        <div className="flex gap-2 flex-wrap mb-8">
-          {MARKETPLACE_CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-              style={category === cat ? {
-                background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                color: 'white',
-                border: '1px solid rgba(139,92,246,0.5)',
-              } : {
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                border: '1px solid var(--border-bright)',
-              }}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="card p-5 animate-pulse">
-                <div className="w-10 h-10 rounded-lg mb-3" style={{ background: 'var(--surface-2)' }} />
-                <div className="h-4 rounded w-3/4 mb-2" style={{ background: 'var(--surface-2)' }} />
-                <div className="h-3 rounded w-full mb-1" style={{ background: 'var(--border)' }} />
-                <div className="h-3 rounded w-2/3" style={{ background: 'var(--border)' }} />
-              </div>
-            ))}
-          </div>
-        ) : skills.length === 0 ? (
-          <div className="card p-20 text-center">
-            <div className="text-4xl mb-3">Search</div>
-            <p className="font-medium mb-1">No skills found</p>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Try a different search or category.</p>
-          </div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {skills.map(skill => (
-              <Link
-                key={skill.id}
-                href={`/marketplace/${skill.slug}`}
-                className="card p-5 block group"
-                style={{ textDecoration: 'none' }}
+          {/* Left sidebar */}
+          <aside style={{
+            width: '200px',
+            flexShrink: 0,
+            position: 'sticky',
+            top: '72px',
+            alignSelf: 'flex-start',
+            maxHeight: 'calc(100vh - 80px)',
+            overflowY: 'auto',
+            borderRight: '1px solid var(--border)',
+            paddingRight: '24px',
+            marginRight: '32px',
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+              fontSize: '10px',
+              fontWeight: 600,
+              color: 'var(--text-tertiary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              marginBottom: '8px',
+            }}>Categories</div>
+            {MARKETPLACE_CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  background: 'none',
+                  border: 'none',
+                  borderLeft: category === cat ? '2px solid var(--accent)' : '2px solid transparent',
+                  padding: '7px 12px',
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '13px',
+                  color: category === cat ? 'var(--accent)' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'color 150ms, border-color 150ms',
+                  marginBottom: '1px',
+                }}
+                onMouseEnter={e => {
+                  if (cat !== category) {
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+                    (e.currentTarget as HTMLButtonElement).style.borderLeftColor = 'var(--border-active)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (cat !== category) {
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
+                    (e.currentTarget as HTMLButtonElement).style.borderLeftColor = 'transparent';
+                  }
+                }}
               >
-                <div className="flex items-start justify-between mb-3">
-                  <span className="text-3xl">{skill.icon || '[]'}</span>
-                  <div className="flex items-center gap-1.5">
-                    {skill.verified && (
-                      <span className="badge badge-green text-xs">Official</span>
-                    )}
-                    <span className="badge badge-purple text-xs">{skill.category}</span>
-                  </div>
-                </div>
-
-                <h3 className="font-semibold mb-1 transition-colors group-hover:text-purple-400">
-                  {skill.name}
-                </h3>
-                <p className="text-sm mb-3 line-clamp-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                  {skill.description}
-                </p>
-
-                <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <div className="flex items-center gap-3">
-                    {skill.rating > 0 && (
-                      <span className="flex items-center gap-0.5">
-                        Rating {Number(skill.rating).toFixed(1)}
-                        {skill.review_count > 0 && <span className="ml-0.5">({skill.review_count})</span>}
-                      </span>
-                    )}
-                    <span>{skill.total_installs.toLocaleString()} installs</span>
-                  </div>
-                  <span className="font-semibold" style={{ color: skill.pricing_model === 'free' ? '#22c55e' : '#a855f7' }}>
-                    {pricingLabel(skill)}
-                  </span>
-                </div>
-              </Link>
+                {cat}
+              </button>
             ))}
-          </div>
-        )}
+
+            <div style={{
+              borderTop: '1px solid var(--border)',
+              marginTop: '24px',
+              paddingTop: '24px',
+            }}>
+              <Link href="/developer" className="btn-ghost" style={{
+                display: 'block',
+                textAlign: 'center',
+                padding: '8px 12px',
+                fontSize: '12px',
+                textDecoration: 'none',
+              }}>
+                Publish a skill →
+              </Link>
+            </div>
+          </aside>
+
+          {/* Main content */}
+          <main style={{ flex: 1, minWidth: 0, paddingBottom: '80px' }}>
+            {/* Header */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                <div>
+                  <Badge variant="accent" style={{ marginBottom: '12px' }}>Community Skills</Badge>
+                  <h1 style={{
+                    fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                    fontSize: '28px',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                    marginBottom: '8px',
+                    marginTop: '8px',
+                    lineHeight: 1.2,
+                  }}>Skills Marketplace</h1>
+                  <p style={{
+                    fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                    fontSize: '14px',
+                    color: 'var(--text-secondary)',
+                    margin: 0,
+                  }}>
+                    {OFFICIAL_COUNT} official skills · {total > 0 ? `${total} total available` : 'community-built and verified'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Search + sort */}
+            <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <svg
+                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                  width="14" height="14" fill="none" stroke="var(--text-tertiary)" strokeWidth="2" viewBox="0 0 24 24"
+                >
+                  <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
+                </svg>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search skills..."
+                  className="input-dark"
+                  style={{ paddingLeft: '36px' }}
+                />
+              </div>
+              <button type="submit" className="btn-primary" style={{ padding: '10px 20px', flexShrink: 0 }}>Search</button>
+            </form>
+
+            {/* Sort tabs */}
+            <div style={{
+              display: 'flex',
+              gap: '0',
+              borderBottom: '1px solid var(--border)',
+              marginBottom: '24px',
+            }}>
+              {SORT_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSort(opt.value)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: sort === opt.value ? '2px solid var(--accent)' : '2px solid transparent',
+                    padding: '10px 16px',
+                    fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: sort === opt.value ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    transition: 'color 150ms, border-color 150ms',
+                    marginBottom: '-1px',
+                  }}
+                  onMouseEnter={e => { if (opt.value !== sort) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
+                  onMouseLeave={e => { if (opt.value !== sort) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Skills grid */}
+            {loading ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)' }}>
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} style={{ padding: '24px', backgroundColor: 'var(--bg-secondary)' }}>
+                    <div style={{ width: '40px', height: '40px', background: 'var(--bg-tertiary)', marginBottom: '12px' }} />
+                    <div style={{ height: '14px', background: 'var(--bg-tertiary)', width: '75%', marginBottom: '8px' }} />
+                    <div style={{ height: '12px', background: 'var(--border)', width: '100%', marginBottom: '6px' }} />
+                    <div style={{ height: '12px', background: 'var(--border)', width: '60%' }} />
+                  </div>
+                ))}
+              </div>
+            ) : skills.length === 0 ? (
+              <div style={{
+                padding: '80px 40px',
+                textAlign: 'center',
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-secondary)',
+              }}>
+                <p style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', color: 'var(--text-primary)', marginBottom: '8px', fontWeight: 600 }}>No skills found</p>
+                <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>Try a different search or category.</p>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: '1px',
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--border)',
+              }}>
+                {skills.map(skill => (
+                  <Link
+                    key={skill.id}
+                    href={`/marketplace/${skill.slug}`}
+                    style={{
+                      display: 'block',
+                      padding: '24px',
+                      backgroundColor: 'var(--bg-secondary)',
+                      textDecoration: 'none',
+                      transition: 'background-color 200ms',
+                    }}
+                    onMouseEnter={e => {
+                      const el = e.currentTarget as HTMLAnchorElement;
+                      el.style.backgroundColor = 'var(--bg-tertiary)';
+                    }}
+                    onMouseLeave={e => {
+                      const el = e.currentTarget as HTMLAnchorElement;
+                      el.style.backgroundColor = 'var(--bg-secondary)';
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px', gap: '8px' }}>
+                      <span style={{ fontSize: '28px', lineHeight: 1 }}>{skill.icon || '[]'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {skill.verified && <Badge variant="accent">Official</Badge>}
+                        <Badge variant="dim">{skill.category}</Badge>
+                      </div>
+                    </div>
+
+                    <h3 style={{
+                      fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      color: 'var(--text-primary)',
+                      marginBottom: '8px',
+                      marginTop: 0,
+                    }}>{skill.name}</h3>
+
+                    <p style={{
+                      fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)',
+                      lineHeight: 1.6,
+                      marginBottom: '16px',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>{skill.description}</p>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{
+                        fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                        fontSize: '12px',
+                        color: 'var(--text-tertiary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                      }}>
+                        {skill.rating > 0 && <span>★ {Number(skill.rating).toFixed(1)}</span>}
+                        <span>{skill.total_installs.toLocaleString()} installs</span>
+                      </div>
+                      <span style={{
+                        fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: skill.pricing_model === 'free' ? 'var(--accent)' : 'var(--text-primary)',
+                      }}>{pricingLabel(skill)}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </main>
+        </div>
       </div>
     </div>
   );

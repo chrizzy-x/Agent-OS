@@ -56,7 +56,7 @@ export default function AuditPage() {
 
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
-          <div className="badge badge-purple mb-4">Production Audit</div>
+          <div className="badge badge-accent mb-4">Production Audit</div>
           <h1 className="text-4xl font-black mb-3">Live audit: March 19, 2026</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
             This report reflects the live production deployment on <code>{APP_URL}</code>. No P0 or P1 findings were observed in this pass. The remaining open issue is the custom-domain DNS cutover.
@@ -65,15 +65,15 @@ export default function AuditPage() {
 
         <section className="grid md:grid-cols-3 gap-4">
           <div className="card p-5">
-            <div className="text-3xl font-black gradient-text mb-1">{coverage.platformFeatures}</div>
+            <div className="text-3xl font-black mb-1" style={{ color: 'var(--accent)' }}>{coverage.platformFeatures}</div>
             <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Platform features audited</div>
           </div>
           <div className="card p-5">
-            <div className="text-3xl font-black gradient-text mb-1">{coverage.runtimeFunctions}</div>
+            <div className="text-3xl font-black mb-1" style={{ color: 'var(--accent)' }}>{coverage.runtimeFunctions}</div>
             <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Runtime functions audited</div>
           </div>
           <div className="card p-5">
-            <div className="text-3xl font-black gradient-text mb-1">{coverage.totalCatalogItems}</div>
+            <div className="text-3xl font-black mb-1" style={{ color: 'var(--accent)' }}>{coverage.totalCatalogItems}</div>
             <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Catalog items under crew coverage</div>
           </div>
         </section>
@@ -83,7 +83,7 @@ export default function AuditPage() {
             <article key={`${finding.surface}-${index}`} className="card p-6">
               <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className="badge badge-purple text-xs">{finding.severity}</span>
+                  <span className="badge badge-accent text-xs">{finding.severity}</span>
                   <span className="text-xs font-mono uppercase" style={{ color: finding.status === 'Open' ? '#f59e0b' : '#22c55e' }}>
                     {finding.status}
                   </span>

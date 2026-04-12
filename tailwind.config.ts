@@ -8,14 +8,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: [
-          '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto',
-          '"Helvetica Neue"', 'Arial', 'sans-serif',
-        ],
-        mono: [
-          'ui-monospace', '"SFMono-Regular"', '"SF Mono"', 'Menlo',
-          'Consolas', '"Liberation Mono"', 'monospace',
-        ],
+        sans: ['var(--font-sans)', 'IBM Plex Sans', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'JetBrains Mono', 'monospace'],
       },
     },
   },

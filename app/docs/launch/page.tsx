@@ -65,8 +65,8 @@ export default function LaunchNotesPage() {
 
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
-          <div className="badge badge-purple mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v5 <span className="gradient-text">&ldquo;Ares&rdquo;</span> is live</h1>
+          <div className="badge badge-accent mb-4">Launch Notes</div>
+          <h1 className="text-4xl font-black mb-3">Agent OS v5 <span style={{ color: 'var(--accent)' }}>&ldquo;Ares&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
             v5 ships the FFP Multi-Chain Router — FFP sector chains reach consensus, AgentOS verifies and executes. Built on top of v4&apos;s NL Studio, Workflow Library, SDK Kernel, and the 6 core primitives. Live at <code>{APP_URL}</code>.
           </p>

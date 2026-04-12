@@ -26,12 +26,20 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
     <button
       type="button"
       onClick={handleCopy}
-      className="text-xs px-3 py-1.5 rounded-md font-medium transition-all flex-shrink-0"
-      style={copied
-        ? { background: 'rgba(34,197,94,0.12)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
-        : { background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid var(--border-bright)' }}
+      style={{
+        background: 'none',
+        border: `1px solid ${copied ? 'var(--accent)' : 'var(--border)'}`,
+        color: copied ? 'var(--accent)' : 'var(--text-secondary)',
+        fontSize: '11px',
+        fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+        padding: '3px 10px',
+        cursor: 'pointer',
+        borderRadius: '2px',
+        transition: 'color 150ms, border-color 150ms',
+        flexShrink: 0,
+      }}
     >
-      {copied ? 'Copied' : label}
+      {copied ? 'copied!' : label}
     </button>
   );
 }
@@ -55,82 +63,139 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
 });`;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)' }}
-        >
-          <svg width="18" height="18" fill="none" stroke="#86efac" strokeWidth="2.5" viewBox="0 0 24 24">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Success header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{
+          width: '36px',
+          height: '36px',
+          border: '1px solid rgba(0,255,136,0.3)',
+          background: 'rgba(0,255,136,0.08)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <svg width="16" height="16" fill="none" stroke="var(--accent)" strokeWidth="2.5" viewBox="0 0 24 24">
             <polyline points="20 6 9 17 4 12" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
         <div>
-          <h2 className="text-lg font-black">Agent created!</h2>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Your browser session is active. Save the bearer token for external tools and SDKs.</p>
+          <h2 style={{
+            fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+            fontSize: '18px',
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+            margin: 0,
+          }}>Agent created!</h2>
+          <p style={{
+            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+            fontSize: '13px',
+            color: 'var(--text-secondary)',
+            margin: 0,
+          }}>Save your bearer token — it&apos;s shown only once.</p>
         </div>
       </div>
 
-      <div
-        className="rounded-xl p-4 space-y-4"
-        style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}
-      >
-        <div className="flex items-start gap-2 text-sm" style={{ color: '#fcd34d' }}>
-          <svg width="15" height="15" fill="currentColor" viewBox="0 0 20 20" className="flex-shrink-0 mt-0.5">
+      {/* Warning + credentials */}
+      <div style={{
+        padding: '16px',
+        background: 'rgba(255,170,0,0.06)',
+        border: '1px solid rgba(255,170,0,0.25)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '8px',
+          color: 'var(--warning)',
+          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+          fontSize: '12px',
+        }}>
+          <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20" style={{ flexShrink: 0, marginTop: '1px' }}>
             <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
           </svg>
-          Your bearer token is shown <strong>only once</strong>. Copy and store it securely.
+          <span>Your bearer token is shown <strong>only once</strong>. Copy and store it securely.</span>
         </div>
 
         {[
           { label: 'Agent ID', value: credentials.agentId },
           { label: 'Bearer Token', value: bearerToken },
         ].map(field => (
-          <div key={field.label} className="space-y-1.5">
-            <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>{field.label}</div>
-            <div className="flex items-center gap-2">
-              <div
-                className="flex-1 rounded-lg px-3 py-2 font-mono text-xs truncate"
-                style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-bright)', color: '#a78bfa' }}
-              >
-                {field.value}
-              </div>
+          <div key={field.label}>
+            <div style={{
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '11px',
+              fontWeight: 500,
+              color: 'var(--text-secondary)',
+              textTransform: 'uppercase' as const,
+              letterSpacing: '0.06em',
+              marginBottom: '6px',
+            }}>{field.label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontSize: '11px',
+                color: 'var(--accent)',
+                background: 'var(--code-bg)',
+                border: '1px solid var(--code-border)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>{field.value}</div>
               <CopyButton text={field.value} />
             </div>
           </div>
         ))}
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Expires in {credentials.expiresIn}</p>
+        <p style={{
+          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+          fontSize: '12px',
+          color: 'var(--text-tertiary)',
+          margin: 0,
+        }}>Expires in {credentials.expiresIn}</p>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold">Quick start</span>
-          <CopyButton text={quickstart} label="Copy all" />
+      {/* Quick start */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{
+            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+            fontSize: '13px',
+            fontWeight: 500,
+            color: 'var(--text-primary)',
+          }}>Quick start</span>
+          <CopyButton text={quickstart} label="copy all" />
         </div>
         <div className="terminal">
           <div className="terminal-header">
-            <div className="terminal-dot" style={{ background: '#ef4444' }} />
-            <div className="terminal-dot" style={{ background: '#f59e0b' }} />
-            <div className="terminal-dot" style={{ background: '#22c55e' }} />
-            <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>quickstart.js</span>
+            <div className="terminal-dot" style={{ background: '#ff5f57' }} />
+            <div className="terminal-dot" style={{ background: '#ffbd2e' }} />
+            <div className="terminal-dot" style={{ background: '#28c840' }} />
+            <span style={{ marginLeft: '12px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>quickstart.js</span>
           </div>
-          <pre className="p-4 text-xs overflow-x-auto" style={{ color: '#94a3b8' }}>{quickstart}</pre>
+          <pre style={{ padding: '16px', fontSize: '11px', overflowX: 'auto', color: 'var(--text-secondary)', margin: 0 }}>{quickstart}</pre>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* Navigation links */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
         {[
           { href: '/dashboard', label: 'Dashboard', primary: true },
           { href: '/studio', label: 'Studio', primary: false },
           { href: '/docs', label: 'Docs', primary: false },
           { href: '/marketplace', label: 'Skills', primary: false },
-        ].map(button => (
+        ].map(btn => (
           <Link
-            key={button.href}
-            href={button.href}
-            className={`text-center text-sm py-2.5 rounded-lg font-medium transition-all ${button.primary ? 'btn-primary' : 'btn-outline'}`}
+            key={btn.href}
+            href={btn.href}
+            className={btn.primary ? 'btn-primary' : 'btn-ghost'}
+            style={{ justifyContent: 'center', fontSize: '13px', padding: '10px 16px' }}
           >
-            {button.label}
+            {btn.label}
           </Link>
         ))}
       </div>
@@ -150,15 +215,8 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
     e.preventDefault();
     setError('');
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
 
     setLoading(true);
     try {
@@ -168,10 +226,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
         body: JSON.stringify({ email, password, agentName }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Something went wrong. Please try again.');
-        return;
-      }
+      if (!res.ok) { setError(data.error || 'Something went wrong. Please try again.'); return; }
       onSuccess(data.credentials);
     } catch {
       setError('Network error. Check your connection and try again.');
@@ -181,110 +236,103 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
   };
 
   const ready = email && password && confirmPassword;
+  const labelStyle = {
+    display: 'block' as const,
+    fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+    fontSize: '12px',
+    fontWeight: 500,
+    color: 'var(--text-secondary)',
+    marginBottom: '6px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+  };
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-            Email <span style={{ color: '#f87171' }}>*</span>
-          </label>
-          <input
-            id="email"
-            type="email"
-            required
-            autoFocus
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="input-dark"
-          />
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div>
+          <label htmlFor="email" style={labelStyle}>Email <span style={{ color: 'var(--danger)' }}>*</span></label>
+          <input id="email" type="email" required autoFocus autoComplete="email"
+            value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com" className="input-dark" />
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-            Password <span style={{ color: '#f87171' }}>*</span>
-          </label>
-          <input
-            id="password"
-            type="password"
-            required
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="At least 8 characters"
-            className="input-dark"
-          />
+        <div>
+          <label htmlFor="password" style={labelStyle}>Password <span style={{ color: 'var(--danger)' }}>*</span></label>
+          <input id="password" type="password" required autoComplete="new-password"
+            value={password} onChange={e => setPassword(e.target.value)}
+            placeholder="At least 8 characters" className="input-dark" />
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="confirmPassword" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-            Confirm password <span style={{ color: '#f87171' }}>*</span>
-          </label>
-          <input
-            id="confirmPassword"
-            type="password"
-            required
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Re-enter your password"
-            className="input-dark"
-          />
+        <div>
+          <label htmlFor="confirmPassword" style={labelStyle}>Confirm password <span style={{ color: 'var(--danger)' }}>*</span></label>
+          <input id="confirmPassword" type="password" required autoComplete="new-password"
+            value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter your password" className="input-dark" />
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="agentName" className="block text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-            Agent name <span style={{ color: 'var(--text-dim)' }}>(optional)</span>
+        <div>
+          <label htmlFor="agentName" style={labelStyle}>
+            Agent name <span style={{ color: 'var(--text-tertiary)' }}>(optional)</span>
           </label>
-          <input
-            id="agentName"
-            type="text"
-            autoComplete="nickname"
-            value={agentName}
-            onChange={(e) => setAgentName(e.target.value)}
-            placeholder="My Trading Bot"
-            className="input-dark"
-          />
+          <input id="agentName" type="text" autoComplete="nickname"
+            value={agentName} onChange={e => setAgentName(e.target.value)}
+            placeholder="My Trading Bot" className="input-dark" />
         </div>
 
         {error && (
-          <div
-            className="rounded-lg px-4 py-3 text-sm"
-            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}
-          >
-            {error}
-          </div>
+          <div style={{
+            padding: '12px 16px',
+            background: 'rgba(255,68,68,0.08)',
+            border: '1px solid rgba(255,68,68,0.3)',
+            color: 'var(--danger)',
+            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+            fontSize: '13px',
+          }}>{error}</div>
         )}
 
         <button
           type="submit"
           disabled={loading || !ready}
-          className="btn-primary w-full py-3 rounded-lg"
-          style={{ opacity: (loading || !ready) ? 0.5 : 1, cursor: (loading || !ready) ? 'not-allowed' : 'pointer' }}
+          className="btn-primary"
+          style={{
+            width: '100%',
+            justifyContent: 'center',
+            opacity: (loading || !ready) ? 0.5 : 1,
+            cursor: (loading || !ready) ? 'not-allowed' : 'pointer',
+          }}
         >
           {loading ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+              <svg style={{ animation: 'spin 1s linear infinite' }} width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
               Creating agent...
             </span>
-          ) : 'Create agent'}
+          ) : 'Create agent →'}
         </button>
 
-        <p className="text-xs text-center" style={{ color: 'var(--text-dim)' }}>
-          No credit card required. Free to use.
-        </p>
+        <p style={{
+          textAlign: 'center',
+          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+          fontSize: '12px',
+          color: 'var(--text-tertiary)',
+          margin: 0,
+        }}>No credit card required. Free to use.</p>
       </form>
 
-      <div className="mt-5 pt-5 text-center text-sm" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+      <div style={{
+        borderTop: '1px solid var(--border)',
+        marginTop: '20px',
+        paddingTop: '20px',
+        textAlign: 'center',
+        fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+        fontSize: '13px',
+        color: 'var(--text-secondary)',
+      }}>
         Already have an account?{' '}
-        <Link href="/signin" className="font-medium hover:text-white transition-colors" style={{ color: '#a855f7' }}>
-          Sign in
-        </Link>
+        <Link href="/signin" style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>Sign in</Link>
       </div>
     </>
   );
@@ -297,95 +345,85 @@ export default function SignupPage() {
   useEffect(() => {
     let active = true;
     void fetchBrowserSession().then(session => {
-      if (active && session) {
-        router.replace('/dashboard');
-      }
+      if (active && session) router.replace('/dashboard');
     });
     return () => { active = false; };
   }, [router]);
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
-      <div
-        className="hidden lg:flex flex-col justify-between w-[420px] flex-shrink-0 relative overflow-hidden p-10 bg-grid"
-        style={{ background: 'var(--surface)', borderRight: '1px solid var(--border)' }}
-      >
-        <div
-          className="absolute top-[-100px] right-[-60px] w-80 h-80 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.15) 0%, transparent 70%)', filter: 'blur(60px)' }}
-        />
-        <div
-          className="absolute bottom-[-60px] left-[-60px] w-64 h-64 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%)', filter: 'blur(60px)' }}
-        />
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: 'var(--bg-primary)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '24px 16px',
+    }}>
+      {/* Logo */}
+      <Link href="/" style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        textDecoration: 'none',
+        marginBottom: '40px',
+      }}>
+        <div style={{
+          width: '28px',
+          height: '28px',
+          border: '1px solid var(--accent)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontWeight: 700,
+          fontSize: '14px',
+          color: 'var(--accent)',
+        }}>A</div>
+        <span style={{
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontWeight: 600,
+          fontSize: '15px',
+          color: 'var(--text-primary)',
+        }}>AgentOS</span>
+      </Link>
 
-        <Link href="/" className="relative flex items-center gap-2.5 w-fit">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center font-black font-mono text-sm"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 16px rgba(124,58,237,0.5)' }}
-          >
-            A
-          </div>
-          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
-        </Link>
-
-        <div className="relative">
-          <div className="badge badge-cyan mb-5 w-fit">Free to start</div>
-          <h2 className="text-2xl font-black mb-4 leading-snug">
-            Ship your agent<br /><span className="gradient-text">in 5 minutes.</span>
-          </h2>
-          <p className="text-sm leading-relaxed mb-8" style={{ color: 'var(--text-muted)' }}>
-            Create your account and get instant access to all 6 primitives - no credit card, no setup, no infrastructure headaches.
-          </p>
-
-          <div className="space-y-3">
-            {[
-              'All 6 primitives included',
-              'No credit card required',
-              'Bearer token valid for 90 days',
-              'MIT license, self-hostable',
-            ].map(item => (
-              <div key={item} className="flex items-center gap-3 text-sm">
-                <span
-                  className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)' }}
-                >
-                  <svg width="10" height="10" fill="none" stroke="#86efac" strokeWidth="2.5" viewBox="0 0 12 12">
-                    <polyline points="10 3 5 9 2 6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                <span style={{ color: 'var(--text-muted)' }}>{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="relative text-xs" style={{ color: 'var(--text-dim)' }}>MIT License | Open Source</div>
+      {/* Card */}
+      <div style={{
+        width: '100%',
+        maxWidth: credentials ? '480px' : '400px',
+        backgroundColor: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+        padding: '32px',
+        transition: 'max-width 300ms ease',
+      }}>
+        {!credentials ? (
+          <>
+            <h1 style={{
+              fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+              fontSize: '22px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+              marginBottom: '6px',
+              marginTop: 0,
+            }}>Create your account</h1>
+            <p style={{
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '14px',
+              color: 'var(--text-secondary)',
+              marginBottom: '28px',
+              marginTop: 0,
+            }}>Get started with AgentOS in seconds.</p>
+            <SignupForm onSuccess={setCredentials} />
+          </>
+        ) : (
+          <CredentialsPanel credentials={credentials} />
+        )}
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
-        <Link href="/" className="flex items-center gap-2 mb-10 lg:hidden">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs" style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>
-            A
-          </div>
-          <span className="font-mono font-bold">Agent<span className="gradient-text">OS</span></span>
-        </Link>
-
-        <div className="w-full max-w-sm">
-          {!credentials ? (
-            <>
-              <h1 className="text-2xl font-black mb-1">Create your account</h1>
-              <p className="text-sm mb-8" style={{ color: 'var(--text-muted)' }}>
-                Get started with Agent OS in seconds.
-              </p>
-              <SignupForm onSuccess={setCredentials} />
-            </>
-          ) : (
-            <CredentialsPanel credentials={credentials} />
-          )}
-        </div>
-      </div>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
-

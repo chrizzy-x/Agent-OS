@@ -89,9 +89,9 @@ function CopyButton({ text }: { text: string }) {
 function KindBadge({ kind }: { kind: StudioCommandResponse['kind'] }) {
   const cls =
     kind === 'result' ? 'badge badge-green' :
-    kind === 'preview' ? 'badge badge-amber' :
-    kind === 'error' ? 'badge badge-cyan' :
-    'badge badge-purple';
+    kind === 'preview' ? 'badge badge-warning' :
+    kind === 'error' ? 'badge badge-danger' :
+    'badge badge-accent';
   return <span className={cls}>{kind}</span>;
 }
 
@@ -586,8 +586,8 @@ export default function StudioPage() {
       <nav className="sticky top-0 z-50" style={{ background: 'rgba(3,3,10,0.92)', borderBottom: '1px solid var(--border)', backdropFilter: 'blur(16px)' }}>
         <div className="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></Link>
-            <span className="badge badge-purple">Studio</span>
+            <Link href="/dashboard" className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></Link>
+            <span className="badge badge-accent">Studio</span>
             <span className="text-xs font-mono hidden sm:block" style={{ color: 'var(--text-dim)' }}>v5 Ares</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -625,7 +625,7 @@ export default function StudioPage() {
           {mode === 'nl' ? (
             <section className="card p-6">
               <div className="mb-5">
-                <div className="badge badge-purple mb-2">Natural Language</div>
+                <div className="badge badge-accent mb-2">Natural Language</div>
                 <h2 className="text-xl font-black">Describe your workflow</h2>
                 <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
                   Tell the agent what you want to accomplish. It will plan the steps, show you a preview, then execute on confirm.
@@ -785,8 +785,8 @@ export default function StudioPage() {
                     </div>
                   )}
                   {selectedEntry.response.warnings && selectedEntry.response.warnings.length > 0 && (
-                    <div className="rounded-xl p-4" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.22)' }}>
-                      <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#67e8f9' }}>Warnings</div>
+                    <div className="p-4" style={{ background: 'rgba(255,170,0,0.06)', border: '1px solid rgba(255,170,0,0.2)' }}>
+                      <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--warning)' }}>Warnings</div>
                       <ul className="text-xs space-y-1" style={{ color: '#a5f3fc' }}>
                         {selectedEntry.response.warnings.map(warning => <li key={warning}>- {warning}</li>)}
                       </ul>
@@ -808,7 +808,7 @@ export default function StudioPage() {
                 <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Agent ID</div>
                 <div className="font-mono text-xs mt-2 break-all">{agentId}</div>
               </div>
-              <div className="rounded-xl p-4" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.22)' }}>
+              <div className="p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
                 <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Skills</div>
                 <div className="text-2xl font-black mt-2">{context.installedSkillCount}</div>
               </div>
@@ -849,7 +849,7 @@ export default function StudioPage() {
                         <div className="text-sm font-semibold">{definition.title}</div>
                         {definition.requiresAdvancedMode
                           ? <span className="badge badge-amber">advanced</span>
-                          : <span className={definition.mutating ? 'badge badge-purple' : 'badge badge-green'}>{definition.mutating ? 'preview' : 'read-only'}</span>}
+                          : <span className={definition.mutating ? 'badge badge-warning' : 'badge badge-accent'}>{definition.mutating ? 'preview' : 'read-only'}</span>}
                       </div>
                       <code className="block text-xs mb-1" style={{ color: '#c084fc' }}>{definition.command}</code>
                       <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{definition.description}</p>

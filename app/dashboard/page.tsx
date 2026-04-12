@@ -57,8 +57,8 @@ interface FfpProposal {
 }
 
 const PRIM_COLORS: Record<string, string> = {
-  fs: '#06b6d4', net: '#22c55e', proc: '#f59e0b',
-  mem: '#a855f7', db: '#3b82f6', events: '#ec4899',
+  fs: 'var(--accent)', net: 'var(--accent)', proc: 'var(--accent)',
+  mem: 'var(--accent)', db: 'var(--accent)', events: 'var(--accent)',
 };
 
 function SessionTokenPanel() {
@@ -140,15 +140,15 @@ interface AgentProfile {
 function TierBadge({ tier }: { tier: AgentTier }) {
   if (tier === 'hyper') {
     return (
-      <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-        style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)', color: 'white' }}>
+      <span className="text-xs font-bold px-2 py-0.5"
+        style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>
         HYPER
       </span>
     );
   }
   if (tier === 'pro') {
     return (
-      <span className="badge badge-purple text-xs font-bold">PRO</span>
+      <span className="badge badge-accent text-xs font-bold">PRO</span>
     );
   }
   return (
@@ -270,11 +270,11 @@ export default function DashboardPage() {
         <div className="max-w-6xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 10px rgba(124,58,237,0.4)' }}>
+              <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
+                style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
                 A
               </div>
-              <span className="font-mono font-bold text-sm">Agent<span className="gradient-text">OS</span></span>
+              <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
               <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
@@ -299,8 +299,8 @@ export default function DashboardPage() {
       <div className="max-w-6xl mx-auto px-5 py-8">
         <div className="card p-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm font-mono flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 16px rgba(124,58,237,0.35)' }}>
+            <div className="w-12 h-12 flex items-center justify-center font-black text-sm font-mono flex-shrink-0"
+              style={{ background: 'var(--accent-glow)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
               {initials}
             </div>
             <div>
@@ -321,7 +321,7 @@ export default function DashboardPage() {
               { val: agentProfile ? `${agentProfile.quotas.rateLimitPerMin}/min` : '60/min', label: 'Rate limit' },
             ].map(s => (
               <div key={s.label} className="text-center">
-                <div className="text-xl font-black gradient-text">{s.val}</div>
+                <div className="text-xl font-black" style={{ color: 'var(--accent)' }}>{s.val}</div>
                 <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{s.label}</div>
               </div>
             ))}
@@ -334,8 +334,8 @@ export default function DashboardPage() {
             <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); }}
               className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-all"
               style={activeTab === tab
-                ? { background: 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: 'white', boxShadow: '0 0 16px rgba(124,58,237,0.3)' }
-                : { color: 'var(--text-muted)' }}>
+                ? { background: 'var(--accent)', color: 'var(--bg-primary)', boxShadow: '0 0 16px var(--accent-glow)' }
+                : { color: 'var(--text-secondary)' }>
               {tab === 'ffp' ? 'FFP' : tab}
             </button>
           ))}
@@ -357,9 +357,9 @@ export default function DashboardPage() {
                   </h2>
                   <div className="grid sm:grid-cols-2 xl:grid-cols-6 gap-3">
                     {[
-                      { href: '/marketplace', label: 'Browse Skills', color: '#a855f7' },
-                      { href: '/developer', label: 'Publish Skill', color: '#06b6d4' },
-                      { href: '/docs', label: 'Read Docs', color: '#22c55e' },
+                      { href: '/marketplace', label: 'Browse Skills', color: 'var(--accent)' },
+                      { href: '/developer', label: 'Publish Skill', color: 'var(--accent)' },
+                      { href: '/docs', label: 'Read Docs', color: 'var(--accent)' },
                       { href: '/studio', label: 'Studio Console', color: '#8b5cf6' },
                       { href: '/ops', label: 'Ops Console', color: '#f59e0b' },
                       { href: '#ffp', label: 'FFP & Consensus', color: '#22c55e' },
@@ -397,8 +397,8 @@ export default function DashboardPage() {
                   </h2>
                   <div className="grid sm:grid-cols-3 gap-4">
                     {[
-                      { val: '1 GB', label: 'Storage', desc: 'fs primitive', color: '#06b6d4' },
-                      { val: '100 MB', label: 'Memory Cache', desc: 'mem primitive', color: '#a855f7' },
+                      { val: '1 GB', label: 'Storage', desc: 'fs primitive', color: 'var(--accent)' },
+                      { val: '100 MB', label: 'Memory Cache', desc: 'mem primitive', color: 'var(--accent)' },
                       { val: '100/min', label: 'Rate Limit', desc: 'requests per minute', color: '#22c55e' },
                     ].map(q => (
                       <div key={q.label} className="card p-5">
@@ -594,7 +594,7 @@ export default function DashboardPage() {
 
                 {recentAudit.length === 0 ? (
                   <div className="card p-12 text-center">
-                    <div className="w-14 h-14 rounded-2xl mx-auto mb-4" style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)' }} />
+                    <div className="w-14 h-14 mx-auto mb-4" style={{ background: 'var(--accent-glow)', border: '1px solid var(--border-active)' }} />
                     <p className="font-bold mb-2">No activity yet</p>
                     <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                       All primitive operations (fs, net, proc, mem, db, events) will be logged here.

@@ -37,10 +37,10 @@ export function FeatureShowcase() {
   return (
     <div className="mb-24">
       <div className="text-center mb-12">
-        <div className="badge badge-purple mb-4">Canonical Catalog</div>
+        <div className="badge badge-accent mb-4">Canonical Catalog</div>
         <h2 className="text-5xl font-black mb-4">
           {totalFeatures} Platform Features<br />
-          <span className="gradient-text">mapped to one shared source</span>
+          <span style={{ color: 'var(--accent)' }}>mapped to one shared source</span>
         </h2>
         <p className="text-lg max-w-3xl mx-auto" style={{ color: 'var(--text-muted)' }}>
           The landing page, docs, and autonomous crew all read from the same catalog so product claims and operational coverage stay aligned.
@@ -59,7 +59,7 @@ export function FeatureShowcase() {
               >
                 <div>
                   <div className="flex items-center gap-3 mb-2 flex-wrap">
-                    <span className="badge badge-purple text-xs">{category.badge}</span>
+                    <span className="badge badge-accent text-xs">{category.badge}</span>
                     <span className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-dim)' }}>
                       {category.features.length} features
                     </span>
@@ -67,7 +67,7 @@ export function FeatureShowcase() {
                   <h3 className="text-2xl font-bold mb-1">{category.name}</h3>
                   <p className="text-sm max-w-3xl" style={{ color: 'var(--text-muted)' }}>{category.description}</p>
                 </div>
-                <span className="text-sm font-mono" style={{ color: expanded ? '#a855f7' : 'var(--text-muted)' }}>
+                <span className="text-sm font-mono" style={{ color: expanded ? 'var(--accent)' : 'var(--text-muted)' }}>
                   {expanded ? 'collapse' : 'expand'}
                 </span>
               </button>
@@ -78,7 +78,7 @@ export function FeatureShowcase() {
                     <article key={feature.slug} className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <div className="text-xs font-mono mb-1" style={{ color: '#a855f7' }}>#{feature.id}</div>
+                          <div className="text-xs font-mono mb-1" style={{ color: 'var(--accent)' }}>#{feature.id}</div>
                           <h4 className="font-semibold text-base">{feature.name}</h4>
                         </div>
                         <button

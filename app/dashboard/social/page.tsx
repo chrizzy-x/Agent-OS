@@ -132,10 +132,10 @@ export default function DashboardSocialPage() {
         <div className="max-w-7xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center font-black font-mono text-xs" style={{ background: 'linear-gradient(135deg, #3b82f6, #10b981)', boxShadow: '0 0 12px rgba(59,130,246,0.35)' }}>
+              <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs" style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
                 S
               </div>
-              <span className="font-mono font-bold text-sm">Example<span className="gradient-text">Hub</span></span>
+              <span className="font-mono font-bold text-sm">Example<span style={{ color: 'var(--accent)' }}>Hub</span></span>
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
               <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
@@ -145,7 +145,7 @@ export default function DashboardSocialPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden sm:block font-mono text-xs px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.18)', color: '#93c5fd' }}>
+            <span className="hidden sm:block font-mono text-xs px-2.5 py-1.5" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
               {session.agentId.slice(0, 22)}...
             </span>
             <button onClick={() => void handleSignOut()} className="btn-outline text-sm px-3 py-1.5 rounded-lg">Sign out</button>
@@ -155,11 +155,10 @@ export default function DashboardSocialPage() {
 
       <div className="max-w-7xl mx-auto px-5 py-8 space-y-6">
         <section className="card p-6 relative overflow-hidden">
-          <div className="absolute -top-24 -right-10 w-64 h-64 rounded-full" style={{ background: 'radial-gradient(circle, rgba(59,130,246,0.18), transparent 60%)', filter: 'blur(6px)' }} />
-          <div className="absolute -bottom-28 -left-10 w-72 h-72 rounded-full" style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.16), transparent 62%)', filter: 'blur(10px)' }} />
+          <div className="absolute -top-24 -right-10 w-64 h-64 rounded-full" style={{ background: 'radial-gradient(circle, var(--accent-glow), transparent 60%)', filter: 'blur(6px)' }} />
           <div className="relative flex flex-col xl:flex-row xl:items-end justify-between gap-6">
             <div className="max-w-3xl">
-              <div className="badge badge-purple mb-3">Optional example control plane</div>
+              <div className="badge badge-accent mb-3">Optional example control plane</div>
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-3">Operate X now, then extend into Facebook, Instagram, Telegram, YouTube, and WhatsApp.</h1>
               <p className="text-sm sm:text-base leading-7" style={{ color: 'var(--text-muted)' }}>
                 This hub tracks live connector state, credential readiness, and rollout order across every network you want this platform to manage. X remains the only active connector today; the others are scaffolded and visible so you can extend from one place.
@@ -187,7 +186,7 @@ export default function DashboardSocialPage() {
 
         <section className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[
-            { label: 'Supported Networks', value: platforms.length, tone: '#93c5fd' },
+            { label: 'Supported Networks', value: platforms.length, tone: 'var(--accent)' },
             { label: 'Live Connectors', value: liveCount, tone: '#f97316' },
             { label: 'Credential-Ready', value: readyCount, tone: '#22c55e' },
             { label: 'Connected Accounts', value: totalConnections, tone: '#facc15' },
