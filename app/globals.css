@@ -472,11 +472,6 @@ body {
 
 .responsive-sidebar-summary {
   display: none;
-  list-style: none;
-}
-
-.responsive-sidebar-summary::-webkit-details-marker {
-  display: none;
 }
 
 .responsive-sidebar-summary-hint {
@@ -517,7 +512,6 @@ body {
   }
 
   .responsive-sidebar-panel {
-    display: none;
     width: 100% !important;
     position: static !important;
     top: auto !important;
@@ -530,12 +524,12 @@ body {
     border: 1px solid var(--border);
   }
 
-  .responsive-sidebar[open] .responsive-sidebar-panel {
-    display: block;
+  .responsive-sidebar-panel[hidden] {
+    display: none !important;
   }
 
   .marketplace-sidebar-panel {
-    border-right: 1px solid var(--border) !important;
+    border-right: 0 !important;
     padding-right: 12px !important;
   }
 }
