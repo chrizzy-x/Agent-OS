@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Badge from '@/components/Badge';
+import ResponsiveSidebar from '@/components/ResponsiveSidebar';
 import { MARKETPLACE_CATEGORIES, getOfficialSkillCount } from '@/src/skills/official-catalog';
 
 interface Skill {
@@ -75,21 +76,25 @@ export default function MarketplacePage() {
       <Nav activePath="/marketplace" />
 
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
-        <div style={{ display: 'flex', gap: '0', paddingTop: '40px' }}>
+        <div className="sidebar-layout" style={{ paddingTop: '40px' }}>
 
           {/* Left sidebar */}
-          <aside style={{
-            width: '200px',
-            flexShrink: 0,
-            position: 'sticky',
-            top: '72px',
-            alignSelf: 'flex-start',
-            maxHeight: 'calc(100vh - 80px)',
-            overflowY: 'auto',
-            borderRight: '1px solid var(--border)',
-            paddingRight: '24px',
-            marginRight: '32px',
-          }}>
+          <ResponsiveSidebar
+            label="Categories"
+            panelClassName="marketplace-sidebar-panel"
+            panelStyle={{
+              width: '200px',
+              flexShrink: 0,
+              position: 'sticky',
+              top: '72px',
+              alignSelf: 'flex-start',
+              maxHeight: 'calc(100vh - 80px)',
+              overflowY: 'auto',
+              borderRight: '1px solid var(--border)',
+              paddingRight: '24px',
+              marginRight: '32px',
+            }}
+          >
             <div style={{
               fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
               fontSize: '10px',
@@ -150,7 +155,7 @@ export default function MarketplacePage() {
                 Publish a skill →
               </Link>
             </div>
-          </aside>
+          </ResponsiveSidebar>
 
           {/* Main content */}
           <main style={{ flex: 1, minWidth: 0, paddingBottom: '80px' }}>
@@ -341,3 +346,4 @@ export default function MarketplacePage() {
     </div>
   );
 }
+

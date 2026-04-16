@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Nav from '@/components/Nav';
 import DocsFooter from '@/components/DocsFooter';
 import Badge from '@/components/Badge';
+import ResponsiveSidebar from '@/components/ResponsiveSidebar';
 import { APP_URL } from '@/lib/config';
 
 const sections = [
@@ -90,18 +91,21 @@ export default function DocsPage() {
       <Nav activePath="/docs" />
 
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
-        <div style={{ display: 'flex', gap: '48px', paddingTop: '40px' }}>
+        <div className="sidebar-layout sidebar-layout-wide" style={{ paddingTop: '40px' }}>
 
           {/* Left sidebar */}
-          <aside style={{
-            width: '200px',
-            flexShrink: 0,
-            position: 'sticky',
-            top: '72px',
-            alignSelf: 'flex-start',
-            maxHeight: 'calc(100vh - 80px)',
-            overflowY: 'auto',
-          }}>
+          <ResponsiveSidebar
+            label="Documentation"
+            panelStyle={{
+              width: '200px',
+              flexShrink: 0,
+              position: 'sticky',
+              top: '72px',
+              alignSelf: 'flex-start',
+              maxHeight: 'calc(100vh - 80px)',
+              overflowY: 'auto',
+            }}
+          >
             <div style={{
               fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
               fontSize: '10px',
@@ -132,7 +136,7 @@ export default function DocsPage() {
                 {link.label}
               </Link>
             ))}
-          </aside>
+          </ResponsiveSidebar>
 
           {/* Main content */}
           <main style={{ flex: 1, minWidth: 0, paddingBottom: '80px' }}>
@@ -340,3 +344,4 @@ await fetch(AGENT_OS + '/mcp', {
     </div>
   );
 }
+
