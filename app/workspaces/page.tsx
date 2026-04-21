@@ -47,7 +47,7 @@ export default function WorkspacesPage() {
       const session = await fetchBrowserSession();
       if (!session) return;
       try {
-        const res = await fetch('/workspaces');
+        const res = await fetch('/api/workspaces');
         const data = await res.json();
         setWorkspaces(data.workspaces ?? []);
       } catch { /* silent */ }
@@ -60,8 +60,8 @@ export default function WorkspacesPage() {
     setDetailLoading(true);
     try {
       const [agentsRes, auditRes] = await Promise.all([
-        fetch(`/workspaces/${ws.id}/agents`),
-        fetch(`/workspaces/${ws.id}/audit`),
+        fetch(`/api/workspaces/${ws.id}/agents`),
+        fetch(`/api/workspaces/${ws.id}/audit`),
       ]);
       const agentsData = await agentsRes.json();
       const auditData = await auditRes.json();
@@ -78,7 +78,7 @@ export default function WorkspacesPage() {
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (agentBearerToken) headers['Authorization'] = `Bearer ${agentBearerToken}`;
-      const res = await fetch('/workspaces', {
+      const res = await fetch('/api/workspaces', {
         method: 'POST',
         headers,
         body: JSON.stringify({ name: newName.trim() }),
@@ -95,7 +95,7 @@ export default function WorkspacesPage() {
     if (!selected || !agentIdInput.trim()) return;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (agentBearerToken) headers['Authorization'] = `Bearer ${agentBearerToken}`;
-    await fetch(`/workspaces/${selected.id}/agents`, {
+    await fetch(`/api/workspaces/${selected.id}/agents`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ agent_id: agentIdInput.trim() }),
@@ -108,7 +108,7 @@ export default function WorkspacesPage() {
     if (!selected || !memberIdInput.trim()) return;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (agentBearerToken) headers['Authorization'] = `Bearer ${agentBearerToken}`;
-    await fetch(`/workspaces/${selected.id}/members`, {
+    await fetch(`/api/workspaces/${selected.id}/members`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ user_id: memberIdInput.trim(), role: memberRole }),
