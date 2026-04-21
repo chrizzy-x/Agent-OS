@@ -171,11 +171,16 @@ export default function DashboardPage() {
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
   const [recentAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'activity' | 'ffp'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'activity' | 'ffp' | 'eval'>('overview');
   const [ffpAudit, setFfpAudit] = useState<FfpOperation[]>([]);
   const [ffpConsensus, setFfpConsensus] = useState<FfpProposal[]>([]);
   const [ffpLoading, setFfpLoading] = useState(false);
   const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  const [evalSuites, setEvalSuites] = useState<Array<{ id: string; name: string; createdAt: string }>>([]);
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [evalLastRuns, setEvalLastRuns] = useState<Record<string, { score: number | null; passCount: number; failCount: number; status: string }>>({});
+  const [deployingTemplate, setDeployingTemplate] = useState<string | null>(null);
+  const [deployResult, setDeployResult] = useState<{ agentId: string; apiKey: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -234,6 +239,48 @@ export default function DashboardPage() {
     finally { setFfpLoading(false); }
   };
 
+  const loadEval = async () => {
+    if (evalLoading) return;
+    setEvalLoading(true);
+    try {
+      const res = await fetch('/eval/suites', { headers: { 'Content-Type': 'application/json' } });
+      const data = await res.json();
+      const suites = data.suites ?? [];
+      setEvalSuites(suites);
+      const runMap: Record<string, { score: number | null; passCount: number; failCount: number; status: string }> = {};
+      await Promise.all(suites.map(async (suite: { id: string }) => {
+        try {
+          const runsRes = await fetch(`/eval/suites/${suite.id}/runs`);
+          const runsData = await runsRes.json();
+          const runs: Array<{ score: number | null; pass_count: number; fail_count: number; status: string }> = runsData.runs ?? [];
+          if (runs.length > 0) {
+            const last = runs[0];
+            runMap[suite.id] = { score: last.score, passCount: last.pass_count, failCount: last.fail_count, status: last.status };
+          }
+        } catch { /* keep empty */ }
+      }));
+      setEvalLastRuns(runMap);
+    } catch { /* keep existing */ }
+    finally { setEvalLoading(false); }
+  };
+
+  const deployTemplate = async (templateId: string) => {
+    setDeployingTemplate(templateId);
+    setDeployResult(null);
+    try {
+      const res = await fetch('/agents/from-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_id: templateId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.agentId && data.apiKey) {
+        setDeployResult({ agentId: data.agentId, apiKey: data.apiKey });
+      }
+    } catch { /* show nothing */ }
+    finally { setDeployingTemplate(null); }
+  };
+
   const handleSignOut = async () => {
     await destroyBrowserSession();
     router.push('/signin');
@@ -281,6 +328,7 @@ export default function DashboardPage() {
               <Link href="/connect" className="hover:text-white transition-colors">Connect</Link>
               <Link href="/studio" className="hover:text-white transition-colors">Studio</Link>
               <Link href="/developer" className="hover:text-white transition-colors">Developer</Link>
+              <Link href="/workspaces" className="hover:text-white transition-colors">Workspaces</Link>
               <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
             </div>
           </div>
@@ -330,8 +378,8 @@ export default function DashboardPage() {
 
         <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-lg w-fit"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          {(['overview', 'skills', 'activity', 'ffp'] as const).map(tab => (
-            <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); }}
+          {(['overview', 'skills', 'activity', 'ffp', 'eval'] as const).map(tab => (
+            <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); if (tab === 'eval') void loadEval(); }}
               className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-all"
               style={activeTab === tab
                 ? { background: 'var(--accent)', color: 'var(--bg-primary)', boxShadow: '0 0 16px var(--accent-glow)' }
@@ -371,6 +419,47 @@ export default function DashboardPage() {
                           {a.label}
                         </span>
                       </Link>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h2 className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--text-muted)' }}>
+                    Agent Templates
+                  </h2>
+                  {deployResult && (
+                    <div className="mb-4 card p-4 space-y-2" style={{ borderColor: 'rgba(34,197,94,0.4)' }}>
+                      <p className="text-sm font-semibold" style={{ color: '#86efac' }}>Agent deployed!</p>
+                      <div className="font-mono text-xs break-all" style={{ color: 'var(--text-muted)' }}>ID: {deployResult.agentId}</div>
+                      <div className="font-mono text-xs break-all px-3 py-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.4)', color: '#a78bfa', border: '1px solid var(--border-bright)' }}>
+                        {deployResult.apiKey}
+                      </div>
+                      <button onClick={() => setDeployResult(null)} className="text-xs" style={{ color: 'var(--text-muted)' }}>Dismiss</button>
+                    </div>
+                  )}
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {[
+                      { id: 'research-agent', name: 'Research Agent', desc: 'Web research + knowledge storage', color: '#3b82f6' },
+                      { id: 'trading-monitor', name: 'Trading Monitor', desc: 'Price feeds + alerts', color: '#f59e0b' },
+                      { id: 'social-manager', name: 'Social Manager', desc: 'Scheduled social posts', color: '#ec4899' },
+                      { id: 'data-pipeline', name: 'Data Pipeline', desc: 'ETL, transform + store', color: '#8b5cf6' },
+                      { id: 'security-sentinel', name: 'Security Sentinel', desc: 'Endpoint monitoring', color: '#ef4444' },
+                      { id: 'customer-support', name: 'Customer Support', desc: 'FAQ + ticket logging', color: '#22c55e' },
+                    ].map(t => (
+                      <div key={t.id} className="card p-5 flex flex-col gap-3">
+                        <div className="w-9 h-9 rounded-lg flex-shrink-0" style={{ background: `${t.color}18`, border: `1px solid ${t.color}30` }} />
+                        <div>
+                          <div className="font-semibold text-sm">{t.name}</div>
+                          <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{t.desc}</div>
+                        </div>
+                        <button
+                          onClick={() => void deployTemplate(t.id)}
+                          disabled={deployingTemplate === t.id}
+                          className="btn-primary text-xs px-3 py-1.5 rounded-lg mt-auto"
+                        >
+                          {deployingTemplate === t.id ? 'Deploying…' : 'Deploy'}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -582,6 +671,99 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'eval' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-black text-lg">Eval Suites</h2>
+                  <button
+                    onClick={async () => {
+                      const name = window.prompt('Suite name:');
+                      if (!name?.trim()) return;
+                      await fetch('/eval/suites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
+                      void loadEval();
+                    }}
+                    className="btn-outline text-sm px-4 py-2 rounded-lg"
+                  >
+                    + New Suite
+                  </button>
+                </div>
+
+                {evalLoading ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => <div key={i} className="card h-20 animate-pulse" />)}
+                  </div>
+                ) : evalSuites.length === 0 ? (
+                  <div className="card p-12 text-center">
+                    <div className="w-14 h-14 rounded-2xl mx-auto mb-4" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }} />
+                    <p className="font-bold mb-2">No eval suites yet</p>
+                    <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
+                      Create a suite, add test cases, and run evals to measure agent behavior over time.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        const name = window.prompt('Suite name:');
+                        if (!name?.trim()) return;
+                        await fetch('/eval/suites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }) });
+                        void loadEval();
+                      }}
+                      className="btn-primary px-6 py-2.5 rounded-lg text-sm"
+                    >
+                      Create First Suite
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {evalSuites.map(suite => {
+                      const run = evalLastRuns[suite.id];
+                      const pct = run?.score != null ? Math.round(run.score * 100) : null;
+                      return (
+                        <div key={suite.id} className="card p-5">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="font-semibold">{suite.name}</div>
+                              <div className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{suite.id.slice(0, 8)}</div>
+                            </div>
+                            {run ? (
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs px-2 py-0.5 rounded font-medium"
+                                  style={run.status === 'complete'
+                                    ? { background: 'rgba(34,197,94,0.1)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
+                                    : run.status === 'failed'
+                                    ? { background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)' }
+                                    : { background: 'rgba(245,158,11,0.1)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.25)' }}>
+                                  {run.status}
+                                </span>
+                                {pct != null && (
+                                  <span className="font-black text-lg" style={{ color: pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444' }}>
+                                    {pct}%
+                                  </span>
+                                )}
+                                <div className="text-xs text-right" style={{ color: 'var(--text-muted)' }}>
+                                  <div>{run.passCount} pass</div>
+                                  <div>{run.failCount} fail</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>No runs yet</span>
+                            )}
+                            <button
+                              onClick={async () => {
+                                await fetch(`/eval/suites/${suite.id}/run`, { method: 'POST' });
+                                void loadEval();
+                              }}
+                              className="btn-outline text-xs px-3 py-1.5 rounded-lg flex-shrink-0"
+                            >
+                              Run
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}

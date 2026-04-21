@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
@@ -6,6 +6,13 @@ import Nav from '@/components/Nav';
 import Badge from '@/components/Badge';
 import ResponsiveSidebar from '@/components/ResponsiveSidebar';
 import { MARKETPLACE_CATEGORIES, getOfficialSkillCount } from '@/src/skills/official-catalog';
+
+interface SecurityScore {
+  skill_id: string;
+  aggregate_score: number | null;
+  risk_flags: string[];
+  llm_summary: string | null;
+}
 
 interface Skill {
   id: string;
@@ -23,6 +30,7 @@ interface Skill {
   author_name: string;
   verified: boolean;
   tags: string[];
+  security_score?: SecurityScore | null;
 }
 
 const OFFICIAL_COUNT = getOfficialSkillCount();
@@ -40,6 +48,7 @@ export default function MarketplacePage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('popular');
   const [total, setTotal] = useState(0);
+  const [scoreModal, setScoreModal] = useState<SecurityScore | null>(null);
 
   const fetchSkills = useCallback(async (searchTerm?: string) => {
     setLoading(true);
@@ -72,6 +81,7 @@ export default function MarketplacePage() {
   };
 
   return (
+    <>
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
       <Nav activePath="/marketplace" />
 
@@ -152,7 +162,7 @@ export default function MarketplacePage() {
                 fontSize: '12px',
                 textDecoration: 'none',
               }}>
-                Publish a skill →
+                Publish a skill â†’
               </Link>
             </div>
           </ResponsiveSidebar>
@@ -179,7 +189,7 @@ export default function MarketplacePage() {
                     color: 'var(--text-secondary)',
                     margin: 0,
                   }}>
-                    {OFFICIAL_COUNT} official skills · {total > 0 ? `${total} total available` : 'community-built and verified'}
+                    {OFFICIAL_COUNT} official skills Â· {total > 0 ? `${total} total available` : 'community-built and verified'}
                   </p>
                 </div>
               </div>
@@ -293,8 +303,33 @@ export default function MarketplacePage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                         {skill.verified && <Badge variant="accent">Official</Badge>}
                         <Badge variant="dim">{skill.category}</Badge>
+                        {(() => {
+                          const sc = skill.security_score;
+                          const score = sc?.aggregate_score;
+                          if (score == null) return (
+                            <button onClick={e => { e.preventDefault(); }}
+                              style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.3)', cursor: 'default' }}>
+                              unscored
+                            </button>
+                          );
+                          const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
+                          const bg = score >= 80 ? 'rgba(34,197,94,0.12)' : score >= 50 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)';
+                          const border = score >= 80 ? 'rgba(34,197,94,0.3)' : score >= 50 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)';
+                          const dot = score >= 80 ? '🟢' : score >= 50 ? '🟡' : '🔴';
+                          return (
+                            <button onClick={e => { e.preventDefault(); if (sc) setScoreModal(sc); }}
+                              style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: bg, color, border: `1px solid ${border}`, cursor: 'pointer', fontWeight: 600 }}>
+                              {dot} {Math.round(score)}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
+                    {skill.security_score?.aggregate_score != null && skill.security_score.aggregate_score < 40 && (
+                      <div style={{ marginBottom: '8px', padding: '6px 10px', borderRadius: '6px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', fontSize: '11px', color: '#fcd34d' }}>
+                        ⚠ Pending security review
+                      </div>
+                    )}
 
                     <h3 style={{
                       fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
@@ -326,7 +361,7 @@ export default function MarketplacePage() {
                         alignItems: 'center',
                         gap: '10px',
                       }}>
-                        {skill.rating > 0 && <span>★ {Number(skill.rating).toFixed(1)}</span>}
+                        {skill.rating > 0 && <span>â˜… {Number(skill.rating).toFixed(1)}</span>}
                         <span>{skill.total_installs.toLocaleString()} installs</span>
                       </div>
                       <span style={{
@@ -344,6 +379,70 @@ export default function MarketplacePage() {
         </div>
       </div>
     </div>
+
+      {scoreModal && (
+        <div
+          onClick={() => setScoreModal(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '12px', padding: '28px', maxWidth: '420px', width: '100%' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h3 style={{ fontFamily: 'var(--font-mono)', fontSize: '16px', fontWeight: 700, margin: 0 }}>Security Score</h3>
+              <button onClick={() => setScoreModal(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px', lineHeight: 1 }}>×</button>
+            </div>
+            {(() => {
+              const score = scoreModal.aggregate_score ?? 0;
+              const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
+              return (
+                <>
+                  <div style={{ fontSize: '48px', fontWeight: 900, color, marginBottom: '16px', fontFamily: 'var(--font-mono)' }}>
+                    {Math.round(score)}
+                    <span style={{ fontSize: '18px', color: 'var(--text-muted)', fontWeight: 400 }}>/100</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+                    {[
+                      { label: 'Static Analysis', key: 'static_score' },
+                      { label: 'Sandbox Run', key: 'sandbox_score' },
+                      { label: 'LLM Review', key: 'llm_score' },
+                    ].map(item => {
+                      const val = (scoreModal as unknown as Record<string, number | null>)[item.key];
+                      return (
+                        <div key={item.key} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>{item.label}</div>
+                          <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                            {val != null ? Math.round(val * 100) : '—'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {scoreModal.risk_flags && scoreModal.risk_flags.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Risk Flags</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {scoreModal.risk_flags.map(flag => (
+                          <span key={flag} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)' }}>
+                            {flag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {scoreModal.llm_summary && (
+                    <div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>LLM Review</div>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>{scoreModal.llm_summary}</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
-
