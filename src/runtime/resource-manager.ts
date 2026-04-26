@@ -60,7 +60,10 @@ export async function checkRateLimit(ctx: AgentContext): Promise<void> {
         `Rate limit exceeded: ${count}/${limit} requests this minute. Try again in the next minute.`,
       );
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof RateLimitError) {
+      throw error;
+    }
     checkLocalRateLimit(ctx, limit);
   }
 }

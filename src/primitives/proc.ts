@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 import { executeCode, type SupportedLanguage } from '../runtime/sandbox.js';
 import { withAudit } from '../runtime/audit.js';
 import { validate } from '../utils/validation.js';
-import { NotFoundError } from '../utils/errors.js';
+import { AgentOSError, NotFoundError } from '../utils/errors.js';
 import { createAgentToken } from '../auth/agent-identity.js';
 import { randomUUID } from 'crypto';
 import { getFFPClient } from '../ffp/client.js';
@@ -15,7 +15,8 @@ const MAX_TIMEOUT = 5 * 60 * 1000;
 async function withProcFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
   try {
     return await primary();
-  } catch {
+  } catch (error) {
+    if (error instanceof AgentOSError) throw error;
     return fallback();
   }
 }

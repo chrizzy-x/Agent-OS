@@ -36,6 +36,7 @@ beforeEach(() => {
     delete: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     single: vi.fn().mockResolvedValue({ data: { content_type: 'text/plain', size_bytes: 11, created_at: '2025-01-01', updated_at: '2025-01-01' }, error: null }),
     order: vi.fn().mockReturnThis(),
     limit: vi.fn().mockResolvedValue({ data: [], error: null }),
@@ -82,15 +83,17 @@ describe('fsRead', () => {
 
 describe('fsList', () => {
   it('returns directory entries', async () => {
-    mockSupabase.storage.from.mockReturnValue({
-      list: vi.fn().mockResolvedValue({
+    const chainable = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockResolvedValue({
         data: [
-          { name: 'file.txt', id: 'abc', metadata: { size: 100 } },
-          { name: 'subdir', id: null, metadata: {} },
+          { path: 'file.txt', size_bytes: 100 },
+          { path: 'subdir/inner.txt', size_bytes: 50 },
         ],
         error: null,
       }),
-    });
+    };
+    mockSupabase.from.mockReturnValue(chainable);
     const result = await fsList(ctx, { path: '/' });
     expect(result.entries).toHaveLength(2);
     expect(result.entries[0].type).toBe('file');

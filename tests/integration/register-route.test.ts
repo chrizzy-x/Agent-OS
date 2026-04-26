@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { mockSupabase } from '../setup.js';
 import { POST } from '../../app/register/route.js';
 
+
 function maybeSingleBuilder(data: unknown, error: unknown = null) {
   return {
     select: vi.fn().mockReturnThis(),

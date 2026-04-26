@@ -239,10 +239,11 @@ export async function getExternalAgentRegistration(agentId: string): Promise<Ext
     }
 
     if (!error) {
-      return await getLocalExternalAgentRegistration(agentId);
+      // Supabase is available and reports agent not found — return null authoritatively.
+      return null;
     }
   } catch {
-    // Fall back to local state below.
+    // Supabase unavailable — fall back to local state.
   }
 
   return await getLocalExternalAgentRegistration(agentId);
@@ -275,6 +276,7 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
     throw error;
   }
 
+  let supabaseSucceeded = false;
   try {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase
@@ -298,26 +300,35 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
 
       throw error;
     }
+    supabaseSucceeded = true;
   } catch (error) {
     const duplicateError = error as { code?: string; statusCode?: number };
     if (duplicateError.code === '23505' || duplicateError.statusCode === 409) {
       throw error;
     }
+    // Supabase unavailable — fall through to local registration below.
   }
 
-  const duplicate = await updateLocalRuntimeState(state => {
-    if (state.externalAgents[agentId]) {
-      return true;
+  if (supabaseSucceeded) {
+    // Supabase insert succeeded — just cache in local state (overwrite any stale data).
+    await updateLocalRuntimeState(state => {
+      state.externalAgents[agentId] = buildExternalAgentRegistrationRecord(registration);
+    });
+  } else {
+    // Supabase unavailable — register locally with duplicate check as fallback.
+    const duplicate = await updateLocalRuntimeState(state => {
+      if (state.externalAgents[agentId]) {
+        return true;
+      }
+      state.externalAgents[agentId] = buildExternalAgentRegistrationRecord(registration);
+      return false;
+    });
+
+    if (duplicate) {
+      const error = new Error('Agent ID already registered');
+      (error as Error & { statusCode?: number }).statusCode = 409;
+      throw error;
     }
-
-    state.externalAgents[agentId] = buildExternalAgentRegistrationRecord(registration);
-    return false;
-  });
-
-  if (duplicate) {
-    const error = new Error('Agent ID already registered');
-    (error as Error & { statusCode?: number }).statusCode = 409;
-    throw error;
   }
 
   return {

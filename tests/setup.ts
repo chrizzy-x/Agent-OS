@@ -32,6 +32,7 @@ export const mockRedis = {
   llen: vi.fn().mockResolvedValue(0),
   ltrim: vi.fn(),
   publish: vi.fn(),
+  ping: vi.fn().mockResolvedValue('PONG'),
   pipeline: vi.fn(() => ({
     lpush: vi.fn().mockReturnThis(),
     ltrim: vi.fn().mockReturnThis(),
