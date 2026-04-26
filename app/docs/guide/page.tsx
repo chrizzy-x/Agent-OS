@@ -633,7 +633,7 @@ function TOC({ items }: { items: { id: string; label: string }[] }) {
   );
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+function Section({ id, title, children }: { id: string; title: string; children?: React.ReactNode }) {
   return (
     <section id={id} className="mb-14 scroll-mt-20">
       <h2 className="text-2xl font-bold mb-4 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>{title}</h2>
@@ -642,7 +642,7 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-function UseCase({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+function UseCase({ n, title, children }: { n: string; title: string; children?: React.ReactNode }) {
   return (
     <div className="mb-8">
       <div className="flex items-center gap-3 mb-3">
@@ -654,7 +654,7 @@ function UseCase({ n, title, children }: { n: string; title: string; children: R
   );
 }
 
-function Callout({ emoji, children }: { emoji: string; children: React.ReactNode }) {
+function Callout({ emoji, children }: { emoji: string; children?: React.ReactNode }) {
   return (
     <div className="flex gap-3 p-4 mt-4 text-sm" style={{ background: 'rgba(255,170,0,0.06)', border: '1px solid rgba(255,170,0,0.2)', color: 'var(--text-secondary)' }}>
       <span className="text-base flex-shrink-0">{emoji}</span>
@@ -663,7 +663,7 @@ function Callout({ emoji, children }: { emoji: string; children: React.ReactNode
   );
 }
 
-function Code({ children }: { children: string }) {
+function Code({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-3 overflow-hidden" style={{ background: 'var(--code-bg)', border: '1px solid var(--code-border)' }}>
       <pre className="p-4 text-xs font-mono overflow-x-auto leading-relaxed whitespace-pre" style={{ color: 'var(--text-secondary)' }}>
@@ -673,7 +673,7 @@ function Code({ children }: { children: string }) {
   );
 }
 
-function Result({ children }: { children: string }) {
+function Result({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-2 overflow-hidden" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--code-border)' }}>
       <div className="px-3 py-1.5 text-xs" style={{ color: 'var(--text-tertiary)', borderBottom: '1px solid var(--code-border)' }}>Response</div>

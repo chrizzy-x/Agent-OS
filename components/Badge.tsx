@@ -4,7 +4,7 @@ type Variant = 'accent' | 'dim' | 'danger' | 'warning' | 'outline';
 
 interface BadgeProps {
   variant?: Variant;
-  children: ReactNode;
+  children?: ReactNode;
   dot?: boolean;
   className?: string;
   style?: CSSProperties;

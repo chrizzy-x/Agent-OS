@@ -3,7 +3,7 @@
 import { useEffect, useRef, ReactNode, CSSProperties } from 'react';
 
 interface FadeInProps {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   style?: CSSProperties;
   delay?: number;
