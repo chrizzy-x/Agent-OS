@@ -56,6 +56,27 @@ interface FfpProposal {
   [key: string]: unknown;
 }
 
+interface DeployedAgent {
+  agent_id: string;
+  name: string;
+  description: string | null;
+  status: string | null;
+  total_calls: number | null;
+  last_active_at: string | null;
+  created_at: string;
+  allowed_tools: string[] | null;
+  allowed_domains: string[] | null;
+}
+
+interface AgentActivityEntry {
+  primitive: string;
+  operation: string;
+  success: boolean;
+  duration_ms: number | null;
+  error: string | null;
+  created_at: string;
+}
+
 const PRIM_COLORS: Record<string, string> = {
   fs: 'var(--accent)', net: 'var(--accent)', proc: 'var(--accent)',
   mem: 'var(--accent)', db: 'var(--accent)', events: 'var(--accent)',
@@ -171,7 +192,7 @@ export default function DashboardPage() {
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
   const [recentAudit] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'skills' | 'activity' | 'ffp' | 'eval'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'agents' | 'skills' | 'activity' | 'ffp' | 'eval'>('overview');
   const [ffpAudit, setFfpAudit] = useState<FfpOperation[]>([]);
   const [ffpConsensus, setFfpConsensus] = useState<FfpProposal[]>([]);
   const [ffpLoading, setFfpLoading] = useState(false);
@@ -181,6 +202,12 @@ export default function DashboardPage() {
   const [evalLastRuns, setEvalLastRuns] = useState<Record<string, { score: number | null; passCount: number; failCount: number; status: string }>>({});
   const [deployingTemplate, setDeployingTemplate] = useState<string | null>(null);
   const [deployResult, setDeployResult] = useState<{ agentId: string; apiKey: string } | null>(null);
+  const [deployedAgents, setDeployedAgents] = useState<DeployedAgent[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentActivity, setAgentActivity] = useState<Record<string, AgentActivityEntry[]>>({});
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
+  const [activityLoading, setActivityLoading] = useState<string | null>(null);
+  const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -264,6 +291,39 @@ export default function DashboardPage() {
     finally { setEvalLoading(false); }
   };
 
+  const loadAgents = async () => {
+    if (agentsLoading) return;
+    setAgentsLoading(true);
+    try {
+      const res = await fetch('/api/agents');
+      const data = await res.json() as { agents?: DeployedAgent[] };
+      setDeployedAgents(data.agents ?? []);
+    } catch { /* keep existing */ }
+    finally { setAgentsLoading(false); }
+  };
+
+  const loadAgentActivity = async (agentId: string) => {
+    if (activityLoading === agentId) return;
+    if (expandedAgent === agentId) {
+      setExpandedAgent(null);
+      return;
+    }
+    setActivityLoading(agentId);
+    setExpandedAgent(agentId);
+    try {
+      const res = await fetch(`/api/agents/${agentId}/activity`);
+      const data = await res.json() as { activity?: AgentActivityEntry[] };
+      setAgentActivity(prev => ({ ...prev, [agentId]: data.activity ?? [] }));
+    } catch { /* keep empty */ }
+    finally { setActivityLoading(null); }
+  };
+
+  const copyAgentId = async (agentId: string) => {
+    await navigator.clipboard.writeText(agentId);
+    setCopiedAgentId(agentId);
+    window.setTimeout(() => setCopiedAgentId(null), 1500);
+  };
+
   const deployTemplate = async (templateId: string) => {
     setDeployingTemplate(templateId);
     setDeployResult(null);
@@ -276,6 +336,7 @@ export default function DashboardPage() {
       const data = await res.json();
       if (res.ok && data.agentId && data.apiKey) {
         setDeployResult({ agentId: data.agentId, apiKey: data.apiKey });
+        setDeployedAgents([]);
       }
     } catch { /* show nothing */ }
     finally { setDeployingTemplate(null); }
@@ -378,8 +439,8 @@ export default function DashboardPage() {
 
         <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-lg w-fit"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          {(['overview', 'skills', 'activity', 'ffp', 'eval'] as const).map(tab => (
-            <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); if (tab === 'eval') void loadEval(); }}
+          {(['overview', 'agents', 'skills', 'activity', 'ffp', 'eval'] as const).map(tab => (
+            <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); if (tab === 'eval') void loadEval(); if (tab === 'agents') void loadAgents(); }}
               className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-all"
               style={activeTab === tab
                 ? { background: 'var(--accent)', color: 'var(--bg-primary)', boxShadow: '0 0 16px var(--accent-glow)' }
@@ -760,6 +821,153 @@ export default function DashboardPage() {
                               Run
                             </button>
                           </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'agents' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-black text-lg">
+                    My Agents
+                    <span className="ml-2 text-sm font-normal" style={{ color: 'var(--text-muted)' }}>
+                      ({deployedAgents.length})
+                    </span>
+                  </h2>
+                  <button onClick={() => void loadAgents()} className="btn-outline text-xs px-3 py-1.5 rounded-lg">
+                    Refresh
+                  </button>
+                </div>
+
+                {agentsLoading ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {[...Array(4)].map((_, i) => <div key={i} className="card h-32 animate-pulse" />)}
+                  </div>
+                ) : deployedAgents.length === 0 ? (
+                  <div className="card p-12 text-center">
+                    <div className="w-14 h-14 rounded-2xl mx-auto mb-4" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }} />
+                    <p className="font-bold mb-2">No agents deployed yet</p>
+                    <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
+                      Use the Deploy buttons in the Overview tab, or type &ldquo;create an agent&rdquo; in Studio.
+                    </p>
+                    <button onClick={() => setActiveTab('overview')} className="btn-primary px-6 py-2.5 rounded-lg text-sm">
+                      Go to Overview
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {deployedAgents.map(agent => {
+                      const isActive = (agent.status ?? 'active') === 'active';
+                      const isExpanded = expandedAgent === agent.agent_id;
+                      const activity = agentActivity[agent.agent_id] ?? [];
+                      const isLoadingActivity = activityLoading === agent.agent_id;
+                      const lastSeen = agent.last_active_at
+                        ? new Date(agent.last_active_at).toLocaleString()
+                        : 'Never';
+                      return (
+                        <div key={agent.agent_id} className="card overflow-hidden">
+                          <div className="p-5">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <span className="font-semibold">{agent.name}</span>
+                                  <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                    style={isActive
+                                      ? { background: 'rgba(34,197,94,0.1)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
+                                      : { background: 'rgba(100,116,139,0.1)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.25)' }}>
+                                    {isActive ? 'active' : agent.status ?? 'inactive'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <code className="font-mono text-xs truncate" style={{ color: '#a78bfa' }}>
+                                    {agent.agent_id}
+                                  </code>
+                                  <button
+                                    onClick={() => void copyAgentId(agent.agent_id)}
+                                    className="text-xs flex-shrink-0"
+                                    style={{ color: 'var(--text-muted)' }}
+                                  >
+                                    {copiedAgentId === agent.agent_id ? 'Copied!' : 'Copy'}
+                                  </button>
+                                </div>
+                                {agent.description && (
+                                  <p className="text-sm mt-1.5" style={{ color: 'var(--text-muted)' }}>{agent.description}</p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => void loadAgentActivity(agent.agent_id)}
+                                className="btn-outline text-xs px-3 py-1.5 rounded-lg flex-shrink-0"
+                                disabled={isLoadingActivity}
+                              >
+                                {isLoadingActivity ? 'Loading…' : isExpanded ? 'Hide Activity' : 'View Activity'}
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
+                              <div className="text-center">
+                                <div className="text-xl font-black" style={{ color: 'var(--accent)' }}>
+                                  {agent.total_calls ?? 0}
+                                </div>
+                                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Total Calls</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs font-semibold truncate" style={{ color: 'var(--text-secondary)' }}>
+                                  {lastSeen}
+                                </div>
+                                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Last Active</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs font-semibold truncate" style={{ color: 'var(--text-secondary)' }}>
+                                  {new Date(agent.created_at).toLocaleDateString()}
+                                </div>
+                                <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Deployed</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {isExpanded && (
+                            <div style={{ borderTop: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)' }}>
+                              <div className="px-5 py-3 flex items-center justify-between">
+                                <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                                  Activity Log
+                                </span>
+                                <span className="text-xs" style={{ color: 'var(--text-dim)' }}>Last 50 operations</span>
+                              </div>
+                              {activity.length === 0 ? (
+                                <div className="px-5 pb-5 text-center">
+                                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No operations recorded yet for this agent.</p>
+                                </div>
+                              ) : (
+                                <div className="px-5 pb-5 space-y-1.5">
+                                  {activity.map((entry, i) => (
+                                    <div key={i} className="flex items-center gap-3 py-1.5 px-3 rounded-lg text-xs"
+                                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${entry.success ? 'bg-green-400' : 'bg-red-400'}`} />
+                                      <span className="font-mono font-semibold w-12 flex-shrink-0" style={{ color: 'var(--accent)' }}>
+                                        {entry.primitive}
+                                      </span>
+                                      <span className="font-mono flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>
+                                        {entry.operation}
+                                      </span>
+                                      {entry.duration_ms != null && (
+                                        <span style={{ color: 'var(--text-dim)' }}>{entry.duration_ms}ms</span>
+                                      )}
+                                      {entry.error && (
+                                        <span className="truncate max-w-32" style={{ color: '#fca5a5' }}>{entry.error}</span>
+                                      )}
+                                      <span className="hidden sm:block flex-shrink-0" style={{ color: 'var(--text-dim)' }}>
+                                        {new Date(entry.created_at).toLocaleTimeString()}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

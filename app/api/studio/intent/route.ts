@@ -1,8 +1,10 @@
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { getRedisClient } from '@/src/storage/redis';
 import { toErrorResponse } from '@/src/utils/errors';
+import { registerExternalAgent } from '@/src/external-agents/service';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 
 export const runtime = 'nodejs';
@@ -34,6 +36,7 @@ Tool reference (tool_name → required fields → example input):
 - proc_schedule     → { expression, tool, input }          → { "expression": "*/5 * * * *", "tool": "net_http_get", "input": { "url": "https://..." } }
 - events_publish    → { topic, message }                   → { "topic": "price_updates", "message": { "price": 50000 } }
 - events_subscribe  → { topic }                            → { "topic": "price_updates" }
+- agent_deploy      → { name, description? }               → { "name": "My Research Bot", "description": "Monitors crypto prices" }
 
 Return this exact JSON structure:
 {
@@ -130,6 +133,26 @@ export async function POST(req: NextRequest) {
       const results: unknown[] = [];
       for (const step of plan.steps.sort((a, b) => a.order - b.order)) {
         const toolName = step.tool.replace(/^agentos\./, '');
+
+        if (step.tool === 'agentos.agent_deploy') {
+          const agentName = typeof step.input.name === 'string' && step.input.name.trim()
+            ? step.input.name.trim()
+            : 'Studio Agent';
+          const desc = typeof step.input.description === 'string' ? step.input.description : null;
+          const suffix = crypto.randomBytes(4).toString('hex');
+          const agentId = agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) + '-' + suffix;
+          const deployResult = await registerExternalAgent({
+            agentId,
+            name: agentName,
+            description: desc,
+            ownerEmail: ctx.agentId,
+            allowedDomains: ['*'],
+            allowedTools: [],
+          });
+          results.push({ step: step.order, tool: 'agent_deploy', result: { agentId: deployResult.agentId, token: deployResult.token, message: 'Agent deployed successfully' } });
+          continue;
+        }
+
         const result = await executeUniversalToolCall({
           agentContext: ctx,
           name: step.tool,

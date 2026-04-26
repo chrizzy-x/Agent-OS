@@ -223,6 +223,24 @@ export function normalizeRequestedToolName(toolName: string): string {
   return normalized;
 }
 
+export async function listExternalAgents(ownerAgentId: string): Promise<ExternalAgentRegistrationRow[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('external_agent_registrations')
+      .select('agent_id, name, description, owner_email, allowed_domains, allowed_tools, status, total_calls, last_active_at, created_at')
+      .eq('owner_email', ownerAgentId)
+      .order('created_at', { ascending: false });
+    if (!error && data) return data as ExternalAgentRegistrationRow[];
+  } catch { /* fall through to local */ }
+
+  const state = await readLocalRuntimeState();
+  return Object.values(state.externalAgents)
+    .filter(r => r.owner_email === ownerAgentId)
+    .map(toExternalAgentRegistration)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+
 export async function getExternalAgentRegistration(agentId: string): Promise<ExternalAgentRegistrationRow | null> {
   try {
     const supabase = getSupabaseAdmin();
