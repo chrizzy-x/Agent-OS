@@ -16,7 +16,7 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 
 type Props = InputProps | TextareaProps;
 
-export default function Input({ label, error, hint, as: Tag = 'input', ...props }: Props) {
+export default function Input({ label, error, hint, as: Tag = 'input', style: propStyle, ...props }: Props & { style?: CSSProperties }) {
   const inputStyle: CSSProperties = {
     background: 'var(--bg-tertiary)',
     border: `1px solid ${error ? 'var(--danger)' : 'var(--border)'}`,
@@ -71,14 +71,14 @@ export default function Input({ label, error, hint, as: Tag = 'input', ...props 
       {Tag === 'textarea' ? (
         <textarea
           {...(props as TextareaHTMLAttributes<HTMLTextAreaElement>)}
-          style={{ ...inputStyle, resize: 'vertical', minHeight: '100px', ...(props.style as CSSProperties) }}
+          style={{ ...inputStyle, resize: 'vertical', minHeight: '100px', ...propStyle }}
           onFocus={handleFocus as React.FocusEventHandler<HTMLTextAreaElement>}
           onBlur={handleBlur as React.FocusEventHandler<HTMLTextAreaElement>}
         />
       ) : (
         <input
           {...(props as InputHTMLAttributes<HTMLInputElement>)}
-          style={{ ...inputStyle, ...(props.style as CSSProperties) }}
+          style={{ ...inputStyle, ...propStyle }}
           onFocus={handleFocus as React.FocusEventHandler<HTMLInputElement>}
           onBlur={handleBlur as React.FocusEventHandler<HTMLInputElement>}
         />

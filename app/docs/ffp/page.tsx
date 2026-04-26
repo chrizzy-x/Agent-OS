@@ -224,7 +224,7 @@ FFP_REQUIRE_CONSENSUS=true`}</pre>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <section className="mb-12">
       <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-3 border-b border-gray-100">{title}</h2>
@@ -233,7 +233,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Step({ n, label, children }: { n: number; label: string; children: React.ReactNode }) {
+function Step({ n, label, children }: { n: number; label: string; children?: React.ReactNode }) {
   return (
     <div className="flex gap-4">
       <div className="w-7 h-7 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{n}</div>
@@ -245,7 +245,7 @@ function Step({ n, label, children }: { n: number; label: string; children: Reac
   );
 }
 
-function Callout({ color, emoji, children }: { color: 'blue' | 'amber'; emoji: string; children: React.ReactNode }) {
+function Callout({ color, emoji, children }: { color: 'blue' | 'amber'; emoji: string; children?: React.ReactNode }) {
   const styles = {
     blue: 'bg-blue-50 border-blue-100 text-gray-700',
     amber: 'bg-amber-50 border-amber-100 text-gray-700',

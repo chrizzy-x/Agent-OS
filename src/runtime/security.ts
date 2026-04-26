@@ -80,7 +80,7 @@ export function checkDomainAllowed(url: string, agentAllowedDomains: string[]): 
 
   const allowed = new Set([...globalDomains, ...agentAllowedDomains.map(domain => domain.toLowerCase())]);
 
-  if (allowed.has('*') || allowed.size === 0) {
+  if (allowed.has('*')) {
     return;
   }
 

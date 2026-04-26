@@ -73,6 +73,6 @@ describe('POST /api/signup', () => {
     const body = await response.json();
 
     expect(response.status).toBe(409);
-    expect(body.error).toContain('already exists');
+    expect(body.message).toContain('already exists');
   });
 });

@@ -253,7 +253,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-function Code({ children }: { children: string }) {
+function Code({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-gray-950 rounded-lg overflow-hidden mt-3">
       <pre className="p-4 text-xs font-mono text-gray-300 overflow-x-auto leading-relaxed whitespace-pre">
@@ -263,7 +263,7 @@ function Code({ children }: { children: string }) {
   );
 }
 
-function Result({ children }: { children: string }) {
+function Result({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden mt-2">
       <div className="px-3 py-1.5 text-xs text-gray-500 border-b border-gray-700">Response</div>

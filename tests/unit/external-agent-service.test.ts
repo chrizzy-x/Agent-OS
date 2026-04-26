@@ -7,6 +7,7 @@ import {
 import { mockSupabase } from '../setup.js';
 import { PermissionError, ValidationError } from '../../src/utils/errors.js';
 
+
 function maybeSingleBuilder(data: unknown, error: unknown = null) {
   return {
     select: vi.fn().mockReturnThis(),

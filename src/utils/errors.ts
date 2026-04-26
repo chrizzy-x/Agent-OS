@@ -71,15 +71,15 @@ export function toErrorResponse(error: unknown): { code: string; message: string
 
   if (error instanceof Error) {
     return {
-      code: 'REQUEST_FAILED',
-      message: error.message || 'Request failed',
-      statusCode: 400,
+      code: 'INTERNAL_ERROR',
+      message: 'An internal error occurred',
+      statusCode: 500,
     };
   }
 
   return {
     code: 'UNKNOWN_ERROR',
     message: 'An unknown error occurred',
-    statusCode: 400,
+    statusCode: 500,
   };
 }

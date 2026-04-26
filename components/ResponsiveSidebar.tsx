@@ -4,7 +4,7 @@ import { useEffect, useId, useState, type CSSProperties, type ReactNode } from '
 
 type ResponsiveSidebarProps = {
   label: string;
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   panelClassName?: string;
   panelStyle?: CSSProperties;

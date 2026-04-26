@@ -31,7 +31,10 @@ function getLocalMemoryUsage(state: Awaited<ReturnType<typeof readLocalRuntimeSt
 async function withMemFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
   try {
     return await primary();
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Corrupted value')) {
+      throw error;
+    }
     return fallback();
   }
 }
@@ -98,7 +101,11 @@ export async function memGet(ctx: AgentContext, input: unknown): Promise<{ key: 
       if (raw === null) {
         throw new NotFoundError(`Key not found: ${key}`);
       }
-      return { key, value: JSON.parse(raw) as unknown };
+      try {
+        return { key, value: JSON.parse(raw) as unknown };
+      } catch {
+        throw new Error(`Corrupted value for key: ${key}`);
+      }
     }, async () => {
       const state = await readLocalRuntimeState();
       const record = state.mem[ctx.agentId]?.[key];
