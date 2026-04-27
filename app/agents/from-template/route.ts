@@ -17,7 +17,7 @@ const TEMPLATES: Record<string, { name: string }> = {
 
 export async function POST(request: NextRequest) {
   try {
-    requireAgentContext(request.headers);
+    const ctx = requireAgentContext(request.headers);
 
     const body = await request.json() as Record<string, unknown>;
     const templateId = typeof body.template_id === 'string' ? body.template_id : '';
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       name: template.name,
       allowedDomains: ['*'],
       allowedTools: [],
+      ownerEmail: ctx.agentId,
     });
 
     return NextResponse.json({ agentId: result.agentId, apiKey: result.token });
