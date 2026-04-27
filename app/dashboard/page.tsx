@@ -190,7 +190,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
-  const [recentAudit] = useState<AuditEntry[]>([]);
+  const [recentAudit, setRecentAudit] = useState<AuditEntry[]>([]);
+  const [activityTabLoading, setActivityTabLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'agents' | 'skills' | 'activity' | 'ffp' | 'eval'>('overview');
   const [ffpAudit, setFfpAudit] = useState<FfpOperation[]>([]);
@@ -290,6 +291,17 @@ export default function DashboardPage() {
       setEvalLastRuns(runMap);
     } catch { /* keep existing */ }
     finally { setEvalLoading(false); }
+  };
+
+  const loadActivity = async () => {
+    if (activityTabLoading) return;
+    setActivityTabLoading(true);
+    try {
+      const res = await fetch('/api/agent/activity?limit=50');
+      const data = await res.json() as { activity?: AuditEntry[] };
+      if (res.ok) setRecentAudit(data.activity ?? []);
+    } catch { /* keep existing */ }
+    finally { setActivityTabLoading(false); }
   };
 
   const loadAgents = async () => {
@@ -447,7 +459,7 @@ export default function DashboardPage() {
         <div className="flex flex-wrap gap-1 mb-6 p-1 rounded-lg w-fit"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           {(['overview', 'agents', 'skills', 'activity', 'ffp', 'eval'] as const).map(tab => (
-            <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); if (tab === 'eval') void loadEval(); if (tab === 'agents') void loadAgents(); }}
+            <button key={tab} onClick={() => { setActiveTab(tab); if (tab === 'ffp') void loadFfp(); if (tab === 'eval') void loadEval(); if (tab === 'agents') void loadAgents(); if (tab === 'activity') void loadActivity(); }}
               className="px-4 py-2 text-sm font-medium rounded-md capitalize transition-all"
               style={activeTab === tab
                 ? { background: 'var(--accent)', color: 'var(--bg-primary)', boxShadow: '0 0 16px var(--accent-glow)' }
@@ -993,10 +1005,16 @@ export default function DashboardPage() {
               <div>
                 <div className="flex items-center justify-between mb-5">
                   <h2 className="font-black text-lg">Recent Activity</h2>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Audit log · Agent OS</span>
+                  <button onClick={() => void loadActivity()} className="btn-outline text-xs px-3 py-1.5 rounded-lg">
+                    {activityTabLoading ? 'Loading…' : 'Refresh'}
+                  </button>
                 </div>
 
-                {recentAudit.length === 0 ? (
+                {activityTabLoading && recentAudit.length === 0 ? (
+                  <div className="space-y-2">
+                    {[...Array(5)].map((_, i) => <div key={i} className="card h-14 animate-pulse" />)}
+                  </div>
+                ) : recentAudit.length === 0 ? (
                   <div className="card p-12 text-center">
                     <div className="w-14 h-14 mx-auto mb-4" style={{ background: 'var(--accent-glow)', border: '1px solid var(--border-active)' }} />
                     <p className="font-bold mb-2">No activity yet</p>

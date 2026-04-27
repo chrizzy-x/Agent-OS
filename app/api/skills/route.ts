@@ -80,12 +80,43 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body', message: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const { name, slug, category } = body as Record<string, unknown>;
+    const { name, slug, category, description } = body as Record<string, unknown>;
     if (!name || !slug || !category) {
       return NextResponse.json({ error: 'Missing required fields: name, slug, category', message: 'Missing required fields: name, slug, category' }, { status: 400 });
     }
 
-    return NextResponse.json({ id: `${agentCtx.agentId}:${slug}`, slug }, { status: 201 });
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('skills')
+      .insert({
+        name: String(name),
+        slug: String(slug),
+        category: String(category),
+        description: typeof description === 'string' ? description : '',
+        long_description: typeof body.long_description === 'string' ? body.long_description : null,
+        icon: typeof body.icon === 'string' ? body.icon : '📦',
+        author_id: agentCtx.agentId,
+        author_name: agentCtx.agentId,
+        pricing_model: typeof body.pricing_model === 'string' ? body.pricing_model : 'free',
+        price_per_call: typeof body.price_per_call === 'number' ? body.price_per_call : 0,
+        free_tier_calls: typeof body.free_tier_calls === 'number' ? body.free_tier_calls : 100,
+        capabilities: Array.isArray(body.capabilities) ? body.capabilities : [],
+        source_code: typeof body.source_code === 'string' ? body.source_code : '',
+        primitives_required: Array.isArray(body.primitives_required) ? body.primitives_required : [],
+        tags: Array.isArray(body.tags) ? body.tags : [],
+        published: true,
+      })
+      .select('id, slug')
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: 'A skill with this slug already exists', message: 'A skill with this slug already exists' }, { status: 409 });
+      }
+      throw error;
+    }
+
+    return NextResponse.json({ id: data.id, slug: data.slug }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
