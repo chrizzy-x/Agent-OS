@@ -204,6 +204,7 @@ export default function DashboardPage() {
   const [deployResult, setDeployResult] = useState<{ agentId: string; apiKey: string } | null>(null);
   const [deployedAgents, setDeployedAgents] = useState<DeployedAgent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [agentActivity, setAgentActivity] = useState<Record<string, AgentActivityEntry[]>>({});
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [activityLoading, setActivityLoading] = useState<string | null>(null);
@@ -294,12 +295,18 @@ export default function DashboardPage() {
   const loadAgents = async () => {
     if (agentsLoading) return;
     setAgentsLoading(true);
+    setAgentsError(null);
     try {
       const res = await fetch('/api/agents');
-      const data = await res.json() as { agents?: DeployedAgent[] };
-      setDeployedAgents(data.agents ?? []);
-    } catch { /* keep existing */ }
-    finally { setAgentsLoading(false); }
+      const data = await res.json() as { agents?: DeployedAgent[]; error?: string };
+      if (!res.ok) {
+        setAgentsError(data.error ?? `Error ${res.status}`);
+      } else {
+        setDeployedAgents(data.agents ?? []);
+      }
+    } catch (e) {
+      setAgentsError(e instanceof Error ? e.message : 'Network error');
+    } finally { setAgentsLoading(false); }
   };
 
   const loadAgentActivity = async (agentId: string) => {
@@ -336,7 +343,7 @@ export default function DashboardPage() {
       const data = await res.json();
       if (res.ok && data.agentId && data.apiKey) {
         setDeployResult({ agentId: data.agentId, apiKey: data.apiKey });
-        setDeployedAgents([]);
+        void loadAgents();
       }
     } catch { /* show nothing */ }
     finally { setDeployingTemplate(null); }
@@ -843,11 +850,17 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
+                {agentsError && (
+                  <div className="card p-4 mb-4 text-sm" style={{ borderColor: 'rgba(239,68,68,0.4)', color: '#fca5a5' }}>
+                    Failed to load agents: {agentsError}
+                  </div>
+                )}
+
                 {agentsLoading ? (
                   <div className="grid sm:grid-cols-2 gap-4">
                     {[...Array(4)].map((_, i) => <div key={i} className="card h-32 animate-pulse" />)}
                   </div>
-                ) : deployedAgents.length === 0 ? (
+                ) : deployedAgents.length === 0 && !agentsError ? (
                   <div className="card p-12 text-center">
                     <div className="w-14 h-14 rounded-2xl mx-auto mb-4" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }} />
                     <p className="font-bold mb-2">No agents deployed yet</p>
