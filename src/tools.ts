@@ -5,6 +5,7 @@ import { dbQuery, dbTransaction, dbCreateTable, dbInsert, dbUpdate, dbDelete } f
 import { netHttpGet, netHttpPost, netHttpPut, netHttpDelete, netDnsResolve } from './primitives/net.js';
 import { eventsPublish, eventsSubscribe, eventsUnsubscribe, eventsListTopics } from './primitives/events.js';
 import { procExecute, procSchedule, procSpawn, procKill, procList } from './primitives/proc.js';
+import { notifySend } from './primitives/notify.js';
 import { xAccountsList, xDraftCreate, xMentionsPull, xMetricsSync, xPublishNow, xQueueApprove, xQueueSchedule } from './integrations/x/service.js';
 import type { AgentContext } from './auth/permissions.js';
 
@@ -60,6 +61,9 @@ export const TOOLS: Record<string, ToolHandler> = {
   proc_spawn: procSpawn,
   proc_kill: procKill,
   proc_list: procList,
+
+  // Notify primitive — email, WhatsApp, SMS, Telegram, Slack, Discord, webhook
+  notify_send: notifySend,
 
   // X account management tools
   x_accounts_list: xAccountsList,
