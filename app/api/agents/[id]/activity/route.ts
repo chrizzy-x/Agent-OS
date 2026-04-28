@@ -18,7 +18,7 @@ export async function GET(
     if (!registration) {
       throw new NotFoundError(`Agent '${id}' not found`);
     }
-    if (registration.owner_email !== ctx.agentId) {
+    if (registration.owner_email !== ctx.agentId.toLowerCase()) {
       throw new PermissionError('Access denied');
     }
 
