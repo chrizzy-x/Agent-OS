@@ -184,8 +184,17 @@ const primitiveMetadata: Record<string, PrimitiveMetadata> = {
     inputSchema: objectSchema({ code: { type: 'string' }, language: { type: 'string', enum: ['javascript', 'python', 'bash'] }, timeoutMs: { type: 'number', minimum: 1 } }, ['code', 'language']),
   },
   proc_schedule: {
-    description: 'Register a scheduled task in the process runtime.',
-    inputSchema: objectSchema({ name: { type: 'string' }, schedule: { type: 'string' }, code: { type: 'string' }, language: { type: 'string', enum: ['javascript', 'python', 'bash'] } }, ['name', 'schedule', 'code', 'language']),
+    description: 'Schedule a tool to run on a cron expression (e.g. "0 * * * *" for hourly).',
+    inputSchema: objectSchema({ expression: { type: 'string' }, tool: { type: 'string' }, input: { type: 'object' } }, ['expression', 'tool']),
+  },
+  notify_send: {
+    description: 'Send a notification via email, WhatsApp, SMS, Telegram, Slack, Discord, or a generic webhook.',
+    inputSchema: objectSchema({
+      channel: { type: 'string', enum: ['email', 'whatsapp', 'sms', 'telegram', 'slack', 'discord', 'webhook'] },
+      to: { type: 'string' },
+      message: { type: 'string' },
+      subject: { type: 'string' },
+    }, ['channel', 'to', 'message']),
   },
   proc_spawn: {
     description: 'Spawn a child agent process with isolated credentials.',

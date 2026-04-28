@@ -179,7 +179,20 @@ export async function executeCode(code: string, language: SupportedLanguage, tim
       }
       return result;
     } catch {
-      return executeLanguageFallback(code, language, timeoutMs);
+      if (language === 'javascript') {
+        return executeLanguageFallback(code, language, timeoutMs);
+      }
+      // Python and Bash binaries are not available in this environment.
+      // Return a clear error instead of a misleading toy interpreter fallback.
+      const hint = language === 'python'
+        ? 'Python is not available. Use JavaScript for scripting, or net_http_post to call email/webhook APIs (e.g. Resend, SendGrid, Mailgun).'
+        : 'Bash is not available. Use JavaScript for scripting or net_http_* tools for HTTP tasks.';
+      return {
+        stdout: '',
+        stderr: hint,
+        exitCode: 1,
+        durationMs: 0,
+      };
     }
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});

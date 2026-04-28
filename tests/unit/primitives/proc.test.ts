@@ -82,11 +82,12 @@ describe('procExecute', () => {
 describe('procSchedule', () => {
   it('creates a scheduled task and returns taskId', async () => {
     const result = await procSchedule(ctx, {
-      code: 'console.log("ping")',
-      language: 'javascript',
-      cronExpression: '*/5 * * * *',
+      expression: '*/5 * * * *',
+      tool: 'agentos.net_http_get',
+      input: { url: 'https://api.example.com/ping' },
     });
-    expect(result.cronExpression).toBe('*/5 * * * *');
+    expect(result.expression).toBe('*/5 * * * *');
+    expect(result.tool).toBe('agentos.net_http_get');
     expect(typeof result.taskId).toBe('string');
     expect(mockSupabase.from).toHaveBeenCalledWith('scheduled_tasks');
   });

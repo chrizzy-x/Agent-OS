@@ -53,10 +53,14 @@ Tool reference (tool_name → required fields → example input):
 - fs_write          → { path, content }                    → { "path": "data/output.txt", "content": "hello" }
 - fs_list           → { path }                             → { "path": "data" }
 - fs_delete         → { path }                             → { "path": "data/output.txt" }
-- proc_execute      → { code, language }                   → { "code": "print('hello')", "language": "python" }
-- proc_schedule     → { expression, tool, input }          → { "expression": "*/5 * * * *", "tool": "net_http_get", "input": { "url": "https://..." } }
+- proc_execute      → { code, language }                   → { "code": "console.log('hello')", "language": "javascript" }
+- proc_schedule     → { expression, tool, input }          → { "expression": "0 * * * *", "tool": "agentos.notify_send", "input": { "channel": "email", "to": "user@example.com", "message": "Price update" } }
 - events_publish    → { topic, message }                   → { "topic": "price_updates", "message": { "price": 50000 } }
 - events_subscribe  → { topic }                            → { "topic": "price_updates" }
+- notify_send       → { channel, to, message, subject? }   → { "channel": "email", "to": "user@example.com", "message": "BTC is $50000", "subject": "Price Alert" }
+- notify_send (WhatsApp) →                                 → { "channel": "whatsapp", "to": "+1234567890", "message": "BTC is $50000" }
+- notify_send (Telegram) →                                 → { "channel": "telegram", "to": "<chat_id>", "message": "BTC is $50000" }
+- notify_send (webhook)  →                                 → { "channel": "webhook", "to": "https://hooks.slack.com/...", "message": "BTC is $50000" }
 - agent_deploy      → { name, description? }               → { "name": "My Research Bot", "description": "Monitors crypto prices" }
 
 Return this exact JSON structure:
@@ -83,7 +87,16 @@ Rules:
 - If a value is ambiguous, use the most common/obvious interpretation
 - NEVER ask for clarification — always make your best guess and build the plan
 - missingParams must always be an empty array []
-- schedule is null unless the instruction implies recurring execution (e.g. "every minute", "daily")
+- schedule is null unless the instruction implies recurring execution (e.g. "every hour", "daily", "every 5 minutes")
+- For scheduled tasks, use proc_schedule with the recurring tool as input (e.g. net_http_get or net_http_post)
+- For EMAIL tasks: use notify_send with channel "email" and to = the recipient email address
+- For WHATSAPP tasks: use notify_send with channel "whatsapp" and to = phone number with country code (e.g. "+1234567890")
+- For TELEGRAM tasks: use notify_send with channel "telegram" and to = the Telegram chat ID
+- For SLACK/DISCORD tasks: use notify_send with channel "slack" or "discord" and to = the webhook URL
+- For SCHEDULING tasks (hourly, daily, every N minutes): use proc_schedule with expression (cron), tool (agentos.notify_send or agentos.net_http_get etc), and input
+- When user wants to "monitor X and notify every Y": use net_http_get to fetch, mem_set to store, proc_schedule to repeat, notify_send to alert — all as separate steps
+- For proc_execute: ALWAYS use language "javascript" — Python and Bash are not available in this environment
+- NEVER generate proc_execute with Python or Bash code
 - Return ONLY the JSON object, nothing else`;
 
 export interface PlanStep {

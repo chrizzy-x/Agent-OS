@@ -159,17 +159,21 @@ export async function procExecute(
 export async function procSchedule(
   ctx: AgentContext,
   input: unknown,
-): Promise<{ taskId: string; cronExpression: string; language: string }> {
-  const { code, language, cronExpression } = validate(
+): Promise<{ taskId: string; expression: string; tool: string; message: string }> {
+  const { expression, tool, input: toolInput } = validate(
     z.object({
-      code: z.string().min(1).max(1_000_000),
-      language: z.enum(['python', 'javascript', 'bash']),
-      cronExpression: z.string().min(1).max(100),
+      expression: z.string().min(1).max(100),
+      tool: z.string().min(1).max(200),
+      input: z.record(z.unknown()).default({}),
     }),
     input,
   );
 
-  return withAudit({ agentId: ctx.agentId, primitive: 'proc', operation: 'schedule', metadata: { language, cronExpression } }, async () => {
+  // Store tool+input as JSON in the code column; language='tool' marks it as a tool-based task
+  const code = JSON.stringify({ tool, input: toolInput });
+  const language = 'tool' as const;
+
+  return withAudit({ agentId: ctx.agentId, primitive: 'proc', operation: 'schedule', metadata: { tool, expression } }, async () => {
     const result = await withProcFallback(async () => {
       const supabase = getSupabaseAdmin();
       const taskId = randomUUID();
@@ -178,7 +182,7 @@ export async function procSchedule(
         agent_id: ctx.agentId,
         code,
         language,
-        cron_expression: cronExpression,
+        cron_expression: expression,
         enabled: true,
       });
 
@@ -186,7 +190,7 @@ export async function procSchedule(
         throw new Error(`Failed to schedule task: ${error.message}`);
       }
 
-      return { taskId, cronExpression, language };
+      return { taskId, expression, tool };
     }, async () => {
       const taskId = randomUUID();
       await updateLocalRuntimeState(state => {
@@ -194,7 +198,7 @@ export async function procSchedule(
         state.scheduledTasks[ctx.agentId].push({
           id: taskId,
           language,
-          cronExpression,
+          cronExpression: expression,
           code,
           enabled: true,
           createdAt: new Date().toISOString(),
@@ -202,11 +206,11 @@ export async function procSchedule(
           nextRunAt: null,
         });
       });
-      return { taskId, cronExpression, language };
+      return { taskId, expression, tool };
     });
 
-    void getFFPClient().log({ primitive: 'proc', action: 'schedule', params: { language, cronExpression }, result: { taskId: result.taskId }, timestamp: Date.now(), agentId: ctx.agentId });
-    return result;
+    void getFFPClient().log({ primitive: 'proc', action: 'schedule', params: { tool, expression }, result: { taskId: result.taskId }, timestamp: Date.now(), agentId: ctx.agentId });
+    return { ...result, message: `Task scheduled. Runs "${expression}". Trigger POST /api/cron/tasks to execute due tasks.` };
   });
 }
 
