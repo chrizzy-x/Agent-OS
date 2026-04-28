@@ -77,6 +77,26 @@ interface AgentActivityEntry {
   created_at: string;
 }
 
+interface CommandPlanStep {
+  order: number;
+  tool: string;
+  description: string;
+  input: Record<string, unknown>;
+}
+
+interface CommandPlan {
+  summary: string;
+  steps: CommandPlanStep[];
+  schedule: string | null;
+  confirmToken: string;
+}
+
+interface CommandResult {
+  executed: boolean;
+  results: Array<{ step: number; tool: string; result: unknown }>;
+  workflowId: string | null;
+}
+
 const PRIM_COLORS: Record<string, string> = {
   fs: 'var(--accent)', net: 'var(--accent)', proc: 'var(--accent)',
   mem: 'var(--accent)', db: 'var(--accent)', events: 'var(--accent)',
@@ -207,9 +227,14 @@ export default function DashboardPage() {
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [agentActivity, setAgentActivity] = useState<Record<string, AgentActivityEntry[]>>({});
-  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [activityLoading, setActivityLoading] = useState<string | null>(null);
   const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null);
+  const [expandedPanel, setExpandedPanel] = useState<Record<string, 'activity' | 'command' | null>>({});
+  const [commandDraft, setCommandDraft] = useState<Record<string, string>>({});
+  const [commandPlan, setCommandPlan] = useState<Record<string, CommandPlan | null>>({});
+  const [commandLoading, setCommandLoading] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<Record<string, string | null>>({});
+  const [commandResults, setCommandResults] = useState<Record<string, CommandResult | null>>({});
 
   useEffect(() => {
     let active = true;
@@ -323,12 +348,7 @@ export default function DashboardPage() {
 
   const loadAgentActivity = async (agentId: string) => {
     if (activityLoading === agentId) return;
-    if (expandedAgent === agentId) {
-      setExpandedAgent(null);
-      return;
-    }
     setActivityLoading(agentId);
-    setExpandedAgent(agentId);
     try {
       const res = await fetch(`/api/agents/${agentId}/activity`);
       const data = await res.json() as { activity?: AgentActivityEntry[] };
@@ -341,6 +361,55 @@ export default function DashboardPage() {
     await navigator.clipboard.writeText(agentId);
     setCopiedAgentId(agentId);
     window.setTimeout(() => setCopiedAgentId(null), 1500);
+  };
+
+  const togglePanel = (agentId: string, panel: 'activity' | 'command') => {
+    setExpandedPanel(prev => ({ ...prev, [agentId]: prev[agentId] === panel ? null : panel }));
+    if (panel === 'activity' && expandedPanel[agentId] !== 'activity') {
+      void loadAgentActivity(agentId);
+    }
+  };
+
+  const sendAgentCommand = async (agentId: string) => {
+    const instruction = commandDraft[agentId]?.trim();
+    if (!instruction || commandLoading === agentId) return;
+    setCommandLoading(agentId);
+    setCommandError(prev => ({ ...prev, [agentId]: null }));
+    setCommandPlan(prev => ({ ...prev, [agentId]: null }));
+    setCommandResults(prev => ({ ...prev, [agentId]: null }));
+    try {
+      const res = await fetch(`/api/agents/${agentId}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction }),
+      });
+      const data = await res.json() as CommandPlan & { error?: string };
+      if (!res.ok) { setCommandError(prev => ({ ...prev, [agentId]: data.error ?? `Error ${res.status}` })); return; }
+      setCommandPlan(prev => ({ ...prev, [agentId]: data }));
+    } catch (e) {
+      setCommandError(prev => ({ ...prev, [agentId]: e instanceof Error ? e.message : 'Network error' }));
+    } finally { setCommandLoading(null); }
+  };
+
+  const confirmAgentCommand = async (agentId: string, confirmToken: string) => {
+    if (commandLoading === agentId) return;
+    setCommandLoading(agentId);
+    setCommandError(prev => ({ ...prev, [agentId]: null }));
+    try {
+      const res = await fetch(`/api/agents/${agentId}/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true, confirmToken }),
+      });
+      const data = await res.json() as CommandResult & { error?: string };
+      if (!res.ok) { setCommandError(prev => ({ ...prev, [agentId]: data.error ?? `Error ${res.status}` })); return; }
+      setCommandPlan(prev => ({ ...prev, [agentId]: null }));
+      setCommandResults(prev => ({ ...prev, [agentId]: data }));
+      setCommandDraft(prev => ({ ...prev, [agentId]: '' }));
+      void loadAgents();
+    } catch (e) {
+      setCommandError(prev => ({ ...prev, [agentId]: e instanceof Error ? e.message : 'Network error' }));
+    } finally { setCommandLoading(null); }
   };
 
   const deployTemplate = async (templateId: string) => {
@@ -887,12 +956,16 @@ export default function DashboardPage() {
                   <div className="space-y-4">
                     {deployedAgents.map(agent => {
                       const isActive = (agent.status ?? 'active') === 'active';
-                      const isExpanded = expandedAgent === agent.agent_id;
+                      const panel = expandedPanel[agent.agent_id] ?? null;
                       const activity = agentActivity[agent.agent_id] ?? [];
                       const isLoadingActivity = activityLoading === agent.agent_id;
                       const lastSeen = agent.last_active_at
                         ? new Date(agent.last_active_at).toLocaleString()
                         : 'Never';
+                      const plan = commandPlan[agent.agent_id] ?? null;
+                      const cmdResult = commandResults[agent.agent_id] ?? null;
+                      const cmdError = commandError[agent.agent_id] ?? null;
+                      const isCmdLoading = commandLoading === agent.agent_id;
                       return (
                         <div key={agent.agent_id} className="card overflow-hidden">
                           <div className="p-5">
@@ -923,13 +996,21 @@ export default function DashboardPage() {
                                   <p className="text-sm mt-1.5" style={{ color: 'var(--text-muted)' }}>{agent.description}</p>
                                 )}
                               </div>
-                              <button
-                                onClick={() => void loadAgentActivity(agent.agent_id)}
-                                className="btn-outline text-xs px-3 py-1.5 rounded-lg flex-shrink-0"
-                                disabled={isLoadingActivity}
-                              >
-                                {isLoadingActivity ? 'Loading…' : isExpanded ? 'Hide Activity' : 'View Activity'}
-                              </button>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                  onClick={() => togglePanel(agent.agent_id, 'command')}
+                                  className="btn-primary text-xs px-3 py-1.5 rounded-lg"
+                                >
+                                  {panel === 'command' ? 'Close' : 'Command'}
+                                </button>
+                                <button
+                                  onClick={() => togglePanel(agent.agent_id, 'activity')}
+                                  className="btn-outline text-xs px-3 py-1.5 rounded-lg"
+                                  disabled={isLoadingActivity}
+                                >
+                                  {isLoadingActivity ? 'Loading…' : panel === 'activity' ? 'Hide' : 'Activity'}
+                                </button>
+                              </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-4 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
@@ -954,7 +1035,105 @@ export default function DashboardPage() {
                             </div>
                           </div>
 
-                          {isExpanded && (
+                          {/* Command Panel */}
+                          {panel === 'command' && (
+                            <div style={{ borderTop: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)' }}>
+                              <div className="px-5 py-3">
+                                <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
+                                  Send Command
+                                </div>
+
+                                {!plan && !cmdResult && (
+                                  <div className="flex gap-2">
+                                    <textarea
+                                      value={commandDraft[agent.agent_id] ?? ''}
+                                      onChange={e => setCommandDraft(prev => ({ ...prev, [agent.agent_id]: e.target.value }))}
+                                      onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendAgentCommand(agent.agent_id); }}
+                                      placeholder="Tell this agent what to do… (Cmd+Enter to submit)"
+                                      rows={2}
+                                      className="flex-1 text-sm px-3 py-2 rounded-lg resize-none"
+                                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-bright)', color: 'var(--text)', outline: 'none' }}
+                                    />
+                                    <button
+                                      onClick={() => void sendAgentCommand(agent.agent_id)}
+                                      disabled={isCmdLoading || !(commandDraft[agent.agent_id]?.trim())}
+                                      className="btn-primary text-xs px-4 py-2 rounded-lg self-end flex-shrink-0"
+                                    >
+                                      {isCmdLoading ? 'Planning…' : 'Plan'}
+                                    </button>
+                                  </div>
+                                )}
+
+                                {cmdError && (
+                                  <p className="text-xs mt-2 mb-2" style={{ color: '#fca5a5' }}>{cmdError}</p>
+                                )}
+
+                                {plan && (
+                                  <div className="space-y-3">
+                                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{plan.summary}</p>
+                                    <div className="space-y-1.5">
+                                      {plan.steps.map(step => (
+                                        <div key={step.order} className="flex items-center gap-3 py-1.5 px-3 rounded-lg text-xs"
+                                          style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                                          <span className="w-4 h-4 rounded text-center font-bold flex-shrink-0"
+                                            style={{ background: 'rgba(139,92,246,0.2)', color: '#a78bfa', fontSize: '10px', lineHeight: '16px' }}>
+                                            {step.order}
+                                          </span>
+                                          <span className="font-mono flex-shrink-0" style={{ color: 'var(--accent)' }}>
+                                            {step.tool.replace(/^agentos\./, '')}
+                                          </span>
+                                          <span className="flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>{step.description}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        onClick={() => void confirmAgentCommand(agent.agent_id, plan.confirmToken)}
+                                        disabled={isCmdLoading}
+                                        className="btn-primary text-xs px-4 py-1.5 rounded-lg"
+                                      >
+                                        {isCmdLoading ? 'Running…' : 'Confirm & Run'}
+                                      </button>
+                                      <button
+                                        onClick={() => { setCommandPlan(prev => ({ ...prev, [agent.agent_id]: null })); setCommandError(prev => ({ ...prev, [agent.agent_id]: null })); }}
+                                        className="btn-outline text-xs px-3 py-1.5 rounded-lg"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {cmdResult && (
+                                  <div className="space-y-2">
+                                    <p className="text-xs font-semibold" style={{ color: '#86efac' }}>Executed {cmdResult.results.length} step{cmdResult.results.length !== 1 ? 's' : ''}</p>
+                                    <div className="space-y-1">
+                                      {cmdResult.results.map((r, i) => (
+                                        <div key={i} className="flex items-center gap-3 py-1.5 px-3 rounded-lg text-xs"
+                                          style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                                          <span className="font-mono flex-shrink-0" style={{ color: 'var(--accent)' }}>{r.tool}</span>
+                                          <span className="text-xs truncate flex-1" style={{ color: 'var(--text-muted)' }}>
+                                            {typeof r.result === 'object' ? JSON.stringify(r.result).slice(0, 80) : String(r.result)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <button
+                                      onClick={() => { setCommandResults(prev => ({ ...prev, [agent.agent_id]: null })); setCommandDraft(prev => ({ ...prev, [agent.agent_id]: '' })); }}
+                                      className="text-xs mt-1"
+                                      style={{ color: 'var(--text-muted)' }}
+                                    >
+                                      New command
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Activity Panel */}
+                          {panel === 'activity' && (
                             <div style={{ borderTop: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)' }}>
                               <div className="px-5 py-3 flex items-center justify-between">
                                 <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
