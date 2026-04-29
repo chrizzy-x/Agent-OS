@@ -18,25 +18,33 @@ const ibmPlexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Agent OS | Autonomous Agent Infrastructure',
+  title: 'AgentOS by PRIME',
   description:
     'Agent OS combines primitives, universal MCP routing, consensus controls, a skills marketplace, and an autonomous operations crew for production AI agents.',
   keywords: 'AI agents, MCP, autonomous agents, skills marketplace, agent infrastructure, consensus',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'AgentOS by PRIME',
+  },
   icons: {
-    icon: '/icon.svg',
-    shortcut: '/icon.svg',
-    apple: '/icon.svg',
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/apple-touch-icon.png',
   },
   openGraph: {
-    title: 'Agent OS',
+    title: 'AgentOS by PRIME',
     description: 'Universal MCP, skills, consensus, and production infrastructure for AI agents.',
     url: APP_URL,
     type: 'website',
+    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'AgentOS by PRIME' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Agent OS',
+    title: 'AgentOS by PRIME',
     description: 'Universal MCP, skills, consensus, and production infrastructure for AI agents.',
+    images: ['/logo.png'],
   },
 };
 

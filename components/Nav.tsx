@@ -59,26 +59,25 @@ export default function Nav({ activePath }: NavProps) {
           {/* Logo */}
           <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{
-                width: '28px',
-                height: '28px',
-                border: '1px solid var(--accent)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
-                fontWeight: 700,
-                fontSize: '14px',
-                color: 'var(--accent)',
-                flexShrink: 0,
-              }}>A</div>
-              <span style={{
-                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
-                fontWeight: 600,
-                fontSize: '15px',
-                color: 'var(--text-primary)',
-                letterSpacing: '-0.02em',
-              }}>AgentOS</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="AgentOS by PRIME" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+                <span style={{
+                  fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  color: 'var(--text-primary)',
+                  letterSpacing: '-0.02em',
+                }}>AgentOS</span>
+                <span style={{
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontWeight: 500,
+                  fontSize: '10px',
+                  color: 'var(--text-secondary)',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}>by PRIME</span>
+              </div>
             </div>
           </Link>
 
