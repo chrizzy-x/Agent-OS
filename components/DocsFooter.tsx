@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Image from 'next/image';
 
 export default function DocsFooter() {
   const links = [
@@ -28,15 +27,13 @@ export default function DocsFooter() {
         justifyContent: 'space-between',
         gap: '16px',
       }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Image src="/logo.png" alt="AgentOS by PRIME" width={24} height={24} style={{ borderRadius: '4px', objectFit: 'cover' }} />
-          <span style={{
-            fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
-            fontWeight: 700,
-            fontSize: '14px',
-            color: 'var(--text-primary)',
-          }}>AgentOS <span style={{ fontWeight: 400, fontSize: '11px', color: 'var(--text-tertiary)' }}>by PRIME</span></span>
-        </Link>
+        <Link href="/" style={{
+          fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+          fontWeight: 700,
+          fontSize: '14px',
+          color: 'var(--text-primary)',
+          textDecoration: 'none',
+        }}>AgentOS</Link>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0', flexWrap: 'wrap' }}>
           {links.map(link => (
