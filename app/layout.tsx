@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   icons: {
     icon: '/logo.png',
     shortcut: '/logo.png',
-    apple: '/logo.png',
+    apple: '/apple-touch-icon.png',
   },
   openGraph: {
     title: 'AgentOS by PRIME',
