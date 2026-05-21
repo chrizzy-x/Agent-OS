@@ -5,6 +5,7 @@
 **OS-level primitives for AI agents — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
 
 🚀 **Live:** [agentos-app.vercel.app](https://agentos-app.vercel.app) · [Get started free →](https://agentos-app.vercel.app/signup)
+Official CA : GtpxyYeFGDA8WoxA5buhRXMcBKweMCpK9S2CShmCpump
 
 AgentOS is a production infrastructure layer that gives any agent or app a safe, isolated environment to persist data, run code, make HTTP requests, publish events, and coordinate with other agents — without touching the host system. Each client gets its own namespace, enforced quotas, rate limits, and a full audit trail.
 
