@@ -449,12 +449,15 @@ export default function HomePage() {
                   color: 'var(--text-primary)',
                   marginBottom: '8px',
                   marginTop: '8px',
-                }}>Skills Marketplace</h2>
+                }}>Skill Store + App Store</h2>
                 <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '15px', color: 'var(--text-secondary)', margin: 0 }}>
-                  Community-built capabilities. Install only what you need.
+                  Install individual skills or download full agentic apps built on AgentOS.
                 </p>
               </div>
-              <Link href="/marketplace" className="btn-ghost" style={{ fontSize: '13px', padding: '8px 16px' }}>Browse all →</Link>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <Link href="/marketplace" className="btn-ghost" style={{ fontSize: '13px', padding: '8px 16px' }}>Browse skills</Link>
+                <Link href="/appstore" className="btn-ghost" style={{ fontSize: '13px', padding: '8px 16px' }}>Browse apps</Link>
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)', marginBottom: '24px' }}>
@@ -490,10 +493,10 @@ export default function HomePage() {
             }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                  Build skills. Earn 70% revenue share.
+                  Build skills or publish agentic apps.
                 </div>
                 <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
-                  Publish to the marketplace and earn from every API call your skill handles.
+                  Skills monetize by API call. Apps publish to the App Store as downloadable AgentOS packages.
                 </p>
               </div>
               <Link href="/developer" className="btn-primary" style={{ flexShrink: 0, fontSize: '13px', padding: '10px 20px' }}>
@@ -559,7 +562,8 @@ export default function HomePage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0' }}>
             {[
               { href: 'https://github.com/chrizzy-x/Agent-OS', label: 'GitHub', external: true },
-              { href: '/marketplace', label: 'Marketplace', external: false },
+              { href: '/marketplace', label: 'Skill Store', external: false },
+              { href: '/appstore', label: 'App Store', external: false },
               { href: '/connect', label: 'Connect', external: false },
               { href: '/docs', label: 'Docs', external: false },
               { href: '/developer', label: 'Developer', external: false },

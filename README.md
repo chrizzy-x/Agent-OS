@@ -24,8 +24,11 @@ AgentOS is a production infrastructure layer that gives any agent or app a safe,
 | **events** | Pub/sub messaging between agents via Redis topics | Redis |
 | **proc** | Sandboxed code execution (Python, JS, Bash) + cron scheduling | Sandboxed subprocess |
 
-### Skills Marketplace
-Install pre-built capabilities from the marketplace. Developers earn 70% revenue share.
+### Marketplace
+The marketplace is split into two stores:
+
+- **Skill Store:** install pre-built capabilities into an agent. Developers earn 70% revenue share on paid skill usage.
+- **App Store:** download full agentic apps built on AgentOS. Individuals and enterprises can publish app packages with manifests, device targets, and default config.
 
 ### Universal MCP Router
 One endpoint routes to built-in primitives, installed skills, or any external MCP server (Gmail, Slack, GitHub, etc.).
@@ -204,7 +207,7 @@ Client (any language) → POST /mcp  { "tool": "...", "input": {} }
                            ├── Quota enforcement
                            │
                            ├── agentos.*        → 6 primitives
-                           ├── agentos.skill.*  → skills marketplace
+                           ├── agentos.skill.*  -> skill store
                            └── mcp.*            → external MCP servers
                                     │
                                     └── Audit log → Supabase (async)
@@ -239,11 +242,13 @@ Agent-OS/
 │   │   ├── kernel/               # SDK kernel command layer
 │   │   ├── session/from-key/     # SDK → dashboard login link
 │   │   ├── payments/             # Crypto payments (Solana + Base USDC)
-│   │   ├── skills/               # Marketplace routes
+│   │   ├── skills/               # Skill Store routes
+│   │   ├── apps/                 # App Store routes
 │   │   └── mcp/                  # Universal MCP router
 │   ├── studio/                   # Studio UI (NL + Advanced modes)
 │   ├── dashboard/                # Dashboard (Skills, FFP, Activity tabs)
-│   ├── marketplace/              # Skills marketplace
+│   ├── marketplace/              # Skill Store
+│   ├── appstore/                 # App Store
 │   └── docs/                     # Documentation pages
 ├── src/
 │   ├── auth/                     # JWT, session cookies, permissions

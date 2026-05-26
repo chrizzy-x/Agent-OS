@@ -152,14 +152,37 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/skills', auth: 'None',
-    desc: 'Browse published marketplace skills. Supports category, search, sort, page, limit, and author query params.',
+    desc: 'Browse published Skill Store skills. Supports category, search, sort, page, limit, and author query params.',
     response: '{ "skills": [...], "pagination": { "page": 1, "limit": 50, "total": 54 } }',
+  },
+  {
+    method: 'GET', path: '/api/apps', auth: 'None',
+    desc: 'Browse published App Store listings. Supports category, search, and sort query params.',
+    response: '{ "apps": [...], "categories": ["All", "Research", "..."], "pagination": { "total": 6 } }',
+  },
+  {
+    method: 'POST', path: '/api/apps', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Publish a full agentic app to the App Store automatically.',
+    body: [
+      { field: 'name', type: 'string', required: true, desc: 'Human-readable app name' },
+      { field: 'category', type: 'string', required: true, desc: 'App Store category such as Research, Finance, Data, or Operations' },
+      { field: 'description', type: 'string', required: true, desc: 'Short listing description' },
+      { field: 'deviceTargets', type: 'string[]', required: false, desc: 'Targets such as AgentOS Desktop, AgentOS Cloud, or Enterprise Workspace' },
+      { field: 'manifest', type: 'object', required: false, desc: 'Runtime, entrypoint, primitives, skills, permissions, required secrets, and commands' },
+      { field: 'defaultConfig', type: 'object', required: false, desc: 'Default app configuration. Do not include secrets.' },
+    ],
+    response: '{ "success": true, "app": { "slug": "invoice-ops-agent", "published": true } }',
+  },
+  {
+    method: 'GET', path: '/api/apps/{slug}/download', auth: 'None',
+    desc: 'Download an AgentOS app package for device or workspace installation.',
+    response: '{ "schema": "agentos.app.v1", "app": {...}, "manifest": {...}, "defaultConfig": {...} }',
   },
   {
     method: 'POST', path: '/api/skills/install', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Install a published skill for the authenticated agent.',
     body: [
-      { field: 'skill_id', type: 'string', required: true, desc: 'Skill UUID from the marketplace listing' },
+      { field: 'skill_id', type: 'string', required: true, desc: 'Skill UUID from the Skill Store listing' },
     ],
     response: '{ "success": true, "installation": { "id": "...", "installed_at": "..." } }',
   },
@@ -314,5 +337,3 @@ export default function ApiReferencePage() {
     </div>
   );
 }
-
-

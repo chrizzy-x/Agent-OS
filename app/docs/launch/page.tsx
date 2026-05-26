@@ -43,6 +43,7 @@ const startLinks = [
   { label: 'Sign in', href: '/signin' },
   { label: 'Open Studio', href: '/studio' },
   { label: 'Browse skills', href: '/marketplace' },
+  { label: 'Browse apps', href: '/appstore' },
   { label: 'Quick Start', href: '/docs/sdk' },
   { label: 'API reference', href: '/docs/api' },
   { label: 'FFP docs', href: '/docs/ffp' },
@@ -76,7 +77,7 @@ export default function LaunchNotesPage() {
           <h2 className="text-2xl font-bold mb-4">What shipped in v5</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS is a production infrastructure layer for autonomous agents. One API key gives you 6 primitives (mem, fs, db, net, events, proc), a skills marketplace, universal MCP routing to external services, FFP audit + consensus, a Natural Language Studio, and now a full FFP Multi-Chain Router so sector chains can execute tools through AgentOS as a verified bridge.
+              AgentOS is a production infrastructure layer for autonomous agents. One API key gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, a Natural Language Studio, and now a full FFP Multi-Chain Router so sector chains can execute tools through AgentOS as a verified bridge.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.
@@ -99,7 +100,7 @@ export default function LaunchNotesPage() {
               <li>Provision an agent account and stay signed in with a secure browser session.</li>
               <li>Generate a fresh bearer token only when you need CLI, SDK, or external API access.</li>
               <li>Use Studio to run guided commands and preview mutating operations before they execute.</li>
-              <li>Install from official verified skill packs or publish your own extensions to the marketplace.</li>
+              <li>Install from official verified skill packs, publish your own extensions, or download full agentic apps from the App Store.</li>
               <li>Register any external agent once, receive a scoped token, and use the same MCP endpoint for primitives, skills, and external connectors.</li>
             </ul>
           </div>
@@ -141,5 +142,4 @@ export default function LaunchNotesPage() {
     </div>
   );
 }
-
 

@@ -90,7 +90,7 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     name: 'AgentOS',
     version: '1.0.0',
-    description: 'Universal MCP, primitives, marketplace skills, and external agent connectivity over one endpoint.',
+    description: 'Universal MCP, primitives, Skill Store capabilities, App Store packages, and external agent connectivity over one endpoint.',
     status: 'ok',
     endpoints: {
       'GET  /': 'API info (this response)',

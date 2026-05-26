@@ -473,7 +473,8 @@ export default function DashboardPage() {
               <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
-              <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
+              <Link href="/marketplace" className="hover:text-white transition-colors">Skill Store</Link>
+              <Link href="/appstore" className="hover:text-white transition-colors">App Store</Link>
               <Link href="/connect" className="hover:text-white transition-colors">Connect</Link>
               <Link href="/studio" className="hover:text-white transition-colors">Studio</Link>
               <Link href="/developer" className="hover:text-white transition-colors">Developer</Link>
@@ -553,9 +554,10 @@ export default function DashboardPage() {
                   <h2 className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--text-muted)' }}>
                     Quick Actions
                   </h2>
-                  <div className="grid sm:grid-cols-2 xl:grid-cols-6 gap-3">
+                  <div className="grid sm:grid-cols-2 xl:grid-cols-7 gap-3">
                     {[
                       { href: '/marketplace', label: 'Browse Skills', color: 'var(--accent)' },
+                      { href: '/appstore', label: 'Browse Apps', color: '#22c55e' },
                       { href: '/developer', label: 'Publish Skill', color: 'var(--accent)' },
                       { href: '/docs', label: 'Read Docs', color: 'var(--accent)' },
                       { href: '/studio', label: 'Studio Console', color: '#8b5cf6' },
@@ -661,7 +663,7 @@ export default function DashboardPage() {
                     </span>
                   </h2>
                   <Link href="/marketplace" className="btn-outline text-sm px-4 py-2 rounded-lg">
-                    + Browse marketplace
+                    + Browse skills
                   </Link>
                 </div>
 
@@ -670,7 +672,7 @@ export default function DashboardPage() {
                     <div className="w-14 h-14 rounded-2xl mx-auto mb-4" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }} />
                     <p className="font-bold mb-2">No skills installed yet</p>
                     <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
-                      Browse the marketplace and install skills to extend your agent.
+                      Browse the Skill Store and install capabilities to extend your agent.
                     </p>
                     <Link href="/marketplace" className="btn-primary px-6 py-2.5 rounded-lg text-sm">
                       Browse Skills
@@ -1274,5 +1276,4 @@ function CredRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
 

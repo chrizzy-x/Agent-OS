@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { OFFICIAL_VERIFIED_SKILLS } from '../skills/official-catalog.js';
+import type { AgentAppListing } from '../appstore/catalog.js';
 
 export type LocalAccountRecord = {
   agentId: string;
@@ -134,6 +135,8 @@ export type LocalExternalAgentRegistrationRecord = {
   created_at: string;
 };
 
+export type LocalAgentAppRecord = AgentAppListing;
+
 export type LocalRuntimeState = {
   accounts: Record<string, LocalAccountRecord>;
   externalAgents: Record<string, LocalExternalAgentRegistrationRecord>;
@@ -149,6 +152,9 @@ export type LocalRuntimeState = {
   skills: {
     catalog: LocalSkillRecord[];
     installations: Record<string, LocalSkillInstallationRecord[]>;
+  };
+  agentApps: {
+    catalog: LocalAgentAppRecord[];
   };
 };
 
@@ -208,6 +214,9 @@ function createDefaultState(): LocalRuntimeState {
       catalog: defaultSkillCatalog(),
       installations: {},
     },
+    agentApps: {
+      catalog: [],
+    },
   };
 }
 
@@ -234,6 +243,9 @@ function normalizeState(value: unknown): LocalRuntimeState {
     skills: {
       catalog: state.skills?.catalog?.length ? state.skills.catalog : defaults.skills.catalog,
       installations: state.skills?.installations ?? defaults.skills.installations,
+    },
+    agentApps: {
+      catalog: state.agentApps?.catalog ?? defaults.agentApps.catalog,
     },
   };
 }

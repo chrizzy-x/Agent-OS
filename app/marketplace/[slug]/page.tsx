@@ -301,7 +301,7 @@ console.log(result.result);`;
         <div className="text-4xl">🔍</div>
         <p className="font-medium">Skill not found</p>
         <Link href="/marketplace" className="text-sm hover:underline" style={{ color: 'var(--accent)' }}>
-          ← Back to Marketplace
+          {'\u2190 Back to Skill Store'}
         </Link>
       </div>
     );
@@ -322,7 +322,7 @@ console.log(result.result);`;
           </Link>
           <div className="flex items-center gap-6">
             <Link href="/marketplace" className="text-sm transition-colors hover:text-white" style={{ color: 'var(--accent)' }}>
-              ← Marketplace
+              {'\u2190 Skill Store'}
             </Link>
             <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
           </div>

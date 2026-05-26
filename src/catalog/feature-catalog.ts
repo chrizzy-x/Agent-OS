@@ -5,6 +5,7 @@ type GroupKey =
   | 'ffp'
   | 'mcp'
   | 'skills'
+  | 'apps'
   | 'auth'
   | 'ui'
   | 'ops'
@@ -88,7 +89,7 @@ const GROUPS: Record<GroupKey, GroupDefinition> = {
     ],
   },
   skills: {
-    name: 'Skills Marketplace',
+    name: 'Skill Store',
     badge: 'SKILL',
     description: 'Reusable third-party capabilities that can be installed, published, metered, and monetized.',
     competitor: 'Zapier AI actions or ad hoc private tool registries',
@@ -96,6 +97,17 @@ const GROUPS: Record<GroupKey, GroupDefinition> = {
     useCaseTemplates: [
       'A legal intake agent uses {name} to add document parsing or clause extraction without rebuilding those capabilities from scratch.',
       'A growth team agent uses {name} to install SEO, scraping, or enrichment skills as reusable production modules.',
+    ],
+  },
+  apps: {
+    name: 'Agentic App Store',
+    badge: 'APP',
+    description: 'Downloadable agentic apps with manifests, device targets, packaged workflows, and publisher metadata.',
+    competitor: 'Traditional app stores or private agent template folders',
+    standout: 'Agent OS separates full agentic apps from individual skills so teams can ship complete workflows as downloadable packages.',
+    useCaseTemplates: [
+      'A retail user uses {name} to download a ready-made research or trading monitor app without assembling primitives manually.',
+      'An enterprise team uses {name} to publish approved internal agent apps for employees and managed devices.',
     ],
   },
   auth: {
@@ -234,8 +246,8 @@ const PLATFORM_FEATURES: CatalogSeed[] = [
   { id: 10, slug: 'coordination', name: 'Coordination', short: 'Coordinate handoffs and staged work between multiple agents.', group: 'ffp', kind: 'platform_feature' },
   { id: 11, slug: 'validation', name: 'Validation', short: 'Validate agents before they participate in consensus or high-risk work.', group: 'ffp', kind: 'platform_feature' },
   { id: 12, slug: 'diversity-enforcement', name: 'Diversity Enforcement', short: 'Reduce single points of failure by spreading agent decision sources.', group: 'ffp', kind: 'platform_feature' },
-  { id: 13, slug: 'browse-skills', name: 'Browse Skills', short: 'Search and filter marketplace skills by keyword, category, and popularity.', group: 'skills', kind: 'platform_feature' },
-  { id: 14, slug: 'install-skills', name: 'Install Skills', short: 'Install marketplace skills into an agent with one API call.', group: 'skills', kind: 'platform_feature' },
+  { id: 13, slug: 'browse-skills', name: 'Browse Skills', short: 'Search and filter Skill Store skills by keyword, category, and popularity.', group: 'skills', kind: 'platform_feature' },
+  { id: 14, slug: 'install-skills', name: 'Install Skills', short: 'Install Skill Store skills into an agent with one API call.', group: 'skills', kind: 'platform_feature' },
   { id: 15, slug: 'use-skills', name: 'Use Skills', short: 'Execute installed skill capabilities through the Agent OS API.', group: 'skills', kind: 'platform_feature' },
   { id: 16, slug: 'skill-execution-engine', name: 'Skill Execution Engine', short: 'Run skill code in an isolated runtime with limits and result controls.', group: 'skills', kind: 'platform_feature' },
   { id: 17, slug: 'publish-skills', name: 'Publish Skills', short: 'Publish new skills with code, pricing, capabilities, and metadata.', group: 'skills', kind: 'platform_feature' },
@@ -243,9 +255,13 @@ const PLATFORM_FEATURES: CatalogSeed[] = [
   { id: 19, slug: 'developer-dashboard', name: 'Developer Dashboard', short: 'Track installs, calls, and earnings for skills you publish.', group: 'skills', kind: 'platform_feature' },
   { id: 20, slug: 'revenue-sharing', name: 'Revenue Sharing', short: 'Split paid skill revenue between developers and the platform.', group: 'skills', kind: 'platform_feature' },
   { id: 21, slug: 'skill-analytics', name: 'Skill Analytics', short: 'Measure installs, calls, latency, failures, and revenue per skill.', group: 'skills', kind: 'platform_feature' },
+  { id: 71, slug: 'browse-agent-apps', name: 'Browse Agentic Apps', short: 'Search and filter downloadable agentic apps by category, publisher, and popularity.', group: 'apps', kind: 'platform_feature' },
+  { id: 72, slug: 'download-agent-apps', name: 'Download Agentic Apps', short: 'Download AgentOS app packages with manifest, device targets, and default configuration.', group: 'apps', kind: 'platform_feature' },
+  { id: 73, slug: 'publish-agent-apps', name: 'Publish Agentic Apps', short: 'Let individuals and enterprises publish complete AgentOS apps automatically.', group: 'apps', kind: 'platform_feature' },
+  { id: 74, slug: 'agent-app-manifests', name: 'Agent App Manifests', short: 'Describe app runtime, entrypoint, primitives, permissions, secrets, and commands in one package.', group: 'apps', kind: 'platform_feature' },
   { id: 22, slug: 'landing-page', name: 'Landing Page', short: 'Present the product story, primitives, and feature coverage clearly.', group: 'ui', kind: 'platform_feature' },
   { id: 23, slug: 'signup-flow', name: 'Signup Flow', short: 'Create a new agent account and issue credentials quickly.', group: 'ui', kind: 'platform_feature' },
-  { id: 24, slug: 'marketplace-ui', name: 'Marketplace UI', short: 'Browse and discover skills through a product-grade catalog interface.', group: 'ui', kind: 'platform_feature' },
+  { id: 24, slug: 'marketplace-ui', name: 'Store UI', short: 'Browse and discover skills and apps through product-grade catalog interfaces.', group: 'ui', kind: 'platform_feature' },
   { id: 25, slug: 'skill-detail-pages', name: 'Skill Detail Pages', short: 'Inspect a skill before installation with reviews, capability info, and examples.', group: 'ui', kind: 'platform_feature' },
   { id: 26, slug: 'developer-publishing-ui', name: 'Developer Publishing UI', short: 'Use a form-driven interface to publish and manage skills.', group: 'ui', kind: 'platform_feature' },
   { id: 27, slug: 'agent-dashboard', name: 'Agent Dashboard', short: 'View credentials, installed skills, and activity for each agent.', group: 'ui', kind: 'platform_feature' },
@@ -354,7 +370,7 @@ function toCatalogItem(item: CatalogSeed): FeatureCatalogItem {
 
 export const PROJECT_DETAILS = {
   name: 'Agent OS',
-  summary: 'Agent OS is a production platform for building, deploying, and operating autonomous AI agents with hosted primitives, MCP routing, skills, and multi-agent control features.',
+  summary: 'Agent OS is a production platform for building, deploying, and operating autonomous AI agents with hosted primitives, MCP routing, skills, downloadable agentic apps, and multi-agent control features.',
   audience: 'Platform engineers, AI product teams, startups shipping agent workflows, and operators who need governed automation.',
   productionPath: 'Primary path: GitHub main -> GitHub Actions -> Vercel production. Direct Vercel deploys can be used temporarily for recovery or launch unblockers.',
   stack: [
@@ -367,7 +383,7 @@ export const PROJECT_DETAILS = {
   differentiators: [
     'Hosted primitives instead of do-it-yourself infra glue',
     'MCP routing with optional consensus and full logging',
-    'A skills marketplace with installation, execution, and monetization',
+    'A Skill Store for capabilities and an App Store for downloadable agentic apps',
     'An autonomous active-and-standby operations crew for every feature and runtime function',
   ],
 };
@@ -376,7 +392,7 @@ export const PLATFORM_CATALOG = PLATFORM_FEATURES.map(toCatalogItem);
 export const RUNTIME_FUNCTION_CATALOG = RUNTIME_FUNCTIONS.map(toCatalogItem);
 export const FULL_CATALOG = [...PLATFORM_CATALOG, ...RUNTIME_FUNCTION_CATALOG];
 
-const SHOWCASE_GROUP_ORDER: GroupKey[] = ['core', 'ffp', 'mcp', 'skills', 'auth', 'ui', 'ops', 'infra', 'advanced'];
+const SHOWCASE_GROUP_ORDER: GroupKey[] = ['core', 'ffp', 'mcp', 'skills', 'apps', 'auth', 'ui', 'ops', 'infra', 'advanced'];
 
 export const FEATURE_SHOWCASE_CATEGORIES: FeatureShowcaseCategory[] = SHOWCASE_GROUP_ORDER.map(groupKey => {
   const group = GROUPS[groupKey];

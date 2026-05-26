@@ -45,7 +45,7 @@ const sections = [
   {
     title: 'Skills',
     href: '/docs/skills',
-    desc: 'Install marketplace skills, publish your own, and meter usage.',
+    desc: 'Install Skill Store capabilities, publish your own, and meter usage.',
     badge: null,
   },
   {

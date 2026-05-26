@@ -16,7 +16,7 @@ export default function SkillsDocsPage() {
           <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <Link href="/docs" className="text-blue-600">Docs</Link>
-            <Link href="/marketplace" className="hover:text-gray-900">Marketplace</Link>
+            <Link href="/marketplace" className="hover:text-gray-900">Skill Store</Link>
             <Link href="/developer" className="hover:text-gray-900">Developer</Link>
           </div>
         </div>
@@ -25,7 +25,7 @@ export default function SkillsDocsPage() {
       <div className="max-w-5xl mx-auto px-4 py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Skills</h1>
         <p className="text-lg text-gray-500 mb-10">
-          Extend Agent OS with reusable capabilities. The marketplace now includes {OFFICIAL_COUNT} maintained free verified skills across official packs, plus community-published extensions.
+          Extend Agent OS with reusable capabilities. The Skill Store includes {OFFICIAL_COUNT} maintained free verified skills across official packs, plus community-published extensions.
         </p>
 
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-10">
@@ -37,7 +37,7 @@ export default function SkillsDocsPage() {
             <a href="#installing" className="block hover:underline">Installing skills</a>
             <a href="#using" className="block hover:underline">Using installed skills</a>
             <a href="#building" className="block hover:underline">Building your own skill</a>
-            <a href="#publishing" className="block hover:underline">Publishing to the marketplace</a>
+            <a href="#publishing" className="block hover:underline">Publishing to the Skill Store</a>
           </div>
         </div>
 
@@ -52,7 +52,7 @@ export default function SkillsDocsPage() {
 
         <Section id="auth-model" title="Browser session vs bearer token">
           <p>
-            The web app now uses a secure browser session cookie by default. That means installs, marketplace actions, Studio commands, and dashboard flows work after you sign in once without pasting a token into the UI.
+            The web app now uses a secure browser session cookie by default. That means installs, store actions, Studio commands, and dashboard flows work after you sign in once without pasting a token into the UI.
           </p>
           <p className="mt-3">
             Generate a bearer token only when you need to call Agent OS from an SDK, another machine, automation, or a third-party integration. The dashboard can issue a fresh token on demand.
@@ -61,7 +61,7 @@ export default function SkillsDocsPage() {
 
         <Section id="official-packs" title="Official verified skill packs">
           <p>
-            Agent OS maintains official free verified skills in packs so developers can install a coherent set of tools quickly. Each skill in the list below already has a marketplace detail page and can be installed directly.
+            Agent OS maintains official free verified skills in packs so developers can install a coherent set of tools quickly. Each skill in the list below already has a Skill Store detail page and can be installed directly.
           </p>
 
           <div className="mt-6 space-y-5">
@@ -100,7 +100,7 @@ export default function SkillsDocsPage() {
 
         <Section id="installing" title="Installing skills">
           <p>
-            In the web app, open the <Link href="/marketplace" className="text-blue-600 hover:underline">Marketplace</Link> and install directly while signed in. For external clients, call the install endpoint with a bearer token.
+            In the web app, open the <Link href="/marketplace" className="text-blue-600 hover:underline">Skill Store</Link> and install directly while signed in. For external clients, call the install endpoint with a bearer token.
           </p>
           <CodeBlock>{`POST /api/skills/install
 Authorization: Bearer <your-bearer-token>
@@ -144,13 +144,13 @@ Content-Type: application/json
 }`}</CodeBlock>
           <ul className="mt-3 space-y-1.5 text-sm text-gray-600 list-disc list-inside">
             <li>Return JSON-serializable values only.</li>
-            <li>Declare capabilities clearly so Studio and marketplace detail pages can show them.</li>
+            <li>Declare capabilities clearly so Studio and Skill Store detail pages can show them.</li>
             <li>Ask for only the primitives you really need.</li>
             <li>Keep methods deterministic unless side effects are the explicit purpose of the skill.</li>
           </ul>
         </Section>
 
-        <Section id="publishing" title="Publishing to the marketplace">
+        <Section id="publishing" title="Publishing to the Skill Store">
           <p>
             Use the <Link href="/developer" className="text-blue-600 hover:underline">Developer Dashboard</Link> while signed in, or call the API directly from an external client with a bearer token.
           </p>
@@ -167,7 +167,7 @@ Content-Type: application/json
   "source_code": "class Skill { run(params) { return String(params.input || '') } }"
 }`}</CodeBlock>
           <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-            Keep slugs unique, lowercase, and stable. Other agents install your skill by slug and by marketplace record.
+            Keep slugs unique, lowercase, and stable. Other agents install your skill by slug and by Skill Store record.
           </div>
         </Section>
       </div>

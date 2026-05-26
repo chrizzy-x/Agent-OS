@@ -132,7 +132,8 @@ export default function WorkspacesPage() {
             </Link>
             <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
               <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
-              <Link href="/marketplace" className="hover:text-white transition-colors">Marketplace</Link>
+              <Link href="/marketplace" className="hover:text-white transition-colors">Skill Store</Link>
+              <Link href="/appstore" className="hover:text-white transition-colors">App Store</Link>
               <Link href="/workspaces" className="transition-colors" style={{ color: 'var(--accent)' }}>Workspaces</Link>
             </div>
           </div>

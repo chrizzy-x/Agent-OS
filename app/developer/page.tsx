@@ -21,6 +21,21 @@ interface Skill {
   created_at: string;
 }
 
+interface AgentApp {
+  id: string;
+  name: string;
+  slug: string;
+  category: string;
+  description: string;
+  publisherId: string;
+  publisherName: string;
+  installCount: number;
+  verified: boolean;
+  published: boolean;
+  deviceTargets: string[];
+  createdAt: string;
+}
+
 interface Earnings {
   this_month: string;
   last_month: string;
@@ -45,10 +60,27 @@ const EMPTY_SKILL = {
   repository_url: '',
 };
 
+const EMPTY_APP = {
+  name: '',
+  slug: '',
+  category: 'Operations',
+  description: '',
+  long_description: '',
+  app_url: '',
+  repository_url: '',
+  device_targets: 'AgentOS Desktop, AgentOS Cloud',
+  manifest: '{\n  "version": "1.0.0",\n  "runtime": "agentos-agent",\n  "entrypoint": "agentos://apps/my-agent-app",\n  "primitives": ["mem.*", "db.*", "net.fetch"],\n  "skills": [],\n  "permissions": ["memory", "database", "network"],\n  "requiredSecrets": [],\n  "commands": [\n    { "name": "run", "description": "Run the app workflow" }\n  ]\n}',
+  default_config: '{\n  "system_prompt": "Run this app safely on AgentOS."\n}',
+};
+
 const CATEGORIES = [
   'Documents', 'Web & Browser', 'AI & ML', 'Finance & Crypto',
   'Communication', 'Data & Analytics', 'Cloud & Deploy', 'Security',
   'Utilities', 'Content', 'Network', 'Research', 'Support',
+];
+
+const APP_CATEGORIES = [
+  'Research', 'Finance', 'Growth', 'Data', 'Security', 'Support', 'Operations',
 ];
 
 const labelStyle = {
@@ -65,11 +97,15 @@ const labelStyle = {
 export default function DeveloperPage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [mySkills, setMySkills] = useState<Skill[]>([]);
+  const [myApps, setMyApps] = useState<AgentApp[]>([]);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPublish, setShowPublish] = useState(false);
+  const [publishMode, setPublishMode] = useState<'skill' | 'app'>('skill');
   const [form, setForm] = useState(EMPTY_SKILL);
+  const [appForm, setAppForm] = useState(EMPTY_APP);
   const [publishing, setPublishing] = useState(false);
+  const [publishingApp, setPublishingApp] = useState(false);
   const [publishError, setPublishError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [payoutEmail, setPayoutEmail] = useState('');
@@ -90,6 +126,7 @@ export default function DeveloperPage() {
       setSession(currentSession);
       await Promise.all([
         fetchMySkills(currentSession.agentId),
+        fetchMyApps(currentSession.agentId),
         fetchEarnings(),
         fetchPayoutSettings(),
       ]);
@@ -106,6 +143,14 @@ export default function DeveloperPage() {
       const data = await res.json();
       setMySkills(data.skills ?? []);
     } catch { setMySkills([]); }
+  };
+
+  const fetchMyApps = async (agentId: string) => {
+    try {
+      const res = await fetch(`/api/apps?publisher=${agentId}`);
+      const data = await res.json();
+      setMyApps(data.apps ?? []);
+    } catch { setMyApps([]); }
   };
 
   const fetchEarnings = async () => {
@@ -192,6 +237,48 @@ export default function DeveloperPage() {
     finally { setPublishing(false); }
   };
 
+  const handlePublishApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPublishingApp(true);
+    setPublishError('');
+    setPublishSuccess('');
+
+    let manifestParsed: Record<string, unknown>;
+    let configParsed: Record<string, unknown>;
+    try { manifestParsed = JSON.parse(appForm.manifest); }
+    catch { setPublishError('Manifest must be valid JSON.'); setPublishingApp(false); return; }
+    try { configParsed = JSON.parse(appForm.default_config); }
+    catch { setPublishError('Default config must be valid JSON.'); setPublishingApp(false); return; }
+
+    try {
+      const res = await fetch('/api/apps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: appForm.name,
+          slug: appForm.slug,
+          category: appForm.category,
+          description: appForm.description,
+          long_description: appForm.long_description,
+          app_url: appForm.app_url || null,
+          repository_url: appForm.repository_url || null,
+          device_targets: appForm.device_targets.split(',').map(t => t.trim()).filter(Boolean),
+          manifest: manifestParsed,
+          default_config: configParsed,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPublishError(data.error || 'App publishing failed'); }
+      else {
+        setPublishSuccess(`App "${appForm.name}" published to the App Store.`);
+        setShowPublish(false);
+        setAppForm(EMPTY_APP);
+        if (session) await fetchMyApps(session.agentId);
+      }
+    } catch { setPublishError('Network error. Please try again.'); }
+    finally { setPublishingApp(false); }
+  };
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
       <Nav activePath="/developer" />
@@ -210,28 +297,38 @@ export default function DeveloperPage() {
               marginTop: '8px',
             }}>Developer Dashboard</h1>
             <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
-              Publish and manage your skills
+              Publish and manage your skills and apps
             </p>
           </div>
           {session && (
-            <button
-              onClick={() => { setShowPublish(!showPublish); setPublishError(''); setPublishSuccess(''); }}
-              className="btn-primary"
-              style={{ flexShrink: 0 }}
-            >
-              {showPublish ? 'Cancel' : '+ Publish Skill'}
-            </button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => { setPublishMode('skill'); setShowPublish(value => !(value && publishMode === 'skill')); setPublishError(''); setPublishSuccess(''); }}
+                className={showPublish && publishMode === 'skill' ? 'btn-outline' : 'btn-primary'}
+                style={{ flexShrink: 0 }}
+              >
+                {showPublish && publishMode === 'skill' ? 'Cancel' : '+ Publish Skill'}
+              </button>
+              <button
+                onClick={() => { setPublishMode('app'); setShowPublish(value => !(value && publishMode === 'app')); setPublishError(''); setPublishSuccess(''); }}
+                className={showPublish && publishMode === 'app' ? 'btn-outline' : 'btn-primary'}
+                style={{ flexShrink: 0 }}
+              >
+                {showPublish && publishMode === 'app' ? 'Cancel' : '+ Publish App'}
+              </button>
+            </div>
           )}
         </div>
 
         {/* Earnings stats */}
         {session && earnings && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)', marginBottom: '32px' }}>
             {[
               { label: 'This Month', value: `$${earnings.this_month}`, accent: true },
               { label: 'Last Month', value: `$${earnings.last_month}`, accent: false },
               { label: 'All Time', value: `$${earnings.all_time}`, accent: false },
               { label: 'Published Skills', value: String(mySkills.length), accent: false },
+              { label: 'Published Apps', value: String(myApps.length), accent: false },
             ].map(card => (
               <div key={card.label} style={{ padding: '20px 24px', backgroundColor: 'var(--bg-secondary)' }}>
                 <div style={{
@@ -251,10 +348,10 @@ export default function DeveloperPage() {
         {!session && (
           <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '64px 40px', textAlign: 'center', marginBottom: '32px' }}>
             <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px' }}>
-              Sign in to publish skills
+              Sign in to publish
             </h2>
             <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', maxWidth: '440px', margin: '0 auto 24px', lineHeight: 1.6 }}>
-              Sign in once to open a secure browser session, then publish skills without pasting a bearer token into the web UI.
+              Sign in once to open a secure browser session, then publish skills or apps without pasting a bearer token into the web UI.
             </p>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
               <Link href="/signin" className="btn-primary">Sign In</Link>
@@ -264,7 +361,7 @@ export default function DeveloperPage() {
         )}
 
         {/* Publish form */}
-        {session && showPublish && (
+        {session && showPublish && publishMode === 'skill' && (
           <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px', marginBottom: '32px' }}>
             <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '24px', marginTop: 0 }}>
               Publish a New Skill
@@ -351,7 +448,82 @@ export default function DeveloperPage() {
               )}
               <button type="submit" disabled={publishing} className="btn-primary"
                 style={{ width: '100%', justifyContent: 'center', opacity: publishing ? 0.5 : 1, cursor: publishing ? 'not-allowed' : 'pointer' }}>
-                {publishing ? 'Publishing...' : 'Publish to Marketplace'}
+                {publishing ? 'Publishing...' : 'Publish to Skill Store'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {session && showPublish && publishMode === 'app' && (
+          <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px', marginBottom: '32px' }}>
+            <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '24px', marginTop: 0 }}>
+              Publish a New App
+            </h2>
+            <form onSubmit={handlePublishApp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={labelStyle}>App Name *</label>
+                  <input type="text" required value={appForm.name} onChange={e => setAppForm(f => ({ ...f, name: e.target.value }))} className="input-dark" placeholder="e.g. Invoice Ops Agent" />
+                </div>
+                <div>
+                  <label style={labelStyle}>Slug</label>
+                  <input type="text" value={appForm.slug} onChange={e => setAppForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} className="input-dark" placeholder="auto-generated if empty" />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={labelStyle}>Category *</label>
+                  <select value={appForm.category} onChange={e => setAppForm(f => ({ ...f, category: e.target.value }))} className="input-dark">
+                    {APP_CATEGORIES.map(cat => <option key={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Device Targets</label>
+                  <input type="text" value={appForm.device_targets} onChange={e => setAppForm(f => ({ ...f, device_targets: e.target.value }))} className="input-dark" placeholder="AgentOS Desktop, AgentOS Cloud" />
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Short Description *</label>
+                <input type="text" required value={appForm.description} onChange={e => setAppForm(f => ({ ...f, description: e.target.value }))} className="input-dark" placeholder="One sentence describing the app" />
+              </div>
+              <div>
+                <label style={labelStyle}>Long Description</label>
+                <textarea rows={3} value={appForm.long_description} onChange={e => setAppForm(f => ({ ...f, long_description: e.target.value }))} className="input-dark" placeholder="Detailed App Store description" style={{ resize: 'vertical' }} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={labelStyle}>App URL</label>
+                  <input type="url" value={appForm.app_url} onChange={e => setAppForm(f => ({ ...f, app_url: e.target.value }))} className="input-dark" placeholder="https://..." />
+                </div>
+                <div>
+                  <label style={labelStyle}>Repository URL</label>
+                  <input type="url" value={appForm.repository_url} onChange={e => setAppForm(f => ({ ...f, repository_url: e.target.value }))} className="input-dark" placeholder="https://github.com/..." />
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Manifest JSON *</label>
+                <textarea rows={11} required value={appForm.manifest} onChange={e => setAppForm(f => ({ ...f, manifest: e.target.value }))} className="input-dark"
+                  style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', resize: 'vertical' }} />
+                <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Declare runtime, entrypoint, primitives, permissions, required secrets, and commands. Do not put secret values here.</p>
+              </div>
+              <div>
+                <label style={labelStyle}>Default Config JSON</label>
+                <textarea rows={5} value={appForm.default_config} onChange={e => setAppForm(f => ({ ...f, default_config: e.target.value }))} className="input-dark"
+                  style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', resize: 'vertical' }} />
+              </div>
+
+              {publishError && (
+                <div style={{ padding: '12px 16px', background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)', color: 'var(--danger)', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px' }}>
+                  {publishError}
+                </div>
+              )}
+              <button type="submit" disabled={publishingApp} className="btn-primary"
+                style={{ width: '100%', justifyContent: 'center', opacity: publishingApp ? 0.5 : 1, cursor: publishingApp ? 'not-allowed' : 'pointer' }}>
+                {publishingApp ? 'Publishing...' : 'Publish to App Store'}
               </button>
             </form>
           </div>
@@ -410,6 +582,60 @@ export default function DeveloperPage() {
                       <Link href={`/marketplace/${skill.slug}`} style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--accent)', textDecoration: 'none', flexShrink: 0, marginTop: '2px' }}>
                         View →
                       </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* My apps */}
+        {session && (
+          <div style={{ marginBottom: '40px' }}>
+            <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>
+              Your Apps{' '}
+              {!loading && <span style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontWeight: 400, fontSize: '14px', color: 'var(--text-secondary)' }}>({myApps.length})</span>}
+            </h2>
+
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)' }}>
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} style={{ padding: '20px 24px', backgroundColor: 'var(--bg-secondary)' }}>
+                    <div style={{ height: '14px', background: 'var(--bg-tertiary)', width: '33%', marginBottom: '8px' }} />
+                    <div style={{ height: '12px', background: 'var(--border)', width: '66%' }} />
+                  </div>
+                ))}
+              </div>
+            ) : myApps.length === 0 ? (
+              <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '48px 40px', textAlign: 'center' }}>
+                <h3 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>No apps published yet</h3>
+                <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+                  Publish a packaged agentic app to the App Store.
+                </p>
+                <button onClick={() => { setPublishMode('app'); setShowPublish(true); }} className="btn-primary">Publish Your First App</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)' }}>
+                {myApps.map(app => (
+                  <div key={app.id} style={{ padding: '20px 24px', backgroundColor: 'var(--bg-secondary)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                          <h3 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{app.name}</h3>
+                          <Badge variant="dim">{app.category}</Badge>
+                          <Badge variant={app.published ? 'accent' : 'warning'}>{app.published ? 'Published' : 'Draft'}</Badge>
+                          {app.verified && <Badge variant="accent">Verified</Badge>}
+                        </div>
+                        <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>{app.description}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', flexWrap: 'wrap' }}>
+                          <div><span style={{ color: 'var(--text-tertiary)' }}>Downloads </span><span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{app.installCount.toLocaleString()}</span></div>
+                          <div><span style={{ color: 'var(--text-tertiary)' }}>Targets </span><span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{app.deviceTargets.join(', ')}</span></div>
+                        </div>
+                      </div>
+                      <a href={`/api/apps/${app.slug}/download`} style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--accent)', textDecoration: 'none', flexShrink: 0, marginTop: '2px' }}>
+                        Download
+                      </a>
                     </div>
                   </div>
                 ))}

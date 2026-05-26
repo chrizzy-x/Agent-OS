@@ -162,7 +162,7 @@ export default function MarketplacePage() {
                 fontSize: '12px',
                 textDecoration: 'none',
               }}>
-                Publish a skill â†’
+                Publish a skill
               </Link>
             </div>
           </ResponsiveSidebar>
@@ -171,9 +171,34 @@ export default function MarketplacePage() {
           <main style={{ flex: 1, minWidth: 0, paddingBottom: '80px' }}>
             {/* Header */}
             <div style={{ marginBottom: '24px' }}>
+              <div style={{
+                display: 'inline-flex',
+                border: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-secondary)',
+                marginBottom: '24px',
+              }}>
+                <Link href="/marketplace" style={{
+                  padding: '9px 14px',
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '13px',
+                  color: 'var(--bg-primary)',
+                  backgroundColor: 'var(--accent)',
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  borderRight: '1px solid var(--border)',
+                }}>Skill Store</Link>
+                <Link href="/appstore" style={{
+                  padding: '9px 14px',
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  textDecoration: 'none',
+                }}>App Store</Link>
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
-                  <Badge variant="accent" style={{ marginBottom: '12px' }}>Community Skills</Badge>
+                  <Badge variant="accent" style={{ marginBottom: '12px' }}>Installable Capabilities</Badge>
                   <h1 style={{
                     fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
                     fontSize: '28px',
@@ -182,14 +207,16 @@ export default function MarketplacePage() {
                     marginBottom: '8px',
                     marginTop: '8px',
                     lineHeight: 1.2,
-                  }}>Skills Marketplace</h1>
+                  }}>Skill Store</h1>
                   <p style={{
                     fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
                     fontSize: '14px',
                     color: 'var(--text-secondary)',
                     margin: 0,
+                    maxWidth: '680px',
+                    lineHeight: 1.6,
                   }}>
-                    {OFFICIAL_COUNT} official skills Â· {total > 0 ? `${total} total available` : 'community-built and verified'}
+                    Install individual skills into your agent. For full downloadable agentic apps, use the App Store. {OFFICIAL_COUNT} official skills · {total > 0 ? `${total} total available` : 'community-built and verified'}
                   </p>
                 </div>
               </div>

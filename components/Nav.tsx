@@ -25,7 +25,8 @@ export default function Nav({ activePath }: NavProps) {
   }, []);
 
   const links = [
-    { href: '/marketplace', label: 'Marketplace' },
+    { href: '/marketplace', label: 'Skill Store' },
+    { href: '/appstore', label: 'App Store' },
     { href: '/connect', label: 'Connect' },
     { href: '/docs', label: 'Docs' },
     { href: '/developer', label: 'Developer' },

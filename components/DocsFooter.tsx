@@ -9,7 +9,8 @@ export default function DocsFooter() {
     { href: '/docs/audit', label: 'Audit' },
     { href: '/docs/primitives', label: 'Primitives' },
     { href: '/docs/skills', label: 'Skills' },
-    { href: '/marketplace', label: 'Marketplace' },
+    { href: '/marketplace', label: 'Skill Store' },
+    { href: '/appstore', label: 'App Store' },
   ];
 
   return (

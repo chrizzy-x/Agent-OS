@@ -188,6 +188,7 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
           { href: '/studio', label: 'Studio', primary: false },
           { href: '/docs', label: 'Docs', primary: false },
           { href: '/marketplace', label: 'Skills', primary: false },
+          { href: '/appstore', label: 'Apps', primary: false },
         ].map(btn => (
           <Link
             key={btn.href}

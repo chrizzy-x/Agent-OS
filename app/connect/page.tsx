@@ -34,7 +34,7 @@ const languageTags = ['Python', 'Node.js', 'Rust', 'Go', 'Any language'];
 const capabilityCards = [
   { icon: '⚡', title: 'Primitives', subtitle: '32 built-in tools', detail: 'for any agent' },
   { icon: '🌐', title: 'External MCPs', subtitle: 'Gmail, Slack, Stripe', detail: 'and any MCP server' },
-  { icon: '🛠️', title: 'Skills Marketplace', subtitle: 'Install capabilities', detail: 'on demand' },
+  { icon: '🛠️', title: 'Skill Store', subtitle: 'Install capabilities', detail: 'on demand' },
   { icon: '📄', title: 'Database', subtitle: 'Private SQL per', detail: 'agent' },
   { icon: '📡', title: 'Events', subtitle: 'Pub/sub between', detail: 'agents' },
   { icon: '⚙️', title: 'Code Execution', subtitle: 'Run Python, JS,', detail: 'Bash in sandbox' },
@@ -213,7 +213,7 @@ export default function ConnectPage() {
             lineHeight: 1.7,
             marginBottom: '24px',
           }}>
-            One connection. Every capability. AgentOS gives your agent access to 32 built-in tools, the skills marketplace,
+            One connection. Every capability. AgentOS gives your agent access to 32 built-in tools, the Skill Store,
             and any external MCP server — Gmail, Slack, Stripe, GitHub, and more. Connect in 60 seconds.
           </p>
 
@@ -441,7 +441,7 @@ export default function ConnectPage() {
               <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>What your agent can access</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>
                 <div><span style={{ color: 'var(--accent)', marginRight: '8px' }}>✓</span>{registration.allowedTools.filter(t => t.startsWith('agentos.') && !t.startsWith('agentos.skill.')).length} AgentOS primitives (agentos.*)</div>
-                <div><span style={{ color: 'var(--accent)', marginRight: '8px' }}>✓</span>Skills marketplace (agentos.skill.*) once installed</div>
+                <div><span style={{ color: 'var(--accent)', marginRight: '8px' }}>✓</span>Skill Store (agentos.skill.*) once installed</div>
                 <div><span style={{ color: 'var(--accent)', marginRight: '8px' }}>✓</span>External MCP servers (mcp.*) when configured</div>
               </div>
             </div>

@@ -30,9 +30,9 @@ export default function GuidePage() {
           { id: 'create-account', label: 'Step 1 — Create your account & get your API key' },
           { id: 'what-next', label: 'Step 2 — What can you actually do?' },
           { id: 'use-cases', label: 'Step 3 — Real-life use cases' },
-          { id: 'marketplace', label: 'Step 4 — Skills marketplace' },
+          { id: 'marketplace', label: 'Step 4 - Skill Store and App Store' },
           { id: 'studio', label: 'Step 5 — Studio console (test without writing code)' },
-          { id: 'publish', label: 'Step 6 — Publish your own skill & earn money' },
+          { id: 'publish', label: 'Step 6 - Publish your own skill or app' },
           { id: 'ops', label: 'Step 7 — Multi-agent ops & infrastructure crew' },
           { id: 'ffp', label: 'Step 8 — FFP / consensus mode' },
         ]} />
@@ -439,12 +439,12 @@ console.log('History:', history);`}</Code>
         </Section>
 
         {/* SECTION 5 */}
-        <Section id="marketplace" title="Step 4 — Skills marketplace">
+        <Section id="marketplace" title="Step 4 - Skill Store and App Store">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            Skills are pre-built capabilities you can install and call instantly. Instead of writing code to parse PDFs, translate text, or process images — install a skill and call it with one line.
+            The marketplace has two stores. The <Link href="/marketplace" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps built on AgentOS.
           </p>
           <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
-            Browse at <Link href="/marketplace" style={{ color: 'var(--accent)' }}>/marketplace</Link>. Skills are free or usage-based (you pay per call).
+            Skills are free or usage-based. Apps package workflows, manifests, device targets, and default configuration into an AgentOS app package.
           </p>
 
           <h3 className="text-base font-semibold mb-2">Install a skill:</h3>
@@ -479,6 +479,12 @@ console.log(result.result); // filtered data`}</Code>
 }).then(r => r.json());
 
 installed_skills.forEach(s => console.log(s.skill.name, s.skill.slug));`}</Code>
+
+          <h3 className="text-base font-semibold mt-6 mb-2">Download an app package:</h3>
+          <Code>{`const pkg = await fetch('${APP_URL}/api/apps/research-agent/download')
+  .then(r => r.json());
+
+console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         </Section>
 
         {/* SECTION 6 */}
@@ -512,9 +518,9 @@ installed_skills.forEach(s => console.log(s.skill.name, s.skill.slug));`}</Code>
         </Section>
 
         {/* SECTION 7 */}
-        <Section id="publish" title="Step 6 — Publish your own skill & earn money">
+        <Section id="publish" title="Step 6 - Publish your own skill or app">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            If you build something useful on top of AgentOS, you can publish it as a skill on the marketplace. Other agents can install and call your skill — and you receive <strong>70% of all usage revenue</strong>.
+            If you build something useful on top of AgentOS, you can publish it as a skill or as a full app. Other agents can install and call your skill, or users can download your app package from the App Store.
           </p>
 
           <ol className="list-decimal ml-6 space-y-3 mb-6" style={{ color: 'var(--text-secondary)' }}>
@@ -544,6 +550,30 @@ installed_skills.forEach(s => console.log(s.skill.name, s.skill.slug));`}</Code>
     };
   }
 }`}</Code>
+
+          <h3 className="text-base font-semibold mt-6 mb-2">Example app publish request:</h3>
+          <Code>{`await fetch('${APP_URL}/api/apps', {
+  method: 'POST',
+  headers: {
+    Authorization: 'Bearer ' + API_KEY,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    name: 'Invoice Ops Agent',
+    category: 'Operations',
+    description: 'Autonomous invoice intake, validation, and routing.',
+    deviceTargets: ['AgentOS Desktop', 'AgentOS Cloud'],
+    manifest: {
+      version: '1.0.0',
+      runtime: 'agentos-agent',
+      entrypoint: 'agentos://apps/invoice-ops-agent',
+      primitives: ['fs.*', 'db.*', 'net.fetch', 'events.*'],
+      skills: ['csv-processor'],
+      permissions: ['files', 'database', 'network', 'events'],
+      requiredSecrets: ['ERP_API_KEY'],
+    },
+  }),
+});`}</Code>
 
           <Callout emoji="💰">
             Earnings are paid monthly. Set your payout method at <Link href="/developer" style={{ color: 'var(--accent)' }}>/developer → Payout Settings</Link>. Supports PayPal, bank transfer (ACH/Wire), and USDC crypto wallet.
@@ -607,6 +637,7 @@ console.log(v); // 'world'`}</Code>
             <Link href="/signup" className="btn-primary text-sm">Create account →</Link>
             <Link href="/docs/primitives" className="btn-ghost text-sm">All 30 tools</Link>
             <Link href="/marketplace" className="btn-ghost text-sm">Browse skills</Link>
+            <Link href="/appstore" className="btn-ghost text-sm">Browse apps</Link>
           </div>
         </div>
       </div>
