@@ -4,22 +4,33 @@ import {
   getAgentAppBySlug,
   recordAgentAppDownload,
 } from '@/src/appstore/service';
+import { hasAdminAccess, requireAgentContext } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
     const { slug } = await params;
-    const app = await getAgentAppBySlug(slug);
+    const app = await getAgentAppBySlug(slug, { includePrivate: true });
     if (!app) {
       return NextResponse.json({ error: 'App not found' }, { status: 404 });
     }
+    if (!app.published && !hasAdminAccess(request.headers)) {
+      try {
+        const agentCtx = requireAgentContext(request.headers);
+        if (agentCtx.agentId !== app.publisherId) {
+          return NextResponse.json({ error: 'App not found' }, { status: 404 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'App not found' }, { status: 404 });
+      }
+    }
 
-    await recordAgentAppDownload(app.slug);
+    if (app.published) await recordAgentAppDownload(app.slug);
     const filename = `${app.slug.replace(/[^a-z0-9-]/g, '')}.agentos-app.json`;
 
     return new NextResponse(JSON.stringify(buildAgentAppPackage(app), null, 2), {

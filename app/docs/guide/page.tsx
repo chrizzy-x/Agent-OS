@@ -559,14 +559,14 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
     'Content-Type': 'application/json',
   },
   body: JSON.stringify({
-    name: 'Invoice Ops Agent',
+    name: 'Invoice Ops',
     category: 'Operations',
     description: 'Autonomous invoice intake, validation, and routing.',
     deviceTargets: ['AgentOS Desktop', 'AgentOS Cloud'],
     manifest: {
       version: '1.0.0',
-      runtime: 'agentos-agent',
-      entrypoint: 'agentos://apps/invoice-ops-agent',
+      runtime: 'agentos-app',
+      entrypoint: 'agentos://apps/invoice-ops',
       primitives: ['fs.*', 'db.*', 'net.fetch', 'events.*'],
       skills: ['csv-processor'],
       permissions: ['files', 'database', 'network', 'events'],

@@ -171,7 +171,7 @@ function SessionTokenPanel() {
   );
 }
 
-type AgentTier = 'free' | 'pro' | 'hyper';
+type AgentTier = 'free' | 'pro' | 'hyper' | 'enterprise';
 
 interface AgentProfile {
   tier: AgentTier;
@@ -179,6 +179,14 @@ interface AgentProfile {
 }
 
 function TierBadge({ tier }: { tier: AgentTier }) {
+  if (tier === 'enterprise') {
+    return (
+      <span className="text-xs font-bold px-2 py-0.5"
+        style={{ background: 'var(--accent)', color: 'var(--bg-primary)' }}>
+        ENTERPRISE
+      </span>
+    );
+  }
   if (tier === 'hyper') {
     return (
       <span className="text-xs font-bold px-2 py-0.5"

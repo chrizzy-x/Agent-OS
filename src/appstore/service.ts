@@ -5,7 +5,6 @@ import { ValidationError } from '../utils/errors.js';
 import {
   AGENT_APP_CATEGORIES,
   AGENT_APP_DEVICE_TARGETS,
-  SEEDED_AGENT_APPS,
   type AgentAppListing,
   type AgentAppManifest,
 } from './catalog.js';
@@ -17,6 +16,7 @@ export type ListAgentAppsOptions = {
   search?: string | null;
   sort?: string | null;
   publisherId?: string | null;
+  includePrivate?: boolean;
 };
 
 export type PublishAgentAppInput = {
@@ -32,6 +32,7 @@ export type PublishAgentAppInput = {
   deviceTargets?: unknown;
   manifest?: unknown;
   defaultConfig?: unknown;
+  published?: unknown;
 };
 
 export type AgentAppPackage = {
@@ -109,7 +110,7 @@ function normalizeManifest(value: unknown, slug: string): AgentAppManifest {
   return {
     schemaVersion: 'agentos.app.v1',
     version: stringValue(input.version, '1.0.0'),
-    runtime: input.runtime === 'external-agent' || input.runtime === 'workspace-agent' ? input.runtime : 'agentos-agent',
+    runtime: input.runtime === 'external-app' || input.runtime === 'workspace-app' ? input.runtime : 'agentos-app',
     entrypoint: stringValue(input.entrypoint, `agentos://apps/${slug}`),
     primitives: stringArray(input.primitives, []),
     skills: stringArray(input.skills, []),
@@ -178,13 +179,6 @@ function toDbPayload(app: AgentAppListing): Record<string, unknown> {
   };
 }
 
-function mergeApps(storedApps: AgentAppListing[]): AgentAppListing[] {
-  const bySlug = new Map<string, AgentAppListing>();
-  for (const app of SEEDED_AGENT_APPS) bySlug.set(app.slug, app);
-  for (const app of storedApps) bySlug.set(app.slug, app);
-  return Array.from(bySlug.values());
-}
-
 async function loadStoredApps(): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
@@ -228,10 +222,14 @@ export async function listAgentApps(options: ListAgentAppsOptions = {}): Promise
   const search = options.search?.trim().toLowerCase() ?? '';
   const sort = options.sort?.trim() || 'popular';
   const publisherId = options.publisherId?.trim();
-  let apps = mergeApps(await loadStoredApps()).filter(app => app.published);
+  let apps = await loadStoredApps();
 
   if (publisherId) {
     apps = apps.filter(app => app.publisherId === publisherId);
+  }
+
+  if (!options.includePrivate) {
+    apps = apps.filter(app => app.published);
   }
 
   if (category && category !== 'All' && category.toLowerCase() !== 'all') {
@@ -245,9 +243,9 @@ export async function listAgentApps(options: ListAgentAppsOptions = {}): Promise
   return apps.sort((left, right) => compareApps(sort, left, right));
 }
 
-export async function getAgentAppBySlug(slug: string): Promise<AgentAppListing | null> {
+export async function getAgentAppBySlug(slug: string, options: { includePrivate?: boolean } = {}): Promise<AgentAppListing | null> {
   const normalizedSlug = normalizeSlug(slug);
-  const apps = await listAgentApps();
+  const apps = await listAgentApps({ includePrivate: options.includePrivate });
   return apps.find(app => app.slug === normalizedSlug) ?? null;
 }
 
@@ -279,7 +277,7 @@ export async function publishAgentApp(input: PublishAgentAppInput): Promise<Agen
     defaultConfig: normalizeDefaultConfig(input.defaultConfig),
     installCount: 0,
     verified: false,
-    published: true,
+    published: input.published !== false,
     createdAt: now,
     updatedAt: now,
   };
@@ -310,6 +308,44 @@ export async function publishAgentApp(input: PublishAgentAppInput): Promise<Agen
       return existing;
     }
     state.agentApps.catalog.unshift(app);
+    return app;
+  });
+}
+
+export async function updateAgentAppVisibility(params: {
+  slug: string;
+  publisherId?: string;
+  published: boolean;
+  canManageAll?: boolean;
+}): Promise<AgentAppListing> {
+  const normalizedSlug = normalizeSlug(params.slug);
+  const now = new Date().toISOString();
+
+  try {
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from('agent_apps')
+      .update({ published: params.published, updated_at: now })
+      .eq('slug', normalizedSlug);
+
+    if (!params.canManageAll) {
+      query = query.eq('publisher_id', params.publisherId ?? '');
+    }
+
+    const { data, error } = await query.select().maybeSingle();
+    if (!error && data) return fromDbRow(data as DbAgentAppRow);
+  } catch {
+    // Local fallback below.
+  }
+
+  return updateLocalRuntimeState(state => {
+    const app = state.agentApps.catalog.find(item => item.slug === normalizedSlug);
+    if (!app || (!params.canManageAll && app.publisherId !== params.publisherId)) {
+      throw new ValidationError('App not found');
+    }
+
+    app.published = params.published;
+    app.updatedAt = now;
     return app;
   });
 }

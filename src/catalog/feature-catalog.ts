@@ -257,7 +257,7 @@ const PLATFORM_FEATURES: CatalogSeed[] = [
   { id: 21, slug: 'skill-analytics', name: 'Skill Analytics', short: 'Measure installs, calls, latency, failures, and revenue per skill.', group: 'skills', kind: 'platform_feature' },
   { id: 71, slug: 'browse-agent-apps', name: 'Browse Agentic Apps', short: 'Search and filter downloadable agentic apps by category, publisher, and popularity.', group: 'apps', kind: 'platform_feature' },
   { id: 72, slug: 'download-agent-apps', name: 'Download Agentic Apps', short: 'Download AgentOS app packages with manifest, device targets, and default configuration.', group: 'apps', kind: 'platform_feature' },
-  { id: 73, slug: 'publish-agent-apps', name: 'Publish Agentic Apps', short: 'Let individuals and enterprises publish complete AgentOS apps automatically.', group: 'apps', kind: 'platform_feature' },
+  { id: 73, slug: 'publish-agent-apps', name: 'Publish Agentic Apps', short: 'Let enterprise subscribers publish complete AgentOS apps with public or private visibility.', group: 'apps', kind: 'platform_feature' },
   { id: 74, slug: 'agent-app-manifests', name: 'Agent App Manifests', short: 'Describe app runtime, entrypoint, primitives, permissions, secrets, and commands in one package.', group: 'apps', kind: 'platform_feature' },
   { id: 22, slug: 'landing-page', name: 'Landing Page', short: 'Present the product story, primitives, and feature coverage clearly.', group: 'ui', kind: 'platform_feature' },
   { id: 23, slug: 'signup-flow', name: 'Signup Flow', short: 'Create a new agent account and issue credentials quickly.', group: 'ui', kind: 'platform_feature' },

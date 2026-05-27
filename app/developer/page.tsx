@@ -43,6 +43,8 @@ interface Earnings {
   per_skill: { skill_id: string; skill_name: string; total_calls: number; total_revenue: string }[];
 }
 
+type DeveloperTier = 'free' | 'pro' | 'hyper' | 'enterprise';
+
 const EMPTY_SKILL = {
   name: '',
   slug: '',
@@ -66,10 +68,11 @@ const EMPTY_APP = {
   category: 'Operations',
   description: '',
   long_description: '',
+  visibility: 'public',
   app_url: '',
   repository_url: '',
   device_targets: 'AgentOS Desktop, AgentOS Cloud',
-  manifest: '{\n  "version": "1.0.0",\n  "runtime": "agentos-agent",\n  "entrypoint": "agentos://apps/my-agent-app",\n  "primitives": ["mem.*", "db.*", "net.fetch"],\n  "skills": [],\n  "permissions": ["memory", "database", "network"],\n  "requiredSecrets": [],\n  "commands": [\n    { "name": "run", "description": "Run the app workflow" }\n  ]\n}',
+  manifest: '{\n  "version": "1.0.0",\n  "runtime": "agentos-app",\n  "entrypoint": "agentos://apps/my-agentic-app",\n  "primitives": ["mem.*", "db.*", "net.fetch"],\n  "skills": [],\n  "permissions": ["memory", "database", "network"],\n  "requiredSecrets": [],\n  "commands": [\n    { "name": "run", "description": "Run the app workflow" }\n  ]\n}',
   default_config: '{\n  "system_prompt": "Run this app safely on AgentOS."\n}',
 };
 
@@ -98,6 +101,7 @@ export default function DeveloperPage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [mySkills, setMySkills] = useState<Skill[]>([]);
   const [myApps, setMyApps] = useState<AgentApp[]>([]);
+  const [agentTier, setAgentTier] = useState<DeveloperTier>('free');
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPublish, setShowPublish] = useState(false);
@@ -106,6 +110,7 @@ export default function DeveloperPage() {
   const [appForm, setAppForm] = useState(EMPTY_APP);
   const [publishing, setPublishing] = useState(false);
   const [publishingApp, setPublishingApp] = useState(false);
+  const [visibilityBusySlug, setVisibilityBusySlug] = useState('');
   const [publishError, setPublishError] = useState('');
   const [publishSuccess, setPublishSuccess] = useState('');
   const [payoutEmail, setPayoutEmail] = useState('');
@@ -114,6 +119,7 @@ export default function DeveloperPage() {
   const [payoutSaving, setPayoutSaving] = useState(false);
   const [payoutMsg, setPayoutMsg] = useState('');
   const [payoutRequested, setPayoutRequested] = useState(false);
+  const canPublishApps = agentTier === 'enterprise' || agentTier === 'hyper';
 
   useEffect(() => {
     let active = true;
@@ -125,6 +131,7 @@ export default function DeveloperPage() {
 
       setSession(currentSession);
       await Promise.all([
+        fetchAgentProfile(),
         fetchMySkills(currentSession.agentId),
         fetchMyApps(currentSession.agentId),
         fetchEarnings(),
@@ -143,6 +150,17 @@ export default function DeveloperPage() {
       const data = await res.json();
       setMySkills(data.skills ?? []);
     } catch { setMySkills([]); }
+  };
+
+  const fetchAgentProfile = async () => {
+    try {
+      const res = await fetch('/api/agent/me', { cache: 'no-store' });
+      const data = await res.json();
+      const tier = data.tier;
+      setAgentTier(tier === 'enterprise' || tier === 'hyper' || tier === 'pro' || tier === 'free' ? tier : 'free');
+    } catch {
+      setAgentTier('free');
+    }
   };
 
   const fetchMyApps = async (agentId: string) => {
@@ -239,6 +257,10 @@ export default function DeveloperPage() {
 
   const handlePublishApp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canPublishApps) {
+      setPublishError('Enterprise subscription required to publish AgentOS apps.');
+      return;
+    }
     setPublishingApp(true);
     setPublishError('');
     setPublishSuccess('');
@@ -265,6 +287,7 @@ export default function DeveloperPage() {
           device_targets: appForm.device_targets.split(',').map(t => t.trim()).filter(Boolean),
           manifest: manifestParsed,
           default_config: configParsed,
+          published: appForm.visibility === 'public',
         }),
       });
       const data = await res.json();
@@ -277,6 +300,30 @@ export default function DeveloperPage() {
       }
     } catch { setPublishError('Network error. Please try again.'); }
     finally { setPublishingApp(false); }
+  };
+
+  const handleToggleAppVisibility = async (app: AgentApp) => {
+    setVisibilityBusySlug(app.slug);
+    setPublishError('');
+    setPublishSuccess('');
+    try {
+      const res = await fetch('/api/apps', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: app.slug, visibility: app.published ? 'private' : 'public' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPublishError(data.error || 'Visibility update failed');
+      } else {
+        setPublishSuccess(`App "${app.name}" is now ${data.app?.published ? 'public' : 'private'}.`);
+        if (session) await fetchMyApps(session.agentId);
+      }
+    } catch {
+      setPublishError('Network error. Please try again.');
+    } finally {
+      setVisibilityBusySlug('');
+    }
   };
 
   return (
@@ -311,10 +358,11 @@ export default function DeveloperPage() {
               </button>
               <button
                 onClick={() => { setPublishMode('app'); setShowPublish(value => !(value && publishMode === 'app')); setPublishError(''); setPublishSuccess(''); }}
+                disabled={!canPublishApps}
                 className={showPublish && publishMode === 'app' ? 'btn-outline' : 'btn-primary'}
-                style={{ flexShrink: 0 }}
+                style={{ flexShrink: 0, opacity: canPublishApps ? 1 : 0.45, cursor: canPublishApps ? 'pointer' : 'not-allowed' }}
               >
-                {showPublish && publishMode === 'app' ? 'Cancel' : '+ Publish App'}
+                {showPublish && publishMode === 'app' ? 'Cancel' : 'Publish App'}
               </button>
             </div>
           )}
@@ -463,7 +511,7 @@ export default function DeveloperPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
                   <label style={labelStyle}>App Name *</label>
-                  <input type="text" required value={appForm.name} onChange={e => setAppForm(f => ({ ...f, name: e.target.value }))} className="input-dark" placeholder="e.g. Invoice Ops Agent" />
+                  <input type="text" required value={appForm.name} onChange={e => setAppForm(f => ({ ...f, name: e.target.value }))} className="input-dark" placeholder="e.g. Invoice Ops" />
                 </div>
                 <div>
                   <label style={labelStyle}>Slug</label>
@@ -482,6 +530,14 @@ export default function DeveloperPage() {
                   <label style={labelStyle}>Device Targets</label>
                   <input type="text" value={appForm.device_targets} onChange={e => setAppForm(f => ({ ...f, device_targets: e.target.value }))} className="input-dark" placeholder="AgentOS Desktop, AgentOS Cloud" />
                 </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Visibility</label>
+                <select value={appForm.visibility} onChange={e => setAppForm(f => ({ ...f, visibility: e.target.value }))} className="input-dark">
+                  <option value="public">Public App Store listing</option>
+                  <option value="private">Private to publisher</option>
+                </select>
               </div>
 
               <div>
@@ -611,9 +667,16 @@ export default function DeveloperPage() {
               <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '48px 40px', textAlign: 'center' }}>
                 <h3 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>No apps published yet</h3>
                 <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>
-                  Publish a packaged agentic app to the App Store.
+                  {canPublishApps ? 'Publish a packaged agentic app to the App Store.' : 'Enterprise subscription required to publish AgentOS apps.'}
                 </p>
-                <button onClick={() => { setPublishMode('app'); setShowPublish(true); }} className="btn-primary">Publish Your First App</button>
+                <button
+                  onClick={() => { setPublishMode('app'); setShowPublish(true); }}
+                  disabled={!canPublishApps}
+                  className="btn-primary"
+                  style={{ opacity: canPublishApps ? 1 : 0.45, cursor: canPublishApps ? 'pointer' : 'not-allowed' }}
+                >
+                  Publish Your First App
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)' }}>
@@ -624,7 +687,7 @@ export default function DeveloperPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
                           <h3 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{app.name}</h3>
                           <Badge variant="dim">{app.category}</Badge>
-                          <Badge variant={app.published ? 'accent' : 'warning'}>{app.published ? 'Published' : 'Draft'}</Badge>
+                          <Badge variant={app.published ? 'accent' : 'warning'}>{app.published ? 'Public' : 'Private'}</Badge>
                           {app.verified && <Badge variant="accent">Verified</Badge>}
                         </div>
                         <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>{app.description}</p>
@@ -633,9 +696,19 @@ export default function DeveloperPage() {
                           <div><span style={{ color: 'var(--text-tertiary)' }}>Targets </span><span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{app.deviceTargets.join(', ')}</span></div>
                         </div>
                       </div>
-                      <a href={`/api/apps/${app.slug}/download`} style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--accent)', textDecoration: 'none', flexShrink: 0, marginTop: '2px' }}>
-                        Download
-                      </a>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0, marginTop: '2px' }}>
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleAppVisibility(app)}
+                          disabled={visibilityBusySlug === app.slug}
+                          style={{ background: 'none', border: 0, padding: 0, fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--accent)', cursor: visibilityBusySlug === app.slug ? 'wait' : 'pointer' }}
+                        >
+                          {visibilityBusySlug === app.slug ? 'Saving...' : app.published ? 'Make Private' : 'Make Public'}
+                        </button>
+                        <a href={`/api/apps/${app.slug}/download`} style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: 'var(--accent)', textDecoration: 'none' }}>
+                          Download
+                        </a>
+                      </div>
                     </div>
                   </div>
                 ))}

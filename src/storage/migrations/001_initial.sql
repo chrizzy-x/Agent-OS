@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS agents (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   name        TEXT,
+  tier        TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'pro', 'hyper', 'enterprise')),
   -- JSON blob: { storage_quota_bytes, memory_quota_bytes, rate_limit_per_min, allowed_domains[] }
   quotas      JSONB NOT NULL DEFAULT '{}',
   metadata    JSONB NOT NULL DEFAULT '{}'

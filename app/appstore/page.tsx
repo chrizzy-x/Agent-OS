@@ -18,14 +18,14 @@ Authorization: Bearer <agent-token>
 Content-Type: application/json
 
 {
-  "name": "Invoice Ops Agent",
+  "name": "Invoice Ops",
   "category": "Operations",
   "description": "Autonomous invoice intake, validation, and routing.",
   "deviceTargets": ["AgentOS Desktop", "AgentOS Cloud"],
   "manifest": {
     "version": "1.0.0",
-    "runtime": "agentos-agent",
-    "entrypoint": "agentos://apps/invoice-ops-agent",
+    "runtime": "agentos-app",
+    "entrypoint": "agentos://apps/invoice-ops",
     "primitives": ["fs.*", "db.*", "net.fetch", "events.*"],
     "skills": ["csv-processor"],
     "permissions": ["files", "database", "network", "events"],
@@ -207,7 +207,7 @@ export default function AppStorePage() {
                   color: 'var(--text-tertiary)',
                   paddingTop: '8px',
                 }}>
-                  {total > 0 ? `${total} apps` : 'verified seed apps'}
+                  {`${total} apps`}
                 </div>
               </div>
             </div>
@@ -280,7 +280,7 @@ export default function AppStorePage() {
                 backgroundColor: 'var(--bg-secondary)',
               }}>
                 <p style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', color: 'var(--text-primary)', marginBottom: '8px', fontWeight: 600 }}>No apps found</p>
-                <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>Try a different search or category.</p>
+                <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>No public app listings match this view.</p>
               </div>
             ) : (
               <div style={{
@@ -415,7 +415,7 @@ export default function AppStorePage() {
                   lineHeight: 1.7,
                   marginBottom: '16px',
                 }}>
-                  Individuals and enterprises can publish full AgentOS app packages. The listing is published automatically and the downloadable package exposes metadata, manifest, targets, and default config without secrets.
+                  Enterprise subscribers can publish full AgentOS app packages. Apps can be public in the App Store or private to the publisher, and downloadable packages expose metadata, manifest, targets, and default config without secrets.
                 </p>
                 <Link href="/developer" className="btn-outline" style={{ fontSize: '13px', padding: '9px 16px' }}>
                   Developer Portal

@@ -28,7 +28,7 @@ AgentOS is a production infrastructure layer that gives any agent or app a safe,
 The marketplace is split into two stores:
 
 - **Skill Store:** install pre-built capabilities into an agent. Developers earn 70% revenue share on paid skill usage.
-- **App Store:** download full agentic apps built on AgentOS. Individuals and enterprises can publish app packages with manifests, device targets, and default config.
+- **App Store:** download full agentic apps built on AgentOS. Enterprise subscribers can publish app packages with manifests, device targets, default config, and public/private visibility.
 
 ### Universal MCP Router
 One endpoint routes to built-in primitives, installed skills, or any external MCP server (Gmail, Slack, GitHub, etc.).

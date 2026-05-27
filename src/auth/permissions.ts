@@ -22,7 +22,7 @@ export interface AgentContext {
   allowedDomains: string[];
   // Resource quotas for this agent
   quotas: AgentQuotas;
-  // Capability tier: free | pro | hyper
+  // Capability tier: free | pro | hyper | enterprise
   tier: AgentTier;
 }
 
