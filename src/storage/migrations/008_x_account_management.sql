@@ -130,10 +130,27 @@ ALTER TABLE x_inbox_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE x_sync_checkpoints ENABLE ROW LEVEL SECURITY;
 ALTER TABLE x_post_metrics ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deny_all_x_account_connections" ON x_account_connections FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_x_account_policies" ON x_account_policies FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_x_post_drafts" ON x_post_drafts FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_x_publish_queue" ON x_publish_queue FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_x_inbox_items" ON x_inbox_items FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_x_sync_checkpoints" ON x_sync_checkpoints FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_x_post_metrics" ON x_post_metrics FOR ALL USING (FALSE);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'x_account_connections' AND policyname = 'deny_all_x_account_connections') THEN
+    CREATE POLICY "deny_all_x_account_connections" ON x_account_connections FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'x_account_policies' AND policyname = 'deny_all_x_account_policies') THEN
+    CREATE POLICY "deny_all_x_account_policies" ON x_account_policies FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'x_post_drafts' AND policyname = 'deny_all_x_post_drafts') THEN
+    CREATE POLICY "deny_all_x_post_drafts" ON x_post_drafts FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'x_publish_queue' AND policyname = 'deny_all_x_publish_queue') THEN
+    CREATE POLICY "deny_all_x_publish_queue" ON x_publish_queue FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'x_inbox_items' AND policyname = 'deny_all_x_inbox_items') THEN
+    CREATE POLICY "deny_all_x_inbox_items" ON x_inbox_items FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'x_sync_checkpoints' AND policyname = 'deny_all_x_sync_checkpoints') THEN
+    CREATE POLICY "deny_all_x_sync_checkpoints" ON x_sync_checkpoints FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'x_post_metrics' AND policyname = 'deny_all_x_post_metrics') THEN
+    CREATE POLICY "deny_all_x_post_metrics" ON x_post_metrics FOR ALL USING (FALSE);
+  END IF;
+END $$;

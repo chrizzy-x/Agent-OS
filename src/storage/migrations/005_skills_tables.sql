@@ -118,6 +118,13 @@ CREATE INDEX IF NOT EXISTS idx_dev_earnings_skill ON developer_earnings(skill_id
 CREATE INDEX IF NOT EXISTS idx_dev_earnings_period ON developer_earnings(period_start);
 
 -- Helper functions
+CREATE OR REPLACE FUNCTION increment_skill_installs(skill_id_arg UUID)
+RETURNS void AS $$
+  UPDATE skills
+  SET total_installs = total_installs + 1
+  WHERE id = skill_id_arg;
+$$ LANGUAGE sql;
+
 CREATE OR REPLACE FUNCTION decrement_skill_installs(skill_id UUID)
 RETURNS void AS $$
   UPDATE skills
@@ -141,11 +148,24 @@ ALTER TABLE skill_usage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE skill_reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE developer_earnings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "deny_all_skills" ON skills FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_skill_installations" ON skill_installations FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_skill_usage" ON skill_usage FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_skill_reviews" ON skill_reviews FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_developer_earnings" ON developer_earnings FOR ALL USING (FALSE);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'skills' AND policyname = 'deny_all_skills') THEN
+    CREATE POLICY "deny_all_skills" ON skills FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'skill_installations' AND policyname = 'deny_all_skill_installations') THEN
+    CREATE POLICY "deny_all_skill_installations" ON skill_installations FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'skill_usage' AND policyname = 'deny_all_skill_usage') THEN
+    CREATE POLICY "deny_all_skill_usage" ON skill_usage FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'skill_reviews' AND policyname = 'deny_all_skill_reviews') THEN
+    CREATE POLICY "deny_all_skill_reviews" ON skill_reviews FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'developer_earnings' AND policyname = 'deny_all_developer_earnings') THEN
+    CREATE POLICY "deny_all_developer_earnings" ON developer_earnings FOR ALL USING (FALSE);
+  END IF;
+END $$;
 
 -- Seed data: built-in example skills
 INSERT INTO skills (

@@ -86,8 +86,21 @@ ALTER TABLE agent_processes ENABLE ROW LEVEL SECURITY;
 
 -- Service role can do everything (bypasses RLS automatically)
 -- Deny all access for anonymous and authenticated roles
-CREATE POLICY "deny_all_agents" ON agents FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_agent_files" ON agent_files FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_audit_logs" ON audit_logs FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_scheduled_tasks" ON scheduled_tasks FOR ALL USING (FALSE);
-CREATE POLICY "deny_all_agent_processes" ON agent_processes FOR ALL USING (FALSE);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'agents' AND policyname = 'deny_all_agents') THEN
+    CREATE POLICY "deny_all_agents" ON agents FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'agent_files' AND policyname = 'deny_all_agent_files') THEN
+    CREATE POLICY "deny_all_agent_files" ON agent_files FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'audit_logs' AND policyname = 'deny_all_audit_logs') THEN
+    CREATE POLICY "deny_all_audit_logs" ON audit_logs FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'scheduled_tasks' AND policyname = 'deny_all_scheduled_tasks') THEN
+    CREATE POLICY "deny_all_scheduled_tasks" ON scheduled_tasks FOR ALL USING (FALSE);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'agent_processes' AND policyname = 'deny_all_agent_processes') THEN
+    CREATE POLICY "deny_all_agent_processes" ON agent_processes FOR ALL USING (FALSE);
+  END IF;
+END $$;
