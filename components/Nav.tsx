@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
 interface NavProps {
   activePath?: string;
@@ -10,6 +11,8 @@ interface NavProps {
 export default function Nav({ activePath }: NavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [session, setSession] = useState<BrowserSession | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 8);
@@ -22,6 +25,15 @@ export default function Nav({ activePath }: NavProps) {
     const handler = () => { if (window.innerWidth > 768) setMenuOpen(false); };
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchBrowserSession()
+      .then(nextSession => { if (active) setSession(nextSession); })
+      .catch(() => { if (active) setSession(null); })
+      .finally(() => { if (active) setSessionChecked(true); });
+    return () => { active = false; };
   }, []);
 
   const links = [
@@ -113,7 +125,45 @@ export default function Nav({ activePath }: NavProps) {
 
           {/* Desktop CTAs */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }} className="nav-desktop-ctas">
+            {sessionChecked && session && (
+              <>
+                <span style={{
+                  maxWidth: '180px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                }}>
+                  {session.agentName ?? session.agentId}
+                </span>
+                <Link href="/dashboard" style={{
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'var(--bg-primary)',
+                  backgroundColor: 'var(--accent)',
+                  textDecoration: 'none',
+                  padding: '8px 18px',
+                  transition: 'background-color 200ms ease, box-shadow 200ms ease',
+                  whiteSpace: 'nowrap',
+                }}
+                  onMouseEnter={e => {
+                    const el = e.currentTarget as HTMLAnchorElement;
+                    el.style.backgroundColor = 'var(--accent-dim)';
+                    el.style.boxShadow = '0 0 16px var(--accent-glow)';
+                  }}
+                  onMouseLeave={e => {
+                    const el = e.currentTarget as HTMLAnchorElement;
+                    el.style.backgroundColor = 'var(--accent)';
+                    el.style.boxShadow = 'none';
+                  }}
+                >Dashboard</Link>
+              </>
+            )}
             <Link href="/signin" style={{
+              display: sessionChecked && !session ? undefined : 'none',
               fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
               fontSize: '14px',
               fontWeight: 500,
@@ -126,6 +176,7 @@ export default function Nav({ activePath }: NavProps) {
               onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)'; }}
             >Sign in</Link>
             <Link href="/signup" style={{
+              display: sessionChecked && !session ? undefined : 'none',
               fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
               fontSize: '14px',
               fontWeight: 600,
@@ -146,7 +197,7 @@ export default function Nav({ activePath }: NavProps) {
                 el.style.backgroundColor = 'var(--accent)';
                 el.style.boxShadow = 'none';
               }}
-            >Get started →</Link>
+            >Get started</Link>
           </div>
 
           {/* Mobile hamburger */}
@@ -206,6 +257,20 @@ export default function Nav({ activePath }: NavProps) {
               {link.label}
             </Link>
           ))}
+          {sessionChecked && session && (
+            <Link href="/dashboard" onClick={() => setMenuOpen(false)} style={{
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '16px',
+              fontWeight: 600,
+              color: 'var(--accent)',
+              textDecoration: 'none',
+              padding: '16px 24px',
+              borderBottom: '1px solid var(--border)',
+              minHeight: '56px',
+              display: 'flex',
+              alignItems: 'center',
+            }}>Dashboard</Link>
+          )}
           <Link href="/signin" onClick={() => setMenuOpen(false)} style={{
             fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
             fontSize: '16px',
@@ -215,10 +280,10 @@ export default function Nav({ activePath }: NavProps) {
             padding: '16px 24px',
             borderBottom: '1px solid var(--border)',
             minHeight: '56px',
-            display: 'flex',
+            display: sessionChecked && !session ? 'flex' : 'none',
             alignItems: 'center',
           }}>Sign in</Link>
-          <div style={{ padding: '16px 24px', marginTop: 'auto' }}>
+          <div style={{ padding: '16px 24px', marginTop: 'auto', display: sessionChecked && !session ? 'block' : 'none' }}>
             <Link href="/signup" onClick={() => setMenuOpen(false)} style={{
               fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
               fontSize: '16px',
@@ -229,7 +294,7 @@ export default function Nav({ activePath }: NavProps) {
               padding: '14px 24px',
               display: 'block',
               textAlign: 'center',
-            }}>Get started →</Link>
+            }}>Get started</Link>
           </div>
         </div>
       )}

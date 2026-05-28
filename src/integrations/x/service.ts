@@ -252,7 +252,7 @@ async function createChildAgentForXAccount(ownerContext: AgentContext, user: XUs
 
   const { error } = await supabase.from('agents').insert({
     id: childAgentId,
-    name: `X Operator @${user.username}`,
+    name: `X Operator @${user.username} ${childAgentId.slice(-8)}`,
     quotas: ownerContext.quotas,
     metadata: {
       parentAgentId: ownerContext.agentId,

@@ -49,5 +49,16 @@ describe('storage migrations', () => {
     expect(sql).toContain('last_result JSONB');
     expect(sql).toContain('CREATE POLICY "deny_all_agent_workflows"');
   });
+
+  it('adds database-level agent name uniqueness enforcement', () => {
+    const sql = readFileSync(join(migrationsDir, '015_unique_agent_names.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION normalize_agent_name');
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION enforce_agent_name_uniqueness');
+    expect(sql).toContain('CREATE OR REPLACE FUNCTION enforce_external_agent_name_uniqueness');
+    expect(sql).toContain('CREATE TRIGGER agents_name_uniqueness');
+    expect(sql).toContain('CREATE TRIGGER external_agent_registrations_name_uniqueness');
+    expect(sql).toContain('agents_name_normalized_unique_idx');
+  });
 });
 

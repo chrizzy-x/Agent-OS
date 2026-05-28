@@ -3,6 +3,7 @@ import { createAgentToken } from '@/src/auth/agent-identity';
 import { setAgentSessionCookie } from '@/src/auth/session-cookie';
 import { hashPassword } from '@/src/auth/password';
 import { createAgentAccount, findAccountsByEmail } from '@/src/auth/agent-store';
+import { isValidTier } from '@/src/auth/tiers';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -27,6 +28,15 @@ export async function POST(req: NextRequest) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
   const agentName = typeof body.agentName === 'string' ? body.agentName.trim() : '';
+  const accountType = body.accountType === 'enterprise' ? 'enterprise' : 'retail';
+  const selectedPlan = isValidTier(body.selectedPlan) ? body.selectedPlan : 'free';
+  const requestedTier = accountType === 'enterprise'
+    ? 'enterprise'
+    : selectedPlan === 'enterprise'
+      ? 'free'
+      : selectedPlan;
+  const planSelectionSkipped = body.planSelectionSkipped === true;
+  const tier = planSelectionSkipped ? 'free' : requestedTier;
 
   if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: 'invalid_email', message: 'Valid email required' }, { status: 400 });
@@ -49,11 +59,23 @@ export async function POST(req: NextRequest) {
   const fallbackName = emailName
     ? `${emailName.replace(/\b\w/g, char => char.toUpperCase())}'s Agent`
     : 'My Agent';
-  const name = agentName || fallbackName;
+  let name = agentName || fallbackName;
   const passwordHash = await hashPassword(password);
-  const created = await createAgentAccount({ id: agentId, name, email, passwordHash });
+  let created = await createAgentAccount({ id: agentId, name, email, passwordHash, tier, accountType, planSelectionSkipped });
+
+  if (created.duplicate && created.conflictField === 'name' && !agentName) {
+    name = `${fallbackName} ${crypto.randomBytes(3).toString('hex')}`;
+    created = await createAgentAccount({ id: agentId, name, email, passwordHash, tier, accountType, planSelectionSkipped });
+  }
 
   if (created.duplicate) {
+    if (created.conflictField === 'name') {
+      return NextResponse.json(
+        { error: 'conflict', message: 'That agent name is already taken. Choose a unique agent name.' },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
       { error: 'conflict', message: 'An account with this email already exists. Please sign in.' },
       { status: 409 },
@@ -78,6 +100,9 @@ export async function POST(req: NextRequest) {
         bearerToken,
         apiKey: bearerToken,
         agentName: name,
+        tier,
+        accountType,
+        planSelectionSkipped,
         expiresIn: '90 days',
       },
     },

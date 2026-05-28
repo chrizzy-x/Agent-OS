@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord } from '../storage/local-state.js';
+import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
+import { isValidTier, type AgentTier } from './tiers.js';
 
 export type AgentAccount = {
   id: string;
@@ -14,7 +16,23 @@ export type CreateAgentAccountInput = {
   name: string;
   email: string;
   passwordHash: string;
+  tier?: AgentTier;
+  accountType?: 'retail' | 'enterprise' | null;
+  planSelectionSkipped?: boolean;
 };
+
+export type CreateAgentAccountResult = {
+  duplicate: boolean;
+  conflictField?: 'email' | 'name' | 'id' | 'unknown';
+};
+
+function inferDuplicateField(error: { message?: string; details?: string; hint?: string }): CreateAgentAccountResult['conflictField'] {
+  const text = `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase();
+  if (text.includes('email')) return 'email';
+  if (text.includes('name')) return 'name';
+  if (text.includes('id') || text.includes('agents_pkey')) return 'id';
+  return 'unknown';
+}
 
 function mapLocalAccount(record: LocalAccountRecord): AgentAccount {
   return {
@@ -82,15 +100,23 @@ export async function findAccountById(agentId: string): Promise<AgentAccount | n
   return accounts.find(account => account.id === agentId) ?? null;
 }
 
-export async function createAgentAccount(input: CreateAgentAccountInput): Promise<{ duplicate: boolean }> {
+export async function createAgentAccount(input: CreateAgentAccountInput): Promise<CreateAgentAccountResult> {
+  const tier = input.tier && isValidTier(input.tier) ? input.tier : 'free';
+  const name = cleanAgentDisplayName(input.name);
   try {
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.from('agents').insert({
       id: input.id,
-      name: input.name,
-      tier: 'free',
+      name,
+      tier,
       quotas: {},
-      metadata: { email: input.email, password_hash: input.passwordHash, signup_source: 'web' },
+      metadata: {
+        email: input.email,
+        password_hash: input.passwordHash,
+        signup_source: 'web',
+        account_type: input.accountType ?? null,
+        plan_selection_skipped: Boolean(input.planSelectionSkipped),
+      },
     });
 
     if (!error) {
@@ -98,23 +124,37 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
     }
 
     if (error.code === '23505') {
-      return { duplicate: true };
+      return { duplicate: true, conflictField: inferDuplicateField(error) };
     }
   } catch {
     // Fall back to local state below.
   }
 
   return updateLocalRuntimeState(state => {
-    const existing = Object.values(state.accounts).some(account => account.email === input.email || account.agentId === input.id);
-    if (existing) {
-      return { duplicate: true };
+    const normalizedName = normalizeAgentDisplayName(name);
+    const existingEmail = Object.values(state.accounts).some(account => account.email === input.email);
+    if (existingEmail) {
+      return { duplicate: true, conflictField: 'email' };
+    }
+
+    const existingId = Boolean(state.accounts[input.id] || state.externalAgents[input.id]);
+    if (existingId) {
+      return { duplicate: true, conflictField: 'id' };
+    }
+
+    const existingName = normalizedName
+      ? Object.values(state.accounts).some(account => normalizeAgentDisplayName(account.agentName) === normalizedName)
+        || Object.values(state.externalAgents).some(agent => normalizeAgentDisplayName(agent.name) === normalizedName)
+      : false;
+    if (existingName) {
+      return { duplicate: true, conflictField: 'name' };
     }
 
     const now = new Date().toISOString();
     state.accounts[input.id] = {
       agentId: input.id,
       email: input.email,
-      agentName: input.name,
+      agentName: name,
       passwordHash: input.passwordHash,
       createdAt: now,
       updatedAt: now,

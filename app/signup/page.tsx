@@ -11,7 +11,23 @@ interface Credentials {
   bearerToken: string;
   apiKey?: string;
   expiresIn: string;
+  tier?: string;
+  accountType?: string | null;
+  planSelectionSkipped?: boolean;
 }
+
+type AccountType = 'retail' | 'enterprise';
+type PlanKey = 'free' | 'pro' | 'hyper' | 'enterprise';
+
+const RETAIL_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
+  { key: 'free', name: 'Free', detail: 'Start testing AgentOS.' },
+  { key: 'pro', name: 'Pro', detail: 'Retail power user tools.' },
+  { key: 'hyper', name: 'Hyper', detail: 'High-volume retail automation.' },
+];
+
+const ENTERPRISE_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
+  { key: 'enterprise', name: 'Enterprise', detail: 'SDK, apps, publishing, and team scale.' },
+];
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -209,8 +225,20 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agentName, setAgentName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [accountType, setAccountType] = useState<AccountType>('retail');
+  const [selectedPlan, setSelectedPlan] = useState<PlanKey>('free');
+  const [planSelectionSkipped, setPlanSelectionSkipped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const planOptions = accountType === 'retail' ? RETAIL_PLANS : ENTERPRISE_PLANS;
+
+  const selectAccountType = (type: AccountType) => {
+    setAccountType(type);
+    setPlanSelectionSkipped(false);
+    setSelectedPlan(type === 'enterprise' ? 'enterprise' : 'free');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,7 +252,8 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
       const res = await fetch('/api/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, agentName }),
+        credentials: 'include',
+        body: JSON.stringify({ email, password, agentName, accountType, selectedPlan, planSelectionSkipped }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Something went wrong. Please try again.'); return; }
@@ -260,16 +289,54 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
 
         <div>
           <label htmlFor="password" style={labelStyle}>Password <span style={{ color: 'var(--danger)' }}>*</span></label>
-          <input id="password" type="password" required autoComplete="new-password"
-            value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="At least 8 characters" className="input-dark" />
+          <div style={{ position: 'relative' }}>
+            <input id="password" type={showPassword ? 'text' : 'password'} required autoComplete="new-password"
+              value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="At least 8 characters" className="input-dark" style={{ paddingRight: '72px' }} />
+            <button
+              type="button"
+              onClick={() => setShowPassword(value => !value)}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 0,
+                color: 'var(--accent)',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
 
         <div>
           <label htmlFor="confirmPassword" style={labelStyle}>Confirm password <span style={{ color: 'var(--danger)' }}>*</span></label>
-          <input id="confirmPassword" type="password" required autoComplete="new-password"
-            value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-            placeholder="Re-enter your password" className="input-dark" />
+          <div style={{ position: 'relative' }}>
+            <input id="confirmPassword" type={showConfirmPassword ? 'text' : 'password'} required autoComplete="new-password"
+              value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password" className="input-dark" style={{ paddingRight: '72px' }} />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(value => !value)}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 0,
+                color: 'var(--accent)',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              {showConfirmPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
 
         <div>
@@ -279,6 +346,83 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
           <input id="agentName" type="text" autoComplete="nickname"
             value={agentName} onChange={e => setAgentName(e.target.value)}
             placeholder="My Trading Bot" className="input-dark" />
+        </div>
+
+        <div>
+          <label style={labelStyle}>Account type</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {(['retail', 'enterprise'] as AccountType[]).map(type => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => selectAccountType(type)}
+                style={{
+                  border: `1px solid ${accountType === type ? 'var(--accent)' : 'var(--border)'}`,
+                  background: accountType === type ? 'rgba(0,255,136,0.08)' : 'var(--bg-tertiary)',
+                  color: accountType === type ? 'var(--accent)' : 'var(--text-secondary)',
+                  padding: '10px 12px',
+                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textTransform: 'capitalize',
+                }}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Subscription</label>
+          <div style={{ display: 'grid', gridTemplateColumns: accountType === 'retail' ? 'repeat(auto-fit, minmax(96px, 1fr))' : '1fr', gap: '8px' }}>
+            {planOptions.map(plan => (
+              <button
+                key={plan.key}
+                type="button"
+                onClick={() => {
+                  setSelectedPlan(plan.key);
+                  setPlanSelectionSkipped(false);
+                }}
+                style={{
+                  minHeight: '86px',
+                  border: `1px solid ${!planSelectionSkipped && selectedPlan === plan.key ? 'var(--accent)' : 'var(--border)'}`,
+                  background: !planSelectionSkipped && selectedPlan === plan.key ? 'rgba(0,255,136,0.08)' : 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                  padding: '10px',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                }}
+              >
+                <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '12px', color: !planSelectionSkipped && selectedPlan === plan.key ? 'var(--accent)' : 'var(--text-primary)' }}>{plan.name}</span>
+                <span style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>{plan.detail}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setPlanSelectionSkipped(true);
+              setSelectedPlan('free');
+            }}
+            style={{
+              width: '100%',
+              marginTop: '8px',
+              background: planSelectionSkipped ? 'rgba(0,255,136,0.08)' : 'transparent',
+              border: `1px solid ${planSelectionSkipped ? 'var(--accent)' : 'var(--border)'}`,
+              color: planSelectionSkipped ? 'var(--accent)' : 'var(--text-secondary)',
+              padding: '9px 12px',
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
+            Skip for now
+          </button>
         </div>
 
         {error && (
@@ -311,7 +455,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
               </svg>
               Creating agent...
             </span>
-          ) : 'Create agent →'}
+          ) : 'Create agent'}
         </button>
 
         <p style={{
@@ -392,7 +536,7 @@ export default function SignupPage() {
       {/* Card */}
       <div style={{
         width: '100%',
-        maxWidth: credentials ? '480px' : '400px',
+        maxWidth: credentials ? '480px' : '440px',
         backgroundColor: 'var(--bg-secondary)',
         border: '1px solid var(--border)',
         padding: '32px',

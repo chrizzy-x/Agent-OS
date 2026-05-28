@@ -205,9 +205,11 @@ export async function POST(
 
       if (plan.delegatedTasks && plan.delegatedTasks.length > 1) {
         const delegated = await Promise.all(plan.delegatedTasks.map(async (task, index) => {
+          const suffix = crypto.randomBytes(3).toString('hex');
+          const childName = `${registration.name} Task ${index + 1} ${suffix}`;
           const child = await registerExternalAgent({
-            agentId: `${slugify(registration.name)}-${slugify(task)}-${crypto.randomBytes(3).toString('hex')}`,
-            name: `${registration.name} Task ${index + 1}`,
+            agentId: `${slugify(registration.name)}-${slugify(task)}-${suffix}`,
+            name: childName,
             description: task,
             ownerEmail: id,
             allowedDomains: registration.allowed_domains ?? ['*'],
@@ -216,7 +218,7 @@ export async function POST(
           const taskPlan = await callClaude(task);
           const run = await executeAgentPlan({
             agentId: child.agentId,
-            agentName: `${registration.name} Task ${index + 1}`,
+            agentName: childName,
             allowedDomains: child.allowedDomains,
             plan: { ...taskPlan, workflowName: task.slice(0, 80) },
           });

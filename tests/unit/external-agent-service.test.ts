@@ -22,10 +22,12 @@ describe('external agent service', () => {
   });
 
   it('registers a new external agent with wildcard domains and default primitives', async () => {
+    const agentInsert = vi.fn().mockResolvedValue({ error: null });
     const insert = vi.fn().mockResolvedValue({ error: null });
 
     mockSupabase.from
       .mockReturnValueOnce(maybeSingleBuilder(null))
+      .mockReturnValueOnce({ insert: agentInsert })
       .mockReturnValueOnce({ insert });
 
     const result = await registerExternalAgent({
@@ -37,6 +39,10 @@ describe('external agent service', () => {
     expect(result.token).toBeTruthy();
     expect(result.allowedDomains).toEqual(['*']);
     expect(result.allowedTools).toContain('agentos.mem_set');
+    expect(agentInsert).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'test-agent-1',
+      name: 'Test Agent',
+    }));
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       agent_id: 'test-agent-1',
       allowed_domains: ['*'],

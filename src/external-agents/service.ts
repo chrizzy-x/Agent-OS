@@ -1,4 +1,5 @@
 import { createAgentToken } from '../auth/agent-identity.js';
+import { cleanAgentDisplayName, normalizeAgentDisplayName } from '../auth/agent-names.js';
 import { getPublicAppUrl } from '../config/env.js';
 import {
   readLocalRuntimeState,
@@ -126,7 +127,24 @@ function normalizeName(name: unknown): string {
   if (typeof name !== 'string' || !name.trim()) {
     throw new ValidationError('agentId and name are required');
   }
-  return name.trim();
+  return cleanAgentDisplayName(name);
+}
+
+function duplicateAgentNameError(name: string): Error {
+  const error = new Error(`Agent name already exists: ${name}`);
+  (error as Error & { statusCode?: number }).statusCode = 409;
+  return error;
+}
+
+function duplicateAgentIdError(): Error {
+  const error = new Error('Agent ID already registered');
+  (error as Error & { statusCode?: number }).statusCode = 409;
+  return error;
+}
+
+function inferAgentInsertDuplicate(error: { message?: string; details?: string; hint?: string }, name: string): Error {
+  const text = `${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`.toLowerCase();
+  return text.includes('name') ? duplicateAgentNameError(name) : duplicateAgentIdError();
 }
 
 function normalizeOptionalString(value: unknown): string | null {
@@ -322,14 +340,28 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
 
   const existing = await getExternalAgentRegistration(agentId);
   if (existing) {
-    const error = new Error('Agent ID already registered');
-    (error as Error & { statusCode?: number }).statusCode = 409;
-    throw error;
+    throw duplicateAgentIdError();
   }
 
   let supabaseSucceeded = false;
   try {
     const supabase = getSupabaseAdmin();
+    const agentInsert = await supabase
+      .from('agents')
+      .insert({
+        id: agentId,
+        name,
+        metadata: { externalAgent: true, ownerAgentId: ownerEmail },
+        updated_at: new Date().toISOString(),
+      });
+
+    if (agentInsert.error) {
+      if (agentInsert.error.code === '23505') {
+        throw inferAgentInsertDuplicate(agentInsert.error, name);
+      }
+      throw agentInsert.error;
+    }
+
     const { error } = await supabase
       .from('external_agent_registrations')
       .insert({
@@ -343,10 +375,9 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
       });
 
     if (error) {
+      await supabase.from('agents').delete().eq('id', agentId);
       if (error.code === '23505') {
-        const duplicate = new Error('Agent ID already registered');
-        (duplicate as Error & { statusCode?: number }).statusCode = 409;
-        throw duplicate;
+        throw inferAgentInsertDuplicate(error, name);
       }
 
       throw error;
@@ -361,36 +392,30 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
   }
 
   if (supabaseSucceeded) {
-    try {
-      const supabase = getSupabaseAdmin();
-      await supabase
-        .from('agents')
-        .upsert({
-          id: agentId,
-          name,
-          metadata: { externalAgent: true, ownerAgentId: ownerEmail },
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
-    } catch { /* external registration already succeeded */ }
-
     // Supabase insert succeeded — just cache in local state (overwrite any stale data).
     await updateLocalRuntimeState(state => {
       state.externalAgents[agentId] = buildExternalAgentRegistrationRecord(registration);
     });
   } else {
     // Supabase unavailable — register locally with duplicate check as fallback.
-    const duplicate = await updateLocalRuntimeState(state => {
+    const duplicate = await updateLocalRuntimeState<'id' | 'name' | false>(state => {
       if (state.externalAgents[agentId]) {
-        return true;
+        return 'id';
+      }
+      const normalizedName = normalizeAgentDisplayName(name);
+      if (normalizedName) {
+        const accountNameExists = Object.values(state.accounts)
+          .some(account => normalizeAgentDisplayName(account.agentName) === normalizedName);
+        const externalNameExists = Object.values(state.externalAgents)
+          .some(agent => normalizeAgentDisplayName(agent.name) === normalizedName);
+        if (accountNameExists || externalNameExists) return 'name';
       }
       state.externalAgents[agentId] = buildExternalAgentRegistrationRecord(registration);
       return false;
     });
 
     if (duplicate) {
-      const error = new Error('Agent ID already registered');
-      (error as Error & { statusCode?: number }).statusCode = 409;
-      throw error;
+      throw duplicate === 'name' ? duplicateAgentNameError(name) : duplicateAgentIdError();
     }
   }
 

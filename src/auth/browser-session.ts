@@ -18,7 +18,7 @@ export function clearLegacyBrowserAuth(): void {
 }
 
 export async function fetchBrowserSession(): Promise<BrowserSession | null> {
-  const response = await fetch('/api/session', { cache: 'no-store' });
+  const response = await fetch('/api/session', { cache: 'no-store', credentials: 'include' });
   if (!response.ok) {
     clearLegacyBrowserAuth();
     return null;
@@ -29,13 +29,14 @@ export async function fetchBrowserSession(): Promise<BrowserSession | null> {
 }
 
 export async function destroyBrowserSession(): Promise<void> {
-  await fetch('/api/session', { method: 'DELETE' });
+  await fetch('/api/session', { method: 'DELETE', credentials: 'include' });
   clearLegacyBrowserAuth();
 }
 
 export async function issueBrowserToken(): Promise<BrowserTokenCredentials> {
   const response = await fetch('/api/session/token', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
   });
 

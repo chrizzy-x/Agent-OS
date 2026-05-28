@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     const result = await registerExternalAgent({
       agentId,
-      name: template.name,
+      name: `${template.name} ${suffix}`,
       allowedDomains: ['*'],
       allowedTools: [],
       ownerEmail: ctx.agentId,

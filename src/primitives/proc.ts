@@ -255,7 +255,7 @@ export async function procSpawn(ctx: AgentContext, input: unknown): Promise<{ ch
       const childAgentId = `${parentSlug}-child-${randomUUID().slice(0, 8)}`;
       const child = await registerExternalAgent({
         agentId: childAgentId,
-        name: childConfig.name ?? `Child of ${ctx.agentId}`,
+        name: childConfig.name ?? `Child of ${ctx.agentId} ${childAgentId.slice(-8)}`,
         ownerEmail: ctx.agentId,
         allowedDomains: childConfig.allowedDomains,
         allowedTools: [],
