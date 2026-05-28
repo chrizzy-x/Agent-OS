@@ -316,7 +316,8 @@ function WorkflowLibrary() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/agent/workflows');
+      await fetch('/api/agent/workflows/run-due', { method: 'POST' });
+      const res = await fetch('/api/agent/workflows', { cache: 'no-store' });
       const body = await res.json() as { workflows: Workflow[] };
       setWorkflows(body.workflows ?? []);
     } catch { /* keep existing */ }
