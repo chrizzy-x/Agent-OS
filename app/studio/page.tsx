@@ -313,6 +313,7 @@ function NLModePanel({ agentId }: { agentId: string }) {
 function WorkflowLibrary() {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [runningWorkflowId, setRunningWorkflowId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -340,6 +341,20 @@ function WorkflowLibrary() {
     void load();
   }
 
+  async function runWorkflowNow(id: string) {
+    setRunningWorkflowId(id);
+    try {
+      await fetch('/api/agent/workflows/run-due', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflowId: id, force: true }),
+      });
+      await load();
+    } finally {
+      setRunningWorkflowId(null);
+    }
+  }
+
   async function deleteWorkflow(id: string) {
     await fetch(`/api/agent/workflows/${id}`, { method: 'DELETE' });
     setWorkflows(prev => prev.filter(w => w.id !== id));
@@ -361,17 +376,19 @@ function WorkflowLibrary() {
           {wf.summary && <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{wf.summary}</p>}
           {wf.schedule && <div className="text-xs mb-2" style={{ color: '#c084fc' }}>Schedule: {wf.schedule}</div>}
           {wf.last_run_at && <div className="text-xs mb-2" style={{ color: 'var(--text-dim)' }}>Last run: {new Date(wf.last_run_at).toLocaleString()}</div>}
-          {wf.last_error && (
-            <div className="text-xs mb-2 rounded-lg p-2" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-              {wf.last_error}
-            </div>
-          )}
-          {wf.last_result !== null && wf.last_result !== undefined && (
-            <pre className="terminal p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all mb-2" style={{ color: '#e5e7eb' }}>
-              {formatNaturalValue(wf.last_result)}
-            </pre>
-          )}
+          <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)' }}>Latest result</div>
+          <pre className="terminal p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all mb-2" style={{ color: wf.last_error ? '#fca5a5' : '#e5e7eb' }}>
+            {wf.last_error ? wf.last_error : wf.last_result !== null && wf.last_result !== undefined ? formatNaturalValue(wf.last_result) : 'No result yet.'}
+          </pre>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void runWorkflowNow(wf.id)}
+              disabled={runningWorkflowId === wf.id}
+              className="btn-primary text-xs px-2 py-1 rounded-lg"
+            >
+              {runningWorkflowId === wf.id ? 'Running' : 'Run now'}
+            </button>
             <button
               type="button"
               onClick={() => void toggleStatus(wf)}
