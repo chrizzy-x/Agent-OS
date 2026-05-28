@@ -89,6 +89,7 @@ Rules:
 - missingParams must always be an empty array []
 - schedule is null unless the instruction implies recurring execution (e.g. "every hour", "daily", "every 5 minutes")
 - For scheduled tasks, use proc_schedule with the recurring tool as input (e.g. net_http_get or net_http_post)
+- For recurring in-app result requests such as "check BTC price every minute and return it here", include a net_http_get step for the current result and a proc_schedule step for the recurring net_http_get. Every minute means "*/1 * * * *".
 - For EMAIL tasks: use notify_send with channel "email" and to = the recipient email address
 - For WHATSAPP tasks: use notify_send with channel "whatsapp" and to = phone number with country code (e.g. "+1234567890")
 - For TELEGRAM tasks: use notify_send with channel "telegram" and to = the Telegram chat ID
@@ -123,6 +124,8 @@ const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PHONE_RE = /\+\d[\d\s().-]{6,}\d/;
 const WEBHOOK_RE = /https:\/\/\S+/i;
 const TELEGRAM_DEST_RE = /(?:^|\s)(@\w{4,}|-?\d{5,})(?:\s|$)/;
+const BTC_PRICE_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+const ETH_PRICE_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
 
 function normalizeToolName(tool: string): string {
   return tool.trim().replace(/^agentos\./, '');
@@ -180,10 +183,86 @@ function isUnsafeImplicitNotification(instruction: string, step: PlanStep): bool
   return false;
 }
 
+function inferScheduleExpression(instruction: string, schedule: string | null): string | null {
+  if (schedule) return schedule;
+
+  const lower = instruction.toLowerCase();
+  const everyMinutes = lower.match(/\bevery\s+(\d+)\s+minutes?\b/);
+  if (everyMinutes) return `*/${everyMinutes[1]} * * * *`;
+  if (/\bevery\s+(one\s+)?minute\b|\bper\s+minute\b|\beach\s+minute\b/.test(lower)) return '*/1 * * * *';
+  if (/\bevery\s+hour\b|\bhourly\b/.test(lower)) return '0 * * * *';
+  if (/\bevery\s+day\b|\bdaily\b/.test(lower)) return '0 0 * * *';
+
+  return null;
+}
+
+function inferReadableUrl(instruction: string, steps: PlanStep[]): string | null {
+  for (const step of steps) {
+    if (normalizeToolName(step.tool) === 'net_http_get' && typeof step.input.url === 'string') {
+      return step.input.url;
+    }
+
+    if (normalizeToolName(step.tool) === 'proc_schedule') {
+      const nestedTool = typeof step.input.tool === 'string' ? step.input.tool : '';
+      const nestedInput = step.input.input && typeof step.input.input === 'object' && !Array.isArray(step.input.input)
+        ? step.input.input as Record<string, unknown>
+        : {};
+      if (normalizeToolName(nestedTool) === 'net_http_get' && typeof nestedInput.url === 'string') {
+        return nestedInput.url;
+      }
+    }
+  }
+
+  if (/\b(btc|btyc|bitcoin)\b/i.test(instruction)) return BTC_PRICE_URL;
+  if (/\b(eth|ethereum)\b/i.test(instruction)) return ETH_PRICE_URL;
+
+  return null;
+}
+
+function ensureRecurringInAppResult(instruction: string, plan: Plan, steps: PlanStep[]): PlanStep[] {
+  const schedule = inferScheduleExpression(instruction, plan.schedule);
+  if (!schedule) return steps;
+
+  const hasScheduleStep = steps.some(step => normalizeToolName(step.tool) === 'proc_schedule');
+  const url = inferReadableUrl(instruction, [...steps, ...plan.steps]);
+  if (!url) return steps;
+
+  const nextSteps = [...steps];
+  const hasImmediateRead = nextSteps.some(step => normalizeToolName(step.tool) === 'net_http_get' && step.input.url === url);
+  if (!hasImmediateRead) {
+    nextSteps.unshift({
+      order: 1,
+      tool: 'agentos.net_http_get',
+      input: { url },
+      description: 'Fetch the current result for AgentOS Studio.',
+    });
+  }
+
+  if (!hasScheduleStep) {
+    nextSteps.push({
+      order: nextSteps.length + 1,
+      tool: 'agentos.proc_schedule',
+      input: {
+        expression: schedule,
+        tool: 'agentos.net_http_get',
+        input: { url },
+      },
+      description: 'Schedule the same read-only check to run inside AgentOS.',
+    });
+  }
+
+  return nextSteps.map((step, index) => ({ ...step, order: index + 1 }));
+}
+
 export function sanitizeStudioPlan(instruction: string, plan: Plan): Plan {
   const safeSteps = plan.steps.filter(step => !isUnsafeImplicitNotification(instruction, step));
   const removedImplicitNotification = safeSteps.length !== plan.steps.length;
-  const reindexedSteps = safeSteps.map((step, index) => ({ ...step, order: index + 1 }));
+  const scheduleExpression = inferScheduleExpression(instruction, plan.schedule);
+  const reindexedSteps = ensureRecurringInAppResult(
+    instruction,
+    plan,
+    safeSteps.map((step, index) => ({ ...step, order: index + 1 })),
+  );
   const hasScheduledStep = reindexedSteps.some(step => normalizeToolName(step.tool) === 'proc_schedule');
 
   return {
@@ -192,7 +271,7 @@ export function sanitizeStudioPlan(instruction: string, plan: Plan): Plan {
       ? 'AgentOS will run the requested steps and show the result here.'
       : plan.summary,
     steps: reindexedSteps,
-    schedule: hasScheduledStep ? plan.schedule : null,
+    schedule: hasScheduledStep ? scheduleExpression : null,
     missingParams: Array.isArray(plan.missingParams) ? plan.missingParams : [],
   };
 }

@@ -40,5 +40,14 @@ describe('storage migrations', () => {
     expect(sql).toContain('CREATE OR REPLACE FUNCTION increment_ext_agent_calls');
     expect(sql).toContain('ALTER TABLE external_agent_registrations ENABLE ROW LEVEL SECURITY');
   });
+
+  it('adds durable Studio workflow result tracking', () => {
+    const sql = readFileSync(join(migrationsDir, '014_studio_recurring_workflows.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_workflows');
+    expect(sql).toContain('ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS workflow_id');
+    expect(sql).toContain('last_result JSONB');
+    expect(sql).toContain('CREATE POLICY "deny_all_agent_workflows"');
+  });
 });
 

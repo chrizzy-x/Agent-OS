@@ -58,6 +58,10 @@ type Workflow = {
   steps: IntentStep[];
   schedule: string | null;
   status: 'active' | 'paused';
+  task_id: string | null;
+  last_result: unknown;
+  last_error: string | null;
+  last_run_at: string | null;
   created_at: string;
 };
 
@@ -98,6 +102,28 @@ function KindBadge({ kind }: { kind: StudioCommandResponse['kind'] }) {
 
 function formatResult(value: unknown): string {
   return JSON.stringify(value, null, 2);
+}
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function formatNaturalValue(value: unknown): string {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const payload = value as Record<string, unknown>;
+    if (typeof payload.answer === 'string') return payload.answer;
+    const body = 'body' in payload ? parseJsonValue(payload.body) : payload;
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const objectBody = body as Record<string, unknown>;
+      const bitcoin = objectBody.bitcoin as { usd?: unknown } | undefined;
+      const ethereum = objectBody.ethereum as { usd?: unknown } | undefined;
+      if (typeof bitcoin?.usd === 'number') return `Bitcoin is $${bitcoin.usd.toLocaleString('en-US')} USD.`;
+      if (typeof ethereum?.usd === 'number') return `Ethereum is $${ethereum.usd.toLocaleString('en-US')} USD.`;
+    }
+  }
+
+  return typeof value === 'string' ? value : formatResult(value);
 }
 
 // ── NL Mode ──────────────────────────────────────────────────────────────────
@@ -297,7 +323,11 @@ function WorkflowLibrary() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
 
   async function toggleStatus(wf: Workflow) {
     const next = wf.status === 'active' ? 'paused' : 'active';
@@ -329,6 +359,17 @@ function WorkflowLibrary() {
           </div>
           {wf.summary && <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{wf.summary}</p>}
           {wf.schedule && <div className="text-xs mb-2" style={{ color: '#c084fc' }}>Schedule: {wf.schedule}</div>}
+          {wf.last_run_at && <div className="text-xs mb-2" style={{ color: 'var(--text-dim)' }}>Last run: {new Date(wf.last_run_at).toLocaleString()}</div>}
+          {wf.last_error && (
+            <div className="text-xs mb-2 rounded-lg p-2" style={{ color: '#fca5a5', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              {wf.last_error}
+            </div>
+          )}
+          {wf.last_result !== null && wf.last_result !== undefined && (
+            <pre className="terminal p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all mb-2" style={{ color: '#e5e7eb' }}>
+              {formatNaturalValue(wf.last_result)}
+            </pre>
+          )}
           <div className="flex items-center gap-2">
             <button
               type="button"

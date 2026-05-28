@@ -19,6 +19,7 @@ function parseCronIntervalMs(expression: string): number | null {
 
   // 0 * * * *   → every hour
   if (/^0\s+\*\s+\*\s+\*\s+\*$/.test(expression)) return 60 * 60 * 1000;
+  if (/^(?:\*|\*\/1)\s+\*\s+\*\s+\*\s+\*$/.test(expression)) return 60 * 1000;
 
   // 0 0 * * *   → every day
   if (/^0\s+0\s+\*\s+\*\s+\*$/.test(expression)) return 24 * 60 * 60 * 1000;
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
     const { data: tasks, error } = await supabase
       .from('scheduled_tasks')
-      .select('id, agent_id, code, language, cron_expression, last_run_at')
+      .select('id, agent_id, code, language, cron_expression, last_run_at, workflow_id')
       .eq('enabled', true);
 
     if (error) throw new Error(`Failed to fetch scheduled tasks: ${error.message}`);
@@ -74,25 +75,65 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        await executeUniversalToolCall({
+        const result = await executeUniversalToolCall({
           agentContext: agentCtx,
           name: parsed.tool,
           server: undefined,
           arguments: parsed.input,
         });
 
+        const ranAt = new Date().toISOString();
         await supabase
           .from('scheduled_tasks')
-          .update({ last_run_at: new Date().toISOString() })
+          .update({
+            last_run_at: ranAt,
+            last_result: result,
+            last_error: null,
+            last_success: true,
+          })
           .eq('id', task.id);
+
+        if (task.workflow_id) {
+          await supabase
+            .from('agent_workflows')
+            .update({
+              last_run_at: ranAt,
+              last_result: result,
+              last_error: null,
+              updated_at: ranAt,
+            })
+            .eq('id', task.workflow_id);
+        }
 
         results.push({ taskId: task.id as string, tool: parsed.tool, success: true });
       } catch (err) {
+        const ranAt = new Date().toISOString();
+        const message = err instanceof Error ? err.message : String(err);
+        await supabase
+          .from('scheduled_tasks')
+          .update({
+            last_run_at: ranAt,
+            last_error: message,
+            last_success: false,
+          })
+          .eq('id', task.id);
+
+        if (task.workflow_id) {
+          await supabase
+            .from('agent_workflows')
+            .update({
+              last_run_at: ranAt,
+              last_error: message,
+              updated_at: ranAt,
+            })
+            .eq('id', task.workflow_id);
+        }
+
         results.push({
           taskId: task.id as string,
           tool: parsed.tool,
           success: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: message,
         });
       }
     }

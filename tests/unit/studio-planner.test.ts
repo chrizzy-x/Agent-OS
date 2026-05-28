@@ -51,7 +51,7 @@ describe('sanitizeStudioPlan', () => {
     expect(sanitized.steps[0].tool).toBe('agentos.notify_send');
   });
 
-  it('removes scheduled notification when no destination was provided', () => {
+  it('converts scheduled notification without a destination into an in-app recurring check', () => {
     const plan: Plan = {
       summary: 'Monitor ETH and notify the user.',
       steps: [
@@ -72,7 +72,38 @@ describe('sanitizeStudioPlan', () => {
 
     const sanitized = sanitizeStudioPlan('monitor eth every hour', plan);
 
-    expect(sanitized.steps).toEqual([]);
-    expect(sanitized.schedule).toBeNull();
+    expect(sanitized.steps).toHaveLength(2);
+    expect(sanitized.steps[0].tool).toBe('agentos.net_http_get');
+    expect(sanitized.steps[1]).toMatchObject({
+      tool: 'agentos.proc_schedule',
+      input: {
+        expression: '0 * * * *',
+        tool: 'agentos.net_http_get',
+      },
+    });
+    expect(sanitized.schedule).toBe('0 * * * *');
+  });
+
+  it('builds a BTC every-minute in-app schedule from retail wording', () => {
+    const sanitized = sanitizeStudioPlan('check and return btyc price every minute', {
+      summary: 'Check BTC every minute.',
+      steps: [],
+      schedule: null,
+      missingParams: [],
+    });
+
+    expect(sanitized.steps).toHaveLength(2);
+    expect(sanitized.steps[0]).toMatchObject({
+      tool: 'agentos.net_http_get',
+      input: { url: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd' },
+    });
+    expect(sanitized.steps[1]).toMatchObject({
+      tool: 'agentos.proc_schedule',
+      input: {
+        expression: '*/1 * * * *',
+        tool: 'agentos.net_http_get',
+      },
+    });
+    expect(sanitized.schedule).toBe('*/1 * * * *');
   });
 });

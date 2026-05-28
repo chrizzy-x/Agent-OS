@@ -38,6 +38,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (error) throw error;
     if (!data) return NextResponse.json({ error: 'Workflow not found' }, { status: 404 });
 
+    if (body.status !== undefined && typeof data.task_id === 'string' && data.task_id.length > 0) {
+      await supabase
+        .from('scheduled_tasks')
+        .update({ enabled: body.status === 'active' })
+        .eq('id', data.task_id)
+        .eq('agent_id', ctx.agentId);
+    }
+
     return NextResponse.json({ workflow: data });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
@@ -52,6 +60,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
 
     const supabase = getSupabaseAdmin();
+    const { data: workflow } = await supabase
+      .from('agent_workflows')
+      .select('task_id')
+      .eq('id', id)
+      .eq('agent_id', ctx.agentId)
+      .maybeSingle();
+
     const { error, count } = await supabase
       .from('agent_workflows')
       .delete({ count: 'exact' })
@@ -60,6 +75,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     if (error) throw error;
     if (!count) return NextResponse.json({ error: 'Workflow not found' }, { status: 404 });
+
+    if (workflow && typeof workflow.task_id === 'string' && workflow.task_id.length > 0) {
+      await supabase
+        .from('scheduled_tasks')
+        .update({ enabled: false })
+        .eq('id', workflow.task_id)
+        .eq('agent_id', ctx.agentId);
+    }
 
     return NextResponse.json({ deleted: true });
   } catch (error: unknown) {

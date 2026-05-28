@@ -48,8 +48,29 @@ function parseJsonBody(value: unknown): unknown {
   }
 }
 
+function formatNaturalAnswer(value: unknown): string {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const payload = value as Record<string, unknown>;
+    const bitcoin = payload.bitcoin as { usd?: unknown } | undefined;
+    const ethereum = payload.ethereum as { usd?: unknown } | undefined;
+
+    if (typeof bitcoin?.usd === 'number') {
+      return `Bitcoin is $${bitcoin.usd.toLocaleString('en-US')} USD.`;
+    }
+    if (typeof ethereum?.usd === 'number') {
+      return `Ethereum is $${ethereum.usd.toLocaleString('en-US')} USD.`;
+    }
+  }
+
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
 function buildStudioAnswer(results: unknown[]): string | null {
-  const last = results.at(-1);
+  const last = [...results].reverse().find(item => {
+    if (!item || typeof item !== 'object') return false;
+    const result = (item as { result?: unknown }).result;
+    return Boolean(result && typeof result === 'object' && 'body' in (result as Record<string, unknown>));
+  }) ?? results.at(-1);
   if (!last || typeof last !== 'object') return null;
 
   const result = (last as { result?: unknown }).result;
@@ -60,10 +81,21 @@ function buildStudioAnswer(results: unknown[]): string | null {
   const payload = result as Record<string, unknown>;
   if ('body' in payload) {
     const parsed = parseJsonBody(payload.body);
-    return typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+    return formatNaturalAnswer(parsed);
   }
 
-  return JSON.stringify(result, null, 2);
+  return formatNaturalAnswer(result);
+}
+
+function findScheduledTaskId(results: unknown[]): string | null {
+  for (const item of results) {
+    if (!item || typeof item !== 'object') continue;
+    const result = (item as { result?: unknown }).result;
+    if (!result || typeof result !== 'object') continue;
+    const taskId = (result as { taskId?: unknown }).taskId;
+    if (typeof taskId === 'string' && taskId.length > 0) return taskId;
+  }
+  return null;
 }
 
 // POST /api/studio/intent
@@ -124,6 +156,8 @@ export async function POST(req: NextRequest) {
         results.push({ step: step.order, tool: toolName, result });
       }
 
+      const answer = buildStudioAnswer(results);
+      const taskId = findScheduledTaskId(results);
       let workflowId: string | null = null;
       if (shouldPersistWorkflow(plan)) {
         const supabase = getSupabaseAdmin();
@@ -133,15 +167,26 @@ export async function POST(req: NextRequest) {
           summary: plan.summary,
           steps: plan.steps,
           schedule: plan.schedule,
+          task_id: taskId,
+          last_result: answer ? { answer, results } : { results },
+          last_run_at: new Date().toISOString(),
           status: 'active',
         }).select('id').single();
         workflowId = wf?.id ?? null;
+
+        if (workflowId && taskId) {
+          await supabase
+            .from('scheduled_tasks')
+            .update({ workflow_id: workflowId })
+            .eq('id', taskId)
+            .eq('agent_id', ctx.agentId);
+        }
       }
 
       return NextResponse.json({
         executed: true,
         results,
-        answer: buildStudioAnswer(results),
+        answer,
         workflowId,
         schedule: plan.schedule,
       });

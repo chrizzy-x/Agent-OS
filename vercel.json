@@ -4,6 +4,10 @@
     {
       "path": "/api/ops/crew/cron",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/tasks",
+      "schedule": "* * * * *"
     }
   ]
 }
