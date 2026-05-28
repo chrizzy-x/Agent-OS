@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
 import { registerExternalAgent } from '@/src/external-agents/service';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
+import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { callClaude, tokenSet, tokenGet, tokenDel, TOKEN_TTL_SECONDS } from '@/src/studio/planner';
 
 export const runtime = 'nodejs';
@@ -13,6 +14,7 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   try {
     const ctx = requireAgentContext(req.headers);
+    const studioCtx = withStudioDefaultAllowedDomains(ctx);
 
     let body: { instruction?: string; confirm?: boolean; confirmToken?: string | null };
     try { body = await req.json(); } catch {
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
         }
 
         const result = await executeUniversalToolCall({
-          agentContext: ctx,
+          agentContext: studioCtx,
           name: step.tool,
           server: undefined,
           arguments: step.input,
