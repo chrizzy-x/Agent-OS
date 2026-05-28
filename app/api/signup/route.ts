@@ -45,7 +45,11 @@ export async function POST(req: NextRequest) {
   }
 
   const agentId = generateAgentId();
-  const name = agentName || `Agent ${agentId.slice(0, 12)}`;
+  const emailName = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim();
+  const fallbackName = emailName
+    ? `${emailName.replace(/\b\w/g, char => char.toUpperCase())}'s Agent`
+    : 'My Agent';
+  const name = agentName || fallbackName;
   const passwordHash = await hashPassword(password);
   const created = await createAgentAccount({ id: agentId, name, email, passwordHash });
 
@@ -73,6 +77,7 @@ export async function POST(req: NextRequest) {
         agentId,
         bearerToken,
         apiKey: bearerToken,
+        agentName: name,
         expiresIn: '90 days',
       },
     },

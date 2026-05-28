@@ -232,12 +232,44 @@ export async function listExternalAgents(ownerAgentId: string): Promise<External
       .select('agent_id, name, description, owner_email, allowed_domains, allowed_tools, status, total_calls, last_active_at, created_at')
       .eq('owner_email', normalizedOwner)
       .order('created_at', { ascending: false });
-    if (!error && data) return data as ExternalAgentRegistrationRow[];
+    if (!error && data) {
+      const byId = new Map<string, ExternalAgentRegistrationRow>();
+      let frontier = data as ExternalAgentRegistrationRow[];
+      for (let depth = 0; depth < 5 && frontier.length > 0; depth += 1) {
+        frontier.forEach(agent => byId.set(agent.agent_id, agent));
+        const nextOwners = frontier.map(agent => agent.agent_id).filter(agentId => !byId.has(`${agentId}:queried`));
+        nextOwners.forEach(agentId => byId.set(`${agentId}:queried`, {} as ExternalAgentRegistrationRow));
+        const { data: children } = nextOwners.length > 0
+          ? await supabase
+            .from('external_agent_registrations')
+            .select('agent_id, name, description, owner_email, allowed_domains, allowed_tools, status, total_calls, last_active_at, created_at')
+            .in('owner_email', nextOwners)
+            .order('created_at', { ascending: false })
+          : { data: [] };
+        frontier = (children ?? []) as ExternalAgentRegistrationRow[];
+      }
+      for (const key of [...byId.keys()]) {
+        if (key.endsWith(':queried')) byId.delete(key);
+      }
+      return [...byId.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
   } catch { /* fall through to local */ }
 
   const state = await readLocalRuntimeState();
-  return Object.values(state.externalAgents)
-    .filter(r => r.owner_email === normalizedOwner)
+  const all = Object.values(state.externalAgents);
+  const visibleOwnerIds = new Set([normalizedOwner]);
+  for (let depth = 0; depth < 5; depth += 1) {
+    let added = false;
+    for (const agent of all) {
+      if (agent.owner_email && visibleOwnerIds.has(agent.owner_email) && !visibleOwnerIds.has(agent.agent_id)) {
+        visibleOwnerIds.add(agent.agent_id);
+        added = true;
+      }
+    }
+    if (!added) break;
+  }
+  return all
+    .filter(r => r.owner_email !== null && visibleOwnerIds.has(r.owner_email))
     .map(toExternalAgentRegistration)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
@@ -329,6 +361,18 @@ export async function registerExternalAgent(input: RegisterExternalAgentInput): 
   }
 
   if (supabaseSucceeded) {
+    try {
+      const supabase = getSupabaseAdmin();
+      await supabase
+        .from('agents')
+        .upsert({
+          id: agentId,
+          name,
+          metadata: { externalAgent: true, ownerAgentId: ownerEmail },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+    } catch { /* external registration already succeeded */ }
+
     // Supabase insert succeeded — just cache in local state (overwrite any stale data).
     await updateLocalRuntimeState(state => {
       state.externalAgents[agentId] = buildExternalAgentRegistrationRecord(registration);

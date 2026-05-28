@@ -8,6 +8,7 @@ import { createAgentToken } from '../auth/agent-identity.js';
 import { randomUUID } from 'crypto';
 import { getFFPClient } from '../ffp/client.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
+import { registerExternalAgent } from '../external-agents/service.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const MAX_TIMEOUT = 5 * 60 * 1000;
@@ -249,24 +250,19 @@ export async function procSpawn(ctx: AgentContext, input: unknown): Promise<{ ch
     }
 
     const childConfig = config ?? { name: undefined, allowedDomains: [] };
+    const parentSlug = ctx.agentId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'agent';
     const result = await withProcFallback(async () => {
-      const childAgentId = `${ctx.agentId}_child_${randomUUID().slice(0, 8)}`;
-      const supabase = getSupabaseAdmin();
-      await supabase.from('agents').insert({
-        id: childAgentId,
+      const childAgentId = `${parentSlug}-child-${randomUUID().slice(0, 8)}`;
+      const child = await registerExternalAgent({
+        agentId: childAgentId,
         name: childConfig.name ?? `Child of ${ctx.agentId}`,
-        quotas: ctx.quotas,
-        metadata: { parentAgentId: ctx.agentId },
-      });
-
-      const token = createAgentToken(childAgentId, {
+        ownerEmail: ctx.agentId,
         allowedDomains: childConfig.allowedDomains,
-        expiresIn: '24h',
+        allowedTools: [],
       });
-
-      return { childAgentId, token };
+      return { childAgentId: child.agentId, token: child.token };
     }, async () => {
-      const childAgentId = `${ctx.agentId}_child_${randomUUID().slice(0, 8)}`;
+      const childAgentId = `${parentSlug}-child-${randomUUID().slice(0, 8)}`;
       const token = createAgentToken(childAgentId, {
         allowedDomains: childConfig.allowedDomains,
         expiresIn: '24h',

@@ -6,6 +6,17 @@ import { toErrorResponse, NotFoundError, PermissionError } from '@/src/utils/err
 
 export const runtime = 'nodejs';
 
+async function ownsAgent(agentId: string, ownerAgentId: string): Promise<boolean> {
+  const owner = ownerAgentId.toLowerCase();
+  let current = await getExternalAgentRegistration(agentId);
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    if (current.owner_email === owner) return true;
+    if (!current.owner_email) return false;
+    current = await getExternalAgentRegistration(current.owner_email);
+  }
+  return false;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -18,7 +29,7 @@ export async function GET(
     if (!registration) {
       throw new NotFoundError(`Agent '${id}' not found`);
     }
-    if (registration.owner_email !== ctx.agentId.toLowerCase()) {
+    if (!await ownsAgent(id, ctx.agentId)) {
       throw new PermissionError('Access denied');
     }
 

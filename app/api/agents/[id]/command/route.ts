@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
-import { getExternalAgentRegistration } from '@/src/external-agents/service';
+import { getExternalAgentRegistration, registerExternalAgent } from '@/src/external-agents/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { toErrorResponse, NotFoundError, PermissionError } from '@/src/utils/errors';
@@ -11,6 +11,48 @@ import { logOperation } from '@/src/runtime/audit';
 import type { AgentContext } from '@/src/auth/permissions';
 
 export const runtime = 'nodejs';
+
+type CommandStep = { order: number; tool: string; input: Record<string, unknown>; description: string };
+
+type StoredCommandPlan = {
+  summary: string;
+  steps: CommandStep[];
+  schedule: string | null;
+  workflowName: string;
+  subAgentId: string;
+  callerId: string;
+  delegatedTasks?: string[];
+};
+
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28) || 'task';
+}
+
+function splitDelegatedTasks(instruction: string): string[] {
+  const lines = instruction
+    .split(/\r?\n/)
+    .map(line => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').trim())
+    .filter(Boolean);
+
+  if (lines.length > 1) return lines;
+  const semicolon = instruction.split(';').map(part => part.trim()).filter(Boolean);
+  if (semicolon.length > 1) return semicolon;
+  const numbered = [...instruction.matchAll(/(?:^|\s)(?:\d+[.)])\s+(.+?)(?=\s+\d+[.)]\s+|$)/g)]
+    .map(match => match[1]?.trim())
+    .filter((value): value is string => Boolean(value));
+  return numbered.length > 1 ? numbered : [instruction.trim()];
+}
+
+async function ownsAgent(agentId: string, ownerAgentId: string): Promise<boolean> {
+  const owner = ownerAgentId.toLowerCase();
+  let current = await getExternalAgentRegistration(agentId);
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    if (current.owner_email === owner) return true;
+    if (!current.owner_email) return false;
+    current = await getExternalAgentRegistration(current.owner_email);
+  }
+  return false;
+}
 
 function parseJsonBody(value: unknown): unknown {
   if (typeof value !== 'string') return value;
@@ -63,6 +105,72 @@ function findScheduledTaskId(results: unknown[]): string | null {
   return null;
 }
 
+async function executeAgentPlan(params: {
+  agentId: string;
+  agentName: string;
+  allowedDomains: string[];
+  plan: { summary: string; steps: CommandStep[]; schedule: string | null; workflowName: string };
+}) {
+  const agentCtx: AgentContext = {
+    agentId: params.agentId,
+    allowedDomains: params.allowedDomains,
+    quotas: DEFAULT_QUOTAS,
+    tier: 'free',
+  };
+
+  const results: unknown[] = [];
+  const startedAt = Date.now();
+  for (const step of params.plan.steps.sort((a, b) => a.order - b.order)) {
+    const result = await executeUniversalToolCall({
+      agentContext: agentCtx,
+      name: step.tool,
+      server: undefined,
+      arguments: step.input,
+    });
+    results.push({ step: step.order, tool: step.tool.replace(/^agentos\./, ''), result });
+  }
+
+  const answer = buildAgentAnswer(results);
+  const taskId = findScheduledTaskId(results);
+  const ranAt = new Date().toISOString();
+  const supabase = getSupabaseAdmin();
+  const { data: wf } = await supabase.from('agent_workflows').insert({
+    agent_id: params.agentId,
+    name: params.plan.workflowName,
+    summary: params.plan.summary,
+    steps: params.plan.steps,
+    schedule: params.plan.schedule,
+    task_id: taskId,
+    last_result: answer ? { answer, results } : { results },
+    last_run_at: ranAt,
+    status: 'active',
+  }).select('id').single();
+
+  if (wf?.id && taskId) {
+    await supabase
+      .from('scheduled_tasks')
+      .update({ workflow_id: wf.id })
+      .eq('id', taskId)
+      .eq('agent_id', params.agentId);
+  }
+
+  await logOperation({
+    agentId: params.agentId,
+    primitive: 'workflow',
+    operation: params.plan.workflowName,
+    success: true,
+    durationMs: Date.now() - startedAt,
+    metadata: {
+      workflowId: wf?.id ?? null,
+      schedule: params.plan.schedule,
+      agentName: params.agentName,
+      result: answer ? { answer, results } : { results },
+    },
+  });
+
+  return { results, answer, workflowId: wf?.id ?? null };
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -73,7 +181,7 @@ export async function POST(
 
     const registration = await getExternalAgentRegistration(id);
     if (!registration) throw new NotFoundError(`Agent '${id}' not found`);
-    if (registration.owner_email !== ctx.agentId.toLowerCase()) throw new PermissionError('Access denied');
+    if (!await ownsAgent(id, ctx.agentId)) throw new PermissionError('Access denied');
 
     let body: { instruction?: string; confirm?: boolean; confirmToken?: string | null };
     try { body = await request.json(); } catch {
@@ -87,14 +195,7 @@ export async function POST(
       const stored = await tokenGet(`agent-cmd:${confirmToken}`);
       if (!stored) return NextResponse.json({ error: 'Plan expired — please re-submit your instruction.' }, { status: 400 });
 
-      const plan = JSON.parse(stored) as {
-        summary: string;
-        steps: Array<{ order: number; tool: string; input: Record<string, unknown>; description: string }>;
-        schedule: string | null;
-        workflowName: string;
-        subAgentId: string;
-        callerId: string;
-      };
+      const plan = JSON.parse(stored) as StoredCommandPlan;
 
       if (plan.callerId !== ctx.agentId || plan.subAgentId !== id) {
         return NextResponse.json({ error: 'Token mismatch' }, { status: 403 });
@@ -102,63 +203,71 @@ export async function POST(
 
       await tokenDel(`agent-cmd:${confirmToken}`);
 
-      const subAgentCtx: AgentContext = {
-        agentId: id,
-        allowedDomains: registration.allowed_domains ?? ['*'],
-        quotas: DEFAULT_QUOTAS,
-        tier: 'free',
-      };
+      if (plan.delegatedTasks && plan.delegatedTasks.length > 1) {
+        const delegated = await Promise.all(plan.delegatedTasks.map(async (task, index) => {
+          const child = await registerExternalAgent({
+            agentId: `${slugify(registration.name)}-${slugify(task)}-${crypto.randomBytes(3).toString('hex')}`,
+            name: `${registration.name} Task ${index + 1}`,
+            description: task,
+            ownerEmail: id,
+            allowedDomains: registration.allowed_domains ?? ['*'],
+            allowedTools: registration.allowed_tools ?? [],
+          });
+          const taskPlan = await callClaude(task);
+          const run = await executeAgentPlan({
+            agentId: child.agentId,
+            agentName: `${registration.name} Task ${index + 1}`,
+            allowedDomains: child.allowedDomains,
+            plan: { ...taskPlan, workflowName: task.slice(0, 80) },
+          });
+          return { task, subAgentId: child.agentId, ...run };
+        }));
 
-      const results: unknown[] = [];
-      const startedAt = Date.now();
-      for (const step of plan.steps.sort((a, b) => a.order - b.order)) {
-        const result = await executeUniversalToolCall({
-          agentContext: subAgentCtx,
-          name: step.tool,
-          server: undefined,
-          arguments: step.input,
+        const answer = delegated.map((item, index) => {
+          const text = item.answer ?? JSON.stringify(item.results);
+          return `${index + 1}. ${item.task}: ${text}`;
+        }).join('\n');
+        const results = delegated.map((item, index) => ({
+          step: index + 1,
+          tool: 'delegate_task',
+          result: item,
+        }));
+        const ranAt = new Date().toISOString();
+        const supabase = getSupabaseAdmin();
+        const { data: wf } = await supabase.from('agent_workflows').insert({
+          agent_id: id,
+          name: plan.workflowName,
+          summary: plan.summary,
+          steps: plan.steps,
+          schedule: null,
+          last_result: { answer, results },
+          last_run_at: ranAt,
+          status: 'active',
+        }).select('id').single();
+
+        await logOperation({
+          agentId: id,
+          primitive: 'workflow',
+          operation: plan.workflowName,
+          success: true,
+          metadata: {
+            workflowId: wf?.id ?? null,
+            delegatedCount: delegated.length,
+            result: { answer, results },
+          },
         });
-        results.push({ step: step.order, tool: step.tool.replace(/^agentos\./, ''), result });
+
+        return NextResponse.json({ executed: true, delegated: true, results, answer, workflowId: wf?.id ?? null });
       }
 
-      const answer = buildAgentAnswer(results);
-      const taskId = findScheduledTaskId(results);
-      const ranAt = new Date().toISOString();
-      const supabase = getSupabaseAdmin();
-      const { data: wf } = await supabase.from('agent_workflows').insert({
-        agent_id: id,
-        name: plan.workflowName,
-        summary: plan.summary,
-        steps: plan.steps,
-        schedule: plan.schedule,
-        task_id: taskId,
-        last_result: answer ? { answer, results } : { results },
-        last_run_at: ranAt,
-        status: 'active',
-      }).select('id').single();
-
-      if (wf?.id && taskId) {
-        await supabase
-          .from('scheduled_tasks')
-          .update({ workflow_id: wf.id })
-          .eq('id', taskId)
-          .eq('agent_id', id);
-      }
-
-      await logOperation({
+      const run = await executeAgentPlan({
         agentId: id,
-        primitive: 'workflow',
-        operation: plan.workflowName,
-        success: true,
-        durationMs: Date.now() - startedAt,
-        metadata: {
-          workflowId: wf?.id ?? null,
-          schedule: plan.schedule,
-          result: answer ? { answer, results } : { results },
-        },
+        agentName: registration.name,
+        allowedDomains: registration.allowed_domains ?? ['*'],
+        plan,
       });
 
-      return NextResponse.json({ executed: true, results, answer, workflowId: wf?.id ?? null });
+      return NextResponse.json({ executed: true, results: run.results, answer: run.answer, workflowId: run.workflowId });
     }
 
     // ── PLAN GENERATION ─────────────────────────────────────────────────────
@@ -166,9 +275,35 @@ export async function POST(
       return NextResponse.json({ error: 'instruction is required' }, { status: 400 });
     }
 
+    const token = crypto.randomUUID().replace(/-/g, '');
+    const delegatedTasks = splitDelegatedTasks(instruction.trim());
+    if (delegatedTasks.length > 1) {
+      const steps = delegatedTasks.map((task, index) => ({
+        order: index + 1,
+        tool: 'agentos.proc_spawn',
+        input: { task },
+        description: `Delegate task ${index + 1}: ${task}`,
+      }));
+      await tokenSet(`agent-cmd:${token}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        summary: `${registration.name} will spawn ${delegatedTasks.length} subagents and run these tasks in parallel.`,
+        steps,
+        schedule: null,
+        workflowName: instruction.trim().slice(0, 80),
+        subAgentId: id,
+        callerId: ctx.agentId,
+        delegatedTasks,
+      }));
+
+      return NextResponse.json({
+        summary: `${registration.name} will spawn ${delegatedTasks.length} subagents and run these tasks in parallel.`,
+        steps,
+        schedule: null,
+        confirmToken: token,
+      });
+    }
+
     const plan = await callClaude(instruction.trim());
 
-    const token = crypto.randomUUID().replace(/-/g, '');
     await tokenSet(`agent-cmd:${token}`, TOKEN_TTL_SECONDS, JSON.stringify({
       ...plan,
       workflowName: instruction.trim().slice(0, 80),
