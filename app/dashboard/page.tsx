@@ -33,9 +33,10 @@ interface AuditEntry {
   primitive: string;
   operation: string;
   success: boolean;
-  duration_ms: number;
+  duration_ms: number | null;
   created_at: string;
-  error?: string;
+  error?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface FfpOperation {
@@ -75,6 +76,7 @@ interface AgentActivityEntry {
   duration_ms: number | null;
   error: string | null;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface CommandPlanStep {
@@ -94,13 +96,49 @@ interface CommandPlan {
 interface CommandResult {
   executed: boolean;
   results: Array<{ step: number; tool: string; result: unknown }>;
+  answer?: string | null;
   workflowId: string | null;
 }
 
 const PRIM_COLORS: Record<string, string> = {
   fs: 'var(--accent)', net: 'var(--accent)', proc: 'var(--accent)',
   mem: 'var(--accent)', db: 'var(--accent)', events: 'var(--accent)',
+  workflow: '#22c55e',
 };
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function formatNaturalValue(value: unknown): string {
+  if (value === null || value === undefined) return 'No result yet.';
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const payload = value as Record<string, unknown>;
+    if (typeof payload.answer === 'string') return payload.answer;
+    const body = 'body' in payload ? parseJsonValue(payload.body) : payload;
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const objectBody = body as Record<string, unknown>;
+      const bitcoin = objectBody.bitcoin as { usd?: unknown } | undefined;
+      const ethereum = objectBody.ethereum as { usd?: unknown } | undefined;
+      if (typeof bitcoin?.usd === 'number') return `Bitcoin is $${bitcoin.usd.toLocaleString('en-US')} USD.`;
+      if (typeof ethereum?.usd === 'number') return `Ethereum is $${ethereum.usd.toLocaleString('en-US')} USD.`;
+    }
+  }
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
+function activityResultText(entry: { metadata?: Record<string, unknown> | null; error?: string | null }): string {
+  if (entry.error) return entry.error;
+  const metadata = asRecord(entry.metadata);
+  return formatNaturalValue(metadata.result);
+}
 
 function SessionTokenPanel() {
   const [bearerToken, setBearerToken] = useState('');
@@ -1117,6 +1155,9 @@ export default function DashboardPage() {
                                 {cmdResult && (
                                   <div className="space-y-2">
                                     <p className="text-xs font-semibold" style={{ color: '#86efac' }}>Executed {cmdResult.results.length} step{cmdResult.results.length !== 1 ? 's' : ''}</p>
+                                    <pre className="terminal p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ color: '#e5e7eb' }}>
+                                      {cmdResult.answer ?? formatNaturalValue({ results: cmdResult.results })}
+                                    </pre>
                                     <div className="space-y-1">
                                       {cmdResult.results.map((r, i) => (
                                         <div key={i} className="flex items-center gap-3 py-1.5 px-3 rounded-lg text-xs"
@@ -1158,24 +1199,31 @@ export default function DashboardPage() {
                               ) : (
                                 <div className="px-5 pb-5 space-y-1.5">
                                   {activity.map((entry, i) => (
-                                    <div key={i} className="flex items-center gap-3 py-1.5 px-3 rounded-lg text-xs"
+                                    <div key={i} className="rounded-lg text-xs"
                                       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
-                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${entry.success ? 'bg-green-400' : 'bg-red-400'}`} />
-                                      <span className="font-mono font-semibold w-12 flex-shrink-0" style={{ color: 'var(--accent)' }}>
-                                        {entry.primitive}
-                                      </span>
-                                      <span className="font-mono flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>
-                                        {entry.operation}
-                                      </span>
-                                      {entry.duration_ms != null && (
-                                        <span style={{ color: 'var(--text-dim)' }}>{entry.duration_ms}ms</span>
+                                      <div className="flex items-center gap-3 py-1.5 px-3">
+                                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${entry.success ? 'bg-green-400' : 'bg-red-400'}`} />
+                                        <span className="font-mono font-semibold w-16 flex-shrink-0" style={{ color: PRIM_COLORS[entry.primitive] ?? 'var(--accent)' }}>
+                                          {entry.primitive}
+                                        </span>
+                                        <span className="font-mono flex-1 truncate" style={{ color: 'var(--text-secondary)' }}>
+                                          {entry.operation}
+                                        </span>
+                                        {entry.duration_ms != null && (
+                                          <span style={{ color: 'var(--text-dim)' }}>{entry.duration_ms}ms</span>
+                                        )}
+                                        {entry.error && entry.primitive !== 'workflow' && (
+                                          <span className="truncate max-w-32" style={{ color: '#fca5a5' }}>{entry.error}</span>
+                                        )}
+                                        <span className="hidden sm:block flex-shrink-0" style={{ color: 'var(--text-dim)' }}>
+                                          {new Date(entry.created_at).toLocaleTimeString()}
+                                        </span>
+                                      </div>
+                                      {entry.primitive === 'workflow' && (
+                                        <pre className="mx-3 mb-3 terminal p-2 overflow-x-auto whitespace-pre-wrap break-all" style={{ color: entry.error ? '#fca5a5' : '#e5e7eb' }}>
+                                          {activityResultText(entry)}
+                                        </pre>
                                       )}
-                                      {entry.error && (
-                                        <span className="truncate max-w-32" style={{ color: '#fca5a5' }}>{entry.error}</span>
-                                      )}
-                                      <span className="hidden sm:block flex-shrink-0" style={{ color: 'var(--text-dim)' }}>
-                                        {new Date(entry.created_at).toLocaleTimeString()}
-                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -1216,30 +1264,39 @@ export default function DashboardPage() {
                     {recentAudit.map((entry, i) => {
                       const color = PRIM_COLORS[entry.primitive] ?? '#64748b';
                       return (
-                        <div key={i} className="card p-4 flex items-center gap-4"
+                        <div key={i} className="card p-4"
                           style={!entry.success ? { borderColor: 'rgba(239,68,68,0.3)' } : {}}>
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                            style={{ background: `${color}12`, border: `1px solid ${color}25` }}>
-                            <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                          </div>
-                          <div className="flex-1">
-                            <span className="font-mono text-sm font-bold" style={{ color }}>
-                              {entry.primitive}.{entry.operation}
+                          <div className="flex items-center gap-4">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                              style={{ background: `${color}12`, border: `1px solid ${color}25` }}>
+                              <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+                            </div>
+                            <div className="flex-1">
+                              <span className="font-mono text-sm font-bold" style={{ color }}>
+                                {entry.primitive}.{entry.operation}
+                              </span>
+                              {entry.error && entry.primitive !== 'workflow' && (
+                                <p className="text-xs mt-0.5" style={{ color: '#fca5a5' }}>{entry.error}</p>
+                              )}
+                            </div>
+                            <span className="text-xs px-2 py-0.5 rounded font-medium"
+                              style={entry.success
+                                ? { background: 'rgba(34,197,94,0.1)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
+                                : { background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)' }}>
+                              {entry.success ? 'OK' : 'ERR'}
                             </span>
-                            {entry.error && (
-                              <p className="text-xs mt-0.5" style={{ color: '#fca5a5' }}>{entry.error}</p>
+                            {entry.duration_ms != null && (
+                              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{entry.duration_ms}ms</span>
                             )}
+                            <span className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                              {new Date(entry.created_at).toLocaleTimeString()}
+                            </span>
                           </div>
-                          <span className="text-xs px-2 py-0.5 rounded font-medium"
-                            style={entry.success
-                              ? { background: 'rgba(34,197,94,0.1)', color: '#86efac', border: '1px solid rgba(34,197,94,0.25)' }
-                              : { background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)' }}>
-                            {entry.success ? 'OK' : 'ERR'}
-                          </span>
-                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{entry.duration_ms}ms</span>
-                          <span className="text-xs" style={{ color: 'var(--text-dim)' }}>
-                            {new Date(entry.created_at).toLocaleTimeString()}
-                          </span>
+                          {entry.primitive === 'workflow' && (
+                            <pre className="mt-3 terminal p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ color: entry.error ? '#fca5a5' : '#e5e7eb' }}>
+                              {activityResultText(entry)}
+                            </pre>
+                          )}
                         </div>
                       );
                     })}

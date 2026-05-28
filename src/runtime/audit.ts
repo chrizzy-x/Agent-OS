@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 
 interface AuditEntry {
   agentId: string;
-  primitive: 'fs' | 'net' | 'proc' | 'mem' | 'db' | 'events' | 'x' | 'notify';
+  primitive: 'fs' | 'net' | 'proc' | 'mem' | 'db' | 'events' | 'x' | 'notify' | 'workflow';
   operation: string;
   success: boolean;
   durationMs?: number;

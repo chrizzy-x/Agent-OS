@@ -4,6 +4,7 @@ import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { requireCronAccess } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 import { DEFAULT_QUOTAS } from '@/src/auth/permissions';
+import { logOperation } from '@/src/runtime/audit';
 import type { AgentContext } from '@/src/auth/permissions';
 
 export const runtime = 'nodejs';
@@ -105,6 +106,14 @@ export async function POST(request: NextRequest) {
             .eq('id', task.workflow_id);
         }
 
+        await logOperation({
+          agentId: task.agent_id as string,
+          primitive: 'workflow',
+          operation: 'run',
+          success: true,
+          metadata: { workflowId: task.workflow_id, taskId: task.id, tool: parsed.tool, result },
+        });
+
         results.push({ taskId: task.id as string, tool: parsed.tool, success: true });
       } catch (err) {
         const ranAt = new Date().toISOString();
@@ -128,6 +137,15 @@ export async function POST(request: NextRequest) {
             })
             .eq('id', task.workflow_id);
         }
+
+        await logOperation({
+          agentId: task.agent_id as string,
+          primitive: 'workflow',
+          operation: 'run',
+          success: false,
+          error: message,
+          metadata: { workflowId: task.workflow_id, taskId: task.id, tool: parsed.tool },
+        });
 
         results.push({
           taskId: task.id as string,

@@ -3,6 +3,7 @@ import { requireAgentContext } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
+import { logOperation } from '@/src/runtime/audit';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -188,6 +189,14 @@ export async function POST(request: NextRequest) {
           .eq('id', workflow.id)
           .eq('agent_id', ctx.agentId);
 
+        await logOperation({
+          agentId: ctx.agentId,
+          primitive: 'workflow',
+          operation: 'run',
+          success: true,
+          metadata: { workflowId: workflow.id, tool: execution.tool, result },
+        });
+
         results.push({ workflowId: workflow.id, tool: execution.tool, success: true, result });
       } catch (err) {
         const ranAt = new Date().toISOString();
@@ -198,6 +207,15 @@ export async function POST(request: NextRequest) {
           .update({ last_run_at: ranAt, last_error: message, updated_at: ranAt })
           .eq('id', workflow.id)
           .eq('agent_id', ctx.agentId);
+
+        await logOperation({
+          agentId: ctx.agentId,
+          primitive: 'workflow',
+          operation: 'run',
+          success: false,
+          error: message,
+          metadata: { workflowId: workflow.id, tool: execution.tool },
+        });
 
         results.push({ workflowId: workflow.id, tool: execution.tool, success: false, error: message });
       }
@@ -230,6 +248,14 @@ export async function POST(request: NextRequest) {
 
         await updateWorkflowResult(supabase, ctx.agentId, task, { last_run_at: ranAt, last_result: result, last_error: null, updated_at: ranAt });
 
+        await logOperation({
+          agentId: ctx.agentId,
+          primitive: 'workflow',
+          operation: 'run',
+          success: true,
+          metadata: { workflowId: task.workflow_id, taskId: task.id, tool: parsed.tool, result },
+        });
+
         results.push({ taskId: task.id, workflowId: task.workflow_id, tool: parsed.tool, success: true, result });
       } catch (err) {
         const ranAt = new Date().toISOString();
@@ -242,6 +268,15 @@ export async function POST(request: NextRequest) {
           .eq('agent_id', ctx.agentId);
 
         await updateWorkflowResult(supabase, ctx.agentId, task, { last_run_at: ranAt, last_error: message, updated_at: ranAt });
+
+        await logOperation({
+          agentId: ctx.agentId,
+          primitive: 'workflow',
+          operation: 'run',
+          success: false,
+          error: message,
+          metadata: { workflowId: task.workflow_id, taskId: task.id, tool: parsed.tool },
+        });
 
         results.push({ taskId: task.id, workflowId: task.workflow_id, tool: parsed.tool, success: false, error: message });
       }
@@ -271,6 +306,13 @@ export async function POST(request: NextRequest) {
               .update({ last_run_at: ranAt, last_result: result, last_error: null, updated_at: ranAt })
               .eq('id', workflow.id)
               .eq('agent_id', ctx.agentId);
+            await logOperation({
+              agentId: ctx.agentId,
+              primitive: 'workflow',
+              operation: 'run',
+              success: true,
+              metadata: { workflowId: workflow.id, tool: execution.tool, result },
+            });
             results.push({ workflowId: workflow.id, tool: execution.tool, success: true, result });
           } catch (err) {
             const ranAt = new Date().toISOString();
@@ -280,6 +322,14 @@ export async function POST(request: NextRequest) {
               .update({ last_run_at: ranAt, last_error: message, updated_at: ranAt })
               .eq('id', workflow.id)
               .eq('agent_id', ctx.agentId);
+            await logOperation({
+              agentId: ctx.agentId,
+              primitive: 'workflow',
+              operation: 'run',
+              success: false,
+              error: message,
+              metadata: { workflowId: workflow.id, tool: execution.tool },
+            });
             results.push({ workflowId: workflow.id, tool: execution.tool, success: false, error: message });
           }
         }

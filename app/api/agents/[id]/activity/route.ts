@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
 import { getExternalAgentRegistration } from '@/src/external-agents/service';
-import { getSupabaseAdmin } from '@/src/storage/supabase';
+import { getAgentActivity } from '@/src/activity/service';
 import { toErrorResponse, NotFoundError, PermissionError } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -22,15 +22,8 @@ export async function GET(
       throw new PermissionError('Access denied');
     }
 
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase
-      .from('audit_logs')
-      .select('primitive, operation, success, duration_ms, error, created_at')
-      .eq('agent_id', id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    return NextResponse.json({ agentId: id, activity: data ?? [] });
+    const activity = await getAgentActivity(id, 50);
+    return NextResponse.json({ agentId: id, activity });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });
