@@ -10,6 +10,62 @@ import { callClaude, tokenSet, tokenGet, tokenDel, TOKEN_TTL_SECONDS } from '@/s
 
 export const runtime = 'nodejs';
 
+type StoredPlan = {
+  summary: string;
+  steps: Array<{ order: number; tool: string; input: Record<string, unknown>; description: string }>;
+  schedule: string | null;
+  workflowName: string;
+  agentId: string;
+};
+
+const READ_ONLY_INTENT_TOOLS = new Set([
+  'net_http_get',
+  'net_dns_resolve',
+  'mem_get',
+  'mem_list',
+  'mem_recall',
+  'db_query',
+  'fs_read',
+  'fs_list',
+  'events_subscribe',
+]);
+
+function normalizeToolName(tool: string): string {
+  return tool.replace(/^agentos\./, '');
+}
+
+function shouldPersistWorkflow(plan: StoredPlan): boolean {
+  if (plan.schedule) return true;
+  return plan.steps.some(step => !READ_ONLY_INTENT_TOOLS.has(normalizeToolName(step.tool)));
+}
+
+function parseJsonBody(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function buildStudioAnswer(results: unknown[]): string | null {
+  const last = results.at(-1);
+  if (!last || typeof last !== 'object') return null;
+
+  const result = (last as { result?: unknown }).result;
+  if (!result || typeof result !== 'object') {
+    return result === undefined ? null : JSON.stringify(result, null, 2);
+  }
+
+  const payload = result as Record<string, unknown>;
+  if ('body' in payload) {
+    const parsed = parseJsonBody(payload.body);
+    return typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+  }
+
+  return JSON.stringify(result, null, 2);
+}
+
 // POST /api/studio/intent
 export async function POST(req: NextRequest) {
   try {
@@ -28,13 +84,7 @@ export async function POST(req: NextRequest) {
       const stored = await tokenGet(`intent:token:${confirmToken}`);
       if (!stored) return NextResponse.json({ error: 'Plan expired — please re-submit your instruction and confirm within 30 minutes.' }, { status: 400 });
 
-      const plan = JSON.parse(stored) as {
-        summary: string;
-        steps: Array<{ order: number; tool: string; input: Record<string, unknown>; description: string }>;
-        schedule: string | null;
-        workflowName: string;
-        agentId: string;
-      };
+      const plan = JSON.parse(stored) as StoredPlan;
 
       if (plan.agentId !== ctx.agentId) return NextResponse.json({ error: 'Token mismatch' }, { status: 403 });
 
@@ -74,21 +124,25 @@ export async function POST(req: NextRequest) {
         results.push({ step: step.order, tool: toolName, result });
       }
 
-      // Save workflow to DB
-      const supabase = getSupabaseAdmin();
-      const { data: wf } = await supabase.from('agent_workflows').insert({
-        agent_id: ctx.agentId,
-        name: plan.workflowName,
-        summary: plan.summary,
-        steps: plan.steps,
-        schedule: plan.schedule,
-        status: 'active',
-      }).select('id').single();
+      let workflowId: string | null = null;
+      if (shouldPersistWorkflow(plan)) {
+        const supabase = getSupabaseAdmin();
+        const { data: wf } = await supabase.from('agent_workflows').insert({
+          agent_id: ctx.agentId,
+          name: plan.workflowName,
+          summary: plan.summary,
+          steps: plan.steps,
+          schedule: plan.schedule,
+          status: 'active',
+        }).select('id').single();
+        workflowId = wf?.id ?? null;
+      }
 
       return NextResponse.json({
         executed: true,
         results,
-        workflowId: wf?.id ?? null,
+        answer: buildStudioAnswer(results),
+        workflowId,
         schedule: plan.schedule,
       });
     }

@@ -46,6 +46,7 @@ type IntentPlan = {
 type IntentResult = {
   executed: boolean;
   results: unknown[];
+  answer: string | null;
   workflowId: string | null;
   schedule: string | null;
 };
@@ -244,7 +245,7 @@ function NLModePanel({ agentId }: { agentId: string }) {
       {result && (
         <div className="space-y-4">
           <div className="rounded-xl p-4" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.28)' }}>
-            <div className="text-sm font-semibold mb-1" style={{ color: '#86efac' }}>Workflow executed</div>
+            <div className="text-sm font-semibold mb-1" style={{ color: '#86efac' }}>{result.workflowId ? 'Workflow executed' : 'Answer ready'}</div>
             {result.workflowId && (
               <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Workflow ID: <code>{result.workflowId}</code></div>
             )}
@@ -252,6 +253,14 @@ function NLModePanel({ agentId }: { agentId: string }) {
               <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Schedule: {result.schedule}</div>
             )}
           </div>
+          {result.answer && (
+            <div>
+              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Answer</div>
+              <pre className="terminal p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ color: '#e5e7eb' }}>
+                {result.answer}
+              </pre>
+            </div>
+          )}
           <div>
             <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Step results</div>
             <pre className="terminal p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ color: '#94a3b8' }}>

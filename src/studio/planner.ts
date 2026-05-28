@@ -93,6 +93,10 @@ Rules:
 - For WHATSAPP tasks: use notify_send with channel "whatsapp" and to = phone number with country code (e.g. "+1234567890")
 - For TELEGRAM tasks: use notify_send with channel "telegram" and to = the Telegram chat ID
 - For SLACK/DISCORD tasks: use notify_send with channel "slack" or "discord" and to = the webhook URL
+- AgentOS Studio shows results inside the AgentOS UI by default. For "tell me", "show me", "answer", "return", or similar requests, DO NOT use notify_send.
+- Use notify_send only when the instruction explicitly names an outbound channel AND includes the exact recipient, chat ID, phone number, email address, or webhook URL.
+- NEVER invent recipients such as "user", "me", "tg", "telegram", "<chat_id>", or placeholders.
+- If the user asks for Telegram/WhatsApp/SMS/email/webhook delivery but does not provide the destination, omit notify_send and return the result in AgentOS.
 - For SCHEDULING tasks (hourly, daily, every N minutes): use proc_schedule with expression (cron), tool (agentos.notify_send or agentos.net_http_get etc), and input
 - When user wants to "monitor X and notify every Y": use net_http_get to fetch, mem_set to store, proc_schedule to repeat, notify_send to alert — all as separate steps
 - For proc_execute: ALWAYS use language "javascript" — Python and Bash are not available in this environment
@@ -111,6 +115,86 @@ export interface Plan {
   steps: PlanStep[];
   schedule: string | null;
   missingParams: string[];
+}
+
+const NOTIFY_TOOLS = new Set(['notify_send', 'agentos.notify_send']);
+const SCHEDULE_TOOLS = new Set(['proc_schedule', 'agentos.proc_schedule']);
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const PHONE_RE = /\+\d[\d\s().-]{6,}\d/;
+const WEBHOOK_RE = /https:\/\/\S+/i;
+const TELEGRAM_DEST_RE = /(?:^|\s)(@\w{4,}|-?\d{5,})(?:\s|$)/;
+
+function normalizeToolName(tool: string): string {
+  return tool.trim().replace(/^agentos\./, '');
+}
+
+function stringInputValue(input: Record<string, unknown>, key: string): string {
+  const value = input[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function containsLiteral(instruction: string, value: string): boolean {
+  return Boolean(value) && instruction.toLowerCase().includes(value.toLowerCase());
+}
+
+function hasExplicitNotifyDestination(instruction: string, input: Record<string, unknown>): boolean {
+  const channel = stringInputValue(input, 'channel').toLowerCase();
+  const to = stringInputValue(input, 'to');
+
+  if (!channel || !to || ['user', 'me', 'tg', 'telegram', '<chat_id>'].includes(to.toLowerCase())) {
+    return false;
+  }
+
+  if (!containsLiteral(instruction, channel) && channel !== 'webhook') {
+    return false;
+  }
+
+  if (containsLiteral(instruction, to)) {
+    return true;
+  }
+
+  if (channel === 'email') return EMAIL_RE.test(instruction) && EMAIL_RE.test(to);
+  if (channel === 'sms' || channel === 'whatsapp') return PHONE_RE.test(instruction) && PHONE_RE.test(to);
+  if (channel === 'slack' || channel === 'discord' || channel === 'webhook') return WEBHOOK_RE.test(instruction) && WEBHOOK_RE.test(to);
+  if (channel === 'telegram') return TELEGRAM_DEST_RE.test(instruction) && TELEGRAM_DEST_RE.test(to);
+
+  return false;
+}
+
+function isUnsafeImplicitNotification(instruction: string, step: PlanStep): boolean {
+  const tool = normalizeToolName(step.tool);
+  if (NOTIFY_TOOLS.has(step.tool) || tool === 'notify_send') {
+    return !hasExplicitNotifyDestination(instruction, step.input);
+  }
+
+  if (SCHEDULE_TOOLS.has(step.tool) || tool === 'proc_schedule') {
+    const nestedTool = typeof step.input.tool === 'string' ? step.input.tool : '';
+    const nestedInput = step.input.input && typeof step.input.input === 'object' && !Array.isArray(step.input.input)
+      ? step.input.input as Record<string, unknown>
+      : {};
+    if (normalizeToolName(nestedTool) === 'notify_send') {
+      return !hasExplicitNotifyDestination(instruction, nestedInput);
+    }
+  }
+
+  return false;
+}
+
+export function sanitizeStudioPlan(instruction: string, plan: Plan): Plan {
+  const safeSteps = plan.steps.filter(step => !isUnsafeImplicitNotification(instruction, step));
+  const removedImplicitNotification = safeSteps.length !== plan.steps.length;
+  const reindexedSteps = safeSteps.map((step, index) => ({ ...step, order: index + 1 }));
+  const hasScheduledStep = reindexedSteps.some(step => normalizeToolName(step.tool) === 'proc_schedule');
+
+  return {
+    ...plan,
+    summary: removedImplicitNotification
+      ? 'AgentOS will run the requested steps and show the result here.'
+      : plan.summary,
+    steps: reindexedSteps,
+    schedule: hasScheduledStep ? plan.schedule : null,
+    missingParams: Array.isArray(plan.missingParams) ? plan.missingParams : [],
+  };
 }
 
 export async function callClaude(instruction: string): Promise<Plan> {
@@ -137,5 +221,5 @@ export async function callClaude(instruction: string): Promise<Plan> {
 
   const text = data.content?.find(c => c.type === 'text')?.text ?? '';
   const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-  return JSON.parse(cleaned) as Plan;
+  return sanitizeStudioPlan(instruction, JSON.parse(cleaned) as Plan);
 }

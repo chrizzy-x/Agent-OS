@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { withAudit } from '../runtime/audit.js';
 import { validate } from '../utils/validation.js';
+import { ValidationError } from '../utils/errors.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 export async function notifySend(
@@ -22,7 +23,7 @@ export async function notifySend(
     async () => {
       if (channel === 'email') {
         const apiKey = process.env.RESEND_API_KEY;
-        if (!apiKey) throw new Error('Email notifications require RESEND_API_KEY to be set in environment variables.');
+        if (!apiKey) throw new ValidationError('Email notifications are not configured for this AgentOS deployment.');
         const from = process.env.NOTIFY_FROM_EMAIL ?? 'AgentOS <notifications@resend.dev>';
         const res = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -30,7 +31,7 @@ export async function notifySend(
           body: JSON.stringify({ from, to: [to], subject: subject ?? 'Agent Notification', text: message }),
         });
         const data = await res.json() as { id?: string; message?: string };
-        if (!res.ok) throw new Error(`Email send failed: ${data.message ?? res.status}`);
+        if (!res.ok) throw new ValidationError(`Email send failed: ${data.message ?? res.status}`);
         return { channel, to, status: 'sent', id: data.id };
       }
 
@@ -39,10 +40,7 @@ export async function notifySend(
         const authToken = process.env.TWILIO_AUTH_TOKEN;
         const from = process.env.TWILIO_FROM;
         if (!accountSid || !authToken || !from) {
-          throw new Error(
-            `${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} notifications require TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM environment variables. ` +
-            `For WhatsApp, TWILIO_FROM should be "whatsapp:+<number>".`,
-          );
+          throw new ValidationError(`${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} notifications are not configured for this AgentOS deployment.`);
         }
         const toFormatted = channel === 'whatsapp' && !to.startsWith('whatsapp:') ? `whatsapp:${to}` : to;
         const body = new URLSearchParams({ From: from, To: toFormatted, Body: message });
@@ -56,20 +54,20 @@ export async function notifySend(
           },
         );
         const data = await res.json() as { sid?: string; message?: string };
-        if (!res.ok) throw new Error(`${channel} send failed: ${data.message ?? res.status}`);
+        if (!res.ok) throw new ValidationError(`${channel} send failed: ${data.message ?? res.status}`);
         return { channel, to, status: 'sent', id: data.sid };
       }
 
       if (channel === 'telegram') {
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        if (!botToken) throw new Error('Telegram notifications require TELEGRAM_BOT_TOKEN environment variable.');
+        if (!botToken) throw new ValidationError('Telegram notifications are not configured for this AgentOS deployment.');
         const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: to, text: message }),
         });
         const data = await res.json() as { ok?: boolean; description?: string; result?: { message_id?: number } };
-        if (!res.ok || !data.ok) throw new Error(`Telegram send failed: ${data.description ?? res.status}`);
+        if (!res.ok || !data.ok) throw new ValidationError(`Telegram send failed: ${data.description ?? res.status}`);
         return { channel, to, status: 'sent', id: String(data.result?.message_id ?? '') };
       }
 
@@ -84,7 +82,7 @@ export async function notifySend(
             { message },
           ),
         });
-        if (!res.ok) throw new Error(`${channel} webhook POST failed: ${res.status}`);
+        if (!res.ok) throw new ValidationError(`${channel} webhook POST failed: ${res.status}`);
         return { channel, to, status: 'sent' };
       }
 
