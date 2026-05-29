@@ -250,12 +250,12 @@ export async function procSpawn(ctx: AgentContext, input: unknown): Promise<{ ch
     }
 
     const childConfig = config ?? { name: undefined, allowedDomains: [] };
-    const parentSlug = ctx.agentId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'agent';
+    const parentSlug = `child-${randomUUID().slice(0, 8)}`;
     const result = await withProcFallback(async () => {
       const childAgentId = `${parentSlug}-child-${randomUUID().slice(0, 8)}`;
       const child = await registerExternalAgent({
         agentId: childAgentId,
-        name: childConfig.name ?? `Child of ${ctx.agentId} ${childAgentId.slice(-8)}`,
+        name: childConfig.name ?? `Child agent ${childAgentId.slice(-8)}`,
         ownerEmail: ctx.agentId,
         allowedDomains: childConfig.allowedDomains,
         allowedTools: [],

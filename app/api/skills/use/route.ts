@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { runInstalledSkill } from '@/src/skills/service';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      result: execution.result,
+      result: omitAgentIdentifierFields(execution.result),
       execution_time_ms: execution.executionTimeMs,
     });
   } catch (error: unknown) {

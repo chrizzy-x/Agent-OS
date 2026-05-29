@@ -175,7 +175,7 @@ export function getFFPClient(): FFPClient {
       enabled: process.env.FFP_MODE === 'enabled',
       chainId: process.env.FFP_CHAIN_ID ?? '',
       nodeUrl: (process.env.FFP_NODE_URL ?? '').replace(/\/$/, ''),
-      agentId: process.env.FFP_AGENT_ID ?? '',
+      agentId: process.env.FFP_PRIVATE_REF ?? process.env.FFP_AGENT_ID ?? '',
       requireConsensus: process.env.FFP_REQUIRE_CONSENSUS === 'true',
     });
 

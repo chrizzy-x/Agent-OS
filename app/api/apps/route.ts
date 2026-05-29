@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { findAccountById } from '@/src/auth/agent-store';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { hasAdminAccess, requireAgentContext, requireAgentContextWithTier } from '@/src/auth/request';
 import { isEnterpriseTier } from '@/src/auth/tiers';
 import { AGENT_APP_CATEGORIES } from '@/src/appstore/catalog';
@@ -15,10 +17,14 @@ function stringBodyValue(body: Record<string, unknown>, camel: string, snake: st
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const publisherId = searchParams.get('publisher') ?? searchParams.get('author');
+    const ownCatalog = searchParams.get('mine') === '1' || searchParams.get('mine') === 'true';
+    let publisherId = searchParams.get('publisher') ?? searchParams.get('author');
     let includePrivate = false;
 
-    if (publisherId) {
+    if (ownCatalog) {
+      publisherId = requireAgentContext(request.headers).agentId;
+      includePrivate = true;
+    } else if (publisherId) {
       if (hasAdminAccess(request.headers)) {
         includePrivate = true;
       } else {
@@ -39,7 +45,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      apps,
+      apps: omitAgentIdentifierFields(apps),
       categories: AGENT_APP_CATEGORIES,
       pagination: { total: apps.length },
     });
@@ -63,6 +69,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body', message: 'Invalid JSON body' }, { status: 400 });
     }
 
+    const publisherAccount = await findAccountById(agentCtx.agentId);
     const app = await publishAgentApp({
       name: stringBodyValue(body, 'name', 'name'),
       slug: stringBodyValue(body, 'slug', 'slug'),
@@ -70,7 +77,7 @@ export async function POST(request: NextRequest) {
       description: stringBodyValue(body, 'description', 'description'),
       longDescription: stringBodyValue(body, 'longDescription', 'long_description'),
       publisherId: agentCtx.agentId,
-      publisherName: stringBodyValue(body, 'publisherName', 'publisher_name') ?? agentCtx.agentId,
+      publisherName: stringBodyValue(body, 'publisherName', 'publisher_name') ?? publisherAccount?.name ?? 'AgentOS Publisher',
       appUrl: stringBodyValue(body, 'appUrl', 'app_url') ?? null,
       repositoryUrl: stringBodyValue(body, 'repositoryUrl', 'repository_url') ?? null,
       deviceTargets: body.deviceTargets ?? body.device_targets,
@@ -79,7 +86,7 @@ export async function POST(request: NextRequest) {
       published: typeof body.published === 'boolean' ? body.published : stringBodyValue(body, 'visibility', 'visibility') !== 'private',
     });
 
-    return NextResponse.json({ success: true, app }, { status: 201 });
+    return NextResponse.json({ success: true, app: omitAgentIdentifierFields(app) }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
@@ -117,7 +124,7 @@ export async function PATCH(request: NextRequest) {
       canManageAll,
     });
 
-    return NextResponse.json({ success: true, app });
+    return NextResponse.json({ success: true, app: omitAgentIdentifierFields(app) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });

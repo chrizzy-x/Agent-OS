@@ -73,7 +73,6 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({
     success: true,
     credentials: {
-      agentId: account.id,
       bearerToken,
       apiKey: bearerToken,
       agentName: account.name,

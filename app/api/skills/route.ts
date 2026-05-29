@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { findAccountById } from '@/src/auth/agent-store';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { readLocalRuntimeState } from '@/src/storage/local-state';
 import { requireAgentContext } from '@/src/auth/request';
@@ -24,7 +26,9 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') || 'popular';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
-    const authorId = searchParams.get('author');
+    const authorId = searchParams.get('mine') === '1' || searchParams.get('mine') === 'true'
+      ? requireAgentContext(request.headers).agentId
+      : searchParams.get('author');
 
     try {
       const supabase = getSupabaseAdmin();
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
       const offset = (page - 1) * limit;
       const { data, error, count } = await query.range(offset, offset + limit - 1);
       if (!error) {
-        return NextResponse.json({ skills: data ?? [], pagination: { page, limit, total: count ?? 0 } });
+        return NextResponse.json({ skills: omitAgentIdentifierFields(data ?? []), pagination: { page, limit, total: count ?? 0 } });
       }
     } catch {
       // Fall back to local catalog below.
@@ -61,7 +65,7 @@ export async function GET(request: NextRequest) {
     const total = skills.length;
     const offset = (page - 1) * limit;
     return NextResponse.json({
-      skills: skills.slice(offset, offset + limit),
+      skills: omitAgentIdentifierFields(skills.slice(offset, offset + limit)),
       pagination: { page, limit, total },
     });
   } catch (error: unknown) {
@@ -86,6 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
+    const account = await findAccountById(agentCtx.agentId);
     const { data, error } = await supabase
       .from('skills')
       .insert({
@@ -96,7 +101,7 @@ export async function POST(request: NextRequest) {
         long_description: typeof body.long_description === 'string' ? body.long_description : null,
         icon: typeof body.icon === 'string' ? body.icon : '📦',
         author_id: agentCtx.agentId,
-        author_name: agentCtx.agentId,
+        author_name: account?.name ?? 'AgentOS Publisher',
         pricing_model: typeof body.pricing_model === 'string' ? body.pricing_model : 'free',
         price_per_call: typeof body.price_per_call === 'number' ? body.price_per_call : 0,
         free_tier_calls: typeof body.free_tier_calls === 'number' ? body.free_tier_calls : 100,

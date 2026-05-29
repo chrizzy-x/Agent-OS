@@ -160,7 +160,8 @@ export function normalizeCanonicalToolResult(tool: string, result: unknown): unk
       };
     case 'proc_spawn':
       return {
-        pid: payload.childAgentId ?? payload.processId ?? payload.pid ?? null,
+        pid: payload.pid ?? payload.processId ?? null,
+        token: payload.token ?? undefined,
       };
     case 'proc_kill':
       return {

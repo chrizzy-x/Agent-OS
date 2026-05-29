@@ -16,7 +16,9 @@ Every request to `/mcp` must include a signed JWT in the Authorization header:
 Authorization: Bearer <jwt-token>
 ```
 
-Tokens are issued via `POST /admin/agents` using the admin token. A token encodes the agent's identity, allowed domains, and resource quotas. Tokens expire after 30 days by default.
+Tokens are issued via `POST /admin/agents` using the admin token. A token encodes the agent's private internal identity, allowed domains, and resource quotas. Tokens expire after 30 days by default.
+
+Private agent IDs are treated like secrets: public UI, browser sessions, docs, and marketplace/app responses should show agent names or public action refs instead of raw IDs.
 
 **Create an agent token (admin only):**
 ```
@@ -25,7 +27,6 @@ Authorization: Bearer <ADMIN_TOKEN>
 Content-Type: application/json
 
 {
-  "agentId": "my-agent-001",
   "allowedDomains": ["api.openai.com", "httpbin.org"],
   "expiresIn": "30d"
 }
@@ -34,7 +35,6 @@ Content-Type: application/json
 Response:
 ```json
 {
-  "agentId": "my-agent-001",
   "token": "<jwt>",
   "expiresIn": "30d"
 }
@@ -50,7 +50,7 @@ Returns server status. No authentication required.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0",
+  "version": "6.0.0",
   "timestamp": "2025-01-15T12:00:00.000Z",
   "tools": 27
 }
@@ -436,7 +436,7 @@ Create a child agent with an isolated identity.
 | `config.name` | string | no | Human-readable name |
 | `config.allowedDomains` | string[] | no | Domain allowlist for the child agent |
 
-Returns: `{ childAgentId: string, token: string }` — the token expires in 24 hours.
+Returns: `{ token: string }` — the child agent ID remains private; the token expires in 24 hours.
 
 #### `proc_kill`
 Kill a running process or disable a scheduled task.

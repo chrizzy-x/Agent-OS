@@ -41,7 +41,7 @@ describe('session routes', () => {
 
     expect(response.status).toBe(200);
     expect(body.authenticated).toBe(true);
-    expect(body.session.agentId).toBe('agent-1');
+    expect(body.session.agentId).toBeUndefined();
     expect(body.session.agentName).toBe('Agent One');
   });
 
@@ -58,7 +58,6 @@ describe('session routes', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.credentials.agentId).toBe('agent-1');
     expect(body.credentials.bearerToken).toBeTruthy();
     expect(response.headers.get('set-cookie')).toContain('agent_session=');
   });

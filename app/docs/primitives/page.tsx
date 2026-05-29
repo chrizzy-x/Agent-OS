@@ -66,7 +66,7 @@ const primitives: Primitive[] = [
       { name: 'db_query', desc: 'Run a parameterized SQL query.', required: [{ field: 'sql', type: 'string', desc: 'SQL query with $1, $2 placeholders' }], optional: [{ field: 'params', type: 'array', desc: 'Parameter values for placeholders' }], returns: 'query results array' },
       { name: 'db_transaction', desc: 'Execute multiple SQL statements atomically.', required: [{ field: 'queries', type: 'string[]', desc: 'Array of SQL statements' }], returns: 'array of results' },
     ],
-    notes: ['Each agent gets a private PostgreSQL schema (agent_{agentId}). No cross-agent access.', 'All queries are parameterized — SQL injection is not possible.', 'pg_catalog, information_schema, and system tables are blocked.'],
+    notes: ['Each agent gets a private PostgreSQL schema managed by AgentOS. No cross-agent access.', 'All queries are parameterized — SQL injection is not possible.', 'pg_catalog, information_schema, and system tables are blocked.'],
   },
   {
     id: 'net',
@@ -92,7 +92,7 @@ const primitives: Primitive[] = [
     tools: [
       { name: 'proc_execute', desc: 'Execute code in a sandboxed process.', required: [{ field: 'code', type: 'string', desc: 'Source code to execute' }, { field: 'language', type: 'string', desc: '"python" | "javascript" | "bash"' }], optional: [{ field: 'timeout', type: 'number', desc: 'Max execution time in ms (default 30000, max 300000)' }, { field: 'env', type: 'object', desc: 'Additional env vars to inject' }], returns: '{ stdout, stderr, exitCode, duration_ms }' },
       { name: 'proc_schedule', desc: 'Register a cron job to run code on a schedule.', required: [{ field: 'code', type: 'string', desc: 'Code to run' }, { field: 'language', type: 'string', desc: 'Language' }, { field: 'cronExpression', type: 'string', desc: 'Cron expression e.g. "0 * * * *"' }], returns: '{ taskId, nextRunAt }' },
-      { name: 'proc_spawn', desc: 'Spawn a child agent for a task.', required: [{ field: 'agentId', type: 'string', desc: 'Child agent ID to activate' }], returns: '{ processId }' },
+      { name: 'proc_spawn', desc: 'Spawn a private child agent for a task.', required: [{ field: 'task', type: 'string', desc: 'Task to delegate to the child agent' }], optional: [{ field: 'name', type: 'string', desc: 'Optional display name for the child agent' }], returns: '{ processId }' },
       { name: 'proc_kill', desc: 'Kill a running process or disable a scheduled task.', required: [{ field: 'processId', type: 'string', desc: 'Process/task ID to kill' }], returns: 'true' },
       { name: 'proc_list', desc: 'List recent processes and scheduled tasks.', required: [], returns: '{ processes: [...], scheduledTasks: [...] }' },
     ],

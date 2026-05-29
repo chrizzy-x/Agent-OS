@@ -27,7 +27,6 @@ interface AgentApp {
   slug: string;
   category: string;
   description: string;
-  publisherId: string;
   publisherName: string;
   installCount: number;
   verified: boolean;
@@ -132,8 +131,8 @@ export default function DeveloperPage() {
       setSession(currentSession);
       await Promise.all([
         fetchAgentProfile(),
-        fetchMySkills(currentSession.agentId),
-        fetchMyApps(currentSession.agentId),
+        fetchMySkills(),
+        fetchMyApps(),
         fetchEarnings(),
         fetchPayoutSettings(),
       ]);
@@ -144,9 +143,9 @@ export default function DeveloperPage() {
     return () => { active = false; };
   }, []);
 
-  const fetchMySkills = async (agentId: string) => {
+  const fetchMySkills = async () => {
     try {
-      const res = await fetch(`/api/skills?author=${agentId}`);
+      const res = await fetch('/api/skills?mine=1');
       const data = await res.json();
       setMySkills(data.skills ?? []);
     } catch { setMySkills([]); }
@@ -163,9 +162,9 @@ export default function DeveloperPage() {
     }
   };
 
-  const fetchMyApps = async (agentId: string) => {
+  const fetchMyApps = async () => {
     try {
-      const res = await fetch(`/api/apps?publisher=${agentId}`);
+      const res = await fetch('/api/apps?mine=1');
       const data = await res.json();
       setMyApps(data.apps ?? []);
     } catch { setMyApps([]); }
@@ -249,7 +248,7 @@ export default function DeveloperPage() {
         setPublishSuccess(`Skill "${form.name}" published successfully.`);
         setShowPublish(false);
         setForm(EMPTY_SKILL);
-        if (session) await fetchMySkills(session.agentId);
+        if (session) await fetchMySkills();
       }
     } catch { setPublishError('Network error. Please try again.'); }
     finally { setPublishing(false); }
@@ -296,7 +295,7 @@ export default function DeveloperPage() {
         setPublishSuccess(`App "${appForm.name}" published to the App Store.`);
         setShowPublish(false);
         setAppForm(EMPTY_APP);
-        if (session) await fetchMyApps(session.agentId);
+        if (session) await fetchMyApps();
       }
     } catch { setPublishError('Network error. Please try again.'); }
     finally { setPublishingApp(false); }
@@ -317,7 +316,7 @@ export default function DeveloperPage() {
         setPublishError(data.error || 'Visibility update failed');
       } else {
         setPublishSuccess(`App "${app.name}" is now ${data.app?.published ? 'public' : 'private'}.`);
-        if (session) await fetchMyApps(session.agentId);
+        if (session) await fetchMyApps();
       }
     } catch {
       setPublishError('Network error. Please try again.');

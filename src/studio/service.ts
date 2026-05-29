@@ -607,7 +607,6 @@ async function buildAgentStatus(agentContext: AgentContext): Promise<Record<stri
   ]);
 
   return {
-    agentId: agentContext.agentId,
     allowedDomains: agentContext.allowedDomains,
     quotas: agentContext.quotas,
     installedSkills: installedSkillCount,
@@ -808,7 +807,7 @@ async function executeParsedCommand(params: {
     case 'agent-status': {
       const result = await buildAgentStatus(params.agentContext);
       return {
-        summary: `Loaded status for ${params.agentContext.agentId}`,
+        summary: 'Loaded agent status',
         result,
         snippet: buildSnippetForParsedCommand(params.parsed),
       };

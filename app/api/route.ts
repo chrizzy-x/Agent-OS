@@ -5,7 +5,7 @@ export const runtime = 'nodejs';
 export async function GET() {
   return NextResponse.json({
     name: 'AgentOS',
-    version: '1.0.0',
+    version: '6.0.0',
     description: 'Universal MCP, core primitives, Skill Store capabilities, App Store packages, and consensus-aware agent infrastructure.',
     status: 'ok',
     endpoints: {

@@ -1,6 +1,6 @@
 # AgentOS
 
-> Built by **riz** · v5 "Ares"
+> Built by **riz** · v6 "Public Launch"
 
 **OS-level primitives for AI agents — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
 
@@ -67,7 +67,7 @@ GET  /api/kernel/status/:product  # heartbeat + available commands
 
 ### Option A: Hosted
 
-[Sign up at agentos-app.vercel.app/signup](https://agentos-app.vercel.app/signup) — get your Agent ID and API key in 30 seconds. No credit card required.
+[Sign up at agentos-app.vercel.app/signup](https://agentos-app.vercel.app/signup) — get your bearer token in 30 seconds. Agent IDs stay private; browser screens and APIs use agent names or public action refs. No credit card required.
 
 ```bash
 # Store a value

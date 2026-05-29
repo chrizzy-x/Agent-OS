@@ -13,7 +13,6 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       credentials: {
-        agentId: context.agentId,
         bearerToken,
         apiKey: bearerToken,
         expiresIn: '90 days',

@@ -39,7 +39,7 @@ describe('GET /agent/me', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.agentId).toBe('derek-prime');
+    expect(body.name).toBe('Agent Derek');
     expect(body.totalCalls).toBe(42);
   });
 

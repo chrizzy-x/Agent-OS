@@ -5,6 +5,15 @@ import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
+type WorkspaceMemberRecord = Awaited<ReturnType<typeof addWorkspaceMember>>;
+
+function toPublicWorkspaceMember(member: WorkspaceMemberRecord) {
+  return {
+    role: member.role,
+    joinedAt: member.joinedAt,
+  };
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -25,7 +34,7 @@ export async function POST(
       actorId: agentContext.agentId,
     });
 
-    return NextResponse.json({ member }, { status: 201 });
+    return NextResponse.json({ member: toPublicWorkspaceMember(member) }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

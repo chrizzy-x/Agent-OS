@@ -8,20 +8,18 @@ interface Workspace {
   id: string;
   name: string;
   slug: string;
-  ownerId: string;
   plan: string;
   createdAt: string;
 }
 
 interface WorkspaceAgent {
-  workspaceId: string;
-  agentId: string;
+  agentName: string | null;
   addedAt: string;
 }
 
 interface AuditEntry {
   id: string;
-  actorId: string | null;
+  actorLabel: string | null;
   action: string;
   metadata: Record<string, unknown>;
   createdAt: string;
@@ -37,7 +35,7 @@ export default function WorkspacesPage() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [createError, setCreateError] = useState('');
-  const [agentIdInput, setAgentIdInput] = useState('');
+  const [agentNameInput, setAgentNameInput] = useState('');
   const [memberIdInput, setMemberIdInput] = useState('');
   const [memberRole, setMemberRole] = useState<'member' | 'admin' | 'viewer'>('member');
   const [agentBearerToken, setAgentBearerToken] = useState('');
@@ -92,15 +90,15 @@ export default function WorkspacesPage() {
   };
 
   const handleAddAgent = async () => {
-    if (!selected || !agentIdInput.trim()) return;
+    if (!selected || !agentNameInput.trim()) return;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (agentBearerToken) headers['Authorization'] = `Bearer ${agentBearerToken}`;
     await fetch(`/api/workspaces/${selected.id}/agents`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ agent_id: agentIdInput.trim() }),
+      body: JSON.stringify({ agent_name: agentNameInput.trim() }),
     });
-    setAgentIdInput('');
+    setAgentNameInput('');
     void loadDetail(selected);
   };
 
@@ -231,7 +229,7 @@ export default function WorkspacesPage() {
                       {selected.plan}
                     </span>
                   </div>
-                  <div className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>ID: {selected.id}</div>
+                  <div className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>Slug: {selected.slug}</div>
                 </div>
 
                 <div className="card p-5">
@@ -239,9 +237,9 @@ export default function WorkspacesPage() {
                   <div className="flex gap-2 mb-3">
                     <input
                       type="text"
-                      value={agentIdInput}
-                      onChange={e => setAgentIdInput(e.target.value)}
-                      placeholder="Agent ID"
+                      value={agentNameInput}
+                      onChange={e => setAgentNameInput(e.target.value)}
+                      placeholder="Agent name"
                       className="input-dark flex-1 text-sm"
                     />
                     <button onClick={() => void handleAddAgent()} className="btn-outline text-sm px-3 py-2 rounded-lg flex-shrink-0">Add</button>
@@ -251,9 +249,9 @@ export default function WorkspacesPage() {
                   ) : (
                     <div className="space-y-2">
                       {agents.map(a => (
-                        <div key={a.agentId} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}>
+                        <div key={`${a.agentName ?? 'agent'}-${a.addedAt}`} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}>
                           <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
-                          <span className="font-mono text-xs flex-1">{a.agentId}</span>
+                          <span className="text-sm flex-1">{a.agentName ?? 'Private agent'}</span>
                           <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{new Date(a.addedAt).toLocaleDateString()}</span>
                         </div>
                       ))}
@@ -268,7 +266,7 @@ export default function WorkspacesPage() {
                       type="text"
                       value={memberIdInput}
                       onChange={e => setMemberIdInput(e.target.value)}
-                      placeholder="Agent / User ID"
+                      placeholder="Account email or team handle"
                       className="input-dark flex-1 text-sm"
                     />
                     <select
@@ -295,7 +293,7 @@ export default function WorkspacesPage() {
                         <div key={entry.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}>
                           <div className="flex-1">
                             <span className="font-mono text-xs font-semibold" style={{ color: 'var(--accent)' }}>{entry.action}</span>
-                            {entry.actorId && <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>by {entry.actorId.slice(0, 12)}…</span>}
+                            {entry.actorLabel && <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>by {entry.actorLabel}</span>}
                           </div>
                           <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
                             {new Date(entry.createdAt).toLocaleString()}

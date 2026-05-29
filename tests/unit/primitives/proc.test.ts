@@ -99,7 +99,8 @@ describe('procSpawn', () => {
       insert: vi.fn().mockResolvedValue({ error: null }),
     });
     const result = await procSpawn(ctx, { config: { name: 'child-1', allowedDomains: [] } });
-    expect(result.childAgentId).toContain('proc-agent-child-');
+    expect(result.childAgentId).toContain('child-');
+    expect(result.childAgentId).not.toContain(ctx.agentId);
     expect(result.token).toBe('mock.jwt.token');
   });
 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return NextResponse.json({ workflows: data ?? [] });
+    return NextResponse.json({ workflows: omitAgentIdentifierFields(data ?? []) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (error) throw error;
-    return NextResponse.json({ workflow: data }, { status: 201 });
+    return NextResponse.json({ workflow: omitAgentIdentifierFields(data) }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

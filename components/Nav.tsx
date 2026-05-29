@@ -136,7 +136,7 @@ export default function Nav({ activePath }: NavProps) {
                   fontSize: '13px',
                   color: 'var(--text-secondary)',
                 }}>
-                  {session.agentName ?? session.agentId}
+                  {session.agentName ?? 'Account'}
                 </span>
                 <Link href="/dashboard" style={{
                   fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',

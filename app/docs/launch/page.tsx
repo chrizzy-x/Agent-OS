@@ -8,33 +8,31 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'v5 "Ares" — FFP Multi-Chain Router: FFP sector chains (Finance, Health, Metaverse, etc.) reach consensus on decisions, AgentOS executes them via a cryptographically verified bridge.',
-  'POST /api/ffp/execute: consensus proof verification (HMAC-SHA256, threshold, 5-min expiry, input hash) → chain-scoped execution → immutable log in ffp_chain_executions.',
-  'GET /api/ffp/chains: public discovery endpoint — lists all active FFP sector chains with execution stats.',
-  'Chain-scoped isolation: agentId = "ffp:{chainId}:{agentId}" auto-namespaces all 6 primitives per chain without touching primitive code.',
-  'v4 "Hermes" — Natural Language Studio: describe a workflow in plain English, Claude plans it, you confirm, it executes and saves.',
-  'Workflow Library: every executed plan is saved with name, schedule, and status. Pause, resume, or delete from the dashboard.',
-  'SDK Kernel Command Layer: SDK products register command + status topics and receive dispatched commands via the Redis events bus.',
-  'FFP tab in dashboard: agents can now view their own audit trail and consensus history without admin access.',
-  'SDK dashboard login: POST /api/session/from-key with your API key → get a one-time login link → full dashboard including FFP.',
-  'Full mobile responsiveness: viewport meta, overflow fixes, responsive nav across all pages.',
+  'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
+  'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
+  'Browser sessions now expose account name and expiry only. API callers continue to use bearer tokens; IDs stay inside signed tokens and server-side storage.',
+  'Marketplace split is ready: Skill Store for installable capabilities, App Store for downloadable agentic apps built on AgentOS.',
+  'v5 "Ares" - FFP Multi-Chain Router: FFP sector chains reach consensus on decisions, AgentOS executes them via a cryptographically verified bridge.',
+  'POST /api/ffp/execute: consensus proof verification, chain-scoped execution, and immutable logging in ffp_chain_executions.',
+  'GET /api/ffp/chains: public discovery endpoint lists active FFP sector chains with execution stats.',
+  'v4 "Hermes" - Natural Language Studio, Workflow Library, SDK Kernel, and Redis events command layer.',
   'Crypto-only payments: Solana and Base network USDC, verified on-chain without a payment processor.',
 ];
 
 const changelog = [
-  'Created POST /api/ffp/execute — FFP bridge endpoint: requireAgentContext → verifyConsensusProof → buildChainScopedContext → executeUniversalToolCall → log to ffp_chain_executions.',
-  'Created GET /api/ffp/chains — public chain discovery: aggregates execution count, success/fail stats, and last execution per chain_id.',
-  'Created src/ffp/chain-verifier.ts — HMAC-SHA256 consensus proof verification with constant-time comparison, input hash check, 5-min expiry, threshold enforcement.',
-  'Created src/ffp/chain-context.ts — buildChainScopedContext sets agentId = "ffp:{chainId}:{agentId}", auto-namespacing all 6 primitives.',
-  'Created ffp_chain_executions table in Supabase — indexed on chain_id, agent_id, executed_at.',
-  'Created POST /api/studio/intent — NL intent parser backed by claude-sonnet-4-6, plan stored in Redis with 5-min TTL confirm token.',
-  'Created GET+POST /api/agent/workflows and PATCH+DELETE /api/agent/workflows/:id — full workflow CRUD.',
+  'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
+  'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
+  'Changed /api/session to return only authenticated session display fields; no private agent ID leaves the browser session endpoint.',
+  'Changed deployed-agent APIs to return agentRef, agent name, status, and metrics; command/activity/subagent routes resolve refs server-side.',
+  'Updated Workspaces to add agents by name only and return public workspace/member/audit payloads.',
+  'Renamed public FFP dynamic routes from [agentId] to [privateRef] and updated docs to private-reference language.',
+  'Created POST /api/ffp/execute - FFP bridge endpoint: requireAgentContext -> verifyConsensusProof -> buildChainScopedContext -> executeUniversalToolCall -> log to ffp_chain_executions.',
+  'Created GET /api/ffp/chains - public chain discovery: aggregates execution count, success/fail stats, and last execution per chain_id.',
+  'Created POST /api/studio/intent - NL intent parser, plan storage, confirm tokens, scheduled workflow support, and natural-language answers.',
+  'Created GET+POST /api/agent/workflows and PATCH+DELETE /api/agent/workflows/:id - full workflow CRUD.',
   'Created POST /api/kernel/register, GET /api/kernel/registry, POST /api/kernel/command, GET /api/kernel/status/:product.',
-  'Created GET /api/agent/ffp/audit and GET /api/agent/ffp/consensus — agent-scoped FFP routes (no admin required).',
-  'Created POST /api/session/from-key and GET /api/session/from-key/callback — SDK to browser session bridge.',
-  'Updated Studio UI with NL mode toggle, workflow library panel, and kernel status panel with 15s auto-refresh.',
+  'Updated Studio UI with NL mode toggle, workflow library panel, kernel status panel, and redacted results.',
   'Added FFP tab to dashboard with audit trail, consensus history, and refresh.',
-  'Added viewport meta tag, overflow-x: hidden on html/body, responsive nav.',
   'Rewrote payments to crypto-only: Solana RPC getTransaction + Base eth_getTransactionReceipt verification.',
 ];
 
@@ -67,17 +65,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v5 <span style={{ color: 'var(--accent)' }}>&ldquo;Ares&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">Agent OS v6 <span style={{ color: 'var(--accent)' }}>&ldquo;Public Launch&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v5 ships the FFP Multi-Chain Router — FFP sector chains reach consensus, AgentOS verifies and executes. Built on top of v4&apos;s NL Studio, Workflow Library, SDK Kernel, and the 6 core primitives. Live at <code>{APP_URL}</code>.
+            v6 ships the public launch privacy hardening: agent IDs are private like bearer tokens, deployed-agent actions use public refs, docs/API payloads avoid raw IDs, and the Skill Store/App Store/Studio/FFP surfaces are launch-aligned. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v5</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS is a production infrastructure layer for autonomous agents. One API key gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, a Natural Language Studio, and now a full FFP Multi-Chain Router so sector chains can execute tools through AgentOS as a verified bridge.
+              AgentOS is a production infrastructure layer for autonomous agents. One bearer token gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, and a Natural Language Studio. In v6, private agent IDs stay server-side and users operate with agent names, bearer tokens, and public action refs.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.
@@ -107,7 +105,7 @@ export default function LaunchNotesPage() {
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">v5 Ares — changelog</h2>
+          <h2 className="text-2xl font-bold mb-4">v6 Public Launch changelog</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>Stack: {PROJECT_DETAILS.stack.join('; ')}.</p>
             <ul className="space-y-2">
@@ -142,4 +140,3 @@ export default function LaunchNotesPage() {
     </div>
   );
 }
-

@@ -1,10 +1,11 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
-import { getExternalAgentRegistration, registerExternalAgent } from '@/src/external-agents/service';
+import { registerExternalAgent, resolveVisibleExternalAgentRef } from '@/src/external-agents/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
-import { toErrorResponse, NotFoundError, PermissionError } from '@/src/utils/errors';
+import { toErrorResponse, NotFoundError } from '@/src/utils/errors';
 import { callClaude, tokenSet, tokenGet, tokenDel, TOKEN_TTL_SECONDS } from '@/src/studio/planner';
 import { DEFAULT_QUOTAS } from '@/src/auth/permissions';
 import { logOperation } from '@/src/runtime/audit';
@@ -41,17 +42,6 @@ function splitDelegatedTasks(instruction: string): string[] {
     .map(match => match[1]?.trim())
     .filter((value): value is string => Boolean(value));
   return numbered.length > 1 ? numbered : [instruction.trim()];
-}
-
-async function ownsAgent(agentId: string, ownerAgentId: string): Promise<boolean> {
-  const owner = ownerAgentId.toLowerCase();
-  let current = await getExternalAgentRegistration(agentId);
-  for (let depth = 0; depth < 5 && current; depth += 1) {
-    if (current.owner_email === owner) return true;
-    if (!current.owner_email) return false;
-    current = await getExternalAgentRegistration(current.owner_email);
-  }
-  return false;
 }
 
 function parseJsonBody(value: unknown): unknown {
@@ -132,6 +122,7 @@ async function executeAgentPlan(params: {
 
   const answer = buildAgentAnswer(results);
   const taskId = findScheduledTaskId(results);
+  const publicResults = omitAgentIdentifierFields(results);
   const ranAt = new Date().toISOString();
   const supabase = getSupabaseAdmin();
   const { data: wf } = await supabase.from('agent_workflows').insert({
@@ -141,7 +132,7 @@ async function executeAgentPlan(params: {
     steps: params.plan.steps,
     schedule: params.plan.schedule,
     task_id: taskId,
-    last_result: answer ? { answer, results } : { results },
+    last_result: answer ? { answer, results: publicResults } : { results: publicResults },
     last_run_at: ranAt,
     status: 'active',
   }).select('id').single();
@@ -164,11 +155,11 @@ async function executeAgentPlan(params: {
       workflowId: wf?.id ?? null,
       schedule: params.plan.schedule,
       agentName: params.agentName,
-      result: answer ? { answer, results } : { results },
+      result: answer ? { answer, results: publicResults } : { results: publicResults },
     },
   });
 
-  return { results, answer, workflowId: wf?.id ?? null };
+  return { results: publicResults, answer, workflowId: wf?.id ?? null };
 }
 
 export async function POST(
@@ -179,9 +170,8 @@ export async function POST(
     const ctx = requireAgentContext(request.headers);
     const { id } = await params;
 
-    const registration = await getExternalAgentRegistration(id);
-    if (!registration) throw new NotFoundError(`Agent '${id}' not found`);
-    if (!await ownsAgent(id, ctx.agentId)) throw new PermissionError('Access denied');
+    const registration = await resolveVisibleExternalAgentRef(ctx.agentId, id);
+    if (!registration) throw new NotFoundError('Agent not found');
 
     let body: { instruction?: string; confirm?: boolean; confirmToken?: string | null };
     try { body = await request.json(); } catch {
@@ -197,7 +187,7 @@ export async function POST(
 
       const plan = JSON.parse(stored) as StoredCommandPlan;
 
-      if (plan.callerId !== ctx.agentId || plan.subAgentId !== id) {
+      if (plan.callerId !== ctx.agentId || plan.subAgentId !== registration.agent_id) {
         return NextResponse.json({ error: 'Token mismatch' }, { status: 403 });
       }
 
@@ -211,7 +201,7 @@ export async function POST(
             agentId: `${slugify(registration.name)}-${slugify(task)}-${suffix}`,
             name: childName,
             description: task,
-            ownerEmail: id,
+            ownerEmail: registration.agent_id,
             allowedDomains: registration.allowed_domains ?? ['*'],
             allowedTools: registration.allowed_tools ?? [],
           });
@@ -234,42 +224,43 @@ export async function POST(
           tool: 'delegate_task',
           result: item,
         }));
+        const publicResults = omitAgentIdentifierFields(results);
         const ranAt = new Date().toISOString();
         const supabase = getSupabaseAdmin();
         const { data: wf } = await supabase.from('agent_workflows').insert({
-          agent_id: id,
+          agent_id: registration.agent_id,
           name: plan.workflowName,
           summary: plan.summary,
           steps: plan.steps,
           schedule: null,
-          last_result: { answer, results },
+          last_result: { answer, results: publicResults },
           last_run_at: ranAt,
           status: 'active',
         }).select('id').single();
 
         await logOperation({
-          agentId: id,
+          agentId: registration.agent_id,
           primitive: 'workflow',
           operation: plan.workflowName,
           success: true,
           metadata: {
             workflowId: wf?.id ?? null,
             delegatedCount: delegated.length,
-            result: { answer, results },
+            result: { answer, results: publicResults },
           },
         });
 
-        return NextResponse.json({ executed: true, delegated: true, results, answer, workflowId: wf?.id ?? null });
+        return NextResponse.json({ executed: true, delegated: true, results: publicResults, answer, workflowId: wf?.id ?? null });
       }
 
       const run = await executeAgentPlan({
-        agentId: id,
+        agentId: registration.agent_id,
         agentName: registration.name,
         allowedDomains: registration.allowed_domains ?? ['*'],
         plan,
       });
 
-      return NextResponse.json({ executed: true, results: run.results, answer: run.answer, workflowId: run.workflowId });
+      return NextResponse.json({ executed: true, results: omitAgentIdentifierFields(run.results), answer: run.answer, workflowId: run.workflowId });
     }
 
     // ── PLAN GENERATION ─────────────────────────────────────────────────────
@@ -291,7 +282,7 @@ export async function POST(
         steps,
         schedule: null,
         workflowName: instruction.trim().slice(0, 80),
-        subAgentId: id,
+        subAgentId: registration.agent_id,
         callerId: ctx.agentId,
         delegatedTasks,
       }));
@@ -309,7 +300,7 @@ export async function POST(
     await tokenSet(`agent-cmd:${token}`, TOKEN_TTL_SECONDS, JSON.stringify({
       ...plan,
       workflowName: instruction.trim().slice(0, 80),
-      subAgentId: id,
+      subAgentId: registration.agent_id,
       callerId: ctx.agentId,
     }));
 

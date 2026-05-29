@@ -1,4 +1,6 @@
 ﻿import { randomUUID } from 'crypto';
+import { normalizeAgentDisplayName } from '../auth/agent-names.js';
+import { readLocalRuntimeState } from '../storage/local-state.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer';
@@ -22,6 +24,7 @@ export type WorkspaceMember = {
 export type WorkspaceAgent = {
   workspaceId: string;
   agentId: string;
+  agentName: string | null;
   addedAt: string;
 };
 
@@ -167,6 +170,7 @@ export async function addWorkspaceAgent(params: { workspaceId: string; agentId: 
   const item: WorkspaceAgent = {
     workspaceId: params.workspaceId,
     agentId: params.agentId,
+    agentName: null,
     addedAt: new Date().toISOString(),
   };
 
@@ -184,8 +188,75 @@ export async function addWorkspaceAgent(params: { workspaceId: string; agentId: 
     }
   }
 
-  await appendAudit(item.workspaceId, params.actorId, 'workspace.agent_added', { agentId: item.agentId });
+  const nameMap = await getAgentNameMap([item.agentId]);
+  item.agentName = nameMap.get(item.agentId) ?? null;
+  await appendAudit(item.workspaceId, params.actorId, 'workspace.agent_added', { agentName: item.agentName ?? 'Private agent' });
   return item;
+}
+
+export async function resolveWorkspaceAgentByName(agentName: string): Promise<{ agentId: string; agentName: string } | null> {
+  const name = agentName.trim();
+  if (!name) return null;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('agents')
+      .select('id,name')
+      .eq('name', name)
+      .limit(2);
+
+    if (!error && data && data.length === 1) {
+      const row = data[0] as Record<string, unknown>;
+      return { agentId: String(row.id), agentName: String(row.name) };
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const normalizedName = normalizeAgentDisplayName(name);
+  if (!normalizedName) return null;
+
+  const state = await readLocalRuntimeState();
+  const matches = [
+    ...Object.values(state.accounts).map(account => ({ agentId: account.agentId, agentName: account.agentName })),
+    ...Object.values(state.externalAgents).map(agent => ({ agentId: agent.agent_id, agentName: agent.name })),
+  ].filter(agent => normalizeAgentDisplayName(agent.agentName) === normalizedName);
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function getAgentNameMap(agentIds: string[]): Promise<Map<string, string>> {
+  const uniqueIds = [...new Set(agentIds)].filter(Boolean);
+  const names = new Map<string, string>();
+  if (uniqueIds.length === 0) return names;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('agents')
+      .select('id,name')
+      .in('id', uniqueIds);
+
+    if (!error && data) {
+      for (const row of data as Array<Record<string, unknown>>) {
+        names.set(String(row.id), String(row.name));
+      }
+      return names;
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const state = await readLocalRuntimeState();
+  for (const account of Object.values(state.accounts)) {
+    if (uniqueIds.includes(account.agentId)) names.set(account.agentId, account.agentName);
+  }
+  for (const agent of Object.values(state.externalAgents)) {
+    if (uniqueIds.includes(agent.agent_id)) names.set(agent.agent_id, agent.name);
+  }
+
+  return names;
 }
 
 export async function listWorkspaceAgents(workspaceId: string): Promise<WorkspaceAgent[]> {
@@ -198,9 +269,12 @@ export async function listWorkspaceAgents(workspaceId: string): Promise<Workspac
       .order('added_at', { ascending: false });
 
     if (!error) {
-      return ((data ?? []) as Array<Record<string, unknown>>).map(row => ({
+      const rows = (data ?? []) as Array<Record<string, unknown>>;
+      const nameMap = await getAgentNameMap(rows.map(row => String(row.agent_id)));
+      return rows.map(row => ({
         workspaceId: String(row.workspace_id),
         agentId: String(row.agent_id),
+        agentName: nameMap.get(String(row.agent_id)) ?? null,
         addedAt: String(row.added_at),
       }));
     }

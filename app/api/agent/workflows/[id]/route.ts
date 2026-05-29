@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -46,7 +47,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         .eq('agent_id', ctx.agentId);
     }
 
-    return NextResponse.json({ workflow: data });
+    return NextResponse.json({ workflow: omitAgentIdentifierFields(data) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

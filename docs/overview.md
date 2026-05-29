@@ -174,7 +174,7 @@ Every agent operates in complete isolation. Security is enforced at multiple lay
 - **Memory** — cache keys are automatically namespaced per agent
 - **Process** — each execution runs in an isolated Docker container with no network access by default
 - **SSRF protection** — blocks requests to private IP ranges and cloud metadata endpoints
-- **Audit logging** — every operation logged with timestamp, agent ID, operation type, and result
+- **Audit logging** — every operation logged with timestamp, private agent reference, operation type, and result
 
 See [security.md](./security.md) for the full threat model and controls.
 

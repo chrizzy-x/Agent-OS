@@ -10,6 +10,7 @@ import {
   issueBrowserToken,
   type BrowserSession,
 } from '@/src/auth/browser-session';
+import { formatRedactedJson } from '@/src/auth/display-redaction';
 
 interface InstalledSkill {
   id: string;
@@ -58,10 +59,10 @@ interface FfpProposal {
 }
 
 interface DeployedAgent {
-  agent_id: string;
+  agentRef: string;
   name: string;
   description: string | null;
-  owner_email: string | null;
+  isSubagent: boolean;
   status: string | null;
   total_calls: number | null;
   last_active_at: string | null;
@@ -132,7 +133,7 @@ function formatNaturalValue(value: unknown): string {
       if (typeof ethereum?.usd === 'number') return `Ethereum is $${ethereum.usd.toLocaleString('en-US')} USD.`;
     }
   }
-  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return typeof value === 'string' ? value : formatRedactedJson(value);
 }
 
 function activityResultText(entry: { metadata?: Record<string, unknown> | null; error?: string | null }): string {
@@ -275,7 +276,7 @@ export default function DashboardPage() {
   const [evalLoading, setEvalLoading] = useState(false);
   const [evalLastRuns, setEvalLastRuns] = useState<Record<string, { score: number | null; passCount: number; failCount: number; status: string }>>({});
   const [deployingTemplate, setDeployingTemplate] = useState<string | null>(null);
-  const [deployResult, setDeployResult] = useState<{ agentId: string; apiKey: string } | null>(null);
+  const [deployResult, setDeployResult] = useState<{ apiKey: string } | null>(null);
   const [deployingAgent, setDeployingAgent] = useState<string | null>(null);
   const [subagentDraft, setSubagentDraft] = useState<Record<string, { name: string; description: string }>>({});
   const [subagentError, setSubagentError] = useState<Record<string, string | null>>({});
@@ -284,7 +285,6 @@ export default function DashboardPage() {
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [agentActivity, setAgentActivity] = useState<Record<string, AgentActivityEntry[]>>({});
   const [activityLoading, setActivityLoading] = useState<string | null>(null);
-  const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null);
   const [expandedPanel, setExpandedPanel] = useState<Record<string, 'activity' | 'command' | 'subagent' | null>>({});
   const [commandDraft, setCommandDraft] = useState<Record<string, string>>({});
   const [commandPlan, setCommandPlan] = useState<Record<string, CommandPlan | null>>({});
@@ -402,69 +402,63 @@ export default function DashboardPage() {
     } finally { setAgentsLoading(false); }
   };
 
-  const loadAgentActivity = async (agentId: string) => {
-    if (activityLoading === agentId) return;
-    setActivityLoading(agentId);
+  const loadAgentActivity = async (agentRef: string) => {
+    if (activityLoading === agentRef) return;
+    setActivityLoading(agentRef);
     try {
-      const res = await fetch(`/api/agents/${agentId}/activity`);
+      const res = await fetch(`/api/agents/${agentRef}/activity`);
       const data = await res.json() as { activity?: AgentActivityEntry[] };
-      setAgentActivity(prev => ({ ...prev, [agentId]: data.activity ?? [] }));
+      setAgentActivity(prev => ({ ...prev, [agentRef]: data.activity ?? [] }));
     } catch { /* keep empty */ }
     finally { setActivityLoading(null); }
   };
 
-  const copyAgentId = async (agentId: string) => {
-    await navigator.clipboard.writeText(agentId);
-    setCopiedAgentId(agentId);
-    window.setTimeout(() => setCopiedAgentId(null), 1500);
-  };
-
-  const togglePanel = (agentId: string, panel: 'activity' | 'command' | 'subagent') => {
-    setExpandedPanel(prev => ({ ...prev, [agentId]: prev[agentId] === panel ? null : panel }));
-    if (panel === 'activity' && expandedPanel[agentId] !== 'activity') {
-      void loadAgentActivity(agentId);
+  const togglePanel = (agentRef: string, panel: 'activity' | 'command' | 'subagent') => {
+    setExpandedPanel(prev => ({ ...prev, [agentRef]: prev[agentRef] === panel ? null : panel }));
+    if (panel === 'activity' && expandedPanel[agentRef] !== 'activity') {
+      void loadAgentActivity(agentRef);
     }
   };
 
-  const sendAgentCommand = async (agentId: string) => {
-    const instruction = commandDraft[agentId]?.trim();
-    if (!instruction || commandLoading === agentId) return;
-    setCommandLoading(agentId);
-    setCommandError(prev => ({ ...prev, [agentId]: null }));
-    setCommandPlan(prev => ({ ...prev, [agentId]: null }));
-    setCommandResults(prev => ({ ...prev, [agentId]: null }));
+  const sendAgentCommand = async (agentRef: string) => {
+    const instruction = commandDraft[agentRef]?.trim();
+    if (!instruction || commandLoading === agentRef) return;
+    setCommandLoading(agentRef);
+    setCommandError(prev => ({ ...prev, [agentRef]: null }));
+    setCommandPlan(prev => ({ ...prev, [agentRef]: null }));
+    setCommandResults(prev => ({ ...prev, [agentRef]: null }));
     try {
-      const res = await fetch(`/api/agents/${agentId}/command`, {
+      const res = await fetch(`/api/agents/${agentRef}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction }),
       });
       const data = await res.json() as CommandPlan & { error?: string };
-      if (!res.ok) { setCommandError(prev => ({ ...prev, [agentId]: data.error ?? `Error ${res.status}` })); return; }
-      setCommandPlan(prev => ({ ...prev, [agentId]: data }));
+      if (!res.ok) { setCommandError(prev => ({ ...prev, [agentRef]: data.error ?? `Error ${res.status}` })); return; }
+      setCommandPlan(prev => ({ ...prev, [agentRef]: data }));
     } catch (e) {
-      setCommandError(prev => ({ ...prev, [agentId]: e instanceof Error ? e.message : 'Network error' }));
+      setCommandError(prev => ({ ...prev, [agentRef]: e instanceof Error ? e.message : 'Network error' }));
     } finally { setCommandLoading(null); }
   };
 
-  const confirmAgentCommand = async (agentId: string, confirmToken: string) => {
-    if (commandLoading === agentId) return;
-    setCommandLoading(agentId);
-    setCommandError(prev => ({ ...prev, [agentId]: null }));
+  const confirmAgentCommand = async (agentRef: string, confirmToken: string) => {
+    if (commandLoading === agentRef) return;
+    setCommandLoading(agentRef);
+    setCommandError(prev => ({ ...prev, [agentRef]: null }));
     try {
-      const res = await fetch(`/api/agents/${agentId}/command`, {
+      const res = await fetch(`/api/agents/${agentRef}/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ confirm: true, confirmToken }),
       });
       const data = await res.json() as CommandResult & { error?: string };
-      if (!res.ok) { setCommandError(prev => ({ ...prev, [agentId]: data.error ?? `Error ${res.status}` })); return; }
-      setCommandPlan(prev => ({ ...prev, [agentId]: null }));
-      setCommandResults(prev => ({ ...prev, [agentId]: data }));
-      setCommandDraft(prev => ({ ...prev, [agentId]: '' }));
+      if (!res.ok) { setCommandError(prev => ({ ...prev, [agentRef]: data.error ?? `Error ${res.status}` })); return; }
+      setCommandPlan(prev => ({ ...prev, [agentRef]: null }));
+      setCommandResults(prev => ({ ...prev, [agentRef]: data }));
+      setCommandDraft(prev => ({ ...prev, [agentRef]: '' }));
       void loadAgents();
     } catch (e) {
-      setCommandError(prev => ({ ...prev, [agentId]: e instanceof Error ? e.message : 'Network error' }));
+      setCommandError(prev => ({ ...prev, [agentRef]: e instanceof Error ? e.message : 'Network error' }));
     } finally { setCommandLoading(null); }
   };
 
@@ -478,20 +472,20 @@ export default function DashboardPage() {
         body: JSON.stringify({ template_id: templateId }),
       });
       const data = await res.json();
-      if (res.ok && data.agentId && data.apiKey) {
-        setDeployResult({ agentId: data.agentId, apiKey: data.apiKey });
+      if (res.ok && data.apiKey) {
+        setDeployResult({ apiKey: data.apiKey });
         void loadAgents();
       }
     } catch { /* show nothing */ }
     finally { setDeployingTemplate(null); }
   };
 
-  const deploySubagent = async (parentAgentId: string) => {
-    const draft = subagentDraft[parentAgentId] ?? { name: '', description: '' };
+  const deploySubagent = async (parentAgentRef: string) => {
+    const draft = subagentDraft[parentAgentRef] ?? { name: '', description: '' };
     const name = draft.name.trim();
-    if (!name || deployingAgent === parentAgentId) return;
-    setDeployingAgent(parentAgentId);
-    setSubagentError(prev => ({ ...prev, [parentAgentId]: null }));
+    if (!name || deployingAgent === parentAgentRef) return;
+    setDeployingAgent(parentAgentRef);
+    setSubagentError(prev => ({ ...prev, [parentAgentRef]: null }));
     try {
       const res = await fetch('/api/agents', {
         method: 'POST',
@@ -499,20 +493,20 @@ export default function DashboardPage() {
         body: JSON.stringify({
           name,
           description: draft.description.trim(),
-          parentAgentId,
+          parentAgentRef,
         }),
       });
-      const data = await res.json() as { agentId?: string; apiKey?: string; error?: string };
+      const data = await res.json() as { apiKey?: string; error?: string };
       if (!res.ok) {
-        setSubagentError(prev => ({ ...prev, [parentAgentId]: data.error ?? `Error ${res.status}` }));
+        setSubagentError(prev => ({ ...prev, [parentAgentRef]: data.error ?? `Error ${res.status}` }));
         return;
       }
-      setDeployResult(data.agentId && data.apiKey ? { agentId: data.agentId, apiKey: data.apiKey } : null);
-      setSubagentDraft(prev => ({ ...prev, [parentAgentId]: { name: '', description: '' } }));
-      setExpandedPanel(prev => ({ ...prev, [parentAgentId]: null }));
+      setDeployResult(data.apiKey ? { apiKey: data.apiKey } : null);
+      setSubagentDraft(prev => ({ ...prev, [parentAgentRef]: { name: '', description: '' } }));
+      setExpandedPanel(prev => ({ ...prev, [parentAgentRef]: null }));
       void loadAgents();
     } catch (e) {
-      setSubagentError(prev => ({ ...prev, [parentAgentId]: e instanceof Error ? e.message : 'Network error' }));
+      setSubagentError(prev => ({ ...prev, [parentAgentRef]: e instanceof Error ? e.message : 'Network error' }));
     } finally {
       setDeployingAgent(null);
     }
@@ -545,8 +539,13 @@ export default function DashboardPage() {
     return <div className="min-h-screen" style={{ background: 'var(--bg)' }} />;
   }
 
-  const initials = session.agentId.slice(6, 8).toUpperCase() || '??';
   const currentAgentName = displayAgentName(agentProfile?.name ?? session.agentName);
+  const initials = currentAgentName
+    .split(/\s+/)
+    .map(part => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'A';
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -574,7 +573,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <span className="hidden sm:block font-mono text-xs px-2.5 py-1.5 rounded-lg"
               style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}>
-              {session.agentId.slice(0, 22)}…
+              {currentAgentName}
             </span>
             <button onClick={() => void handleSignOut()} className="btn-outline text-sm px-3 py-1.5 rounded-lg">
               Sign out
@@ -595,8 +594,8 @@ export default function DashboardPage() {
                 <span className="font-bold">{currentAgentName}</span>
                 {agentProfile && <TierBadge tier={agentProfile.tier} />}
               </div>
-              <div className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                {session.agentId}
+              <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                Secure session active
               </div>
             </div>
           </div>
@@ -670,7 +669,6 @@ export default function DashboardPage() {
                   {deployResult && (
                     <div className="mb-4 card p-4 space-y-2" style={{ borderColor: 'rgba(34,197,94,0.4)' }}>
                       <p className="text-sm font-semibold" style={{ color: '#86efac' }}>Agent deployed!</p>
-                      <div className="font-mono text-xs break-all" style={{ color: 'var(--text-muted)' }}>ID: {deployResult.agentId}</div>
                       <div className="font-mono text-xs break-all px-3 py-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.4)', color: '#a78bfa', border: '1px solid var(--border-bright)' }}>
                         {deployResult.apiKey}
                       </div>
@@ -709,7 +707,6 @@ export default function DashboardPage() {
                     Credentials
                   </h2>
                   <div className="card p-5 space-y-4">
-                    <CredRow label="Agent ID" value={session.agentId} />
                     <SessionTokenPanel />
                     <div className="flex items-start gap-2 rounded-lg p-3 text-sm"
                       style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.2)', color: '#fcd34d' }}>
@@ -1025,7 +1022,6 @@ export default function DashboardPage() {
                 {deployResult && (
                   <div className="card p-4 space-y-2" style={{ borderColor: 'rgba(34,197,94,0.4)' }}>
                     <p className="text-sm font-semibold" style={{ color: '#86efac' }}>Agent deployed</p>
-                    <div className="font-mono text-xs break-all" style={{ color: 'var(--text-muted)' }}>ID: {deployResult.agentId}</div>
                     <div className="font-mono text-xs break-all px-3 py-2 rounded-lg" style={{ background: 'rgba(0,0,0,0.4)', color: '#a78bfa', border: '1px solid var(--border-bright)' }}>
                       {deployResult.apiKey}
                     </div>
@@ -1058,19 +1054,20 @@ export default function DashboardPage() {
                   <div className="space-y-4">
                     {deployedAgents.map(agent => {
                       const isActive = (agent.status ?? 'active') === 'active';
-                      const isSubagent = Boolean(agent.owner_email && agent.owner_email !== session.agentId.toLowerCase());
-                      const panel = expandedPanel[agent.agent_id] ?? null;
-                      const activity = agentActivity[agent.agent_id] ?? [];
-                      const isLoadingActivity = activityLoading === agent.agent_id;
+                      const isSubagent = agent.isSubagent;
+                      const agentRef = agent.agentRef;
+                      const panel = expandedPanel[agentRef] ?? null;
+                      const activity = agentActivity[agentRef] ?? [];
+                      const isLoadingActivity = activityLoading === agentRef;
                       const lastSeen = agent.last_active_at
                         ? new Date(agent.last_active_at).toLocaleString()
                         : 'Never';
-                      const plan = commandPlan[agent.agent_id] ?? null;
-                      const cmdResult = commandResults[agent.agent_id] ?? null;
-                      const cmdError = commandError[agent.agent_id] ?? null;
-                      const isCmdLoading = commandLoading === agent.agent_id;
+                      const plan = commandPlan[agentRef] ?? null;
+                      const cmdResult = commandResults[agentRef] ?? null;
+                      const cmdError = commandError[agentRef] ?? null;
+                      const isCmdLoading = commandLoading === agentRef;
                       return (
-                        <div key={agent.agent_id} className="card overflow-hidden">
+                        <div key={agentRef} className="card overflow-hidden">
                           <div className="p-5">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1 min-w-0">
@@ -1089,40 +1086,28 @@ export default function DashboardPage() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <code className="font-mono text-xs truncate" style={{ color: '#a78bfa' }}>
-                                    {agent.agent_id}
-                                  </code>
-                                  <button
-                                    onClick={() => void copyAgentId(agent.agent_id)}
-                                    className="text-xs flex-shrink-0"
-                                    style={{ color: 'var(--text-muted)' }}
-                                  >
-                                    {copiedAgentId === agent.agent_id ? 'Copied!' : 'Copy'}
-                                  </button>
-                                </div>
                                 {agent.description && (
                                   <p className="text-sm mt-1.5" style={{ color: 'var(--text-muted)' }}>{agent.description}</p>
                                 )}
                                 {isSubagent && (
-                                  <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>Parent: {agent.owner_email}</p>
+                                  <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>Managed subagent</p>
                                 )}
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <button
-                                  onClick={() => togglePanel(agent.agent_id, 'command')}
+                                  onClick={() => togglePanel(agentRef, 'command')}
                                   className="btn-primary text-xs px-3 py-1.5 rounded-lg"
                                 >
                                   {panel === 'command' ? 'Close' : 'Command'}
                                 </button>
                                 <button
-                                  onClick={() => togglePanel(agent.agent_id, 'subagent')}
+                                  onClick={() => togglePanel(agentRef, 'subagent')}
                                   className="btn-outline text-xs px-3 py-1.5 rounded-lg"
                                 >
                                   {panel === 'subagent' ? 'Close' : 'Subagent'}
                                 </button>
                                 <button
-                                  onClick={() => togglePanel(agent.agent_id, 'activity')}
+                                  onClick={() => togglePanel(agentRef, 'activity')}
                                   className="btn-outline text-xs px-3 py-1.5 rounded-lg"
                                   disabled={isLoadingActivity}
                                 >
@@ -1164,17 +1149,17 @@ export default function DashboardPage() {
                                 {!plan && !cmdResult && (
                                   <div className="flex gap-2">
                                     <textarea
-                                      value={commandDraft[agent.agent_id] ?? ''}
-                                      onChange={e => setCommandDraft(prev => ({ ...prev, [agent.agent_id]: e.target.value }))}
-                                      onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendAgentCommand(agent.agent_id); }}
+                                      value={commandDraft[agentRef] ?? ''}
+                                      onChange={e => setCommandDraft(prev => ({ ...prev, [agentRef]: e.target.value }))}
+                                      onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void sendAgentCommand(agentRef); }}
                                       placeholder="Tell this agent what to do. Use one line per task for parallel subagents."
                                       rows={2}
                                       className="flex-1 text-sm px-3 py-2 rounded-lg resize-none"
                                       style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-bright)', color: 'var(--text)', outline: 'none' }}
                                     />
                                     <button
-                                      onClick={() => void sendAgentCommand(agent.agent_id)}
-                                      disabled={isCmdLoading || !(commandDraft[agent.agent_id]?.trim())}
+                                      onClick={() => void sendAgentCommand(agentRef)}
+                                      disabled={isCmdLoading || !(commandDraft[agentRef]?.trim())}
                                       className="btn-primary text-xs px-4 py-2 rounded-lg self-end flex-shrink-0"
                                     >
                                       {isCmdLoading ? 'Planning…' : 'Plan'}
@@ -1206,14 +1191,14 @@ export default function DashboardPage() {
                                     </div>
                                     <div className="flex gap-2 pt-1">
                                       <button
-                                        onClick={() => void confirmAgentCommand(agent.agent_id, plan.confirmToken)}
+                                        onClick={() => void confirmAgentCommand(agentRef, plan.confirmToken)}
                                         disabled={isCmdLoading}
                                         className="btn-primary text-xs px-4 py-1.5 rounded-lg"
                                       >
                                         {isCmdLoading ? 'Running…' : 'Confirm & Run'}
                                       </button>
                                       <button
-                                        onClick={() => { setCommandPlan(prev => ({ ...prev, [agent.agent_id]: null })); setCommandError(prev => ({ ...prev, [agent.agent_id]: null })); }}
+                                        onClick={() => { setCommandPlan(prev => ({ ...prev, [agentRef]: null })); setCommandError(prev => ({ ...prev, [agentRef]: null })); }}
                                         className="btn-outline text-xs px-3 py-1.5 rounded-lg"
                                       >
                                         Cancel
@@ -1235,13 +1220,13 @@ export default function DashboardPage() {
                                           <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
                                           <span className="font-mono flex-shrink-0" style={{ color: 'var(--accent)' }}>{r.tool}</span>
                                           <span className="text-xs truncate flex-1" style={{ color: 'var(--text-muted)' }}>
-                                            {typeof r.result === 'object' ? JSON.stringify(r.result).slice(0, 80) : String(r.result)}
+                                            {typeof r.result === 'object' ? formatRedactedJson(r.result).slice(0, 80) : String(r.result)}
                                           </span>
                                         </div>
                                       ))}
                                     </div>
                                     <button
-                                      onClick={() => { setCommandResults(prev => ({ ...prev, [agent.agent_id]: null })); setCommandDraft(prev => ({ ...prev, [agent.agent_id]: '' })); }}
+                                      onClick={() => { setCommandResults(prev => ({ ...prev, [agentRef]: null })); setCommandDraft(prev => ({ ...prev, [agentRef]: '' })); }}
                                       className="text-xs mt-1"
                                       style={{ color: 'var(--text-muted)' }}
                                     >
@@ -1261,27 +1246,27 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="grid sm:grid-cols-2 gap-2">
                                   <input
-                                    value={subagentDraft[agent.agent_id]?.name ?? ''}
-                                    onChange={e => setSubagentDraft(prev => ({ ...prev, [agent.agent_id]: { ...(prev[agent.agent_id] ?? { name: '', description: '' }), name: e.target.value } }))}
+                                    value={subagentDraft[agentRef]?.name ?? ''}
+                                    onChange={e => setSubagentDraft(prev => ({ ...prev, [agentRef]: { ...(prev[agentRef] ?? { name: '', description: '' }), name: e.target.value } }))}
                                     placeholder="Subagent name"
                                     className="input-dark text-sm"
                                   />
                                   <input
-                                    value={subagentDraft[agent.agent_id]?.description ?? ''}
-                                    onChange={e => setSubagentDraft(prev => ({ ...prev, [agent.agent_id]: { ...(prev[agent.agent_id] ?? { name: '', description: '' }), description: e.target.value } }))}
+                                    value={subagentDraft[agentRef]?.description ?? ''}
+                                    onChange={e => setSubagentDraft(prev => ({ ...prev, [agentRef]: { ...(prev[agentRef] ?? { name: '', description: '' }), description: e.target.value } }))}
                                     placeholder="Purpose"
                                     className="input-dark text-sm"
                                   />
                                 </div>
-                                {subagentError[agent.agent_id] && (
-                                  <p className="text-xs" style={{ color: '#fca5a5' }}>{subagentError[agent.agent_id]}</p>
+                                {subagentError[agentRef] && (
+                                  <p className="text-xs" style={{ color: '#fca5a5' }}>{subagentError[agentRef]}</p>
                                 )}
                                 <button
-                                  onClick={() => void deploySubagent(agent.agent_id)}
-                                  disabled={deployingAgent === agent.agent_id || !(subagentDraft[agent.agent_id]?.name?.trim())}
+                                  onClick={() => void deploySubagent(agentRef)}
+                                  disabled={deployingAgent === agentRef || !(subagentDraft[agentRef]?.name?.trim())}
                                   className="btn-primary text-xs px-4 py-1.5 rounded-lg"
                                 >
-                                  {deployingAgent === agent.agent_id ? 'Deploying...' : 'Deploy subagent'}
+                                  {deployingAgent === agentRef ? 'Deploying...' : 'Deploy subagent'}
                                 </button>
                               </div>
                             </div>
@@ -1410,37 +1395,6 @@ export default function DashboardPage() {
             )}
           </>
         )}
-      </div>
-    </div>
-  );
-}
-
-function CredRow({ label, value }: { label: string; value: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copy = () => {
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div>
-      <div className="text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>
-        {label}
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 font-mono text-xs px-3 py-2.5 rounded-lg truncate"
-          style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-bright)', color: '#a78bfa' }}>
-          {value}
-        </div>
-        <button onClick={copy}
-          className="text-xs px-3 py-2.5 rounded-lg transition-all"
-          style={copied
-            ? { background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#86efac' }
-            : { background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-bright)', color: 'var(--text-muted)' }}>
-          {copied ? 'Copied' : 'Copy'}
-        </button>
       </div>
     </div>
   );

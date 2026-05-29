@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { executeUniversalToolCall, listUniversalMcpTools } from '@/src/mcp/registry';
 import { assertExternalAgentToolAccess, trackExternalAgentCall } from '@/src/external-agents/service';
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         jsonrpc: '2.0',
         id: body.id ?? 1,
-        result,
+        result: omitAgentIdentifierFields(result),
         success: true,
       });
     }

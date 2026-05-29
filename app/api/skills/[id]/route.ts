@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { requireAgentContext } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -30,7 +31,7 @@ export async function GET(
     return NextResponse.json({ error: 'Skill not found' }, { status: 404 });
   }
 
-  return NextResponse.json({ skill: data });
+  return NextResponse.json({ skill: omitAgentIdentifierFields(data) });
 }
 
 // PUT /api/skills/:id - Update skill (author only)

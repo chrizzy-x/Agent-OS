@@ -96,7 +96,6 @@ export async function POST(req: NextRequest) {
     {
       success: true,
       credentials: {
-        agentId,
         bearerToken,
         apiKey: bearerToken,
         agentName: name,

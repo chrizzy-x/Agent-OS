@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { requireAgentContext } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -104,5 +105,5 @@ export async function GET(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ reviews: data ?? [] });
+  return NextResponse.json({ reviews: omitAgentIdentifierFields(data ?? []) });
 }

@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     const agentToken = createAgentToken(agentId, { allowedDomains, expiresIn: '90d' });
 
-    return NextResponse.json({ agentId, token: agentToken, expiresIn: '90d' }, { status: 201 });
+    return NextResponse.json({ token: agentToken, expiresIn: '90d' }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

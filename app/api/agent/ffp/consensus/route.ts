@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { getFFPClient } from '@/src/ffp/client';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest) {
 
     const proposals = await getFFPClient().queryConsensusHistory(ctx.agentId);
 
-    return NextResponse.json({ agentId: ctx.agentId, proposals, total: proposals.length });
+    return NextResponse.json({ proposals: omitAgentIdentifierFields(proposals), total: proposals.length });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

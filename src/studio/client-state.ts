@@ -26,16 +26,16 @@ export type StudioTranscriptEntry = {
   };
 };
 
-export function getStudioHistoryStorageKey(agentId: string): string {
-  return `studio:history:${agentId}`;
+export function getStudioHistoryStorageKey(scope: string): string {
+  return `studio:history:${scope}`;
 }
 
-export function getStudioDraftStorageKey(agentId: string): string {
-  return `studio:draft:${agentId}`;
+export function getStudioDraftStorageKey(scope: string): string {
+  return `studio:draft:${scope}`;
 }
 
-export function getStudioAdvancedSessionKey(agentId: string): string {
-  return `studio:advanced:${agentId}`;
+export function getStudioAdvancedSessionKey(scope: string): string {
+  return `studio:advanced:${scope}`;
 }
 
 export function createStudioAdvancedSession(now = Date.now()): StudioAdvancedSession {

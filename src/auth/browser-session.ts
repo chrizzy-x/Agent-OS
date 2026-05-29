@@ -1,11 +1,9 @@
 export interface BrowserSession {
-  agentId: string;
   agentName: string | null;
   expiresAt: string | null;
 }
 
 export interface BrowserTokenCredentials {
-  agentId: string;
   bearerToken: string;
   apiKey: string;
   expiresIn: string;

@@ -28,7 +28,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const quotas = TIER_QUOTAS[tier];
 
     return NextResponse.json({
-      agentId: ctx.agentId,
       name: data?.name ?? null,
       tier,
       quotas,

@@ -44,7 +44,6 @@ export type AgentAppPackage = {
     slug: string;
     version: string;
     category: string;
-    publisherId: string;
     publisherName: string;
   };
   distribution: {
@@ -376,7 +375,6 @@ export function buildAgentAppPackage(app: AgentAppListing): AgentAppPackage {
       slug: app.slug,
       version: app.manifest.version,
       category: app.category,
-      publisherId: app.publisherId,
       publisherName: app.publisherName,
     },
     distribution: {

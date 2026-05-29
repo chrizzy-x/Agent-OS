@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       authenticated: true,
       session: {
-        agentId: context.agentId,
         agentName: agent?.name ?? null,
         expiresAt: claims?.exp ? new Date(claims.exp * 1000).toISOString() : null,
       },

@@ -5,14 +5,14 @@
  * net, events, proc) automatically namespace their data to the FFP chain +
  * agent combination — without touching any existing primitive code.
  *
- * Scoped agent ID format: "ffp:{chainId}:{agentId}"
+ * Scoped private reference format: "ffp:{chainId}:{privateRef}"
  *
  * Example:
  *   chainId = "finance-chain"
- *   agentId = "agent_abc123"
- *   → scopedAgentId = "ffp:finance-chain:agent_abc123"
+ *   privateRef = "<private>"
+ *   → scopedAgentRef = "ffp:finance-chain:<private>"
  *
- * All Redis keys, DB schemas, and file paths will be prefixed with this ID,
+ * All Redis keys, DB schemas, and file paths will be prefixed with this private reference,
  * isolating chain data from regular agent data automatically.
  */
 

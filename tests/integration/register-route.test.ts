@@ -32,12 +32,12 @@ describe('POST /register', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.agentId).toBe('test-agent-1');
+    expect(body.agentId).toBeUndefined();
     expect(typeof body.token).toBe('string');
     expect(body.allowedDomains).toEqual(['httpbin.org']);
   });
 
-  it('rejects duplicate agent IDs', async () => {
+  it('rejects duplicate registrations without exposing IDs', async () => {
     mockSupabase.from.mockReturnValue(maybeSingleBuilder({ agent_id: 'test-agent-1' }));
 
     const request = new NextRequest('http://localhost/register', {
@@ -50,7 +50,7 @@ describe('POST /register', () => {
     const body = await response.json();
 
     expect(response.status).toBe(409);
-    expect(body.error).toBe('Agent ID already registered');
+    expect(body.error).toBe('Agent name already registered');
   });
 
   it('rejects invalid agent ID format', async () => {

@@ -30,8 +30,8 @@ export default function SdkPage() {
         <Step n={1} title="Create your agent">
           <p className="text-gray-600 mb-4">
             Go to <Link href="/signup" className="text-blue-600 hover:underline">/signup</Link> and enter your email.
-            You will receive an <strong>Agent ID</strong> and <strong>API Key</strong>.
-            Save these — the API key is shown only once.
+            You will receive a <strong>bearer token</strong>.
+            Save it because it is shown only once. Agent IDs are private internal identifiers and are not displayed.
           </p>
           <p className="text-sm text-gray-500">
             Or use the API directly:
@@ -42,7 +42,6 @@ export default function SdkPage() {
           <Result>{`{
   "success": true,
   "credentials": {
-    "agentId": "agent_abc123...",
     "apiKey": "eyJhbGciOiJIUzI1NiJ9...",
     "expiresIn": "90 days"
   }

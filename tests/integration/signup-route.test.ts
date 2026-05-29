@@ -37,7 +37,6 @@ describe('POST /api/signup', () => {
     const body = await response.json();
 
     expect(response.status).toBe(201);
-    expect(body.credentials.agentId).toMatch(/^agent_/);
     expect(body.credentials.bearerToken).toBeTruthy();
     expect(body.credentials.apiKey).toBe(body.credentials.bearerToken);
     expect(response.headers.get('set-cookie')).toContain('agent_session=');

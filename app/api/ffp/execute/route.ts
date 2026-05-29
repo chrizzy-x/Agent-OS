@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { verifyConsensusProof, hashInput } from '@/src/ffp/chain-verifier';
 import type { ConsensusProof } from '@/src/ffp/chain-verifier';
@@ -97,8 +98,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           error: errorMessage,
           executionId,
           chainId: typedProof.chainId,
-          agentId: typedProof.agentId,
-          scopedAgentId,
         },
         { status: 422 },
       );
@@ -106,11 +105,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       executed: true,
-      result,
+      result: omitAgentIdentifierFields(result),
       executionId,
       chainId: typedProof.chainId,
-      agentId: typedProof.agentId,
-      scopedAgentId,
     });
   } catch (error) {
     console.error('[ffp/execute]', error instanceof Error ? error.message : error);

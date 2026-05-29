@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from 'crypto';
 import { createAgentToken } from '../auth/agent-identity.js';
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from '../auth/agent-names.js';
 import { getPublicAppUrl } from '../config/env.js';
@@ -49,8 +50,51 @@ export interface RegisterExternalAgentResult {
   message: string;
 }
 
+export interface PublicExternalAgentRegistration {
+  agentRef: string;
+  name: string;
+  description: string | null;
+  isSubagent: boolean;
+  allowed_domains: string[] | null;
+  allowed_tools: string[] | null;
+  status: string | null;
+  total_calls: number | null;
+  last_active_at: string | null;
+  created_at: string;
+}
+
 function getBaseUrl(): string {
   return getPublicAppUrl().replace(/\/$/, '');
+}
+
+function getPublicRefSecret(): string {
+  return process.env.AGENTOS_PUBLIC_REF_SECRET
+    ?? process.env.AGENT_JWT_SECRET
+    ?? process.env.JWT_SECRET
+    ?? 'agentos-dev-public-ref';
+}
+
+export function createExternalAgentPublicRef(agentId: string): string {
+  return `agref-${createHmac('sha256', getPublicRefSecret()).update(agentId).digest('hex').slice(0, 24)}`;
+}
+
+export function toPublicExternalAgentRegistration(
+  registration: ExternalAgentRegistrationRow,
+  ownerAgentId: string,
+): PublicExternalAgentRegistration {
+  const owner = ownerAgentId.toLowerCase();
+  return {
+    agentRef: createExternalAgentPublicRef(registration.agent_id),
+    name: registration.name,
+    description: registration.description,
+    isSubagent: Boolean(registration.owner_email && registration.owner_email !== owner),
+    allowed_domains: registration.allowed_domains,
+    allowed_tools: registration.allowed_tools,
+    status: registration.status,
+    total_calls: registration.total_calls,
+    last_active_at: registration.last_active_at,
+    created_at: registration.created_at,
+  };
 }
 
 function normalizeStringArray(value: unknown, fieldName: string): string[] {
@@ -106,18 +150,27 @@ function normalizeAllowedTools(value: unknown): string[] {
   return [...new Set(tools)];
 }
 
-function normalizeAgentId(agentId: unknown): string {
+function slugifyAgentName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'agent';
+}
+
+function generateAgentId(name: string): string {
+  return `${slugifyAgentName(name)}-${randomBytes(5).toString('hex')}`;
+}
+
+function normalizeAgentId(agentId: unknown, name: string): string {
+  if (agentId === undefined || agentId === null || typeof agentId === 'string' && !agentId.trim()) {
+    return generateAgentId(name);
+  }
+
   if (typeof agentId !== 'string') {
-    throw new ValidationError('agentId and name are required');
+    throw new ValidationError('Private agent reference must be lowercase alphanumeric with hyphens only');
   }
 
   const normalized = agentId.trim();
-  if (!normalized) {
-    throw new ValidationError('agentId and name are required');
-  }
 
   if (!AGENT_ID_PATTERN.test(normalized)) {
-    throw new ValidationError('agentId must be lowercase alphanumeric with hyphens only');
+    throw new ValidationError('Private agent reference must be lowercase alphanumeric with hyphens only');
   }
 
   return normalized;
@@ -125,7 +178,7 @@ function normalizeAgentId(agentId: unknown): string {
 
 function normalizeName(name: unknown): string {
   if (typeof name !== 'string' || !name.trim()) {
-    throw new ValidationError('agentId and name are required');
+    throw new ValidationError('name is required');
   }
   return cleanAgentDisplayName(name);
 }
@@ -137,7 +190,7 @@ function duplicateAgentNameError(name: string): Error {
 }
 
 function duplicateAgentIdError(): Error {
-  const error = new Error('Agent ID already registered');
+  const error = new Error('Agent already registered');
   (error as Error & { statusCode?: number }).statusCode = 409;
   return error;
 }
@@ -292,6 +345,21 @@ export async function listExternalAgents(ownerAgentId: string): Promise<External
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
+export async function resolveVisibleExternalAgentRef(
+  ownerAgentId: string,
+  ref: string,
+): Promise<ExternalAgentRegistrationRow | null> {
+  const decodedRef = decodeURIComponent(ref).trim();
+  const normalizedName = normalizeAgentDisplayName(decodedRef);
+  const agents = await listExternalAgents(ownerAgentId);
+
+  return agents.find(agent => (
+    createExternalAgentPublicRef(agent.agent_id) === decodedRef
+    || agent.agent_id === decodedRef
+    || normalizeAgentDisplayName(agent.name) === normalizedName
+  )) ?? null;
+}
+
 export async function getExternalAgentRegistration(agentId: string): Promise<ExternalAgentRegistrationRow | null> {
   try {
     const supabase = getSupabaseAdmin();
@@ -319,8 +387,8 @@ export async function getExternalAgentRegistration(agentId: string): Promise<Ext
 }
 
 export async function registerExternalAgent(input: RegisterExternalAgentInput): Promise<RegisterExternalAgentResult> {
-  const agentId = normalizeAgentId(input.agentId);
   const name = normalizeName(input.name);
+  const agentId = normalizeAgentId(input.agentId, name);
   const description = normalizeOptionalString(input.description);
   const ownerEmail = normalizeOptionalString(input.ownerEmail)?.toLowerCase() ?? null;
   const allowedDomains = normalizeAllowedDomains(input.allowedDomains);
@@ -438,7 +506,6 @@ export async function getExternalAgentProfile(agentId: string) {
   }
 
   return {
-    agentId: registration.agent_id,
     name: registration.name,
     status: registration.status ?? ACTIVE_REGISTRATION_STATUS,
     allowedDomains: registration.allowed_domains ?? [],

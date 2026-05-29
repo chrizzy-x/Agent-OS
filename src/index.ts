@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createServer } from 'http';
+import { omitAgentIdentifierFields } from './auth/display-redaction.js';
 import { createAgentToken, extractBearerToken, verifyAgentToken } from './auth/agent-identity.js';
 import { getFFPClient } from './ffp/client.js';
 import { assertExternalAgentToolAccess, trackExternalAgentCall } from './external-agents/service.js';
@@ -79,7 +80,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
 
     void trackExternalAgentCall(agentContext.agentId).catch(() => {});
 
-    sendJson(res, 200, { success: true, result: normalizeCanonicalToolResult(toolName, result) });
+    sendJson(res, 200, { success: true, result: omitAgentIdentifierFields(normalizeCanonicalToolResult(toolName, result)) });
   } catch (error) {
     const failure = buildCanonicalToolError(requestedTool, error);
     sendJson(res, failure.status, failure.body);
@@ -89,7 +90,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
 function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     name: 'AgentOS',
-    version: '1.0.0',
+    version: '6.0.0',
     description: 'Universal MCP, primitives, Skill Store capabilities, App Store packages, and external agent connectivity over one endpoint.',
     status: 'ok',
     endpoints: {
@@ -99,7 +100,7 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
       'POST /mcp': 'Execute a universal MCP tool call (Bearer token required)',
       'POST /register': 'Register an external agent and receive a bearer token',
       'GET  /agent/me': 'Inspect the current external agent registration',
-      'POST /admin/agents': 'Create a new agent token (Admin token required)',
+      'POST /admin/agents': 'Create a new bearer token (Admin token required)',
       'GET  /ffp/status': 'FFP mode and config summary',
     },
   });
@@ -108,7 +109,7 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     status: 'ok',
-    version: '1.0.0',
+    version: '6.0.0',
     timestamp: new Date().toISOString(),
     tools: Object.keys(TOOLS).length,
   });
@@ -141,7 +142,6 @@ async function handleCreateAgent(req: IncomingMessage, res: ServerResponse): Pro
   const agentToken = createAgentToken(agentId, { allowedDomains, expiresIn: '90d' });
 
   sendJson(res, 201, {
-    agentId,
     token: agentToken,
     expiresIn: '90d',
   });
@@ -157,7 +157,7 @@ async function handleTools(_req: IncomingMessage, res: ServerResponse): Promise<
   }
 }
 
-async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, agentId: string): Promise<void> {
+async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, privateRef: string): Promise<void> {
   const adminToken = process.env.ADMIN_TOKEN;
   const token = extractBearerToken(req.headers.authorization);
   if (token !== adminToken) {
@@ -171,15 +171,15 @@ async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, agentId
     const startTime = urlObj.searchParams.get('start_time') ? Number(urlObj.searchParams.get('start_time')) : undefined;
     const endTime = urlObj.searchParams.get('end_time') ? Number(urlObj.searchParams.get('end_time')) : undefined;
 
-    const operations = await getFFPClient().queryOperations({ agentId, chainId, startTime, endTime });
-    sendJson(res, 200, { agentId, operations, total: operations.length });
+    const operations = await getFFPClient().queryOperations({ agentId: privateRef, chainId, startTime, endTime });
+    sendJson(res, 200, { operations: omitAgentIdentifierFields(operations), total: operations.length });
   } catch (error) {
     const err = toErrorResponse(error);
     sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
   }
 }
 
-async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, agentId: string): Promise<void> {
+async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, privateRef: string): Promise<void> {
   const adminToken = process.env.ADMIN_TOKEN;
   const token = extractBearerToken(req.headers.authorization);
   if (token !== adminToken) {
@@ -188,8 +188,8 @@ async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, age
   }
 
   try {
-    const proposals = await getFFPClient().queryConsensusHistory(agentId);
-    sendJson(res, 200, { agentId, proposals, total: proposals.length });
+    const proposals = await getFFPClient().queryConsensusHistory(privateRef);
+    sendJson(res, 200, { proposals: omitAgentIdentifierFields(proposals), total: proposals.length });
   } catch (error) {
     const err = toErrorResponse(error);
     sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });

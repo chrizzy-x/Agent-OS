@@ -17,7 +17,6 @@ interface Review {
   review_title?: string;
   review_text?: string;
   created_at: string;
-  agent_id: string;
 }
 
 interface Skill {
@@ -25,7 +24,6 @@ interface Skill {
   name: string;
   slug: string;
   version: string;
-  author_id: string;
   author_name: string;
   category: string;
   description: string;
@@ -50,6 +48,11 @@ interface Skill {
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('agentos_token');
+}
+
+function displayPublicName(name: string | null | undefined): string {
+  if (!name || /^agent[_-]/i.test(name)) return 'AgentOS Publisher';
+  return name;
 }
 
 interface CryptoInfo {
@@ -342,7 +345,7 @@ console.log(result.result);`;
                   <span className="badge badge-accent text-xs">{skill.category}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm flex-wrap mb-3" style={{ color: 'var(--text-muted)' }}>
-                  <span>by @{skill.author_name}</span>
+                  <span>by {displayPublicName(skill.author_name)}</span>
                   <span>·</span>
                   <span>v{skill.version}</span>
                   {skill.rating > 0 && (
@@ -496,7 +499,7 @@ console.log(result.result);`;
                       <div className="flex items-center gap-2 mb-1">
                         <span>{'⭐'.repeat(review.rating)}</span>
                         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          @{review.agent_id.slice(0, 14)}…
+                          Verified user
                         </span>
                       </div>
                       {review.review_title && (
@@ -537,7 +540,7 @@ console.log(result.result);`;
                 )}
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-muted)' }}>Author</span>
-                  <span className="font-semibold">@{skill.author_name}</span>
+                  <span className="font-semibold">{displayPublicName(skill.author_name)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--text-muted)' }}>Category</span>

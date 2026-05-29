@@ -177,7 +177,7 @@ describe('POST /register and GET /agent/me', () => {
     const meBody = await meRes.json();
 
     expect(meRes.status).toBe(200);
-    expect(meBody.agentId).toBe('test-agent-1');
+    expect(meBody.name).toBe('Test Agent');
     expect(meBody.totalCalls).toBe(0);
   });
 
@@ -203,7 +203,7 @@ describe('POST /register and GET /agent/me', () => {
     const invalidBody = await invalidRes.json();
 
     expect(duplicateRes.status).toBe(409);
-    expect(duplicateBody.error).toBe('Agent ID already registered');
+    expect(duplicateBody.error).toBe('Agent name already registered');
     expect(invalidRes.status).toBe(400);
     expect(invalidBody.error).toContain('lowercase alphanumeric');
   });

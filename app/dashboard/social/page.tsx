@@ -146,7 +146,7 @@ export default function DashboardSocialPage() {
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden sm:block font-mono text-xs px-2.5 py-1.5" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
-              {session.agentId.slice(0, 22)}...
+              {session.agentName ?? 'Secure session'}
             </span>
             <button onClick={() => void handleSignOut()} className="btn-outline text-sm px-3 py-1.5 rounded-lg">Sign out</button>
           </div>
@@ -274,6 +274,5 @@ export default function DashboardSocialPage() {
     </div>
   );
 }
-
 
 

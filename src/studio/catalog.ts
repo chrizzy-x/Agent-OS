@@ -10,7 +10,7 @@ export const STUDIO_COMMAND_DEFINITIONS: StudioCommandDefinition[] = [
   {
     title: 'Agent Status',
     command: 'agent status',
-    description: 'Show the current agent ID, quotas, installed skill count, and available tool count.',
+    description: 'Show quotas, installed skill count, and available tool count.',
     mutating: false,
   },
   {

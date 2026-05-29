@@ -7,7 +7,6 @@ import { APP_URL } from '@/lib/config';
 import { fetchBrowserSession } from '@/src/auth/browser-session';
 
 interface Credentials {
-  agentId: string;
   bearerToken: string;
   apiKey?: string;
   expiresIn: string;
@@ -133,11 +132,10 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
           <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20" style={{ flexShrink: 0, marginTop: '1px' }}>
             <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
           </svg>
-          <span>Your bearer token is shown <strong>only once</strong>. Copy and store it securely.</span>
+          <span>Your bearer token is shown <strong>only once</strong>. Copy and store it securely. Agent IDs stay private and are not displayed.</span>
         </div>
 
         {[
-          { label: 'Agent ID', value: credentials.agentId },
           { label: 'Bearer Token', value: bearerToken },
         ].map(field => (
           <div key={field.label}>

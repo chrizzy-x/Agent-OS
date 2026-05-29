@@ -44,16 +44,16 @@ The `ADMIN_TOKEN` env var gates the `POST /admin/agents` endpoint. It must be a 
 
 ### Memory (Redis)
 
-Every Redis key is prefixed with the agent's ID:
+Every Redis key is prefixed with the agent's private internal reference:
 ```
-{prefix}:{agentId}:{userKey}
+{prefix}:{privateAgentRef}:{userKey}
 ```
 
 Agents cannot read or enumerate keys belonging to other agents because the prefix is derived from the verified JWT `sub` claim, not from user input.
 
 ### Filesystem (Supabase Storage)
 
-Files are stored at paths: `{agentId}/{sanitizedPath}`
+Files are stored at paths: `{privateAgentRef}/{sanitizedPath}`
 
 **Path sanitization (`sanitizePath`):**
 - Converts backslashes to forward slashes
@@ -66,7 +66,7 @@ Attempts to use `../../etc/passwd` or similar patterns throw `ValidationError` b
 
 ### Database (PostgreSQL)
 
-Each agent has a dedicated PostgreSQL schema named `agent_{agentId}` (special chars replaced with `_`). All queries execute with `SET search_path TO {agentSchema}, public`, so unqualified table names resolve to the agent's own schema.
+Each agent has a dedicated PostgreSQL schema derived from its private internal reference (special chars replaced with `_`). All queries execute with `SET search_path TO {agentSchema}, public`, so unqualified table names resolve to the agent's own schema.
 
 **The `execute_agent_query` stored procedure:**
 - Validates schema name matches `^agent_[a-zA-Z0-9_]+$`
@@ -133,7 +133,7 @@ The DNS check occurs before the actual fetch. A malicious DNS server could retur
 
 A sliding-window counter in Redis limits each agent to N requests per minute (configurable, default 100). The counter key includes the current minute bucket:
 ```
-rate:{agentId}:{YYYY-MM-DDTHH:MM}
+rate:{privateAgentRef}:{YYYY-MM-DDTHH:MM}
 ```
 The key is set with a 2-minute TTL. If the count exceeds the limit, `RateLimitError` is thrown before any operation is executed.
 
@@ -143,7 +143,7 @@ Before every `fs_write`, the resource manager sums all `size_bytes` for the agen
 
 ### Memory Quota
 
-A Redis counter key (`mem_usage:{agentId}:total`) tracks cumulative Redis memory usage for the agent. It is incremented on `mem_set` (delta from old value) and decremented on `mem_delete`. The default quota is 100MB.
+A Redis counter key (`mem_usage:{privateAgentRef}:total`) tracks cumulative Redis memory usage for the agent. It is incremented on `mem_set` (delta from old value) and decremented on `mem_delete`. The default quota is 100MB.
 
 ---
 
@@ -177,7 +177,7 @@ Key constraints:
 ## Audit Logging
 
 Every primitive operation — success or failure — is written to the `audit_logs` table in Supabase. Each record includes:
-- `agent_id`, `primitive`, `operation`
+- private agent reference, `primitive`, `operation`
 - `success` (boolean)
 - `duration_ms`
 - `metadata` — sanitized input summary (no secrets, no full file contents)

@@ -5,11 +5,23 @@ import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
+type WorkspaceRecord = Awaited<ReturnType<typeof listWorkspaces>>[number];
+
+function toPublicWorkspace(workspace: WorkspaceRecord) {
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    slug: workspace.slug,
+    plan: workspace.plan,
+    createdAt: workspace.createdAt,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const agentContext = requireAgentContext(request.headers);
     const workspaces = await listWorkspaces(agentContext.agentId);
-    return NextResponse.json({ workspaces });
+    return NextResponse.json({ workspaces: workspaces.map(toPublicWorkspace) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });
@@ -32,7 +44,7 @@ export async function POST(request: NextRequest) {
       plan: typeof body.plan === 'string' ? body.plan : undefined,
     });
 
-    return NextResponse.json({ workspace }, { status: 201 });
+    return NextResponse.json({ workspace: toPublicWorkspace(workspace) }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

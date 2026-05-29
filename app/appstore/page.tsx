@@ -33,6 +33,11 @@ Content-Type: application/json
   }
 }`;
 
+function displayPublicName(name: string | null | undefined): string {
+  if (!name || /^agent[_-]/i.test(name)) return 'AgentOS Publisher';
+  return name;
+}
+
 export default function AppStorePage() {
   const [apps, setApps] = useState<AgentAppListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -377,7 +382,7 @@ export default function AppStorePage() {
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                        }}>by {app.publisherName}</div>
+                        }}>by {displayPublicName(app.publisherName)}</div>
                       </div>
                       <a
                         href={`/api/apps/${app.slug}/download`}

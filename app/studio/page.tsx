@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { formatRedactedJson } from '@/src/auth/display-redaction';
 import { STUDIO_COMMAND_DEFINITIONS } from '@/src/studio/catalog';
 import {
   clampStudioTranscriptHistory,
@@ -101,7 +102,7 @@ function KindBadge({ kind }: { kind: StudioCommandResponse['kind'] }) {
 }
 
 function formatResult(value: unknown): string {
-  return JSON.stringify(value, null, 2);
+  return formatRedactedJson(value);
 }
 
 function parseJsonValue(value: unknown): unknown {
@@ -128,7 +129,7 @@ function formatNaturalValue(value: unknown): string {
 
 // ── NL Mode ──────────────────────────────────────────────────────────────────
 
-function NLModePanel({ agentId }: { agentId: string }) {
+function NLModePanel() {
   const [instruction, setInstruction] = useState('');
   const [plan, setPlan] = useState<IntentPlan | null>(null);
   const [result, setResult] = useState<IntentResult | null>(null);
@@ -503,7 +504,8 @@ export default function StudioPage() {
   const [sessionNotice, setSessionNotice] = useState('');
   const [mode, setMode] = useState<StudioMode>('nl');
 
-  const agentId = session?.agentId ?? '';
+  const agentDisplayName = session?.agentName ?? 'Active agent';
+  const studioScope = session ? encodeURIComponent(session.agentName ?? 'active-agent') : '';
   const advancedEnabled = isStudioAdvancedSessionActive(advancedSession);
 
   useEffect(() => {
@@ -518,54 +520,54 @@ export default function StudioPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!agentId) return;
-    const storedHistory = localStorage.getItem(getStudioHistoryStorageKey(agentId));
+    if (!studioScope) return;
+    const storedHistory = localStorage.getItem(getStudioHistoryStorageKey(studioScope));
     if (storedHistory) {
       try {
         const parsed = JSON.parse(storedHistory) as StudioTranscriptEntry[];
         setHistory(parsed);
         setSelectedId(parsed.at(-1)?.id ?? null);
-      } catch { localStorage.removeItem(getStudioHistoryStorageKey(agentId)); }
+      } catch { localStorage.removeItem(getStudioHistoryStorageKey(studioScope)); }
     }
-    const storedDraft = localStorage.getItem(getStudioDraftStorageKey(agentId));
+    const storedDraft = localStorage.getItem(getStudioDraftStorageKey(studioScope));
     if (storedDraft) setCommand(storedDraft);
-    const storedSession = parseStudioAdvancedSession(sessionStorage.getItem(getStudioAdvancedSessionKey(agentId)));
+    const storedSession = parseStudioAdvancedSession(sessionStorage.getItem(getStudioAdvancedSessionKey(studioScope)));
     if (isStudioAdvancedSessionActive(storedSession)) {
       setAdvancedSession(storedSession);
     } else {
-      sessionStorage.removeItem(getStudioAdvancedSessionKey(agentId));
+      sessionStorage.removeItem(getStudioAdvancedSessionKey(studioScope));
     }
-  }, [agentId]);
+  }, [studioScope]);
 
   useEffect(() => {
-    if (!agentId) return;
-    localStorage.setItem(getStudioDraftStorageKey(agentId), command);
-  }, [agentId, command]);
+    if (!studioScope) return;
+    localStorage.setItem(getStudioDraftStorageKey(studioScope), command);
+  }, [studioScope, command]);
 
   useEffect(() => {
-    if (!agentId) return;
-    localStorage.setItem(getStudioHistoryStorageKey(agentId), JSON.stringify(clampStudioTranscriptHistory(history)));
-  }, [agentId, history]);
+    if (!studioScope) return;
+    localStorage.setItem(getStudioHistoryStorageKey(studioScope), JSON.stringify(clampStudioTranscriptHistory(history)));
+  }, [studioScope, history]);
 
   useEffect(() => {
-    if (!agentId) return;
+    if (!studioScope) return;
     const timer = window.setInterval(() => {
-      const storedSession = parseStudioAdvancedSession(sessionStorage.getItem(getStudioAdvancedSessionKey(agentId)));
+      const storedSession = parseStudioAdvancedSession(sessionStorage.getItem(getStudioAdvancedSessionKey(studioScope)));
       if (!isStudioAdvancedSessionActive(storedSession)) {
-        sessionStorage.removeItem(getStudioAdvancedSessionKey(agentId));
+        sessionStorage.removeItem(getStudioAdvancedSessionKey(studioScope));
         setAdvancedSession(null);
       } else {
         setAdvancedSession(storedSession);
       }
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [agentId]);
+  }, [studioScope]);
 
   useEffect(() => {
-    if (!agentId) return;
+    if (!studioScope) return;
     void loadContext();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agentId]);
+  }, [studioScope]);
 
   const selectedEntry = useMemo(() => history.find(entry => entry.id === selectedId) ?? history.at(-1) ?? null, [history, selectedId]);
 
@@ -624,17 +626,17 @@ export default function StudioPage() {
   }
 
   function enableAdvancedMode() {
-    if (!agentId) return;
+    if (!studioScope) return;
     const sessionState = createStudioAdvancedSession();
-    sessionStorage.setItem(getStudioAdvancedSessionKey(agentId), JSON.stringify(sessionState));
+    sessionStorage.setItem(getStudioAdvancedSessionKey(studioScope), JSON.stringify(sessionState));
     setAdvancedSession(sessionState);
     setShowAdvancedModal(false);
     setSessionNotice('Advanced mode is enabled for this browser session for 15 minutes.');
   }
 
   function disableAdvancedMode() {
-    if (!agentId) return;
-    sessionStorage.removeItem(getStudioAdvancedSessionKey(agentId));
+    if (!studioScope) return;
+    sessionStorage.removeItem(getStudioAdvancedSessionKey(studioScope));
     setAdvancedSession(null);
     setSessionNotice('Advanced mode has been turned off for this browser session.');
   }
@@ -656,7 +658,7 @@ export default function StudioPage() {
           <div className="flex items-center gap-3">
             <Link href="/dashboard" className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></Link>
             <span className="badge badge-accent">Studio</span>
-            <span className="text-xs font-mono hidden sm:block" style={{ color: 'var(--text-dim)' }}>v5 Ares</span>
+            <span className="text-xs font-mono hidden sm:block" style={{ color: 'var(--text-dim)' }}>v6 Public Launch</span>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Mode toggle */}
@@ -680,7 +682,6 @@ export default function StudioPage() {
                 <span className="hidden sm:inline">Advanced</span>
               </button>
             </div>
-            <span className="font-mono text-xs hidden sm:block" style={{ color: 'var(--text-dim)' }}>{agentId}</span>
             <Link href="/dashboard" className="btn-outline text-xs px-3 py-1.5 rounded-lg">Dashboard</Link>
           </div>
         </div>
@@ -699,7 +700,7 @@ export default function StudioPage() {
                   Tell the agent what you want to accomplish. It will plan the steps, show you a preview, then execute on confirm.
                 </p>
               </div>
-              <NLModePanel agentId={agentId} />
+              <NLModePanel />
             </section>
           ) : (
             <section className="card overflow-hidden">
@@ -873,8 +874,8 @@ export default function StudioPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl p-4 col-span-2" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.22)' }}>
-                <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Agent ID</div>
-                <div className="font-mono text-xs mt-2 break-all">{agentId}</div>
+                <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Agent</div>
+                <div className="text-sm font-semibold mt-2 break-all">{agentDisplayName}</div>
               </div>
               <div className="p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
                 <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Skills</div>

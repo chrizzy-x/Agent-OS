@@ -21,7 +21,7 @@ export interface ConsensusProof {
   proposalId: string;
   /** Which FFP sector chain this request originates from */
   chainId: string;
-  /** Agent ID on the FFP chain */
+  /** Private agent reference on the FFP chain */
   agentId: string;
   /** Tool being executed e.g. "agentos.net_http_get" */
   tool: string;

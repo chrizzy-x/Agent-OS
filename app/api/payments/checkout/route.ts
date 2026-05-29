@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { requireAgentContext } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Developer has not set up a crypto wallet' }, { status: 400 });
 
     const amountUsdc = Number(skill.price_per_call).toFixed(2);
-    const reference  = `${ctx.agentId.slice(0, 8)}-${skill.id.slice(0, 8)}-${Date.now()}`;
+    const reference  = `${skill.id.slice(0, 8)}-${crypto.randomBytes(8).toString('hex')}-${Date.now()}`;
     const usdcMint   = network === 'solana' ? USDC_MINT_SOLANA : USDC_MINT_BASE;
 
     await supabase.from('skill_purchases').upsert({

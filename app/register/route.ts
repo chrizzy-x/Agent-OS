@@ -8,7 +8,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Record<string, unknown>;
     const result = await registerExternalAgent(body);
-    return NextResponse.json(result);
+    return NextResponse.json({
+      token: result.token,
+      expiresIn: result.expiresIn,
+      allowedDomains: result.allowedDomains,
+      allowedTools: result.allowedTools,
+      mcpEndpoint: result.mcpEndpoint,
+      toolsEndpoint: result.toolsEndpoint,
+      message: result.message,
+    });
   } catch (error) {
     if (error instanceof ValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -18,8 +26,8 @@ export async function POST(request: NextRequest) {
       ? (error as { statusCode: number }).statusCode
       : undefined;
 
-    if (status === 409 || error instanceof Error && error.message === 'Agent ID already registered') {
-      return NextResponse.json({ error: 'Agent ID already registered' }, { status: 409 });
+    if (status === 409 || error instanceof Error && error.message === 'Agent already registered') {
+      return NextResponse.json({ error: 'Agent name already registered' }, { status: 409 });
     }
 
     return NextResponse.json({ error: 'Registration failed' }, { status: 500 });

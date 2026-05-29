@@ -24,7 +24,7 @@ export function getRedisClient(): Redis {
 }
 
 // Build a namespaced Redis key for a given agent and sub-key.
-// Format: {prefix}:{agentId}:{key}
+// Format: {prefix}:{privateAgentRef}:{key}
 export function agentKey(prefix: string, agentId: string, key: string): string {
   return `${prefix}:${agentId}:${key}`;
 }

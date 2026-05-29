@@ -57,8 +57,8 @@ const sections = [
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'v5 Ares — FFP Multi-Chain Router. v4 Hermes — NL Studio, Workflow Library, SDK Kernel.',
-    badge: 'v5 Ares',
+    desc: 'v6 Public Launch — private agent IDs, public action refs, App Store, Skill Store, Studio, and FFP.',
+    badge: 'v6',
   },
 ];
 

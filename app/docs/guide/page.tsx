@@ -63,9 +63,9 @@ export default function GuidePage() {
           <p>Go to <Link href="/signup" style={{ color: 'var(--accent)' }}>/signup</Link>. Enter your email address and a name for your agent. That&apos;s it.</p>
           <p className="mt-3">You&apos;ll get back:</p>
           <ul className="list-disc ml-6 mt-2 space-y-1" style={{ color: 'var(--text-secondary)' }}>
-            <li><strong>Agent ID</strong> — your permanent identifier (e.g. <code className="tag text-xs">agent_abc123...</code>)</li>
             <li><strong>API Key</strong> — a JWT bearer token. <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Save this — it is shown only once.</span></li>
           </ul>
+          <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Agent IDs are private internal identifiers. Use your agent name in the UI and your bearer token for API calls.</p>
           <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Lost your key? Sign in at <Link href="/signin" style={{ color: 'var(--accent)' }}>/signin</Link> to generate a new bearer token from your browser session.</p>
 
           <h3 className="text-base font-semibold mt-6 mb-2">Or create via API (curl):</h3>
@@ -74,7 +74,6 @@ export default function GuidePage() {
   -d '{"email":"you@example.com","agentName":"My Agent"}' | jq`}</Code>
           <Result>{`{
   "credentials": {
-    "agentId":   "agent_abc123...",
     "apiKey":    "eyJhbGciOiJIUzI1NiJ9...",
     "expiresIn": "90 days"
   }
@@ -224,7 +223,7 @@ await mcp('events_publish', {
   payload: {
     task_id:  'task_123',
     result:   { status: 'success', output: 'analysis done' },
-    agent_id: 'agent_A',
+    actor:    'Primary agent',
   },
 });
 

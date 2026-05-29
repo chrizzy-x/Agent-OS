@@ -119,7 +119,7 @@ $$ LANGUAGE sql;
 -- Developer earnings tracking (monthly roll-up, populated by cron/batch job)
 CREATE TABLE IF NOT EXISTS developer_earnings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  developer_id TEXT NOT NULL,              -- agent_id of the skill author
+  developer_id TEXT NOT NULL,              -- private author reference
   skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
   period_start TIMESTAMPTZ NOT NULL,       -- first day of the month (UTC)
   period_end TIMESTAMPTZ NOT NULL,         -- last day of the month (UTC)

@@ -28,7 +28,7 @@ export function setSupabaseClient(c: SupabaseClient): void {
 // Storage bucket name - single bucket with per-agent path prefixes
 export const STORAGE_BUCKET = 'agent-files';
 
-// Build the storage path for a file: {agentId}/{userPath}
+// Build the storage path for a file: {privateAgentRef}/{userPath}
 export function storagePath(agentId: string, filePath: string): string {
   const clean = filePath.startsWith('/') ? filePath.slice(1) : filePath;
   return `${agentId}/${clean}`;

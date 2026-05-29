@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
             allowedDomains: ['*'],
             allowedTools: [],
           });
-          results.push({ step: step.order, tool: 'agent_deploy', result: { agentId: deployResult.agentId, token: deployResult.token, message: 'Agent deployed successfully' } });
+          results.push({ step: step.order, tool: 'agent_deploy', result: { token: deployResult.token, message: 'Agent deployed successfully' } });
           continue;
         }
 
@@ -158,6 +159,7 @@ export async function POST(req: NextRequest) {
 
       const answer = buildStudioAnswer(results);
       const taskId = findScheduledTaskId(results);
+      const publicResults = omitAgentIdentifierFields(results);
       let workflowId: string | null = null;
       if (shouldPersistWorkflow(plan)) {
         const supabase = getSupabaseAdmin();
@@ -168,7 +170,7 @@ export async function POST(req: NextRequest) {
           steps: plan.steps,
           schedule: plan.schedule,
           task_id: taskId,
-          last_result: answer ? { answer, results } : { results },
+          last_result: answer ? { answer, results: publicResults } : { results: publicResults },
           last_run_at: new Date().toISOString(),
           status: 'active',
         }).select('id').single();
@@ -185,7 +187,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         executed: true,
-        results,
+        results: publicResults,
         answer,
         workflowId,
         schedule: plan.schedule,

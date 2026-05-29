@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "1.0.0", "timestamp": "...", "tools": 32 }',
+    response: '{ "status": "ok", "version": "6.0.0", "timestamp": "...", "tools": 32 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -24,21 +24,35 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'POST', path: '/register', auth: 'None',
-    desc: 'Self-service external-agent registration. Creates a registry record and returns a 90-day bearer token for universal MCP access.',
+    desc: 'Self-service external-agent registration. Creates a private internal identifier automatically and returns a 90-day bearer token for universal MCP access.',
     body: [
-      { field: 'agentId', type: 'string', required: true, desc: 'Lowercase agent identifier using letters, numbers, and hyphens only' },
       { field: 'name', type: 'string', required: true, desc: 'Human-readable agent name' },
       { field: 'description', type: 'string', required: false, desc: 'Optional summary of what the agent does' },
       { field: 'ownerEmail', type: 'string', required: false, desc: 'Optional owner contact email' },
       { field: 'allowedDomains', type: 'string[]', required: false, desc: 'Optional outbound domain allowlist. Empty means all domains allowed.' },
       { field: 'allowedTools', type: 'string[]', required: false, desc: 'Optional tool permission list. Defaults to all built-in agentos.* primitives.' },
     ],
-    response: '{ "agentId": "external-agent", "token": "eyJ...", "expiresIn": "90d", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
+    response: '{ "token": "eyJ...", "expiresIn": "90d", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
   },
   {
     method: 'GET', path: '/agent/me', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Return the current external-agent registration details without reissuing the token.',
-    response: '{ "agentId": "external-agent", "name": "My Agent", "status": "active", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "totalCalls": 1, "lastActiveAt": "...", "createdAt": "...", "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
+    response: '{ "name": "My Agent", "status": "active", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "totalCalls": 1, "lastActiveAt": "...", "createdAt": "...", "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
+  },
+  {
+    method: 'GET', path: '/api/agents', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List deployed agents and subagents for the current operator. Private agent IDs are never returned; use the returned public action reference only when calling agent action routes.',
+    response: '{ "agents": [{ "agentRef": "agref-...", "name": "Research Agent", "isSubagent": false, "status": "active" }] }',
+  },
+  {
+    method: 'POST', path: '/api/agents', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Deploy a named subagent. Pass parentAgentRef from /api/agents when nesting under another deployed agent.',
+    body: [
+      { field: 'name', type: 'string', required: true, desc: 'Unique subagent display name' },
+      { field: 'description', type: 'string', required: false, desc: 'Optional purpose summary' },
+      { field: 'parentAgentRef', type: 'string', required: false, desc: 'Public action reference from /api/agents; never a private agent ID' },
+    ],
+    response: '{ "agent": { "agentRef": "agref-...", "name": "Research Subagent", "isSubagent": true, "status": "active" }, "apiKey": "eyJ..." }',
   },
   {
     method: 'POST', path: '/api/signup', auth: 'None',
@@ -48,7 +62,7 @@ const endpoints: Endpoint[] = [
       { field: 'password', type: 'string', required: true, desc: 'At least 8 characters' },
       { field: 'agentName', type: 'string', required: false, desc: 'Optional display name for the new agent' },
     ],
-    response: '{ "success": true, "credentials": { "agentId": "agent_...", "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
+    response: '{ "success": true, "credentials": { "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
   },
   {
     method: 'POST', path: '/api/signin', auth: 'None',
@@ -57,12 +71,12 @@ const endpoints: Endpoint[] = [
       { field: 'email', type: 'string', required: true, desc: 'Account email address' },
       { field: 'password', type: 'string', required: true, desc: 'Existing account password' },
     ],
-    response: '{ "success": true, "credentials": { "agentId": "agent_...", "bearerToken": "eyJ...", "apiKey": "eyJ...", "agentName": "My Agent", "expiresIn": "90 days" } }',
+    response: '{ "success": true, "credentials": { "bearerToken": "eyJ...", "apiKey": "eyJ...", "agentName": "My Agent", "expiresIn": "90 days" } }',
   },
   {
     method: 'GET', path: '/api/session', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Return the current authenticated browser session or bearer-backed session state.',
-    response: '{ "authenticated": true, "session": { "agentId": "agent_...", "agentName": "My Agent", "expiresAt": "..." } }',
+    desc: 'Return the current authenticated browser session or bearer-backed session state. Internal identifiers are private and not displayed in public docs.',
+    response: '{ "authenticated": true, "session": { "agentName": "My Agent", "expiresAt": "..." } }',
   },
   {
     method: 'DELETE', path: '/api/session', auth: 'Browser Session or Bearer (Agent)',
@@ -72,7 +86,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'POST', path: '/api/session/token', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Mint a fresh bearer token for external API, SDK, or CLI use while keeping the browser session active.',
-    response: '{ "success": true, "credentials": { "agentId": "agent_...", "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
+    response: '{ "success": true, "credentials": { "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
   },
   {
     method: 'GET', path: '/api/social/platforms', auth: 'Browser Session or Bearer (Agent)',
@@ -89,8 +103,8 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/x/accounts', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Optional example integration route: list connected X accounts visible to the current operator, including owner and child-agent mapping.',
-    response: '{ "accounts": [{ "id": "...", "username": "brand_handle", "child_agent_id": "x_brand_...", "status": "active" }] }',
+    desc: 'Optional example integration route: list connected X accounts visible to the current operator without exposing private child-agent IDs.',
+    response: '{ "accounts": [{ "id": "...", "username": "brand_handle", "status": "active" }] }',
   },
   {
     method: 'GET', path: '/api/x/drafts', auth: 'Browser Session or Bearer (Agent)',

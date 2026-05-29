@@ -14,7 +14,6 @@ import {
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'https://agentos-app.vercel.app';
 
 type RegistrationResponse = {
-  agentId: string;
   token: string;
   expiresIn: string;
   allowedDomains: string[];
@@ -80,13 +79,11 @@ const fieldLabelStyle = {
 
 export default function ConnectPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [agentId, setAgentId] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
   const [allowedDomains, setAllowedDomains] = useState('');
   const [selectedTools, setSelectedTools] = useState<string[]>([...DEFAULT_EXTERNAL_AGENT_TOOLS]);
-  const [agentIdError, setAgentIdError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [loading, setLoading] = useState(false);
   const [registration, setRegistration] = useState<RegistrationResponse | null>(null);
@@ -128,9 +125,9 @@ export default function ConnectPage() {
   }
 
   function resetFlow() {
-    setStep(1); setAgentId(''); setName(''); setDescription(''); setOwnerEmail('');
+    setStep(1); setName(''); setDescription(''); setOwnerEmail('');
     setAllowedDomains(''); setSelectedTools([...DEFAULT_EXTERNAL_AGENT_TOOLS]);
-    setAgentIdError(''); setSubmitError(''); setLoading(false); setRegistration(null);
+    setSubmitError(''); setLoading(false); setRegistration(null);
     setCopiedKey(null); setSnippetTab('env'); setTestTool(DEFAULT_CONNECT_TEST_TOOL);
     setTestInput(getToolExample(DEFAULT_CONNECT_TEST_TOOL)); setTestLoading(false);
     setOutput(null); setHasSuccessfulTest(false);
@@ -138,19 +135,14 @@ export default function ConnectPage() {
 
   async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setAgentIdError(''); setSubmitError('');
-    const trimmedAgentId = agentId.trim();
-    if (!/^[a-z0-9-]+$/.test(trimmedAgentId)) {
-      setAgentIdError('Agent ID must be lowercase letters, numbers, or hyphens only.');
-      return;
-    }
+    setSubmitError('');
     setLoading(true);
     try {
       const response = await fetch('/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          agentId: trimmedAgentId, name: name.trim(),
+          name: name.trim(),
           description: description.trim() || undefined,
           ownerEmail: ownerEmail.trim() || undefined,
           allowedDomains: parseDomains(allowedDomains),
@@ -158,7 +150,7 @@ export default function ConnectPage() {
         }),
       });
       const data = await response.json();
-      if (response.status === 409) { setAgentIdError('This Agent ID is already taken.'); return; }
+      if (response.status === 409) { setSubmitError('That agent name is already taken. Choose a unique name.'); return; }
       if (!response.ok) { setSubmitError(data.error || 'Registration failed'); return; }
       const result = data as RegistrationResponse;
       const nextTools = getPrimitiveTools(result.allowedTools);
@@ -284,12 +276,6 @@ export default function ConnectPage() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-              <div>
-                <label style={fieldLabelStyle}>Agent ID *</label>
-                <input value={agentId} onChange={e => setAgentId(e.target.value)} placeholder="my-agent" className="input-dark" required />
-                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Lowercase letters, numbers, hyphens only</div>
-                {agentIdError && <div style={{ color: 'var(--danger)', fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '12px', marginTop: '4px' }}>{agentIdError}</div>}
-              </div>
               <div>
                 <label style={fieldLabelStyle}>Agent Name *</label>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="My Trading Agent" className="input-dark" required />

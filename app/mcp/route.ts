@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import {
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     void trackExternalAgentCall(agentContext.agentId).catch(() => {});
 
-    return NextResponse.json({ success: true, result: normalizeCanonicalToolResult(normalizedTool, result) });
+    return NextResponse.json({ success: true, result: omitAgentIdentifierFields(normalizeCanonicalToolResult(normalizedTool, result)) });
   } catch (error: unknown) {
     const failure = buildCanonicalToolError(toolName, error);
     return NextResponse.json(failure.body, { status: failure.status });

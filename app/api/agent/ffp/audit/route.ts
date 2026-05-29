@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { getFFPClient } from '@/src/ffp/client';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
       endTime,
     });
 
-    return NextResponse.json({ agentId: ctx.agentId, operations, total: operations.length });
+    return NextResponse.json({ operations: omitAgentIdentifierFields(operations), total: operations.length });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

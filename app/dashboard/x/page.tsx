@@ -12,8 +12,6 @@ import {
 
 type XAccountConnection = {
   id: string;
-  owner_agent_id: string;
-  child_agent_id: string;
   x_user_id: string;
   username: string;
   display_name?: string | null;
@@ -25,7 +23,6 @@ type XAccountConnection = {
 type XDraft = {
   id: string;
   account_connection_id: string;
-  author_agent_id: string;
   kind: 'post' | 'reply';
   text: string;
   reply_to_post_id?: string | null;
@@ -309,7 +306,7 @@ function DashboardXPageContent() {
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden sm:block font-mono text-xs px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.18)', color: '#fdba74' }}>
-              {session.agentId.slice(0, 22)}...
+              {session.agentName ?? 'Secure session'}
             </span>
             <button onClick={() => void handleSignOut()} className="btn-outline text-sm px-3 py-1.5 rounded-lg">Sign out</button>
           </div>
@@ -425,8 +422,8 @@ function DashboardXPageContent() {
                           <div className="mt-1 break-all">{account.id}</div>
                         </div>
                         <div className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(0,0,0,0.28)', border: '1px solid var(--border-bright)' }}>
-                          <div style={{ color: 'var(--text-muted)' }}>Child Agent</div>
-                          <div className="mt-1 break-all">{account.child_agent_id}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>Runtime</div>
+                          <div className="mt-1 break-all">Private child agent</div>
                         </div>
                       </div>
                     </div>
@@ -586,4 +583,3 @@ export default function DashboardXPage() {
     </Suspense>
   );
 }
-

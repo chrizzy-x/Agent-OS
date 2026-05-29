@@ -54,7 +54,7 @@ export default function FFPPage() {
               If approved: the original HTTP request fires normally. If denied or timed out: the operation is blocked and the agent receives an error.
             </Step>
             <Step n={5} label="All outcomes are logged">
-              Every FFP operation — approved, denied, or timed out — is written to the FFP audit trail. Query it at <code className="bg-gray-100 px-1 rounded text-sm">GET /api/ffp/audit/:agentId</code>.
+              Every FFP operation — approved, denied, or timed out — is written to the FFP audit trail. Query it from the authenticated session at <code className="bg-gray-100 px-1 rounded text-sm">GET /api/agent/ffp/audit</code>.
             </Step>
           </div>
 
@@ -111,8 +111,8 @@ FFP_CHAIN_ID=mainnet
 # URL of the FFP network node you are connecting to
 FFP_NODE_URL=https://your-ffp-node.example.com
 
-# This deployment's agent identity on the FFP network
-FFP_AGENT_ID=agent_abc123...
+# This deployment's private FFP identity. Keep it secret.
+FFP_PRIVATE_REF=private-ffp-reference
 
 # Set to true to actually block protected domains pending consensus
 # Without this, FFP logs operations but doesn't block anything
@@ -120,7 +120,7 @@ FFP_REQUIRE_CONSENSUS=true`}</pre>
           </div>
 
           <Callout color="amber" emoji="⚠️">
-            If any of <code className="text-xs bg-amber-50 px-1 rounded">FFP_MODE</code>, <code className="text-xs bg-amber-50 px-1 rounded">FFP_CHAIN_ID</code>, <code className="text-xs bg-amber-50 px-1 rounded">FFP_NODE_URL</code>, or <code className="text-xs bg-amber-50 px-1 rounded">FFP_AGENT_ID</code> are missing, FFP is automatically disabled and all calls are no-ops — existing deployments are completely unaffected.
+            If any of <code className="text-xs bg-amber-50 px-1 rounded">FFP_MODE</code>, <code className="text-xs bg-amber-50 px-1 rounded">FFP_CHAIN_ID</code>, <code className="text-xs bg-amber-50 px-1 rounded">FFP_NODE_URL</code>, or the private FFP identity are missing, FFP is automatically disabled and all calls are no-ops — existing deployments are completely unaffected.
           </Callout>
 
           <h3 className="text-base font-semibold text-gray-900 mt-6 mb-3">Enable in the Ops console:</h3>
@@ -149,23 +149,22 @@ FFP_REQUIRE_CONSENSUS=true`}</pre>
               },
               {
                 method: 'GET',
-                path: '/api/ffp/audit/:agentId',
-                desc: 'Query all operations logged on the FFP chain for a given agent. Optional query params: chain_id, start_time, end_time.',
+                path: '/api/agent/ffp/audit',
+                desc: 'Query all operations logged on the FFP chain for the authenticated agent. Optional query params: chain_id, start_time, end_time.',
                 response: `[
   {
     "primitive":  "net",
     "action":     "http_post",
     "params":     { "url": "https://api.binance.com/..." },
     "result":     { "approved": true },
-    "timestamp":  1743500000,
-    "agentId":    "agent_abc123..."
+    "timestamp":  1743500000
   }
 ]`,
               },
               {
                 method: 'GET',
-                path: '/api/ffp/consensus/:agentId',
-                desc: 'Query the consensus proposal history for an agent — which proposals were submitted, approved, denied, or timed out.',
+                path: '/api/agent/ffp/consensus',
+                desc: 'Query the consensus proposal history for the authenticated agent — which proposals were submitted, approved, denied, or timed out.',
                 response: `[
   {
     "proposalId": "prop_xyz...",

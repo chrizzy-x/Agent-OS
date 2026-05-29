@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       ownerEmail: ctx.agentId,
     });
 
-    return NextResponse.json({ agentId: result.agentId, apiKey: result.token });
+    return NextResponse.json({ apiKey: result.token });
   } catch (error) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

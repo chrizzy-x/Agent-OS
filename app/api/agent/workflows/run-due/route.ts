@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
@@ -175,12 +176,12 @@ export async function POST(request: NextRequest) {
     if (adHocWorkflow) {
       const { workflow, execution } = adHocWorkflow;
       try {
-        const result = await executeUniversalToolCall({
+        const result = omitAgentIdentifierFields(await executeUniversalToolCall({
           agentContext: ctx,
           name: execution.tool,
           server: undefined,
           arguments: execution.input,
-        });
+        }));
         const ranAt = new Date().toISOString();
 
         await supabase
@@ -232,12 +233,12 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const result = await executeUniversalToolCall({
+        const result = omitAgentIdentifierFields(await executeUniversalToolCall({
           agentContext: ctx,
           name: parsed.tool,
           server: undefined,
           arguments: parsed.input,
-        });
+        }));
         const ranAt = new Date().toISOString();
 
         await supabase
@@ -294,12 +295,12 @@ export async function POST(request: NextRequest) {
         const execution = runnableFromWorkflow(workflow as WorkflowRow);
         if (execution) {
           try {
-            const result = await executeUniversalToolCall({
+            const result = omitAgentIdentifierFields(await executeUniversalToolCall({
               agentContext: ctx,
               name: execution.tool,
               server: undefined,
               arguments: execution.input,
-            });
+            }));
             const ranAt = new Date().toISOString();
             await supabase
               .from('agent_workflows')
@@ -336,7 +337,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ran: results.length, results });
+    return NextResponse.json({ ran: results.length, results: omitAgentIdentifierFields(results) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });
