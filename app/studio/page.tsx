@@ -1,968 +1,1014 @@
-'use client';
+﻿'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Nav from '@/components/Nav';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import { formatRedactedJson } from '@/src/auth/display-redaction';
-import { STUDIO_COMMAND_DEFINITIONS } from '@/src/studio/catalog';
-import {
-  clampStudioTranscriptHistory,
-  createStudioAdvancedSession,
-  getStudioAdvancedSessionKey,
-  getStudioDraftStorageKey,
-  getStudioHistoryStorageKey,
-  isStudioAdvancedSessionActive,
-  parseStudioAdvancedSession,
-  type StudioAdvancedSession,
-  type StudioTranscriptEntry,
-} from '@/src/studio/client-state';
-import type { StudioCommandResponse } from '@/src/studio/types';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-type StudioContextState = {
-  toolCount: number;
-  installedSkillCount: number;
+type StudioSession = {
+  id: string;
+  workspaceId: string;
+  superAgentId: string | null;
+  title: string;
+  state: Record<string, unknown>;
+  updatedAt: string;
 };
 
-type StudioMode = 'nl' | 'advanced';
-
-type IntentStep = {
-  order: number;
-  tool: string;
-  input: Record<string, unknown>;
-  description: string;
+type StudioMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  createdAt: string;
 };
 
-type IntentPlan = {
-  summary: string;
-  steps: IntentStep[];
-  schedule: string | null;
-  missingParams: string[];
-  confirmToken: string | null;
-  requiresInput: boolean;
-};
-
-type IntentResult = {
-  executed: boolean;
-  results: unknown[];
-  answer: string | null;
-  workflowId: string | null;
-  schedule: string | null;
+type StudioEvent = {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 };
 
 type Workflow = {
   id: string;
   name: string;
   summary: string | null;
-  steps: IntentStep[];
+  steps: Array<{ order: number; tool: string; description: string; input: Record<string, unknown> }>;
+  graph_state?: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> };
+  code_state?: string;
+  canonical_doc?: Record<string, unknown>;
+  version?: number;
+  status: string;
   schedule: string | null;
-  status: 'active' | 'paused';
-  task_id: string | null;
   last_result: unknown;
   last_error: string | null;
-  last_run_at: string | null;
-  created_at: string;
 };
 
-type KernelEntry = {
+type Subagent = {
   id: string;
-  product: string;
-  command_topic: string;
-  status_topic: string;
-  available_commands: string[];
+  name: string;
+  description: string | null;
+  instructions: string;
   status: string;
-  registered_at: string;
 };
 
-// ── Small helpers ─────────────────────────────────────────────────────────────
+type VaultSecret = {
+  id: string;
+  name: string;
+  maskedValue: string;
+  status: string;
+  version: number;
+  updatedAt: string;
+};
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  async function handleCopy() {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  }
-  return (
-    <button type="button" onClick={handleCopy} className="btn-outline text-xs px-3 py-1.5 rounded-lg">
-      {copied ? 'Copied' : 'Copy'}
-    </button>
-  );
+type Workspace = {
+  id: string;
+  name: string;
+  plan: string;
+};
+
+type PendingPlan = {
+  summary: string;
+  confirmToken: string | null;
+  steps: Array<{ order: number; tool: string; description: string; input: Record<string, unknown> }>;
+  blocked?: boolean;
+};
+
+type Panel = 'workflow' | 'code' | 'subagents' | 'skills' | 'artifacts' | 'runs' | 'versions' | 'vault' | 'app';
+type WorkflowMode = 'conversation' | 'visual' | 'code';
+type VisualNode = {
+  id: string;
+  label: string;
+  tool: string;
+  description: string;
+  inputText: string;
+};
+type VisualEdge = {
+  id: string;
+  source: string;
+  target: string;
+  condition: string;
+};
+
+const PANELS: Panel[] = ['workflow', 'code', 'subagents', 'skills', 'artifacts', 'runs', 'versions', 'vault'];
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function KindBadge({ kind }: { kind: StudioCommandResponse['kind'] }) {
-  const cls =
-    kind === 'result' ? 'badge badge-green' :
-    kind === 'preview' ? 'badge badge-warning' :
-    kind === 'error' ? 'badge badge-danger' :
-    'badge badge-accent';
-  return <span className={cls}>{kind}</span>;
+function normalizeTool(tool: string): string {
+  const trimmed = tool.trim();
+  if (!trimmed) return 'agentos.mem_get';
+  return trimmed.startsWith('agentos.') ? trimmed : `agentos.${trimmed}`;
 }
 
-function formatResult(value: unknown): string {
-  return formatRedactedJson(value);
+function createSequentialEdges(nodes: VisualNode[]): VisualEdge[] {
+  if (nodes.length <= 1) return [];
+  return nodes.slice(1).map((node, index) => ({
+    id: `edge-${index + 1}`,
+    source: nodes[index].id,
+    target: node.id,
+    condition: '',
+  }));
 }
 
-function parseJsonValue(value: unknown): unknown {
-  if (typeof value !== 'string') return value;
-  try { return JSON.parse(value); } catch { return value; }
-}
+function parseVisualGraph(workflow: Workflow | null): { nodes: VisualNode[]; edges: VisualEdge[] } {
+  if (!workflow) return { nodes: [], edges: [] };
+  const graph = asRecord(workflow.graph_state);
+  const rawNodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+  const rawEdges = Array.isArray(graph.edges) ? graph.edges : [];
 
-function formatNaturalValue(value: unknown): string {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const payload = value as Record<string, unknown>;
-    if (typeof payload.answer === 'string') return payload.answer;
-    const body = 'body' in payload ? parseJsonValue(payload.body) : payload;
-    if (body && typeof body === 'object' && !Array.isArray(body)) {
-      const objectBody = body as Record<string, unknown>;
-      const bitcoin = objectBody.bitcoin as { usd?: unknown } | undefined;
-      const ethereum = objectBody.ethereum as { usd?: unknown } | undefined;
-      if (typeof bitcoin?.usd === 'number') return `Bitcoin is $${bitcoin.usd.toLocaleString('en-US')} USD.`;
-      if (typeof ethereum?.usd === 'number') return `Ethereum is $${ethereum.usd.toLocaleString('en-US')} USD.`;
-    }
-  }
-
-  return typeof value === 'string' ? value : formatResult(value);
-}
-
-// ── NL Mode ──────────────────────────────────────────────────────────────────
-
-function NLModePanel() {
-  const [instruction, setInstruction] = useState('');
-  const [plan, setPlan] = useState<IntentPlan | null>(null);
-  const [result, setResult] = useState<IntentResult | null>(null);
-  const [parsing, setParsing] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState('');
-
-  async function parsePlan() {
-    const trimmed = instruction.trim();
-    if (!trimmed) return;
-    setParsing(true);
-    setPlan(null);
-    setResult(null);
-    setError('');
-    try {
-      const res = await fetch('/api/studio/intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction: trimmed }),
-      });
-      const body = await res.json() as IntentPlan & { error?: string };
-      if (!res.ok) { setError(body.error ?? 'Failed to parse intent'); return; }
-      setPlan(body);
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setParsing(false);
-    }
-  }
-
-  async function confirmPlan() {
-    if (!plan?.confirmToken) return;
-    setConfirming(true);
-    setError('');
-    try {
-      const res = await fetch('/api/studio/intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true, confirmToken: plan.confirmToken }),
-      });
-      const body = await res.json() as IntentResult & { error?: string };
-      if (!res.ok) { setError(body.error ?? 'Execution failed'); return; }
-      setResult(body);
-      setPlan(null);
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setConfirming(false);
-    }
-  }
-
-  function reset() {
-    setPlan(null);
-    setResult(null);
-    setError('');
-    setInstruction('');
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* Input */}
-      {!plan && !result && (
-        <div className="space-y-3">
-          <label className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-            Describe what you want the agent to do
-          </label>
-          <textarea
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void parsePlan(); } }}
-            rows={5}
-            className="input-dark text-sm"
-            placeholder={'e.g. "Fetch the latest ETH price and save it to memory as eth_price"'}
-            disabled={parsing}
-          />
-          <button
-            type="button"
-            onClick={() => void parsePlan()}
-            disabled={parsing || !instruction.trim()}
-            className="btn-primary px-5 py-2.5 rounded-lg"
-          >
-            {parsing ? 'Analysing...' : 'Generate plan'}
-          </button>
-        </div>
-      )}
-
-      {/* Plan preview */}
-      {plan && !result && (
-        <div className="space-y-4">
-          <div className="rounded-xl p-4" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.28)' }}>
-            <div className="text-sm font-semibold mb-1">Plan summary</div>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{plan.summary}</p>
-            {plan.schedule && (
-              <div className="mt-2 text-xs" style={{ color: '#c084fc' }}>Recurring: {plan.schedule}</div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Steps</div>
-            {plan.steps.map(step => (
-              <div key={step.order} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono" style={{ color: '#c084fc' }}>#{step.order}</span>
-                  <code className="text-xs" style={{ color: '#86efac' }}>{step.tool}</code>
-                </div>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{step.description}</p>
-              </div>
-            ))}
-          </div>
-
-          {plan.missingParams.length > 0 && (
-            <div className="rounded-xl p-4" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.28)' }}>
-              <div className="text-xs font-semibold mb-2" style={{ color: '#fcd34d' }}>Missing parameters</div>
-              <ul className="text-xs space-y-1" style={{ color: '#fde68a' }}>
-                {plan.missingParams.map(p => <li key={p}>- {p}</li>)}
-              </ul>
-              <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Provide these in your instruction and regenerate the plan.</p>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3 flex-wrap">
-            {plan.confirmToken && (
-              <button
-                type="button"
-                onClick={() => void confirmPlan()}
-                disabled={confirming}
-                className="btn-primary px-5 py-2.5 rounded-lg"
-              >
-                {confirming ? 'Executing...' : 'Confirm and execute'}
-              </button>
-            )}
-            <button type="button" onClick={reset} className="btn-outline px-4 py-2 rounded-lg">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Success */}
-      {result && (
-        <div className="space-y-4">
-          <div className="rounded-xl p-4" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.28)' }}>
-            <div className="text-sm font-semibold mb-1" style={{ color: '#86efac' }}>{result.workflowId ? 'Workflow executed' : 'Answer ready'}</div>
-            {result.workflowId && (
-              <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Workflow ID: <code>{result.workflowId}</code></div>
-            )}
-            {result.schedule && (
-              <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Schedule: {result.schedule}</div>
-            )}
-          </div>
-          {result.answer && (
-            <div>
-              <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Answer</div>
-              <pre className="terminal p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ color: '#e5e7eb' }}>
-                {result.answer}
-              </pre>
-            </div>
-          )}
-          <div>
-            <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Step results</div>
-            <pre className="terminal p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ color: '#94a3b8' }}>
-              {formatResult(result.results)}
-            </pre>
-          </div>
-          <button type="button" onClick={reset} className="btn-outline px-4 py-2 rounded-lg">
-            New plan
-          </button>
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-xl p-3 text-sm" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', color: '#fca5a5' }}>
-          {error}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Workflow Library Panel ────────────────────────────────────────────────────
-
-function WorkflowLibrary() {
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [runningWorkflowId, setRunningWorkflowId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      await fetch('/api/agent/workflows/run-due', { method: 'POST' });
-      const res = await fetch('/api/agent/workflows', { cache: 'no-store' });
-      const body = await res.json() as { workflows: Workflow[] };
-      setWorkflows(body.workflows ?? []);
-    } catch { /* keep existing */ }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    const timer = window.setInterval(() => void load(), 15_000);
-    return () => window.clearInterval(timer);
-  }, [load]);
-
-  async function toggleStatus(wf: Workflow) {
-    const next = wf.status === 'active' ? 'paused' : 'active';
-    await fetch(`/api/agent/workflows/${wf.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: next }),
+  if (rawNodes.length > 0) {
+    const nodes = rawNodes.map((item, index) => {
+      const row = asRecord(item);
+      const input = asRecord(row.input);
+      return {
+        id: typeof row.id === 'string' && row.id.trim() ? row.id : `step-${index + 1}`,
+        label: typeof row.label === 'string' && row.label.trim() ? row.label : `Step ${index + 1}`,
+        tool: normalizeTool(typeof row.tool === 'string' ? row.tool : 'agentos.mem_get'),
+        description: typeof row.description === 'string' && row.description.trim() ? row.description : `Step ${index + 1}`,
+        inputText: formatRedactedJson(input),
+      };
     });
-    void load();
+    const edges = rawEdges
+      .map(item => {
+        const row = asRecord(item);
+        if (typeof row.source !== 'string' || typeof row.target !== 'string') return null;
+        return {
+          id: typeof row.id === 'string' && row.id.trim() ? row.id : `edge-${Math.random().toString(16).slice(2, 8)}`,
+          source: row.source,
+          target: row.target,
+          condition: typeof row.condition === 'string' ? row.condition : '',
+        };
+      })
+      .filter((item): item is VisualEdge => Boolean(item));
+    return { nodes, edges: edges.length > 0 ? edges : createSequentialEdges(nodes) };
   }
 
-  async function runWorkflowNow(id: string) {
-    setRunningWorkflowId(id);
-    try {
-      await fetch('/api/agent/workflows/run-due', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflowId: id, force: true }),
-      });
-      await load();
-    } finally {
-      setRunningWorkflowId(null);
-    }
+  if (workflow.steps.length > 0) {
+    const nodes = workflow.steps.map((step, index) => ({
+      id: `step-${step.order || index + 1}`,
+      label: step.description || `Step ${index + 1}`,
+      tool: normalizeTool(step.tool),
+      description: step.description || `Step ${index + 1}`,
+      inputText: formatRedactedJson(step.input ?? {}),
+    }));
+    return { nodes, edges: createSequentialEdges(nodes) };
   }
 
-  async function deleteWorkflow(id: string) {
-    await fetch(`/api/agent/workflows/${id}`, { method: 'DELETE' });
-    setWorkflows(prev => prev.filter(w => w.id !== id));
-  }
-
-  if (loading) return <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading workflows...</p>;
-  if (workflows.length === 0) return <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No saved workflows yet. Use Natural Language mode to create one.</p>;
-
-  return (
-    <div className="space-y-2">
-      {workflows.map(wf => (
-        <div key={wf.id} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <div className="text-sm font-semibold truncate">{wf.name}</div>
-            <span className={`text-xs font-mono ${wf.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>
-              {wf.status}
-            </span>
-          </div>
-          {wf.summary && <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{wf.summary}</p>}
-          {wf.schedule && <div className="text-xs mb-2" style={{ color: '#c084fc' }}>Schedule: {wf.schedule}</div>}
-          {wf.last_run_at && <div className="text-xs mb-2" style={{ color: 'var(--text-dim)' }}>Last run: {new Date(wf.last_run_at).toLocaleString()}</div>}
-          <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)' }}>Latest result</div>
-          <pre className="terminal p-2 text-xs overflow-x-auto whitespace-pre-wrap break-all mb-2" style={{ color: wf.last_error ? '#fca5a5' : '#e5e7eb' }}>
-            {wf.last_error ? wf.last_error : wf.last_result !== null && wf.last_result !== undefined ? formatNaturalValue(wf.last_result) : 'No result yet.'}
-          </pre>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void runWorkflowNow(wf.id)}
-              disabled={runningWorkflowId === wf.id}
-              className="btn-primary text-xs px-2 py-1 rounded-lg"
-            >
-              {runningWorkflowId === wf.id ? 'Running' : 'Run now'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void toggleStatus(wf)}
-              className="btn-outline text-xs px-2 py-1 rounded-lg"
-            >
-              {wf.status === 'active' ? 'Pause' : 'Resume'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void deleteWorkflow(wf.id)}
-              className="text-xs px-2 py-1 rounded-lg"
-              style={{ color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return { nodes: [], edges: [] };
 }
 
-// ── Kernel Status Panel ───────────────────────────────────────────────────────
-
-function KernelStatusPanel() {
-  const [kernels, setKernels] = useState<KernelEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dispatching, setDispatching] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/kernel/registry');
-      const body = await res.json() as { kernels: KernelEntry[] };
-      setKernels(body.kernels ?? []);
-    } catch { /* keep existing */ }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    intervalRef.current = setInterval(() => void load(), 15_000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [load]);
-
-  async function dispatch(product: string, command: string) {
-    const key = `${product}:${command}`;
-    setDispatching(key);
-    try {
-      await fetch('/api/kernel/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product, command }),
-      });
-    } catch { /* ignore */ }
-    finally { setDispatching(null); }
-  }
-
-  if (loading) return <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Loading connected products...</p>;
-  if (kernels.length === 0) return <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No SDK products registered. Call <code>POST /api/kernel/register</code> from your product to connect.</p>;
-
-  return (
-    <div className="space-y-2">
-      {kernels.map(k => {
-        const isOnline = k.status === 'online';
-        return (
-          <div key={k.id} className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-            <div className="flex items-center gap-2 mb-2">
-              <span
-                className="inline-block w-2 h-2 rounded-full"
-                style={{ background: isOnline ? '#22c55e' : '#ef4444', boxShadow: isOnline ? '0 0 6px #22c55e' : 'none' }}
-              />
-              <span className="text-sm font-semibold">{k.product}</span>
-              <span className="text-xs ml-auto" style={{ color: 'var(--text-dim)' }}>{isOnline ? 'online' : 'offline'}</span>
-            </div>
-            {k.available_commands?.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {k.available_commands.map(cmd => (
-                  <button
-                    key={cmd}
-                    type="button"
-                    disabled={dispatching === `${k.product}:${cmd}`}
-                    onClick={() => void dispatch(k.product, cmd)}
-                    className="btn-outline text-xs px-2 py-1 rounded-lg"
-                    style={{ fontFamily: 'monospace' }}
-                  >
-                    {dispatching === `${k.product}:${cmd}` ? '...' : cmd}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+function timeLabel(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+function eventTone(type: string): { bg: string; color: string; border: string } {
+  if (type.includes('blocked') || type.includes('denied') || type === 'task_failed') {
+    return { bg: 'rgba(239,68,68,0.08)', color: '#fca5a5', border: 'rgba(239,68,68,0.26)' };
+  }
+  if (type.includes('secret') || type.includes('permission')) {
+    return { bg: 'rgba(245,158,11,0.08)', color: '#fcd34d', border: 'rgba(245,158,11,0.26)' };
+  }
+  return { bg: 'rgba(34,197,94,0.06)', color: '#86efac', border: 'rgba(34,197,94,0.2)' };
+}
+
+function JsonBlock({ value }: { value: unknown }) {
+  return (
+    <pre className="terminal text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ padding: '12px', color: '#94a3b8' }}>
+      {formatRedactedJson(value)}
+    </pre>
+  );
+}
 
 export default function StudioPage() {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
-  const [command, setCommand] = useState('help');
-  const [history, setHistory] = useState<StudioTranscriptEntry[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [context, setContext] = useState<StudioContextState>({ toolCount: 0, installedSkillCount: 0 });
-  const [advancedSession, setAdvancedSession] = useState<StudioAdvancedSession | null>(null);
-  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
-  const [sessionNotice, setSessionNotice] = useState('');
-  const [mode, setMode] = useState<StudioMode>('nl');
+  const [sessions, setSessions] = useState<StudioSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState('');
+  const [messages, setMessages] = useState<StudioMessage[]>([]);
+  const [events, setEvents] = useState<StudioEvent[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
+  const [workflowMode, setWorkflowMode] = useState<WorkflowMode>('conversation');
+  const [workflowCodeDraft, setWorkflowCodeDraft] = useState('');
+  const [workflowStepsDraft, setWorkflowStepsDraft] = useState('');
+  const [visualNodes, setVisualNodes] = useState<VisualNode[]>([]);
+  const [visualEdges, setVisualEdges] = useState<VisualEdge[]>([]);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [subagents, setSubagents] = useState<Subagent[]>([]);
+  const [vaultSecrets, setVaultSecrets] = useState<VaultSecret[]>([]);
+  const [installedSkills, setInstalledSkills] = useState<Array<Record<string, unknown>>>([]);
+  const [panel, setPanel] = useState<Panel>('workflow');
+  const [prompt, setPrompt] = useState('');
+  const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [subagentDraft, setSubagentDraft] = useState({ name: '', description: '', instructions: '' });
+  const [secretDraft, setSecretDraft] = useState({ name: '', value: '' });
 
-  const agentDisplayName = session?.agentName ?? 'Active agent';
-  const studioScope = session ? encodeURIComponent(session.agentName ?? 'active-agent') : '';
-  const advancedEnabled = isStudioAdvancedSessionActive(advancedSession);
+  const selectedSession = useMemo(
+    () => sessions.find(item => item.id === selectedSessionId) ?? sessions[0] ?? null,
+    [sessions, selectedSessionId],
+  );
+  const selectedWorkspace = useMemo(
+    () => workspaces.find(item => item.id === selectedSession?.workspaceId) ?? workspaces[0] ?? null,
+    [selectedSession?.workspaceId, workspaces],
+  );
+  const selectedWorkflow = useMemo(
+    () => workflows.find(item => item.id === selectedWorkflowId) ?? workflows[0] ?? null,
+    [selectedWorkflowId, workflows],
+  );
+  const canUseDeveloperConsole = session?.capabilities?.includes('access_developer_console') === true;
+  const visiblePanels = canUseDeveloperConsole ? [...PANELS, 'app' as Panel] : PANELS;
+
+  const loadBundle = useCallback(async (sessionId: string) => {
+    const res = await fetch(`/api/studio/sessions/${sessionId}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    setMessages(data.messages ?? []);
+    setEvents(data.events ?? []);
+  }, []);
+
+  const loadContext = useCallback(async () => {
+    const [sessionsRes, workspacesRes, workflowsRes, subagentsRes, vaultRes, skillsRes] = await Promise.all([
+      fetch('/api/studio/sessions', { cache: 'no-store' }),
+      fetch('/api/workspaces', { cache: 'no-store' }),
+      fetch('/api/agent/workflows', { cache: 'no-store' }),
+      fetch('/api/subagents', { cache: 'no-store' }),
+      fetch('/api/vault', { cache: 'no-store' }),
+      fetch('/api/skills/installed', { cache: 'no-store' }),
+    ]);
+
+    const sessionsData = sessionsRes.ok ? await sessionsRes.json() : { sessions: [] };
+    const workspacesData = workspacesRes.ok ? await workspacesRes.json() : { workspaces: [] };
+    const workflowsData = workflowsRes.ok ? await workflowsRes.json() : { workflows: [] };
+    const subagentsData = subagentsRes.ok ? await subagentsRes.json() : { subagents: [] };
+    const vaultData = vaultRes.ok ? await vaultRes.json() : { secrets: [] };
+    const skillsData = skillsRes.ok ? await skillsRes.json() : { installed_skills: [] };
+
+    const nextSessions = sessionsData.sessions ?? [];
+    setSessions(nextSessions);
+    setWorkspaces(workspacesData.workspaces ?? []);
+    const nextWorkflows = workflowsData.workflows ?? [];
+    setWorkflows(nextWorkflows);
+    if (nextWorkflows.length > 0) {
+      const selectedId = selectedWorkflowId || nextWorkflows[0]?.id || '';
+      setSelectedWorkflowId(selectedId);
+    }
+    setSubagents(subagentsData.subagents ?? []);
+    setVaultSecrets(vaultData.secrets ?? []);
+    setInstalledSkills(skillsData.installed_skills ?? []);
+
+    const nextSelected = selectedSessionId || nextSessions[0]?.id || '';
+    if (nextSelected) {
+      setSelectedSessionId(nextSelected);
+      await loadBundle(nextSelected);
+    }
+  }, [loadBundle, selectedSessionId, selectedWorkflowId]);
 
   useEffect(() => {
     let active = true;
-    void fetchBrowserSession().then(currentSession => {
+    async function bootstrap() {
+      const current = await fetchBrowserSession();
       if (!active) return;
-      if (!currentSession) { router.replace('/signin'); return; }
-      setSession(currentSession);
-      setLoading(false);
-    });
-    return () => { active = false; };
-  }, [router]);
-
-  useEffect(() => {
-    if (!studioScope) return;
-    const storedHistory = localStorage.getItem(getStudioHistoryStorageKey(studioScope));
-    if (storedHistory) {
-      try {
-        const parsed = JSON.parse(storedHistory) as StudioTranscriptEntry[];
-        setHistory(parsed);
-        setSelectedId(parsed.at(-1)?.id ?? null);
-      } catch { localStorage.removeItem(getStudioHistoryStorageKey(studioScope)); }
-    }
-    const storedDraft = localStorage.getItem(getStudioDraftStorageKey(studioScope));
-    if (storedDraft) setCommand(storedDraft);
-    const storedSession = parseStudioAdvancedSession(sessionStorage.getItem(getStudioAdvancedSessionKey(studioScope)));
-    if (isStudioAdvancedSessionActive(storedSession)) {
-      setAdvancedSession(storedSession);
-    } else {
-      sessionStorage.removeItem(getStudioAdvancedSessionKey(studioScope));
-    }
-  }, [studioScope]);
-
-  useEffect(() => {
-    if (!studioScope) return;
-    localStorage.setItem(getStudioDraftStorageKey(studioScope), command);
-  }, [studioScope, command]);
-
-  useEffect(() => {
-    if (!studioScope) return;
-    localStorage.setItem(getStudioHistoryStorageKey(studioScope), JSON.stringify(clampStudioTranscriptHistory(history)));
-  }, [studioScope, history]);
-
-  useEffect(() => {
-    if (!studioScope) return;
-    const timer = window.setInterval(() => {
-      const storedSession = parseStudioAdvancedSession(sessionStorage.getItem(getStudioAdvancedSessionKey(studioScope)));
-      if (!isStudioAdvancedSessionActive(storedSession)) {
-        sessionStorage.removeItem(getStudioAdvancedSessionKey(studioScope));
-        setAdvancedSession(null);
-      } else {
-        setAdvancedSession(storedSession);
+      if (!current) {
+        router.replace('/signin');
+        return;
       }
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [studioScope]);
+      setSession(current);
+      await loadContext();
+      if (active) setLoading(false);
+    }
+    void bootstrap();
+    return () => { active = false; };
+  }, [loadContext, router]);
 
   useEffect(() => {
-    if (!studioScope) return;
-    void loadContext();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studioScope]);
+    if (!selectedSession?.id) return undefined;
+    const source = new EventSource(`/api/studio/sessions/${selectedSession.id}/stream`);
 
-  const selectedEntry = useMemo(() => history.find(entry => entry.id === selectedId) ?? history.at(-1) ?? null, [history, selectedId]);
+    const onStudioEvent = (raw: Event) => {
+      const message = raw as MessageEvent<string>;
+      try {
+        const event = JSON.parse(message.data) as StudioEvent;
+        setEvents(prev => {
+          if (prev.some(item => item.id === event.id)) return prev;
+          return [...prev, event];
+        });
+      } catch {
+        // ignore malformed events
+      }
+    };
 
-  async function loadContext() {
+    source.addEventListener('studio_event', onStudioEvent);
+    source.onerror = () => {
+      source.close();
+    };
+
+    return () => {
+      source.removeEventListener('studio_event', onStudioEvent);
+      source.close();
+    };
+  }, [selectedSession?.id]);
+
+  useEffect(() => {
+    if (!selectedWorkflow) {
+      setWorkflowCodeDraft('');
+      setWorkflowStepsDraft('');
+      setVisualNodes([]);
+      setVisualEdges([]);
+      return;
+    }
+    const codeState = typeof selectedWorkflow.code_state === 'string' && selectedWorkflow.code_state.trim()
+      ? selectedWorkflow.code_state
+      : formatRedactedJson(selectedWorkflow.canonical_doc ?? { steps: selectedWorkflow.steps ?? [] });
+    setWorkflowCodeDraft(codeState);
+    setWorkflowStepsDraft(formatRedactedJson(selectedWorkflow.steps ?? []));
+    const visual = parseVisualGraph(selectedWorkflow);
+    setVisualNodes(visual.nodes);
+    setVisualEdges(visual.edges);
+  }, [selectedWorkflow]);
+
+  async function sendPrompt() {
+    const trimmed = prompt.trim();
+    if (!trimmed || !selectedSession || busy) return;
+    setBusy(true);
+    setNotice('');
+    setPendingPlan(null);
     try {
-      const [skillsRes, toolsRes] = await Promise.all([
-        fetch('/api/skills/installed'),
-        fetch('/tools'),
-      ]);
-      const skillsBody = await skillsRes.json();
-      const toolsBody = await toolsRes.json();
-      setContext({
-        installedSkillCount: Array.isArray(skillsBody.installed_skills) ? skillsBody.installed_skills.length : 0,
-        toolCount: Array.isArray(toolsBody.tools) ? toolsBody.tools.length : 0,
+      const res = await fetch('/api/studio/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction: trimmed, sessionId: selectedSession.id }),
       });
-    } catch { /* keep existing */ }
+      const data = await res.json();
+      setPrompt('');
+      setPendingPlan({
+        summary: data.summary ?? data.error ?? 'Studio request failed.',
+        confirmToken: data.confirmToken ?? null,
+        steps: data.steps ?? [],
+        blocked: !res.ok || data.blocked === true,
+      });
+      await loadBundle(selectedSession.id);
+    } catch {
+      setNotice('Studio request failed. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function appendHistory(commandText: string, response: StudioCommandResponse) {
-    const nextEntry: StudioTranscriptEntry = {
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      command: commandText,
-      response,
-    };
-    setHistory(previous => {
-      const next = clampStudioTranscriptHistory([...previous, nextEntry]);
-      setSelectedId(nextEntry.id);
+  async function createSession() {
+    const workspace = selectedWorkspace ?? workspaces[0];
+    if (!workspace || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/studio/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: workspace.id, title: 'New Studio Session' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? 'Failed to create session.');
+        return;
+      }
+      setSelectedSessionId(data.session.id);
+      await loadContext();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmPlan() {
+    if (!pendingPlan?.confirmToken || !selectedSession || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/studio/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: true, confirmToken: pendingPlan.confirmToken, sessionId: selectedSession.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? 'Execution failed.');
+        return;
+      }
+      setPendingPlan(null);
+      await loadContext();
+    } catch {
+      setNotice('Execution failed. Check your connection and try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runWorkflow(workflowId: string) {
+    if (!workflowId || workflowBusy) return;
+    setWorkflowBusy(true);
+    setNotice('');
+    try {
+      const res = await fetch('/api/agent/workflows/run-due', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflowId, force: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? 'Failed to run workflow.');
+        return;
+      }
+      const ran = typeof data.ran === 'number' ? data.ran : 0;
+      setNotice(ran > 0 ? `Workflow run started (${ran} execution${ran === 1 ? '' : 's'}).` : 'No runnable workflow step found.');
+      await loadContext();
+      if (selectedSession?.id) await loadBundle(selectedSession.id);
+    } catch {
+      setNotice('Workflow run failed. Check your connection and try again.');
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  function updateVisualNode(id: string, patch: Partial<VisualNode>) {
+    setVisualNodes(prev => prev.map(node => (node.id === id ? { ...node, ...patch } : node)));
+  }
+
+  function moveVisualNode(id: string, direction: 'up' | 'down') {
+    setVisualNodes(prev => {
+      const index = prev.findIndex(node => node.id === id);
+      if (index < 0) return prev;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
       return next;
     });
   }
 
-  async function runCommand(commandText = command, confirmToken?: string) {
-    const trimmed = commandText.trim();
-    if (!trimmed) return;
-    if (trimmed.startsWith('advanced run ') && !advancedEnabled && !confirmToken) {
-      setShowAdvancedModal(true);
-      return;
-    }
-    setSubmitting(true);
-    setSessionNotice('');
+  function addVisualNode() {
+    const id = `step-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+    setVisualNodes(prev => [
+      ...prev,
+      {
+        id,
+        label: `Step ${prev.length + 1}`,
+        tool: 'agentos.mem_get',
+        description: `Step ${prev.length + 1}`,
+        inputText: '{}',
+      },
+    ]);
+  }
+
+  function removeVisualNode(id: string) {
+    setVisualNodes(prev => prev.filter(node => node.id !== id));
+    setVisualEdges(prev => prev.filter(edge => edge.source !== id && edge.target !== id));
+  }
+
+  function addVisualEdge() {
+    if (visualNodes.length < 2) return;
+    setVisualEdges(prev => [
+      ...prev,
+      {
+        id: `edge-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+        source: visualNodes[0].id,
+        target: visualNodes[1].id,
+        condition: '',
+      },
+    ]);
+  }
+
+  function updateVisualEdge(id: string, patch: Partial<VisualEdge>) {
+    setVisualEdges(prev => prev.map(edge => (edge.id === id ? { ...edge, ...patch } : edge)));
+  }
+
+  function removeVisualEdge(id: string) {
+    setVisualEdges(prev => prev.filter(edge => edge.id !== id));
+  }
+
+  async function saveWorkflowMode(mode: WorkflowMode) {
+    if (!selectedWorkflow?.id || workflowBusy) return;
+    setWorkflowBusy(true);
+    setNotice('');
     try {
-      const response = await fetch('/api/studio/command', {
+      let payload: Record<string, unknown>;
+      if (mode === 'conversation') {
+        payload = { mode, steps: JSON.parse(workflowStepsDraft) };
+      } else if (mode === 'visual') {
+        if (visualNodes.length === 0) {
+          setNotice('Add at least one visual node before saving.');
+          return;
+        }
+        const nodes = visualNodes.map((node, index) => ({
+          id: node.id,
+          type: 'step',
+          label: node.label.trim() || `Step ${index + 1}`,
+          tool: normalizeTool(node.tool),
+          description: node.description.trim() || node.label.trim() || `Step ${index + 1}`,
+          input: JSON.parse(node.inputText || '{}'),
+          order: index + 1,
+          position: { x: 120 + (index * 220), y: 120 },
+        }));
+        const nodeIds = new Set(nodes.map(node => node.id));
+        const edges = visualEdges
+          .filter(edge => nodeIds.has(edge.source) && nodeIds.has(edge.target) && edge.source !== edge.target)
+          .map((edge, index) => ({
+            id: edge.id || `edge-${index + 1}`,
+            source: edge.source,
+            target: edge.target,
+            condition: edge.condition.trim() || null,
+          }));
+        payload = { mode, graph: { nodes, edges } };
+      } else {
+        payload = { mode, code: workflowCodeDraft };
+      }
+
+      const res = await fetch(`/api/agent/workflows/${selectedWorkflow.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? 'Workflow update failed.');
+        return;
+      }
+      setNotice(`Workflow updated from ${mode} mode.`);
+      await loadContext();
+    } catch {
+      setNotice(`Invalid ${mode} payload. Use valid JSON for conversation node inputs and code mode.`);
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
+  async function createSubagent() {
+    if (!selectedWorkspace || !subagentDraft.name.trim()) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/subagents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: trimmed, confirmToken, advancedMode: advancedEnabled }),
+        body: JSON.stringify({ workspaceId: selectedWorkspace.id, ...subagentDraft }),
       });
-      const body = await response.json() as StudioCommandResponse;
-      appendHistory(trimmed, body);
-      if (body.kind === 'result' || body.kind === 'help') await loadContext();
-    } catch {
-      appendHistory(trimmed, { kind: 'error', command: trimmed, mutating: false, summary: 'Studio request failed. Check your connection and try again.' });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? 'Failed to create subagent.');
+        return;
+      }
+      setSubagentDraft({ name: '', description: '', instructions: '' });
+      await loadContext();
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
-  function enableAdvancedMode() {
-    if (!studioScope) return;
-    const sessionState = createStudioAdvancedSession();
-    sessionStorage.setItem(getStudioAdvancedSessionKey(studioScope), JSON.stringify(sessionState));
-    setAdvancedSession(sessionState);
-    setShowAdvancedModal(false);
-    setSessionNotice('Advanced mode is enabled for this browser session for 15 minutes.');
+  async function saveSecret() {
+    if (!secretDraft.name.trim() || !secretDraft.value || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/vault', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId: selectedWorkspace?.id, name: secretDraft.name, value: secretDraft.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? 'Failed to save secret.');
+        return;
+      }
+      setSecretDraft({ name: '', value: '' });
+      setNotice('Secret saved. Plaintext was not returned.');
+      await loadContext();
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function disableAdvancedMode() {
-    if (!studioScope) return;
-    sessionStorage.removeItem(getStudioAdvancedSessionKey(studioScope));
-    setAdvancedSession(null);
-    setSessionNotice('Advanced mode has been turned off for this browser session.');
-  }
-
-  async function confirmPreview(entry: StudioTranscriptEntry) {
-    if (!entry.response.confirmToken) return;
-    await runCommand(entry.command, entry.response.confirmToken);
-  }
-
-  if (loading || !session) {
-    return <div className="min-h-screen" style={{ background: 'var(--bg)' }} />;
+  if (loading) {
+    return <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }} />;
   }
 
   return (
-    <div className="min-h-screen bg-grid" style={{ background: 'var(--bg)' }}>
-      {/* Nav */}
-      <nav className="sticky top-0 z-50" style={{ background: 'rgba(3,3,10,0.92)', borderBottom: '1px solid var(--border)', backdropFilter: 'blur(16px)' }}>
-        <div className="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></Link>
-            <span className="badge badge-accent">Studio</span>
-            <span className="text-xs font-mono hidden sm:block" style={{ color: 'var(--text-dim)' }}>v6 Public Launch</span>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
+      <Nav activePath="/studio" />
+      <div className="studio-shell">
+        <aside className="studio-sidebar">
+          <div className="studio-section-title">Workspace</div>
+          <div className="studio-workspace">
+            <div className="font-mono text-sm">{selectedWorkspace?.name ?? 'AgentOS Workspace'}</div>
+            <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{session?.planLabel ?? 'Retail Free'} - free for now</div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Mode toggle */}
-            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+
+          <div className="studio-section-title">Sessions</div>
+          <button type="button" className="studio-new-session" onClick={() => void createSession()} disabled={busy || workspaces.length === 0}>+ New session</button>
+          <div className="studio-list">
+            {sessions.map(item => (
               <button
+                key={item.id}
                 type="button"
-                onClick={() => setMode('nl')}
-                className="px-2.5 py-1.5 text-xs font-medium transition-colors"
-                style={mode === 'nl' ? { background: 'rgba(139,92,246,0.25)', color: '#c084fc' } : { color: 'var(--text-muted)' }}
+                onClick={() => {
+                  setSelectedSessionId(item.id);
+                  void loadBundle(item.id);
+                }}
+                className="studio-session-button"
+                style={item.id === selectedSession?.id ? { borderColor: 'var(--accent)', color: 'var(--text-primary)' } : {}}
               >
-                <span className="sm:hidden">NL</span>
-                <span className="hidden sm:inline">Natural Language</span>
+                <span>{item.title}</span>
+                <small>{timeLabel(item.updatedAt)}</small>
               </button>
-              <button
-                type="button"
-                onClick={() => setMode('advanced')}
-                className="px-2.5 py-1.5 text-xs font-medium transition-colors"
-                style={mode === 'advanced' ? { background: 'rgba(139,92,246,0.25)', color: '#c084fc' } : { color: 'var(--text-muted)' }}
-              >
-                <span className="sm:hidden">Adv</span>
-                <span className="hidden sm:inline">Advanced</span>
-              </button>
+            ))}
+          </div>
+
+          <div className="studio-section-title">Projects</div>
+          <div className="studio-mini-list">
+            {workflows.slice(0, 5).map(workflow => <span key={workflow.id}>{workflow.name}</span>)}
+            {workflows.length === 0 && <span>No workflows yet</span>}
+          </div>
+        </aside>
+
+        <main className="studio-main">
+          <div className="studio-header">
+            <div>
+              <div className="studio-eyebrow">NL Studio Terminal</div>
+              <h1>{selectedSession?.title ?? 'AgentOS Studio'}</h1>
             </div>
-            <Link href="/dashboard" className="btn-outline text-xs px-3 py-1.5 rounded-lg">Dashboard</Link>
+            <div className="studio-status">
+              <span>Super AgentOS</span>
+              <strong>active</strong>
+            </div>
           </div>
-        </div>
-      </nav>
 
-      <div className="max-w-7xl mx-auto px-5 py-8 grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.9fr)]">
-
-        {/* ── Left column: mode-dependent main panel ── */}
-        <div className="space-y-6">
-          {mode === 'nl' ? (
-            <section className="card p-6">
-              <div className="mb-5">
-                <div className="badge badge-accent mb-2">Natural Language</div>
-                <h2 className="text-xl font-black">Describe your workflow</h2>
-                <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                  Tell the agent what you want to accomplish. It will plan the steps, show you a preview, then execute on confirm.
-                </p>
+          <div className="studio-transcript">
+            {messages.length === 0 && (
+              <div className="studio-empty">
+                <h2>Start with Super AgentOS</h2>
+                <p>Ask for a workflow, a private research subagent, a skill install, a vault action, or a run. Studio will persist the conversation and backend events.</p>
               </div>
-              <NLModePanel />
-            </section>
-          ) : (
-            <section className="card overflow-hidden">
-              <div className="terminal-header justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="terminal-dot" style={{ background: '#ef4444' }} />
-                  <div className="terminal-dot" style={{ background: '#f59e0b' }} />
-                  <div className="terminal-dot" style={{ background: '#22c55e' }} />
-                  <span className="ml-3 text-xs" style={{ color: 'var(--text-dim)' }}>studio.agentos</span>
-                </div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Ctrl+Enter to run</div>
+            )}
+            {messages.map(message => (
+              <div key={message.id} className={`studio-message ${message.role}`}>
+                <div className="studio-message-meta">{message.role} · {timeLabel(message.createdAt)}</div>
+                <div className="studio-message-body">{message.content}</div>
               </div>
-
-              <div className="p-4 space-y-4">
-                <div className="terminal min-h-[440px] max-h-[440px] overflow-y-auto">
-                  <div className="p-4 space-y-4">
-                    {history.length === 0 && (
-                      <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                        Run <code>help</code> to see the guided Studio commands.
+            ))}
+            {pendingPlan && (
+              <div className={`studio-plan ${pendingPlan.blocked ? 'blocked' : ''}`}>
+                <div className="studio-message-meta">{pendingPlan.blocked ? 'gated response' : 'plan preview'}</div>
+                <p>{pendingPlan.summary}</p>
+                {pendingPlan.steps.length > 0 && (
+                  <div className="studio-plan-steps">
+                    {pendingPlan.steps.map(step => (
+                      <div key={step.order}>
+                        <code>{step.tool.replace(/^agentos\./, '')}</code>
+                        <span>{step.description}</span>
                       </div>
-                    )}
-                    {history.map(entry => (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        onClick={() => setSelectedId(entry.id)}
-                        className="w-full text-left rounded-xl p-3 transition-all"
-                        style={selectedEntry?.id === entry.id
-                          ? { background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.28)' }
-                          : { background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}
-                      >
-                        <div className="flex items-center justify-between gap-3 mb-2">
-                          <code className="text-xs break-all" style={{ color: '#c084fc' }}>{entry.command}</code>
-                          <KindBadge kind={entry.response.kind} />
-                        </div>
-                        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{entry.response.summary}</div>
-                      </button>
                     ))}
                   </div>
-                </div>
-
-                <div className="space-y-3">
-                  <textarea
-                    value={command}
-                    onChange={(event) => setCommand(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                        event.preventDefault();
-                        void runCommand();
-                      }
-                    }}
-                    rows={5}
-                    className="input-dark font-mono text-xs"
-                    placeholder="help"
-                  />
-                  <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={() => void runCommand()} disabled={submitting} className="btn-primary px-4 py-2 rounded-lg">
-                      {submitting ? 'Running...' : 'Run command'}
-                    </button>
-                    <button type="button" onClick={() => setCommand('help')} className="btn-outline px-4 py-2 rounded-lg">Reset</button>
-                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>Mutating commands show a preview before executing.</div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* Workflow library (always visible) */}
-          <section className="card p-5 space-y-4">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Saved</div>
-              <div className="text-lg font-black mt-1">Workflow library</div>
-            </div>
-            <WorkflowLibrary />
-          </section>
-        </div>
-
-        {/* ── Right column ── */}
-        <div className="space-y-6">
-
-          {/* Execution panel (advanced mode only) */}
-          {mode === 'advanced' && (
-            <section className="card p-5 space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Preview / Result</div>
-                  <div className="text-lg font-black mt-1">Execution panel</div>
-                </div>
-                {selectedEntry && <KindBadge kind={selectedEntry.response.kind} />}
-              </div>
-
-              {!selectedEntry && (
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Select a command from the transcript or run a new one to inspect its preview and result.
-                </p>
-              )}
-
-              {selectedEntry && (
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)' }}>Command</div>
-                    <div className="terminal p-3 text-xs break-all" style={{ color: '#c084fc' }}>{selectedEntry.command}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)' }}>Summary</div>
-                    <p className="text-sm">{selectedEntry.response.summary}</p>
-                  </div>
-                  {selectedEntry.response.preview && (
-                    <div className="rounded-xl p-4" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.22)' }}>
-                      <div className="text-sm font-semibold mb-2">{selectedEntry.response.preview.action}</div>
-                      {selectedEntry.response.preview.target && (
-                        <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Target: {selectedEntry.response.preview.target}</div>
-                      )}
-                      {selectedEntry.response.preview.payloadSummary && (
-                        <pre className="terminal p-3 text-xs whitespace-pre-wrap break-all" style={{ color: '#fcd34d' }}>
-                          {selectedEntry.response.preview.payloadSummary}
-                        </pre>
-                      )}
-                      {selectedEntry.response.preview.risks && selectedEntry.response.preview.risks.length > 0 && (
-                        <ul className="mt-3 text-xs space-y-1" style={{ color: '#fcd34d' }}>
-                          {selectedEntry.response.preview.risks.map(risk => <li key={risk}>- {risk}</li>)}
-                        </ul>
-                      )}
-                      {selectedEntry.response.confirmToken && (
-                        <button type="button" onClick={() => void confirmPreview(selectedEntry)} disabled={submitting} className="btn-primary mt-4 px-4 py-2 rounded-lg">
-                          {submitting ? 'Confirming...' : 'Confirm and execute'}
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {selectedEntry.response.result !== undefined && (
-                    <div>
-                      <div className="flex items-center justify-between gap-3 mb-1">
-                        <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Result</div>
-                        <CopyButton text={formatResult(selectedEntry.response.result)} />
-                      </div>
-                      <pre className="terminal p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all" style={{ color: '#94a3b8' }}>
-                        {formatResult(selectedEntry.response.result)}
-                      </pre>
-                    </div>
-                  )}
-                  {selectedEntry.response.snippet && (
-                    <div>
-                      <div className="flex items-center justify-between gap-3 mb-1">
-                        <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Snippet</div>
-                        <CopyButton text={selectedEntry.response.snippet} />
-                      </div>
-                      <pre className="terminal p-3 text-xs overflow-x-auto whitespace-pre-wrap" style={{ color: '#86efac' }}>
-                        {selectedEntry.response.snippet}
-                      </pre>
-                    </div>
-                  )}
-                  {selectedEntry.response.warnings && selectedEntry.response.warnings.length > 0 && (
-                    <div className="p-4" style={{ background: 'rgba(255,170,0,0.06)', border: '1px solid rgba(255,170,0,0.2)' }}>
-                      <div className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--warning)' }}>Warnings</div>
-                      <ul className="text-xs space-y-1" style={{ color: '#a5f3fc' }}>
-                        {selectedEntry.response.warnings.map(warning => <li key={warning}>- {warning}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* Agent workspace */}
-          <section className="card p-5 space-y-4">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Context</div>
-              <div className="text-lg font-black mt-1">Agent workspace</div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl p-4 col-span-2" style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.22)' }}>
-                <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Agent</div>
-                <div className="text-sm font-semibold mt-2 break-all">{agentDisplayName}</div>
-              </div>
-              <div className="p-4" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
-                <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Skills</div>
-                <div className="text-2xl font-black mt-2">{context.installedSkillCount}</div>
-              </div>
-              <div className="rounded-xl p-4" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.22)' }}>
-                <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Tools</div>
-                <div className="text-2xl font-black mt-2">{context.toolCount}</div>
-              </div>
-            </div>
-
-            {mode === 'advanced' && (
-              <div className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <div className="text-sm font-semibold">Advanced sandbox</div>
-                  <button type="button" onClick={advancedEnabled ? disableAdvancedMode : () => setShowAdvancedModal(true)} className="btn-outline text-xs px-3 py-1.5 rounded-lg">
-                    {advancedEnabled ? 'Disable' : 'Enable'}
+                )}
+                {pendingPlan.confirmToken && (
+                  <button type="button" className="btn-primary" onClick={() => void confirmPlan()} disabled={busy}>
+                    {busy ? 'Running...' : 'Confirm and run'}
                   </button>
-                </div>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Exposes <code>proc_execute</code> for 15 minutes in this browser session.
-                </p>
-                {sessionNotice && <div className="text-xs mt-2" style={{ color: '#67e8f9' }}>{sessionNotice}</div>}
+                )}
               </div>
             )}
+          </div>
 
-            {mode === 'advanced' && (
-              <div>
-                <div className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>Quick templates</div>
-                <div className="space-y-2">
-                  {STUDIO_COMMAND_DEFINITIONS.map(definition => (
-                    <button
-                      key={definition.command}
-                      type="button"
-                      onClick={() => setCommand(definition.command)}
-                      className="w-full rounded-xl p-3 text-left transition-all"
-                      style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}
-                    >
-                      <div className="flex items-center justify-between gap-3 mb-1">
-                        <div className="text-sm font-semibold">{definition.title}</div>
-                        {definition.requiresAdvancedMode
-                          ? <span className="badge badge-amber">advanced</span>
-                          : <span className={definition.mutating ? 'badge badge-warning' : 'badge badge-accent'}>{definition.mutating ? 'preview' : 'read-only'}</span>}
-                      </div>
-                      <code className="block text-xs mb-1" style={{ color: '#c084fc' }}>{definition.command}</code>
-                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{definition.description}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
+          <div className="studio-events">
+            {events.slice(-8).map(event => {
+              const tone = eventTone(event.type);
+              return (
+                <span key={event.id} style={{ background: tone.bg, color: tone.color, borderColor: tone.border }}>
+                  {event.type}
+                </span>
+              );
+            })}
+          </div>
 
-          {/* Kernel status */}
-          <section className="card p-5 space-y-4">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>SDK</div>
-              <div className="text-lg font-black mt-1">Connected products</div>
-              <div className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>Auto-refreshes every 15s</div>
-            </div>
-            <KernelStatusPanel />
-          </section>
-        </div>
-      </div>
+          {notice && <div className="studio-notice">{notice}</div>}
 
-      {/* Advanced mode modal */}
-      {showAdvancedModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-5" style={{ background: 'rgba(2,6,23,0.76)' }}>
-          <div className="card max-w-xl w-full p-6 space-y-4">
-            <div>
-              <div className="badge badge-amber mb-3">Advanced sandbox mode</div>
-              <h2 className="text-2xl font-black mb-2">Enable advanced execution?</h2>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                This exposes the sandboxed <code>proc_execute</code> path inside Studio for 15 minutes in this browser session. No raw host shell is exposed.
-              </p>
-            </div>
-            <ul className="text-sm space-y-2" style={{ color: 'var(--text-muted)' }}>
-              <li>- Code still runs with timeout and output limits.</li>
-              <li>- Use this for deliberate debugging, not routine production workflows.</li>
-            </ul>
-            <div className="flex items-center justify-end gap-3">
-              <button type="button" onClick={() => setShowAdvancedModal(false)} className="btn-outline px-4 py-2 rounded-lg">Cancel</button>
-              <button type="button" onClick={enableAdvancedMode} className="btn-primary px-4 py-2 rounded-lg">I understand, enable it</button>
+          <div className="studio-input">
+            <textarea
+              value={prompt}
+              onChange={event => setPrompt(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  void sendPrompt();
+                }
+              }}
+              placeholder='Create a workflow that researches tokens on Base and summarizes risk.'
+              rows={3}
+            />
+            <div className="studio-input-actions">
+              <button type="button" onClick={() => setPrompt('Create a private research subagent.')}>Subagent</button>
+              <button type="button" onClick={() => setPrompt('Install a market data skill.')}>Skill</button>
+              <button type="button" onClick={() => setPanel('vault')}>Vault</button>
+              <button type="button" className="btn-primary" onClick={() => void sendPrompt()} disabled={busy || !prompt.trim()}>
+                {busy ? 'Working...' : 'Send'}
+              </button>
             </div>
           </div>
-        </div>
-      )}
+        </main>
+
+        <aside className="studio-panel">
+          <div className="studio-panel-tabs">
+            {visiblePanels.map(item => (
+              <button key={item} type="button" onClick={() => setPanel(item)} className={panel === item ? 'active' : ''}>
+                {item}
+              </button>
+            ))}
+          </div>
+
+                    {panel === 'workflow' && (
+            <div className="studio-panel-body">
+              <h2>Workflow Authoring</h2>
+              {workflows.length > 0 && (
+                <div className="studio-form" style={{ marginBottom: '10px' }}>
+                  <select
+                    value={selectedWorkflow?.id ?? ''}
+                    onChange={event => setSelectedWorkflowId(event.target.value)}
+                    className="input-dark"
+                  >
+                    {workflows.map(workflow => (
+                      <option key={workflow.id} value={workflow.id}>
+                        {workflow.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="studio-input-actions" style={{ justifyContent: 'flex-start' }}>
+                    <button type="button" onClick={() => setWorkflowMode('conversation')} style={workflowMode === 'conversation' ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}}>
+                      Conversation
+                    </button>
+                    <button type="button" onClick={() => setWorkflowMode('visual')} style={workflowMode === 'visual' ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}}>
+                      Visual
+                    </button>
+                    <button type="button" onClick={() => setWorkflowMode('code')} style={workflowMode === 'code' ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}}>
+                      Code
+                    </button>
+                  </div>
+                  {workflowMode === 'conversation' && (
+                    <textarea
+                      rows={8}
+                      className="input-dark"
+                      value={workflowStepsDraft}
+                      onChange={event => setWorkflowStepsDraft(event.target.value)}
+                      placeholder='[{"order":1,"tool":"agentos.net_http_get","description":"Fetch","input":{"url":"https://example.com"}}]'
+                    />
+                  )}
+                  {workflowMode === 'visual' && (
+                    <div className="visual-editor">
+                      <div className="visual-toolbar">
+                        <button type="button" onClick={() => addVisualNode()}>+ Node</button>
+                        <button type="button" onClick={() => setVisualEdges(createSequentialEdges(visualNodes))} disabled={visualNodes.length < 2}>
+                          Auto-connect
+                        </button>
+                        <button type="button" onClick={() => addVisualEdge()} disabled={visualNodes.length < 2}>
+                          + Edge
+                        </button>
+                      </div>
+
+                      <div className="visual-canvas">
+                        {visualNodes.map((node, index) => (
+                          <div key={node.id} className="visual-node-card">
+                            <div className="visual-node-head">
+                              <strong>{node.label || `Step ${index + 1}`}</strong>
+                            <div className="visual-node-actions">
+                                <button type="button" onClick={() => moveVisualNode(node.id, 'up')} disabled={index === 0}>up</button>
+                                <button type="button" onClick={() => moveVisualNode(node.id, 'down')} disabled={index === visualNodes.length - 1}>down</button>
+                                <button type="button" onClick={() => removeVisualNode(node.id)}>x</button>
+                              </div>
+                            </div>
+                            <input
+                              value={node.label}
+                              onChange={event => updateVisualNode(node.id, { label: event.target.value })}
+                              placeholder="Label"
+                            />
+                            <input
+                              value={node.tool}
+                              onChange={event => updateVisualNode(node.id, { tool: event.target.value })}
+                              placeholder="agentos.net_http_get"
+                            />
+                            <input
+                              value={node.description}
+                              onChange={event => updateVisualNode(node.id, { description: event.target.value })}
+                              placeholder="Description"
+                            />
+                            <textarea
+                              rows={3}
+                              value={node.inputText}
+                              onChange={event => updateVisualNode(node.id, { inputText: event.target.value })}
+                              placeholder='{"url":"https://example.com"}'
+                            />
+                          </div>
+                        ))}
+                        {visualNodes.length === 0 && (
+                          <div className="visual-empty">Add nodes to build a workflow graph.</div>
+                        )}
+                      </div>
+
+                      <div className="visual-edges">
+                        <div className="studio-section-title" style={{ margin: '8px 0' }}>Edges</div>
+                        {visualEdges.map(edge => (
+                          <div key={edge.id} className="visual-edge-row">
+                            <select value={edge.source} onChange={event => updateVisualEdge(edge.id, { source: event.target.value })}>
+                              {visualNodes.map(node => <option key={`${edge.id}-src-${node.id}`} value={node.id}>{node.label || node.id}</option>)}
+                            </select>
+                            <span>{'->'}</span>
+                            <select value={edge.target} onChange={event => updateVisualEdge(edge.id, { target: event.target.value })}>
+                              {visualNodes.map(node => <option key={`${edge.id}-tgt-${node.id}`} value={node.id}>{node.label || node.id}</option>)}
+                            </select>
+                            <input
+                              value={edge.condition}
+                              onChange={event => updateVisualEdge(edge.id, { condition: event.target.value })}
+                              placeholder="condition (optional)"
+                            />
+                            <button type="button" onClick={() => removeVisualEdge(edge.id)}>x</button>
+                          </div>
+                        ))}
+                        {visualEdges.length === 0 && <p>No edges yet.</p>}
+                      </div>
+                    </div>
+                  )}
+                  {workflowMode === 'code' && (
+                    <textarea
+                      rows={10}
+                      className="input-dark"
+                      value={workflowCodeDraft}
+                      onChange={event => setWorkflowCodeDraft(event.target.value)}
+                      placeholder='{"version":"1.0.0","steps":[...],"graph":{"nodes":[],"edges":[]}}'
+                    />
+                  )}
+                  <div className="studio-input-actions" style={{ justifyContent: 'flex-start' }}>
+                    <button type="button" className="btn-primary" disabled={workflowBusy || !selectedWorkflow} onClick={() => void saveWorkflowMode(workflowMode)}>
+                      {workflowBusy ? 'Saving...' : 'Save'}
+                    </button>
+                    <button type="button" disabled={workflowBusy || !selectedWorkflow} onClick={() => selectedWorkflow && void runWorkflow(selectedWorkflow.id)}>
+                      Run
+                    </button>
+                    {selectedWorkflow?.last_error && (
+                      <button type="button" disabled={workflowBusy} onClick={() => selectedWorkflow && void runWorkflow(selectedWorkflow.id)}>
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {workflows.map(workflow => (
+                <div
+                  key={workflow.id}
+                  className="studio-row"
+                  style={workflow.id === selectedWorkflow?.id ? { borderColor: 'var(--accent)' } : {}}
+                >
+                  <strong>{workflow.name}</strong>
+                  <span>{workflow.status}{workflow.schedule ? ` · ${workflow.schedule}` : ''}{typeof workflow.version === 'number' ? ` · v${workflow.version}` : ''}</span>
+                  {workflow.last_error && <em>{workflow.last_error}</em>}
+                </div>
+              ))}
+              {workflows.length === 0 && <p>No saved workflows yet.</p>}
+            </div>
+          )}
+
+          {panel === 'code' && (
+            <div className="studio-panel-body">
+              <h2>Code View</h2>
+              <JsonBlock value={selectedWorkflow?.canonical_doc ?? selectedSession?.state?.workflowCode ?? selectedSession?.state ?? {}} />
+            </div>
+          )}
+
+          {panel === 'subagents' && (
+            <div className="studio-panel-body">
+              <h2>Subagents</h2>
+              <div className="studio-form">
+                <input value={subagentDraft.name} onChange={event => setSubagentDraft(prev => ({ ...prev, name: event.target.value }))} placeholder="Private research subagent" />
+                <input value={subagentDraft.description} onChange={event => setSubagentDraft(prev => ({ ...prev, description: event.target.value }))} placeholder="Purpose" />
+                <textarea value={subagentDraft.instructions} onChange={event => setSubagentDraft(prev => ({ ...prev, instructions: event.target.value }))} placeholder="Instructions" rows={3} />
+                <button type="button" className="btn-primary" onClick={() => void createSubagent()} disabled={busy || !subagentDraft.name.trim()}>Create</button>
+              </div>
+              {subagents.map(item => (
+                <div key={item.id} className="studio-row">
+                  <strong>{item.name}</strong>
+                  <span>{item.description ?? 'Private execution worker'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {panel === 'skills' && (
+            <div className="studio-panel-body">
+              <h2>Skills</h2>
+              {installedSkills.map((item, index) => {
+                const skill = (item.skill ?? item) as Record<string, unknown>;
+                return (
+                  <div key={String(item.id ?? index)} className="studio-row">
+                    <strong>{String(skill.name ?? 'Installed skill')}</strong>
+                    <span>{String(skill.category ?? 'Capability')}</span>
+                  </div>
+                );
+              })}
+              {installedSkills.length === 0 && <p>No installed skills yet.</p>}
+            </div>
+          )}
+
+          {panel === 'vault' && (
+            <div className="studio-panel-body">
+              <h2>Secrets Vault</h2>
+              <div className="studio-form">
+                <input value={secretDraft.name} onChange={event => setSecretDraft(prev => ({ ...prev, name: event.target.value.toUpperCase() }))} placeholder="OPENAI_API_KEY" />
+                <input value={secretDraft.value} onChange={event => setSecretDraft(prev => ({ ...prev, value: event.target.value }))} placeholder="Secret value" type="password" />
+                <button type="button" className="btn-primary" onClick={() => void saveSecret()} disabled={busy || !secretDraft.name || !secretDraft.value}>Save secret</button>
+              </div>
+              {vaultSecrets.map(secret => (
+                <div key={secret.id} className="studio-row">
+                  <strong>{secret.name}</strong>
+                  <span>{secret.maskedValue} · v{secret.version}</span>
+                </div>
+              ))}
+              {vaultSecrets.length === 0 && <p>No secrets stored.</p>}
+            </div>
+          )}
+
+          {(panel === 'artifacts' || panel === 'runs' || panel === 'versions') && (
+            <div className="studio-panel-body">
+              <h2>{panel}</h2>
+              <JsonBlock value={panel === 'runs' ? workflows.map(item => ({ name: item.name, result: item.last_result, error: item.last_error })) : selectedSession?.state?.[panel] ?? []} />
+            </div>
+          )}
+
+          {panel === 'app' && canUseDeveloperConsole && (
+            <div className="studio-panel-body">
+              <h2>App Metadata</h2>
+              <p>Enterprise SDK-backed app creation is available through Developer Console and remains hidden from retail accounts.</p>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      <style>{`
+        .studio-shell { display: grid; grid-template-columns: 260px minmax(0, 1fr) 360px; min-height: calc(100vh - 56px); border-top: 1px solid var(--border); }
+        .studio-sidebar, .studio-panel { background: rgba(255,255,255,0.015); border-right: 1px solid var(--border); padding: 18px; overflow: auto; }
+        .studio-panel { border-right: 0; border-left: 1px solid var(--border); }
+        .studio-section-title, .studio-eyebrow { font: 700 10px var(--font-mono), monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin: 18px 0 8px; }
+        .studio-workspace, .studio-row, .studio-plan { border: 1px solid var(--border); background: rgba(255,255,255,0.025); padding: 12px; }
+        .studio-list, .studio-mini-list, .studio-panel-body, .studio-form { display: flex; flex-direction: column; gap: 8px; }
+        .studio-mini-list span, .studio-row span, .studio-panel-body p { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+        .studio-row strong { display: block; color: var(--text-primary); font-size: 13px; margin-bottom: 4px; }
+        .studio-row em { display: block; color: #fca5a5; font-size: 12px; margin-top: 4px; font-style: normal; }
+        .studio-session-button, .studio-new-session { width: 100%; text-align: left; border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-secondary); padding: 10px; cursor: pointer; }
+        .studio-session-button span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .studio-session-button small { color: var(--text-tertiary); font-size: 11px; }
+        .studio-main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto auto; min-width: 0; }
+        .studio-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+        .studio-header h1 { margin: 0; font-size: 18px; color: var(--text-primary); }
+        .studio-status { display: flex; gap: 8px; align-items: center; color: var(--text-secondary); font-size: 12px; }
+        .studio-status strong { color: #86efac; }
+        .studio-transcript { padding: 22px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+        .studio-empty { max-width: 620px; color: var(--text-secondary); }
+        .studio-empty h2 { color: var(--text-primary); margin: 0 0 8px; font-size: 18px; }
+        .studio-message { max-width: 780px; border: 1px solid var(--border); padding: 12px 14px; background: rgba(255,255,255,0.025); }
+        .studio-message.user { align-self: flex-end; background: rgba(0,255,136,0.05); border-color: rgba(0,255,136,0.22); }
+        .studio-message-meta { color: var(--text-tertiary); font: 700 10px var(--font-mono), monospace; text-transform: uppercase; margin-bottom: 6px; }
+        .studio-message-body { white-space: pre-wrap; color: var(--text-primary); font-size: 14px; line-height: 1.6; }
+        .studio-plan { max-width: 780px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(34,197,94,0.22); }
+        .studio-plan.blocked { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.06); }
+        .studio-plan p { margin: 0; color: var(--text-primary); font-size: 14px; line-height: 1.5; }
+        .studio-plan-steps { display: flex; flex-direction: column; gap: 6px; }
+        .studio-plan-steps div { display: grid; grid-template-columns: 140px minmax(0,1fr); gap: 10px; color: var(--text-secondary); font-size: 12px; }
+        .studio-plan-steps code { color: var(--accent); overflow: hidden; text-overflow: ellipsis; }
+        .studio-events { border-top: 1px solid var(--border); padding: 8px 22px; display: flex; gap: 6px; overflow-x: auto; }
+        .studio-events span { border: 1px solid; padding: 4px 8px; font: 700 10px var(--font-mono), monospace; white-space: nowrap; }
+        .studio-notice { margin: 8px 22px 0; border: 1px solid rgba(245,158,11,0.26); color: #fcd34d; background: rgba(245,158,11,0.08); padding: 10px 12px; font-size: 13px; }
+        .studio-input { border-top: 1px solid var(--border); padding: 14px 22px 18px; display: flex; flex-direction: column; gap: 10px; }
+        .studio-input textarea, .studio-form input, .studio-form textarea, .studio-form select { width: 100%; background: rgba(0,0,0,0.35); border: 1px solid var(--border); color: var(--text-primary); padding: 10px 12px; outline: none; resize: vertical; }
+        .studio-input-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .studio-input-actions button, .studio-panel-tabs button { border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-secondary); padding: 8px 10px; cursor: pointer; font-size: 12px; }
+        .studio-panel-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .studio-panel-tabs button.active { color: var(--accent); border-color: var(--accent); background: rgba(0,255,136,0.06); }
+        .studio-panel-body h2 { margin: 0 0 10px; font-size: 15px; color: var(--text-primary); text-transform: capitalize; }
+        .visual-editor { border: 1px solid var(--border); background: rgba(255,255,255,0.02); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+        .visual-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+        .visual-toolbar button { border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-secondary); padding: 6px 8px; font-size: 12px; cursor: pointer; }
+        .visual-canvas { display: flex; flex-direction: column; gap: 8px; }
+        .visual-node-card { border: 1px solid var(--border); background: rgba(0,0,0,0.24); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+        .visual-node-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .visual-node-head strong { color: var(--text-primary); font-size: 12px; }
+        .visual-node-actions { display: flex; gap: 4px; }
+        .visual-node-actions button { border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-secondary); padding: 2px 6px; font-size: 11px; cursor: pointer; }
+        .visual-empty { border: 1px dashed var(--border); color: var(--text-tertiary); padding: 12px; font-size: 12px; }
+        .visual-edges { display: flex; flex-direction: column; gap: 8px; }
+        .visual-edge-row { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) minmax(0,1fr) auto; gap: 6px; align-items: center; }
+        .visual-edge-row span { color: var(--text-tertiary); font-size: 12px; text-align: center; }
+        .visual-edge-row button { border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-secondary); padding: 5px 8px; font-size: 11px; cursor: pointer; }
+        @media (max-width: 1100px) { .studio-shell { grid-template-columns: 220px minmax(0, 1fr); } .studio-panel { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--border); } }
+        @media (max-width: 720px) { .studio-shell { display: flex; flex-direction: column; } .studio-sidebar { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--border); } .studio-header, .studio-input { padding-left: 14px; padding-right: 14px; } .studio-transcript { padding: 14px; } .studio-message, .studio-plan { max-width: 100%; } .studio-plan-steps div, .visual-edge-row { grid-template-columns: 1fr; } }
+      `}</style>
     </div>
   );
 }
+
+
+

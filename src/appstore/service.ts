@@ -33,6 +33,9 @@ export type PublishAgentAppInput = {
   manifest?: unknown;
   defaultConfig?: unknown;
   published?: unknown;
+  permissionsRequired?: unknown;
+  requiredSecrets?: unknown;
+  publishState?: string;
 };
 
 export type AgentAppPackage = {
@@ -70,6 +73,9 @@ type DbAgentAppRow = {
   device_targets?: unknown;
   manifest?: unknown;
   default_config?: unknown;
+  permissions_required?: unknown;
+  required_secrets?: unknown;
+  publish_state?: unknown;
   install_count?: unknown;
   verified?: unknown;
   published?: unknown;
@@ -280,12 +286,24 @@ export async function publishAgentApp(input: PublishAgentAppInput): Promise<Agen
     createdAt: now,
     updatedAt: now,
   };
+  const publishState = input.publishState && ['draft', 'submitted', 'published', 'rejected'].includes(input.publishState)
+    ? input.publishState
+    : app.published
+      ? 'published'
+      : 'draft';
+  const permissionsRequired = stringArray(input.permissionsRequired, []);
+  const requiredSecrets = stringArray(input.requiredSecrets, []);
 
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('agent_apps')
-      .insert(toDbPayload(app))
+      .insert({
+        ...toDbPayload(app),
+        publish_state: publishState,
+        permissions_required: permissionsRequired,
+        required_secrets: requiredSecrets,
+      })
       .select()
       .single();
 
@@ -363,6 +381,54 @@ export async function recordAgentAppDownload(slug: string): Promise<void> {
     const app = state.agentApps.catalog.find(item => item.slug === normalizedSlug);
     if (app) app.installCount += 1;
   });
+}
+
+export async function installAgentApp(params: {
+  agentId: string;
+  slug: string;
+  workspaceId?: string | null;
+}): Promise<{ app: AgentAppListing; installation: Record<string, unknown> }> {
+  const app = await getAgentAppBySlug(params.slug, { includePrivate: false });
+  if (!app) throw new ValidationError('App not found or not published');
+
+  const now = new Date().toISOString();
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('app_installations')
+      .upsert({
+        id: randomUUID(),
+        app_id: app.id,
+        agent_id: params.agentId,
+        workspace_id: params.workspaceId ?? null,
+        status: 'active',
+        installed_at: now,
+        updated_at: now,
+      }, { onConflict: 'app_id,agent_id' })
+      .select('*')
+      .single();
+
+    if (error) throw new Error(error.message);
+    await recordAgentAppDownload(app.slug);
+    return {
+      app,
+      installation: (data as Record<string, unknown>) ?? {},
+    };
+  } catch {
+    await recordAgentAppDownload(app.slug);
+    return {
+      app,
+      installation: {
+        id: randomUUID(),
+        app_id: app.id,
+        agent_id: params.agentId,
+        workspace_id: params.workspaceId ?? null,
+        status: 'active',
+        installed_at: now,
+        updated_at: now,
+      },
+    };
+  }
 }
 
 export function buildAgentAppPackage(app: AgentAppListing): AgentAppPackage {

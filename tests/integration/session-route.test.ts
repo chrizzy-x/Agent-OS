@@ -12,7 +12,10 @@ describe('session routes', () => {
     mockSupabase.from.mockReturnValue({
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'agent-1', name: 'Agent One' }, error: null }),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { id: 'agent-1', name: 'Agent One', tier: 'retail_pro', metadata: { plan: 'retail_pro' } },
+        error: null,
+      }),
     });
   });
 

@@ -3,6 +3,7 @@ import { createAgentToken } from '@/src/auth/agent-identity';
 import { setAgentSessionCookie } from '@/src/auth/session-cookie';
 import { verifyPassword } from '@/src/auth/password';
 import { findAccountsByEmail } from '@/src/auth/agent-store';
+import { hasCapability } from '@/src/auth/capabilities';
 
 export const runtime = 'nodejs';
 
@@ -70,11 +71,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const canIssueBearerToken = hasCapability(account.metadata.plan, 'use_bearer_token');
   const response = NextResponse.json({
     success: true,
     credentials: {
-      bearerToken,
-      apiKey: bearerToken,
+      bearerToken: canIssueBearerToken ? bearerToken : null,
+      apiKey: canIssueBearerToken ? bearerToken : null,
       agentName: account.name,
       expiresIn: '90 days',
     },

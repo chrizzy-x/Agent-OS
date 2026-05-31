@@ -1,6 +1,9 @@
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { AuthError, PermissionError } from '../utils/errors.js';
 import type { AgentContext } from './permissions.js';
+import type { Capability } from './capabilities.js';
+import { assertCapability } from './capabilities.js';
+import { ROUTE_CAPABILITY_POLICY, type RoutePolicyKey } from './route-policy.js';
 import { extractBearerToken, verifyAgentToken, verifyAgentTokenWithTier } from './agent-identity.js';
 import { extractSessionTokenFromCookie } from './session-cookie.js';
 import { getAdminToken, getCronSecret } from '../config/env.js';
@@ -32,6 +35,22 @@ export async function requireAgentContextWithTier(headers: Headers | globalThis.
     throw new AuthError('Authorization bearer token required');
   }
   return verifyAgentTokenWithTier(token);
+}
+
+export async function requireAgentCapability(
+  headers: Headers | globalThis.Headers,
+  capability: Capability,
+): Promise<AgentContext> {
+  const context = await requireAgentContextWithTier(headers);
+  assertCapability(context.tier, capability);
+  return context;
+}
+
+export async function requireRouteCapability(
+  headers: Headers | globalThis.Headers,
+  route: RoutePolicyKey,
+): Promise<AgentContext> {
+  return requireAgentCapability(headers, ROUTE_CAPABILITY_POLICY[route]);
 }
 
 export function hasAgentAccess(headers: Headers | globalThis.Headers): boolean {

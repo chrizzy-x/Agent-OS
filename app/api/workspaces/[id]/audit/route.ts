@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
-import { getWorkspaceAudit } from '@/src/workspaces/service';
+import { assertWorkspaceMembership, getWorkspaceAudit } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -23,8 +23,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    requireAgentContext(request.headers);
+    const agentContext = requireAgentContext(request.headers);
     const { id } = await params;
+    await assertWorkspaceMembership(id, agentContext.agentId);
     const audit = await getWorkspaceAudit(id);
     return NextResponse.json({ audit: audit.map(toPublicAuditEntry) });
   } catch (error: unknown) {

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireAgentContextWithTier } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { isValidTier } from '@/src/auth/tiers';
-import { TIER_QUOTAS } from '@/src/auth/tiers';
+import { isValidTier, normalizePlan, TIER_QUOTAS } from '@/src/auth/tiers';
+import { getPlanDescriptor } from '@/src/auth/capabilities';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -13,23 +13,29 @@ export const runtime = 'nodejs';
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
-    const ctx = requireAgentContext(req.headers);
+    const ctx = await requireAgentContextWithTier(req.headers);
     const supabase = getSupabaseAdmin();
 
     const { data, error } = await supabase
       .from('agents')
-      .select('id, name, tier, created_at')
+      .select('id, name, tier, metadata, created_at')
       .eq('id', ctx.agentId)
       .maybeSingle();
 
     if (error) throw new Error(`Failed to load agent: ${error.message}`);
 
-    const tier = data && isValidTier(data.tier) ? data.tier : 'free';
+    const metadata = (data?.metadata as Record<string, unknown> | null | undefined) ?? {};
+    const tier = isValidTier(metadata.plan) ? normalizePlan(metadata.plan) : normalizePlan(data?.tier ?? ctx.tier);
     const quotas = TIER_QUOTAS[tier];
+    const plan = getPlanDescriptor(tier);
 
     return NextResponse.json({
       name: data?.name ?? null,
       tier,
+      plan: plan.plan,
+      planLabel: plan.label,
+      accountType: plan.enterprise ? 'enterprise' : 'retail',
+      capabilities: plan.capabilities,
       quotas,
       createdAt: data?.created_at ?? null,
     });

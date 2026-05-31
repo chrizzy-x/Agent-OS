@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findAccountById } from '@/src/auth/agent-store';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
-import { hasAdminAccess, requireAgentContext, requireAgentContextWithTier } from '@/src/auth/request';
-import { isEnterpriseTier } from '@/src/auth/tiers';
+import { hasAdminAccess, requireAgentContext, requireRouteCapability } from '@/src/auth/request';
 import { AGENT_APP_CATEGORIES } from '@/src/appstore/catalog';
 import { listAgentApps, publishAgentApp, updateAgentAppVisibility } from '@/src/appstore/service';
-import { PermissionError, ValidationError, toErrorResponse } from '@/src/utils/errors';
+import { ValidationError, toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
@@ -51,16 +50,13 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const agentCtx = await requireAgentContextWithTier(request.headers);
-    if (!isEnterpriseTier(agentCtx.tier)) {
-      throw new PermissionError('Enterprise subscription required to publish AgentOS apps');
-    }
+    const agentCtx = await requireRouteCapability(request.headers, 'apps.create');
 
     let body: Record<string, unknown>;
     try {
@@ -84,19 +80,22 @@ export async function POST(request: NextRequest) {
       manifest: body.manifest,
       defaultConfig: body.defaultConfig ?? body.default_config,
       published: typeof body.published === 'boolean' ? body.published : stringBodyValue(body, 'visibility', 'visibility') !== 'private',
+      permissionsRequired: body.permissions_required,
+      requiredSecrets: body.required_secrets,
+      publishState: typeof body.publish_state === 'string' ? body.publish_state : undefined,
     });
 
     return NextResponse.json({ success: true, app: omitAgentIdentifierFields(app) }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
     const canManageAll = hasAdminAccess(request.headers);
-    const agentCtx = canManageAll ? null : requireAgentContext(request.headers);
+    const agentCtx = canManageAll ? null : await requireRouteCapability(request.headers, 'apps.publish');
     let body: Record<string, unknown>;
     try {
       body = await request.json();
@@ -127,6 +126,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true, app: omitAgentIdentifierFields(app) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

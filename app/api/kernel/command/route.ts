@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 // POST /api/kernel/command
 export async function POST(req: NextRequest) {
   try {
-    const ctx = requireAgentContext(req.headers);
+    const ctx = await requireRouteCapability(req.headers, 'sdk.kernel');
 
     let body: { product?: string; command?: string; payload?: Record<string, unknown> };
     try { body = await req.json(); } catch {

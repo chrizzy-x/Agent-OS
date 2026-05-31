@@ -1,13 +1,16 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
+import { capabilityMessage, hasCapability } from '@/src/auth/capabilities';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
 import { registerExternalAgent } from '@/src/external-agents/service';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { callClaude, tokenSet, tokenGet, tokenDel, TOKEN_TTL_SECONDS } from '@/src/studio/planner';
+import { appendStudioEvent, appendStudioMessage } from '@/src/studio/persistence';
+import { syncWorkflowDocument } from '@/src/workflows/canonical';
 
 export const runtime = 'nodejs';
 
@@ -99,18 +102,57 @@ function findScheduledTaskId(results: unknown[]): string | null {
   return null;
 }
 
+function restrictedStudioCapability(instruction: string): 'access_sdk' | 'create_app' | 'create_skill' | null {
+  const lower = instruction.toLowerCase();
+  if (/\b(sdk|developer console|manifest|webhook|publishing panel)\b/.test(lower)) return 'access_sdk';
+  if (/\b(create|build|publish|submit|package|convert)\b.*\bapp\b/.test(lower) || /\bapp\b.*\b(create|publish|submit|manifest)\b/.test(lower)) return 'create_app';
+  if (/\b(create|build|publish|submit)\b.*\bskill\b/.test(lower) || /\bskill\b.*\b(create|publish|submit)\b/.test(lower)) return 'create_skill';
+  return null;
+}
+
+async function recordStudioTurn(agentId: string, sessionId: string | undefined, role: 'user' | 'assistant', content: string): Promise<void> {
+  if (!sessionId) return;
+  try {
+    await appendStudioMessage({ ownerAgentId: agentId, sessionId, role, content });
+  } catch {
+    // Persistence failure is surfaced by dedicated session APIs; do not block legacy Studio intent calls.
+  }
+}
+
+async function recordStudioEvent(agentId: string, sessionId: string | undefined, type: Parameters<typeof appendStudioEvent>[0]['type'], payload: Record<string, unknown>): Promise<void> {
+  if (!sessionId) return;
+  try {
+    await appendStudioEvent({ ownerAgentId: agentId, sessionId, type, payload });
+  } catch {
+    // Keep legacy intent endpoint compatible when Studio persistence is not attached.
+  }
+}
+
+async function resolveSessionWorkspaceId(agentId: string, sessionId: string | undefined): Promise<string | null> {
+  if (!sessionId) return null;
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('nl_studio_sessions')
+    .select('workspace_id')
+    .eq('id', sessionId)
+    .eq('owner_agent_id', agentId)
+    .maybeSingle();
+  if (error || !data || typeof data.workspace_id !== 'string') return null;
+  return data.workspace_id;
+}
+
 // POST /api/studio/intent
 export async function POST(req: NextRequest) {
   try {
-    const ctx = requireAgentContext(req.headers);
+    const ctx = await requireRouteCapability(req.headers, 'studio.intent');
     const studioCtx = withStudioDefaultAllowedDomains(ctx);
 
-    let body: { instruction?: string; confirm?: boolean; confirmToken?: string | null };
+    let body: { instruction?: string; confirm?: boolean; confirmToken?: string | null; sessionId?: string };
     try { body = await req.json(); } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const { instruction, confirm = false, confirmToken } = body;
+    const { instruction, confirm = false, confirmToken, sessionId } = body;
 
     // ── CONFIRM EXECUTION ───────────────────────────────────────────────────
     if (confirm && confirmToken) {
@@ -120,6 +162,7 @@ export async function POST(req: NextRequest) {
       const plan = JSON.parse(stored) as StoredPlan;
 
       if (plan.agentId !== ctx.agentId) return NextResponse.json({ error: 'Token mismatch' }, { status: 403 });
+      await recordStudioEvent(ctx.agentId, sessionId, 'task_started', { summary: plan.summary, stepCount: plan.steps.length });
 
       // Delete token immediately (one-time use)
       await tokenDel(`intent:token:${confirmToken}`);
@@ -148,6 +191,7 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        await recordStudioEvent(ctx.agentId, sessionId, 'task_progress', { step: step.order, tool: toolName });
         const result = await executeUniversalToolCall({
           agentContext: studioCtx,
           name: step.tool,
@@ -163,11 +207,21 @@ export async function POST(req: NextRequest) {
       let workflowId: string | null = null;
       if (shouldPersistWorkflow(plan)) {
         const supabase = getSupabaseAdmin();
+        const workflowSync = syncWorkflowDocument({
+          mode: 'conversation',
+          steps: plan.steps,
+          metadata: { source: 'studio_intent_confirmed_plan' },
+        });
+        const workspaceId = await resolveSessionWorkspaceId(ctx.agentId, sessionId);
         const { data: wf } = await supabase.from('agent_workflows').insert({
           agent_id: ctx.agentId,
+          workspace_id: workspaceId,
           name: plan.workflowName,
           summary: plan.summary,
-          steps: plan.steps,
+          steps: workflowSync.steps,
+          graph_state: workflowSync.graphState,
+          code_state: workflowSync.codeState,
+          canonical_doc: workflowSync.canonical,
           schedule: plan.schedule,
           task_id: taskId,
           last_result: answer ? { answer, results: publicResults } : { results: publicResults },
@@ -175,6 +229,9 @@ export async function POST(req: NextRequest) {
           status: 'active',
         }).select('id').single();
         workflowId = wf?.id ?? null;
+        if (workflowId) {
+          await recordStudioEvent(ctx.agentId, sessionId, 'workflow_created', { workflowId, name: plan.workflowName });
+        }
 
         if (workflowId && taskId) {
           await supabase
@@ -184,6 +241,9 @@ export async function POST(req: NextRequest) {
             .eq('agent_id', ctx.agentId);
         }
       }
+
+      await recordStudioEvent(ctx.agentId, sessionId, 'task_completed', { workflowId, schedule: plan.schedule });
+      if (answer) await recordStudioTurn(ctx.agentId, sessionId, 'assistant', answer);
 
       return NextResponse.json({
         executed: true,
@@ -199,15 +259,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'instruction is required' }, { status: 400 });
     }
 
-    const plan = await callClaude(instruction.trim());
+    const trimmedInstruction = instruction.trim();
+    await recordStudioTurn(ctx.agentId, sessionId, 'user', trimmedInstruction);
+    await recordStudioEvent(ctx.agentId, sessionId, 'thinking_started', { instruction: trimmedInstruction.slice(0, 180) });
+
+    const restricted = restrictedStudioCapability(trimmedInstruction);
+    if (restricted && !hasCapability(ctx.tier, restricted)) {
+      const summary = capabilityMessage(restricted);
+      const eventType = restricted === 'create_app'
+        ? 'app_creation_blocked'
+        : restricted === 'create_skill'
+          ? 'skill_creation_blocked'
+          : 'sdk_access_blocked';
+      await recordStudioEvent(ctx.agentId, sessionId, eventType, { capability: restricted });
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', summary);
+      return NextResponse.json({
+        summary,
+        steps: [],
+        schedule: null,
+        missingParams: [],
+        confirmToken: null,
+        requiresInput: false,
+        blocked: true,
+      }, { status: 403 });
+    }
+
+    const plan = await callClaude(trimmedInstruction);
 
     // Generate confirm token
     const token = crypto.randomUUID().replace(/-/g, '');
     await tokenSet(`intent:token:${token}`, TOKEN_TTL_SECONDS, JSON.stringify({
       ...plan,
-      workflowName: instruction.trim().slice(0, 80),
+      workflowName: trimmedInstruction.slice(0, 80),
       agentId: ctx.agentId,
     }));
+    await recordStudioEvent(ctx.agentId, sessionId, 'plan_created', { summary: plan.summary, stepCount: plan.steps.length, schedule: plan.schedule });
 
     return NextResponse.json({
       summary: plan.summary,
@@ -220,6 +306,6 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     console.error('[studio/intent]', error instanceof Error ? error.message : error);
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

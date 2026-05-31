@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 // GET /api/kernel/status/:product
 export async function GET(req: NextRequest, { params }: { params: Promise<{ product: string }> }) {
   try {
-    const ctx = requireAgentContext(req.headers);
+    const ctx = await requireRouteCapability(req.headers, 'sdk.kernel');
     const { product } = await params;
 
     const supabase = getSupabaseAdmin();

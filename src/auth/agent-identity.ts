@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { AgentContext, AgentQuotas, DEFAULT_QUOTAS } from './permissions.js';
-import { isValidTier, TIER_QUOTAS } from './tiers.js';
+import { isValidTier, normalizePlan, TIER_QUOTAS } from './tiers.js';
 import { AuthError } from '../utils/errors.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 
@@ -56,7 +56,7 @@ export function verifyAgentToken(token: string): AgentContext {
       ...DEFAULT_QUOTAS,
       ...payload.quotas,
     },
-    tier: 'free',
+    tier: 'retail_free',
   };
 }
 
@@ -65,16 +65,21 @@ export function verifyAgentToken(token: string): AgentContext {
 export async function verifyAgentTokenWithTier(token: string): Promise<AgentContext> {
   const payload = verifyAgentTokenClaims(token);
 
-  let tier: AgentContext['tier'] = 'free';
+  let tier: AgentContext['tier'] = 'retail_free';
   try {
     const supabase = getSupabaseAdmin();
     const { data } = await supabase
       .from('agents')
-      .select('tier')
+      .select('tier, metadata')
       .eq('id', payload.sub)
       .maybeSingle();
-    if (data && isValidTier(data.tier)) {
-      tier = data.tier;
+    if (data) {
+      const metadata = (data.metadata as Record<string, unknown> | null | undefined) ?? {};
+      if (isValidTier(metadata.plan)) {
+        tier = normalizePlan(metadata.plan);
+      } else if (isValidTier(data.tier)) {
+        tier = normalizePlan(data.tier);
+      }
     }
   } catch {
     // Non-fatal — default to free tier on lookup failure

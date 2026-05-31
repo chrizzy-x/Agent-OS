@@ -1,8 +1,24 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import DocsFooter from '@/components/DocsFooter';
 import { APP_URL } from '@/lib/config';
+import { verifyAgentTokenWithTier } from '@/src/auth/agent-identity';
+import { hasCapability } from '@/src/auth/capabilities';
 
-export default function SdkPage() {
+export default async function SdkPage() {
+  const token = (await cookies()).get('agent_session')?.value;
+  if (token) {
+    try {
+      const ctx = await verifyAgentTokenWithTier(token);
+      if (!hasCapability(ctx.tier, 'access_sdk')) {
+        redirect('/studio?upgrade=sdk');
+      }
+    } catch {
+      // ignore invalid sessions for docs view
+    }
+  }
+
   return (
     <div className="min-h-screen bg-white">
       <nav className="border-b border-gray-100">

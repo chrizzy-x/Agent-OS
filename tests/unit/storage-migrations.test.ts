@@ -60,5 +60,42 @@ describe('storage migrations', () => {
     expect(sql).toContain('CREATE TRIGGER external_agent_registrations_name_uniqueness');
     expect(sql).toContain('agents_name_normalized_unique_idx');
   });
+
+  it('adds Studio-first plans, Vault, sessions, and private subagents', () => {
+    const sql = readFileSync(join(migrationsDir, '016_agentos_studio_vault_plans.sql'), 'utf8');
+
+    expect(sql).toContain("'retail_free'");
+    expect(sql).toContain("'enterprise_max'");
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS super_agents');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS nl_studio_sessions');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS nl_studio_events');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS private_subagents');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS vaults');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS vault_secrets');
+    expect(sql).toContain('ALTER TABLE vault_secrets ENABLE ROW LEVEL SECURITY');
+  });
+
+  it('adds snapshots, SDK credentials, app installs, plan transitions, and Vault lifecycle tables', () => {
+    const sql = readFileSync(join(migrationsDir, '017_studio_sdk_vault_lifecycle.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS nl_studio_snapshots');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS app_installations');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS sdk_credentials');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS plan_transitions');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS vault_secret_versions');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS vault_permissions');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS vault_assignments');
+    expect(sql).toContain('ALTER TABLE sdk_credentials ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain("ALTER TABLE skills ADD COLUMN IF NOT EXISTS publish_state TEXT NOT NULL DEFAULT 'draft'");
+    expect(sql).toContain("ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS publish_state TEXT NOT NULL DEFAULT 'draft'");
+  });
+
+  it('adds canonical workflow documents for sync across conversation, visual, and code modes', () => {
+    const sql = readFileSync(join(migrationsDir, '018_workflow_canonical_document.sql'), 'utf8');
+
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS canonical_doc JSONB NOT NULL DEFAULT');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_workflows_workspace_idx');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_workflows_canonical_idx');
+  });
 });
 

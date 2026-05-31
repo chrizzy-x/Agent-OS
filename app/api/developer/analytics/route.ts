@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 // If no skill_id, returns aggregated across all developer skills
 export async function GET(request: NextRequest) {
   try {
-    const agentCtx = requireAgentContext(request.headers);
+    const agentCtx = await requireRouteCapability(request.headers, 'developer.analytics');
 
     const { searchParams } = new URL(request.url);
     const skillId = searchParams.get('skill_id');
@@ -100,6 +100,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

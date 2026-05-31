@@ -3,7 +3,7 @@ import { findAccountById } from '@/src/auth/agent-store';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { readLocalRuntimeState } from '@/src/storage/local-state';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireAgentContext, requireRouteCapability } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -70,13 +70,13 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const agentCtx = requireAgentContext(request.headers);
+    const agentCtx = await requireRouteCapability(request.headers, 'skills.create');
     let body: Record<string, unknown>;
     try {
       body = await request.json();
@@ -89,6 +89,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields: name, slug, category', message: 'Missing required fields: name, slug, category' }, { status: 400 });
     }
 
+    const publishState = typeof body.publish_state === 'string'
+      ? body.publish_state
+      : typeof body.status === 'string'
+        ? body.status
+        : 'draft';
+    const isPublished = publishState === 'published';
+
     const supabase = getSupabaseAdmin();
     const account = await findAccountById(agentCtx.agentId);
     const { data, error } = await supabase
@@ -99,17 +106,20 @@ export async function POST(request: NextRequest) {
         category: String(category),
         description: typeof description === 'string' ? description : '',
         long_description: typeof body.long_description === 'string' ? body.long_description : null,
-        icon: typeof body.icon === 'string' ? body.icon : '📦',
+        icon: typeof body.icon === 'string' ? body.icon : '[skill]',
         author_id: agentCtx.agentId,
         author_name: account?.name ?? 'AgentOS Publisher',
         pricing_model: typeof body.pricing_model === 'string' ? body.pricing_model : 'free',
         price_per_call: typeof body.price_per_call === 'number' ? body.price_per_call : 0,
         free_tier_calls: typeof body.free_tier_calls === 'number' ? body.free_tier_calls : 100,
         capabilities: Array.isArray(body.capabilities) ? body.capabilities : [],
+        permissions_required: Array.isArray(body.permissions_required) ? body.permissions_required : [],
+        required_secrets: Array.isArray(body.required_secrets) ? body.required_secrets : [],
         source_code: typeof body.source_code === 'string' ? body.source_code : '',
         primitives_required: Array.isArray(body.primitives_required) ? body.primitives_required : [],
         tags: Array.isArray(body.tags) ? body.tags : [],
-        published: true,
+        publish_state: publishState,
+        published: isPublished,
       })
       .select('id, slug')
       .single();
@@ -124,6 +134,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id: data.id, slug: data.slug }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }
+

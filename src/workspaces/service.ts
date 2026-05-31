@@ -2,6 +2,7 @@
 import { normalizeAgentDisplayName } from '../auth/agent-names.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { PermissionError } from '../utils/errors.js';
 
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer';
 
@@ -101,6 +102,62 @@ export async function listWorkspaces(userId: string): Promise<Workspace[]> {
     const members = localMembers.get(ws.id) ?? [];
     return members.some(m => m.userId === userId);
   });
+}
+
+export async function assertWorkspaceMembership(workspaceId: string, userId: string): Promise<{
+  workspace: Workspace;
+  role: WorkspaceRole;
+}> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('workspace_members')
+      .select('role, workspaces(id,name,slug,owner_id,plan,created_at)')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!error && data) {
+      const row = data as Record<string, unknown>;
+      const ws = row.workspaces as Record<string, unknown> | null;
+      if (ws) {
+        return {
+          role: (row.role as WorkspaceRole) ?? 'member',
+          workspace: {
+            id: String(ws.id),
+            name: String(ws.name),
+            slug: String(ws.slug),
+            ownerId: String(ws.owner_id),
+            plan: String(ws.plan),
+            createdAt: String(ws.created_at),
+          },
+        };
+      }
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const workspace = localWorkspaces.get(workspaceId);
+  const member = (localMembers.get(workspaceId) ?? []).find(item => item.userId === userId);
+  if (workspace && member) {
+    return { workspace, role: member.role };
+  }
+
+  throw new PermissionError('Workspace not found or not accessible');
+}
+
+export async function assertWorkspaceOwnership(workspaceId: string, userId: string): Promise<Workspace> {
+  const membership = await assertWorkspaceMembership(workspaceId, userId);
+  if (membership.workspace.ownerId !== userId && membership.role !== 'owner' && membership.role !== 'admin') {
+    throw new PermissionError('Workspace owner or admin access required');
+  }
+  return membership.workspace;
+}
+
+export async function resolveDefaultWorkspaceForAgent(userId: string): Promise<Workspace | null> {
+  const workspaces = await listWorkspaces(userId);
+  return workspaces[0] ?? null;
 }
 
 export async function createWorkspace(params: { name: string; ownerId: string; slug?: string; plan?: string }): Promise<Workspace> {

@@ -6,7 +6,7 @@ import { APP_URL } from '@/lib/config';
 export const runtime = 'nodejs';
 
 // GET /api/session/from-key/callback?st=<token>
-// Exchanges the one-time token for a browser session cookie and redirects to /dashboard
+// Exchanges the one-time token for a browser session cookie and redirects to /studio
 export async function GET(req: NextRequest) {
   const st = req.nextUrl.searchParams.get('st');
 
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
     const { apiKey } = JSON.parse(raw) as { agentId: string; apiKey: string };
 
     // Set the session cookie (API key IS the session JWT in this system)
-    const response = NextResponse.redirect(`${APP_URL}/dashboard`);
+    const response = NextResponse.redirect(`${APP_URL}/studio`);
     setAgentSessionCookie(response, apiKey);
 
     return response;

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Badge from '@/components/Badge';
 import FadeIn from '@/components/FadeIn';
+import AuthHomeRedirect from '@/components/AuthHomeRedirect';
 import { APP_URL } from '@/lib/config';
 
 const CODE_EXAMPLE = `import { AgentOS } from '@agentos/sdk';
@@ -116,6 +117,7 @@ const MARKETPLACE_SKILLS = [
 export default function HomePage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+      <AuthHomeRedirect />
       <Nav />
 
       {/* ── Hero ── */}

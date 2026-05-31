@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireAgentContext, requireRouteCapability } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -41,7 +41,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const agentCtx = requireAgentContext(request.headers);
+    const agentCtx = await requireRouteCapability(request.headers, 'skills.create');
 
     const supabase = getSupabaseAdmin();
     const { data: skill } = await supabase
@@ -66,9 +66,26 @@ export async function PUT(
     const { id: _id, author_id: _aid, created_at: _cat, total_installs: _ti, total_calls: _tc, ...allowed } = body;
     void _id; void _aid; void _cat; void _ti; void _tc;
 
+    const publishState = typeof allowed.publish_state === 'string'
+      ? allowed.publish_state
+      : typeof allowed.status === 'string'
+        ? allowed.status
+        : null;
+    if (publishState && publishState !== 'draft') {
+      await requireRouteCapability(request.headers, 'skills.publish');
+    }
+    if (typeof allowed.published === 'boolean' && allowed.published === true) {
+      await requireRouteCapability(request.headers, 'skills.publish');
+    }
+
     const { data, error } = await supabase
       .from('skills')
-      .update({ ...allowed, updated_at: new Date().toISOString() })
+      .update({
+        ...allowed,
+        ...(publishState ? { publish_state: publishState } : {}),
+        ...(publishState ? { published: publishState === 'published' } : {}),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .select()
       .single();
@@ -88,7 +105,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const agentCtx = requireAgentContext(request.headers);
+    const agentCtx = await requireRouteCapability(request.headers, 'skills.create');
 
     const supabase = getSupabaseAdmin();
     const { data: skill } = await supabase

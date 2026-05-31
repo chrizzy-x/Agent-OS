@@ -4,7 +4,7 @@ import {
   getAgentAppBySlug,
   recordAgentAppDownload,
 } from '@/src/appstore/service';
-import { hasAdminAccess, requireAgentContext } from '@/src/auth/request';
+import { hasAdminAccess, requireRouteCapability } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -14,18 +14,14 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
+    const ctx = await requireRouteCapability(request.headers, 'apps.install');
     const { slug } = await params;
     const app = await getAgentAppBySlug(slug, { includePrivate: true });
     if (!app) {
       return NextResponse.json({ error: 'App not found' }, { status: 404 });
     }
     if (!app.published && !hasAdminAccess(request.headers)) {
-      try {
-        const agentCtx = requireAgentContext(request.headers);
-        if (agentCtx.agentId !== app.publisherId) {
-          return NextResponse.json({ error: 'App not found' }, { status: 404 });
-        }
-      } catch {
+      if (ctx.agentId !== app.publisherId) {
         return NextResponse.json({ error: 'App not found' }, { status: 404 });
       }
     }
@@ -42,6 +38,6 @@ export async function GET(
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

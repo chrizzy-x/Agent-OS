@@ -8,6 +8,34 @@ interface NavProps {
   activePath?: string;
 }
 
+export function buildSessionNavLinks(session: BrowserSession | null): Array<{ href: string; label: string }> {
+  if (!session) {
+    return [
+      { href: '/marketplace', label: 'Skills' },
+      { href: '/appstore', label: 'Apps' },
+      { href: '/docs', label: 'Docs' },
+    ];
+  }
+
+  const canUseDeveloperConsole = session.capabilities?.includes('access_developer_console') === true;
+  return [
+    { href: '/studio', label: 'Studio' },
+    { href: '/workspaces', label: 'Projects' },
+    { href: '/marketplace', label: 'Skills' },
+    { href: '/appstore', label: 'Apps' },
+    { href: '/vault', label: 'Vault' },
+    { href: '/analytics', label: 'Analytics' },
+    { href: '/workspace', label: 'Workspace' },
+    { href: '/settings', label: 'Settings' },
+    ...(canUseDeveloperConsole ? [
+      { href: '/developer', label: 'Developer Console' },
+      { href: '/docs/sdk', label: 'SDK' },
+      { href: '/publishing', label: 'Publishing' },
+      { href: '/team', label: 'Team Management' },
+    ] : []),
+  ];
+}
+
 export default function Nav({ activePath }: NavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -36,13 +64,7 @@ export default function Nav({ activePath }: NavProps) {
     return () => { active = false; };
   }, []);
 
-  const links = [
-    { href: '/marketplace', label: 'Skill Store' },
-    { href: '/appstore', label: 'App Store' },
-    { href: '/connect', label: 'Connect' },
-    { href: '/docs', label: 'Docs' },
-    { href: '/developer', label: 'Developer' },
-  ];
+  const links = buildSessionNavLinks(session);
 
   return (
     <>
@@ -138,7 +160,7 @@ export default function Nav({ activePath }: NavProps) {
                 }}>
                   {session.agentName ?? 'Account'}
                 </span>
-                <Link href="/dashboard" style={{
+                <Link href="/studio" style={{
                   fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
                   fontSize: '14px',
                   fontWeight: 600,
@@ -159,7 +181,7 @@ export default function Nav({ activePath }: NavProps) {
                     el.style.backgroundColor = 'var(--accent)';
                     el.style.boxShadow = 'none';
                   }}
-                >Dashboard</Link>
+                >Studio</Link>
               </>
             )}
             <Link href="/signin" style={{
@@ -258,7 +280,7 @@ export default function Nav({ activePath }: NavProps) {
             </Link>
           ))}
           {sessionChecked && session && (
-            <Link href="/dashboard" onClick={() => setMenuOpen(false)} style={{
+            <Link href="/studio" onClick={() => setMenuOpen(false)} style={{
               fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
               fontSize: '16px',
               fontWeight: 600,
@@ -269,7 +291,7 @@ export default function Nav({ activePath }: NavProps) {
               minHeight: '56px',
               display: 'flex',
               alignItems: 'center',
-            }}>Dashboard</Link>
+            }}>Studio</Link>
           )}
           <Link href="/signin" onClick={() => setMenuOpen(false)} style={{
             fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',

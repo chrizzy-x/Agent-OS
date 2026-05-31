@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
-import { addWorkspaceAgent, listWorkspaceAgents, resolveWorkspaceAgentByName } from '@/src/workspaces/service';
+import {
+  addWorkspaceAgent,
+  assertWorkspaceMembership,
+  assertWorkspaceOwnership,
+  listWorkspaceAgents,
+  resolveWorkspaceAgentByName,
+} from '@/src/workspaces/service';
 import { NotFoundError, ValidationError, toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -17,8 +23,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    requireAgentContext(request.headers);
+    const agentContext = requireAgentContext(request.headers);
     const { id } = await params;
+    await assertWorkspaceMembership(id, agentContext.agentId);
     const agents = await listWorkspaceAgents(id);
     return NextResponse.json({ agents: agents.map(toPublicWorkspaceAgent) });
   } catch (error: unknown) {
@@ -34,6 +41,7 @@ export async function POST(
   try {
     const agentContext = requireAgentContext(request.headers);
     const { id } = await params;
+    await assertWorkspaceOwnership(id, agentContext.agentId);
     const body = await request.json() as { agent_id?: string; agent_name?: string };
     const agentName = typeof body.agent_name === 'string' ? body.agent_name.trim() : '';
 

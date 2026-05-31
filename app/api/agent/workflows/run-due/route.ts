@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { logOperation } from '@/src/runtime/audit';
 import { toErrorResponse } from '@/src/utils/errors';
+import { hydrateWorkflowDocument } from '@/src/workflows/canonical';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +24,9 @@ type WorkflowRow = {
   id: string;
   task_id: string | null;
   steps: unknown;
+  graph_state?: unknown;
+  code_state?: string | null;
+  canonical_doc?: unknown;
   schedule: string | null;
   status: string;
 };
@@ -75,7 +79,18 @@ function parseTaskCode(code: string): ToolExecution {
 }
 
 function runnableFromWorkflow(workflow: WorkflowRow): ToolExecution | null {
-  const steps = Array.isArray(workflow.steps) ? workflow.steps : [];
+  let steps: unknown[] = Array.isArray(workflow.steps) ? workflow.steps : [];
+  try {
+    const hydrated = hydrateWorkflowDocument({
+      canonicalDoc: workflow.canonical_doc,
+      steps: workflow.steps,
+      graphState: workflow.graph_state,
+      codeState: workflow.code_state ?? null,
+    });
+    steps = hydrated.steps;
+  } catch {
+    // fallback to legacy steps payload
+  }
   for (const rawStep of [...steps].reverse()) {
     const step = asObject(rawStep);
     if (!step || typeof step.tool !== 'string') continue;
@@ -121,7 +136,7 @@ async function updateWorkflowResult(
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = withStudioDefaultAllowedDomains(requireAgentContext(request.headers));
+    const ctx = withStudioDefaultAllowedDomains(await requireRouteCapability(request.headers, 'workflows.run'));
     const supabase = getSupabaseAdmin();
     let body: { workflowId?: string; force?: boolean } = {};
     try { body = await request.json(); } catch { /* empty body */ }
@@ -132,7 +147,7 @@ export async function POST(request: NextRequest) {
     if (body.workflowId) {
       const { data: workflow, error: workflowError } = await supabase
         .from('agent_workflows')
-        .select('id, task_id, steps, schedule, status')
+        .select('id, task_id, steps, graph_state, code_state, canonical_doc, schedule, status')
         .eq('id', body.workflowId)
         .eq('agent_id', ctx.agentId)
         .maybeSingle();
@@ -286,7 +301,7 @@ export async function POST(request: NextRequest) {
     if (body.workflowId && results.length === 0) {
       const { data: workflow } = await supabase
         .from('agent_workflows')
-        .select('id, task_id, steps, schedule, status')
+        .select('id, task_id, steps, graph_state, code_state, canonical_doc, schedule, status')
         .eq('id', body.workflowId)
         .eq('agent_id', ctx.agentId)
         .maybeSingle();
@@ -340,6 +355,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ran: results.length, results: omitAgentIdentifierFields(results) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

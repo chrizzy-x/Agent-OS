@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken, verifyAgentTokenClaims } from '@/src/auth/agent-identity';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireAgentContextWithTier } from '@/src/auth/request';
 import { clearAgentSessionCookie, extractSessionTokenFromCookie } from '@/src/auth/session-cookie';
 import { findAccountById } from '@/src/auth/agent-store';
+import { getPlanDescriptor } from '@/src/auth/capabilities';
+import { reconcileAgentOSProvisioning } from '@/src/agentos/provisioning';
 
 export const runtime = 'nodejs';
 
@@ -14,15 +16,25 @@ function readSessionToken(headers: Headers | globalThis.Headers): string | undef
 
 export async function GET(request: NextRequest) {
   try {
-    const context = requireAgentContext(request.headers);
+    const context = await requireAgentContextWithTier(request.headers);
+    try {
+      await reconcileAgentOSProvisioning(context.agentId);
+    } catch {
+      // Session checks should continue even if reconciliation fails.
+    }
     const token = readSessionToken(request.headers);
     const claims = token ? verifyAgentTokenClaims(token) : null;
     const agent = await findAccountById(context.agentId);
+    const plan = getPlanDescriptor(agent?.metadata.plan ?? context.tier);
 
     return NextResponse.json({
       authenticated: true,
       session: {
         agentName: agent?.name ?? null,
+        plan: plan.plan,
+        planLabel: plan.label,
+        accountType: plan.enterprise ? 'enterprise' : 'retail',
+        capabilities: plan.capabilities,
         expiresAt: claims?.exp ? new Date(claims.exp * 1000).toISOString() : null,
       },
     });

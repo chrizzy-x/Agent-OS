@@ -9,6 +9,8 @@ export type LocalAccountRecord = {
   email: string;
   agentName: string;
   passwordHash: string;
+  plan?: string;
+  accountType?: 'retail' | 'enterprise';
   createdAt: string;
   updatedAt: string;
   passwordReset: {

@@ -38,34 +38,46 @@ export async function POST(req: NextRequest) {
     if (skillErr || !skill)
       return NextResponse.json({ error: 'Skill not found' }, { status: 404 });
 
-    if (skill.pricing_model === 'free' || Number(skill.price_per_call) === 0)
+    const skillRow = skill as { id: string; name: string; slug: string; pricing_model: string; price_per_call: number; author_id: string };
+
+    if (skillRow.pricing_model === 'free' || Number(skillRow.price_per_call) === 0)
       return NextResponse.json({ error: 'This skill is free — use /api/skills/install' }, { status: 400 });
+
+    return NextResponse.json({
+      error: 'billing_disabled',
+      message: 'All AgentOS plans and marketplace installs are free while plan mapping is being finalized. Use /api/skills/install.',
+      skillId: skillRow.id,
+      skillSlug: skillRow.slug,
+      amountUsdc: '0.00',
+      network,
+      buyer: ctx.agentId,
+    }, { status: 400 });
 
     // Get developer's payout wallet
     const { data: authorAgent } = await supabase
       .from('agents')
       .select('metadata')
-      .eq('id', skill.author_id)
+      .eq('id', skillRow.author_id)
       .maybeSingle();
 
     const wallet = authorAgent?.metadata?.payout_wallet as string | undefined;
     if (!wallet)
       return NextResponse.json({ error: 'Developer has not set up a crypto wallet' }, { status: 400 });
 
-    const amountUsdc = Number(skill.price_per_call).toFixed(2);
-    const reference  = `${skill.id.slice(0, 8)}-${crypto.randomBytes(8).toString('hex')}-${Date.now()}`;
+    const amountUsdc = Number(skillRow.price_per_call).toFixed(2);
+    const reference  = `${skillRow.id.slice(0, 8)}-${crypto.randomBytes(8).toString('hex')}-${Date.now()}`;
     const usdcMint   = network === 'solana' ? USDC_MINT_SOLANA : USDC_MINT_BASE;
 
     await supabase.from('skill_purchases').upsert({
       agent_id:         ctx.agentId,
-      skill_id:         skill.id,
+      skill_id:         skillRow.id,
       stripe_session_id: reference,
       payment_method:   `crypto_${network}`,
       payment_ref:      reference,
       status:           'pending',
     }, { onConflict: 'stripe_session_id' });
 
-    return NextResponse.json({ wallet, amountUsdc, usdcMint, network, reference, skillId: skill.id, skillSlug: skill.slug });
+    return NextResponse.json({ wallet, amountUsdc, usdcMint, network, reference, skillId: skillRow.id, skillSlug: skillRow.slug });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 // GET /api/developer/payout-settings — return current payout settings
 export async function GET(req: NextRequest) {
   try {
-    const ctx = requireAgentContext(req.headers);
+    const ctx = await requireRouteCapability(req.headers, 'developer.console');
 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -28,14 +28,14 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }
 
 // POST /api/developer/payout-settings — save payout settings
 export async function POST(req: NextRequest) {
   try {
-    const ctx = requireAgentContext(req.headers);
+    const ctx = await requireRouteCapability(req.headers, 'developer.console');
 
     let body: Record<string, unknown>;
     try {
@@ -106,6 +106,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

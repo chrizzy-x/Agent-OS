@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
-import { addWorkspaceMember } from '@/src/workspaces/service';
+import { addWorkspaceMember, assertWorkspaceOwnership } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -21,6 +21,7 @@ export async function POST(
   try {
     const agentContext = requireAgentContext(request.headers);
     const { id } = await params;
+    await assertWorkspaceOwnership(id, agentContext.agentId);
     const body = await request.json() as { user_id?: string; role?: 'owner' | 'admin' | 'member' | 'viewer' };
 
     if (typeof body.user_id !== 'string' || !body.user_id.trim()) {

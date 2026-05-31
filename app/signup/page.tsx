@@ -16,16 +16,16 @@ interface Credentials {
 }
 
 type AccountType = 'retail' | 'enterprise';
-type PlanKey = 'free' | 'pro' | 'hyper' | 'enterprise';
+type PlanKey = 'retail_free' | 'retail_pro' | 'enterprise_plus' | 'enterprise_max';
 
 const RETAIL_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
-  { key: 'free', name: 'Free', detail: 'Start testing AgentOS.' },
-  { key: 'pro', name: 'Pro', detail: 'Retail power user tools.' },
-  { key: 'hyper', name: 'Hyper', detail: 'High-volume retail automation.' },
+  { key: 'retail_free', name: 'Retail Free', detail: 'Studio, Super AgentOS, private workflows, subagents, vault. Free for now.' },
+  { key: 'retail_pro', name: 'Retail Pro', detail: 'Higher limits and bearer token access. Free for now.' },
 ];
 
 const ENTERPRISE_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
-  { key: 'enterprise', name: 'Enterprise', detail: 'SDK, apps, publishing, and team scale.' },
+  { key: 'enterprise_plus', name: 'Enterprise Plus', detail: 'SDK, Developer Console, Apps, Skills, publishing. Free for now.' },
+  { key: 'enterprise_max', name: 'Enterprise Max', detail: 'Higher limits, audit, governance, and org controls. Free for now.' },
 ];
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
@@ -226,7 +226,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [accountType, setAccountType] = useState<AccountType>('retail');
-  const [selectedPlan, setSelectedPlan] = useState<PlanKey>('free');
+  const [selectedPlan, setSelectedPlan] = useState<PlanKey>('retail_free');
   const [planSelectionSkipped, setPlanSelectionSkipped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -235,7 +235,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
   const selectAccountType = (type: AccountType) => {
     setAccountType(type);
     setPlanSelectionSkipped(false);
-    setSelectedPlan(type === 'enterprise' ? 'enterprise' : 'free');
+    setSelectedPlan(type === 'enterprise' ? 'enterprise_plus' : 'retail_free');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -401,26 +401,6 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setPlanSelectionSkipped(true);
-              setSelectedPlan('free');
-            }}
-            style={{
-              width: '100%',
-              marginTop: '8px',
-              background: planSelectionSkipped ? 'rgba(0,255,136,0.08)' : 'transparent',
-              border: `1px solid ${planSelectionSkipped ? 'var(--accent)' : 'var(--border)'}`,
-              color: planSelectionSkipped ? 'var(--accent)' : 'var(--text-secondary)',
-              padding: '9px 12px',
-              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-              fontSize: '12px',
-              cursor: 'pointer',
-            }}
-          >
-            Skip for now
-          </button>
         </div>
 
         {error && (
@@ -488,7 +468,7 @@ export default function SignupPage() {
   useEffect(() => {
     let active = true;
     void fetchBrowserSession().then(session => {
-      if (active && session) router.replace('/dashboard');
+      if (active && session) router.replace('/studio');
     });
     return () => { active = false; };
   }, [router]);
@@ -557,7 +537,7 @@ export default function SignupPage() {
               marginBottom: '28px',
               marginTop: 0,
             }}>Get started with AgentOS in seconds.</p>
-            <SignupForm onSuccess={setCredentials} />
+            <SignupForm onSuccess={() => router.replace('/studio')} />
           </>
         ) : (
           <CredentialsPanel credentials={credentials} />

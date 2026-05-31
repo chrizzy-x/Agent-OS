@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAgentTokenClaims } from '@/src/auth/agent-identity';
+import { verifyAgentTokenClaims, verifyAgentTokenWithTier } from '@/src/auth/agent-identity';
+import { hasCapability } from '@/src/auth/capabilities';
 import { getRedisClient } from '@/src/storage/redis';
 import { toErrorResponse } from '@/src/utils/errors';
 import { APP_URL } from '@/lib/config';
@@ -13,12 +14,12 @@ export async function POST(req: NextRequest) {
   try {
     let body: { apiKey?: string };
     try { body = await req.json(); } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+      return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'Invalid JSON body', message: 'Invalid JSON body' }, { status: 400 });
     }
 
     const { apiKey } = body;
     if (!apiKey || typeof apiKey !== 'string') {
-      return NextResponse.json({ error: 'apiKey is required' }, { status: 400 });
+      return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'apiKey is required', message: 'apiKey is required' }, { status: 400 });
     }
 
     // Validate the API key — it's a JWT, so this verifies signature + expiry
@@ -26,7 +27,19 @@ export async function POST(req: NextRequest) {
     try {
       claims = verifyAgentTokenClaims(apiKey);
     } catch {
-      return NextResponse.json({ error: 'Invalid or expired API key' }, { status: 401 });
+      return NextResponse.json({ code: 'UNAUTHORIZED', error: 'Invalid or expired API key', message: 'Invalid or expired API key' }, { status: 401 });
+    }
+
+    const enrichedContext = await verifyAgentTokenWithTier(apiKey);
+    if (!hasCapability(enrichedContext.tier, 'use_bearer_token')) {
+      return NextResponse.json(
+        {
+          code: 'PERMISSION_DENIED',
+          error: 'Bearer token access is not enabled for this plan.',
+          message: 'Bearer token access is not enabled for this plan.',
+        },
+        { status: 403 },
+      );
     }
 
     const agentId = claims.sub;
@@ -42,6 +55,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ loginUrl, expiresIn: 300 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

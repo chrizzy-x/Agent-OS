@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
 import { setAgentSessionCookie } from '@/src/auth/session-cookie';
 import { toErrorResponse } from '@/src/utils/errors';
 
@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const context = requireAgentContext(request.headers);
+    const context = await requireRouteCapability(request.headers, 'session.token.issue');
     const bearerToken = createAgentToken(context.agentId, { expiresIn: '90d' });
     const response = NextResponse.json({
       success: true,
@@ -22,6 +22,6 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord } from '../storage/local-state.js';
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
-import { isValidTier, type AgentTier } from './tiers.js';
+import { isValidTier, normalizePlan, PLAN_ACCOUNT_TYPE, PLAN_LEGACY_TIER, type AccountType, type AgentPlan, type AgentTier } from './tiers.js';
 
 export type AgentAccount = {
   id: string;
@@ -17,7 +17,8 @@ export type CreateAgentAccountInput = {
   email: string;
   passwordHash: string;
   tier?: AgentTier;
-  accountType?: 'retail' | 'enterprise' | null;
+  plan?: AgentPlan;
+  accountType?: AccountType | null;
   planSelectionSkipped?: boolean;
 };
 
@@ -40,7 +41,11 @@ function mapLocalAccount(record: LocalAccountRecord): AgentAccount {
     name: record.agentName,
     email: record.email,
     passwordHash: record.passwordHash,
-    metadata: record.passwordReset ? { password_reset: record.passwordReset } : {},
+    metadata: {
+      ...(record.passwordReset ? { password_reset: record.passwordReset } : {}),
+      plan: record.plan ?? 'retail_free',
+      account_type: record.accountType ?? 'retail',
+    },
   };
 }
 
@@ -101,11 +106,14 @@ export async function findAccountById(agentId: string): Promise<AgentAccount | n
 }
 
 export async function createAgentAccount(input: CreateAgentAccountInput): Promise<CreateAgentAccountResult> {
-  const tier = input.tier && isValidTier(input.tier) ? input.tier : 'free';
+  const plan = input.plan ?? normalizePlan(input.tier);
+  const tier = input.tier && isValidTier(input.tier) ? input.tier : plan;
+  const legacyTier = PLAN_LEGACY_TIER[plan];
+  const accountType = input.accountType ?? PLAN_ACCOUNT_TYPE[plan];
   const name = cleanAgentDisplayName(input.name);
   try {
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from('agents').insert({
+    const payload = {
       id: input.id,
       name,
       tier,
@@ -114,13 +122,26 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
         email: input.email,
         password_hash: input.passwordHash,
         signup_source: 'web',
-        account_type: input.accountType ?? null,
+        account_type: accountType,
+        plan,
+        plan_price_usd: 0,
         plan_selection_skipped: Boolean(input.planSelectionSkipped),
       },
-    });
+    };
+    const { error } = await supabase.from('agents').insert(payload);
 
     if (!error) {
       return { duplicate: false };
+    }
+
+    if (error.message?.toLowerCase().includes('agents_tier_check') || error.message?.toLowerCase().includes('violates check constraint')) {
+      const retry = await supabase.from('agents').insert({ ...payload, tier: legacyTier });
+      if (!retry.error) {
+        return { duplicate: false };
+      }
+      if (retry.error.code === '23505') {
+        return { duplicate: true, conflictField: inferDuplicateField(retry.error) };
+      }
     }
 
     if (error.code === '23505') {
@@ -156,6 +177,8 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
       email: input.email,
       agentName: name,
       passwordHash: input.passwordHash,
+      plan,
+      accountType,
       createdAt: now,
       updatedAt: now,
       passwordReset: null,

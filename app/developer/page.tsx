@@ -42,7 +42,7 @@ interface Earnings {
   per_skill: { skill_id: string; skill_name: string; total_calls: number; total_revenue: string }[];
 }
 
-type DeveloperTier = 'free' | 'pro' | 'hyper' | 'enterprise';
+type DeveloperTier = 'retail_free' | 'retail_pro' | 'enterprise_plus' | 'enterprise_max' | 'free' | 'pro' | 'hyper' | 'enterprise';
 
 const EMPTY_SKILL = {
   name: '',
@@ -118,7 +118,8 @@ export default function DeveloperPage() {
   const [payoutSaving, setPayoutSaving] = useState(false);
   const [payoutMsg, setPayoutMsg] = useState('');
   const [payoutRequested, setPayoutRequested] = useState(false);
-  const canPublishApps = agentTier === 'enterprise' || agentTier === 'hyper';
+  const canUseDeveloperConsole = agentTier === 'enterprise_plus' || agentTier === 'enterprise_max' || agentTier === 'enterprise' || agentTier === 'hyper';
+  const canPublishApps = canUseDeveloperConsole;
 
   useEffect(() => {
     let active = true;
@@ -155,10 +156,15 @@ export default function DeveloperPage() {
     try {
       const res = await fetch('/api/agent/me', { cache: 'no-store' });
       const data = await res.json();
-      const tier = data.tier;
-      setAgentTier(tier === 'enterprise' || tier === 'hyper' || tier === 'pro' || tier === 'free' ? tier : 'free');
+      const tier = data.plan ?? data.tier;
+      setAgentTier(
+        tier === 'enterprise_plus' || tier === 'enterprise_max' || tier === 'retail_pro' || tier === 'retail_free'
+          || tier === 'enterprise' || tier === 'hyper' || tier === 'pro' || tier === 'free'
+          ? tier
+          : 'retail_free',
+      );
     } catch {
-      setAgentTier('free');
+      setAgentTier('retail_free');
     }
   };
 
@@ -346,7 +352,7 @@ export default function DeveloperPage() {
               Publish and manage your skills and apps
             </p>
           </div>
-          {session && (
+          {session && canUseDeveloperConsole && (
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button
                 onClick={() => { setPublishMode('skill'); setShowPublish(value => !(value && publishMode === 'skill')); setPublishError(''); setPublishSuccess(''); }}
@@ -368,7 +374,19 @@ export default function DeveloperPage() {
         </div>
 
         {/* Earnings stats */}
-        {session && earnings && (
+        {session && !canUseDeveloperConsole && (
+          <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '48px 32px', marginBottom: '32px' }}>
+            <Badge variant="warning" style={{ marginBottom: '12px' }}>Enterprise Only</Badge>
+            <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', color: 'var(--text-primary)', margin: '0 0 8px' }}>
+              Developer Console requires Enterprise Plus or Enterprise Max
+            </h2>
+            <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '14px', color: 'var(--text-secondary)', margin: 0, maxWidth: '680px', lineHeight: 1.6 }}>
+              Retail users can keep using Studio, private workflows, private subagents, Skills, Apps, Vault, and bearer token access where enabled. SDK, App creation, Skill creation, manifests, webhooks, and publishing stay server-gated for Enterprise workspaces.
+            </p>
+          </div>
+        )}
+
+        {session && canUseDeveloperConsole && earnings && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)', marginBottom: '32px' }}>
             {[
               { label: 'This Month', value: `$${earnings.this_month}`, accent: true },
@@ -408,7 +426,7 @@ export default function DeveloperPage() {
         )}
 
         {/* Publish form */}
-        {session && showPublish && publishMode === 'skill' && (
+        {session && canUseDeveloperConsole && showPublish && publishMode === 'skill' && (
           <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px', marginBottom: '32px' }}>
             <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '24px', marginTop: 0 }}>
               Publish a New Skill
@@ -501,7 +519,7 @@ export default function DeveloperPage() {
           </div>
         )}
 
-        {session && showPublish && publishMode === 'app' && (
+        {session && canUseDeveloperConsole && showPublish && publishMode === 'app' && (
           <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px', marginBottom: '32px' }}>
             <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '24px', marginTop: 0 }}>
               Publish a New App
@@ -591,7 +609,7 @@ export default function DeveloperPage() {
         )}
 
         {/* My skills */}
-        {session && (
+        {session && canUseDeveloperConsole && (
           <div style={{ marginBottom: '40px' }}>
             <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>
               Your Skills{' '}
@@ -646,7 +664,7 @@ export default function DeveloperPage() {
         )}
 
         {/* My apps */}
-        {session && (
+        {session && canUseDeveloperConsole && (
           <div style={{ marginBottom: '40px' }}>
             <h2 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '16px' }}>
               Your Apps{' '}
@@ -717,7 +735,7 @@ export default function DeveloperPage() {
         )}
 
         {/* Payout settings */}
-        {session && (
+        {session && canUseDeveloperConsole && (
           <div style={{ border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', padding: '32px', marginBottom: '24px' }}>
             <h3 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px', marginTop: 0 }}>Payout Settings</h3>
             <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
@@ -765,7 +783,7 @@ export default function DeveloperPage() {
         )}
 
         {/* Revenue sharing info */}
-        {session && (
+        {session && canUseDeveloperConsole && (
           <div style={{ border: '1px solid rgba(0,255,136,0.2)', backgroundColor: 'rgba(0,255,136,0.04)', padding: '24px' }}>
             <h3 style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--accent)', marginBottom: '8px', marginTop: 0 }}>Revenue Sharing</h3>
             <p style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>

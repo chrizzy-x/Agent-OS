@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { executeStudioCommand } from '@/src/studio/service';
 import type { StudioCommandRequest, StudioCommandResponse } from '@/src/studio/types';
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   let command = '';
 
   try {
-    const agentContext = withStudioDefaultAllowedDomains(requireAgentContext(request.headers));
+    const agentContext = withStudioDefaultAllowedDomains(await requireRouteCapability(request.headers, 'studio.command'));
     const body = await request.json() as StudioCommandRequest;
     command = typeof body.command === 'string' ? body.command : '';
 

@@ -1,8 +1,10 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { fetchBrowserSession } from '@/src/auth/browser-session';
+import Nav from '@/components/Nav';
 
 interface Workspace {
   id: string;
@@ -26,6 +28,7 @@ interface AuditEntry {
 }
 
 export default function WorkspacesPage() {
+  const router = useRouter();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Workspace | null>(null);
@@ -41,17 +44,25 @@ export default function WorkspacesPage() {
   const [agentBearerToken, setAgentBearerToken] = useState('');
 
   useEffect(() => {
+    let active = true;
     void (async () => {
       const session = await fetchBrowserSession();
-      if (!session) return;
+      if (!session) {
+        if (active) {
+          router.replace('/signin');
+          setLoading(false);
+        }
+        return;
+      }
       try {
         const res = await fetch('/api/workspaces');
         const data = await res.json();
-        setWorkspaces(data.workspaces ?? []);
+        if (active) setWorkspaces(data.workspaces ?? []);
       } catch { /* silent */ }
-      finally { setLoading(false); }
+      finally { if (active) setLoading(false); }
     })();
-  }, []);
+    return () => { active = false; };
+  }, [router]);
 
   const loadDetail = async (ws: Workspace) => {
     setSelected(ws);
@@ -117,27 +128,7 @@ export default function WorkspacesPage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <nav style={{ background: 'rgba(3,3,10,0.9)', borderBottom: '1px solid var(--border)', backdropFilter: 'blur(16px)' }}
-        className="sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-5 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-7 h-7 flex items-center justify-center font-black font-mono text-xs"
-                style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
-                A
-              </div>
-              <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
-            </Link>
-            <div className="hidden sm:flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
-              <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
-              <Link href="/marketplace" className="hover:text-white transition-colors">Skill Store</Link>
-              <Link href="/appstore" className="hover:text-white transition-colors">App Store</Link>
-              <Link href="/workspaces" className="transition-colors" style={{ color: 'var(--accent)' }}>Workspaces</Link>
-            </div>
-          </div>
-          <Link href="/dashboard" className="btn-outline text-sm px-3 py-1.5 rounded-lg">← Dashboard</Link>
-        </div>
-      </nav>
+      <Nav activePath="/workspaces" />
 
       <div className="max-w-6xl mx-auto px-5 py-8">
         <div className="flex items-center justify-between mb-6">
@@ -175,7 +166,7 @@ export default function WorkspacesPage() {
                   className="input-dark flex-1 text-sm"
                 />
                 <button onClick={() => void handleCreate()} disabled={creating || !newName.trim()} className="btn-primary text-sm px-4 py-2 rounded-lg flex-shrink-0">
-                  {creating ? '…' : 'Create'}
+                  {creating ? '...' : 'Create'}
                 </button>
               </div>
               {createError && <p className="text-xs mt-2" style={{ color: '#fca5a5' }}>{createError}</p>}
@@ -199,7 +190,7 @@ export default function WorkspacesPage() {
                       style={selected?.id === ws.id ? { borderColor: 'var(--accent)' } : {}}>
                       <div className="font-semibold text-sm">{ws.name}</div>
                       <div className="font-mono text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                        {ws.slug} · {ws.plan}
+                        {ws.slug} - {ws.plan}
                       </div>
                     </button>
                   ))}
@@ -311,3 +302,5 @@ export default function WorkspacesPage() {
     </div>
   );
 }
+
+

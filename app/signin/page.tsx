@@ -26,7 +26,7 @@ function SignInContent() {
   useEffect(() => {
     let active = true;
     void fetchBrowserSession().then(session => {
-      if (active && session) router.replace('/dashboard');
+      if (active && session) router.replace('/studio');
     });
     return () => { active = false; };
   }, [router]);
@@ -47,7 +47,7 @@ function SignInContent() {
         setError(data.error || 'Something went wrong. Please try again.');
         return;
       }
-      router.push('/dashboard');
+      router.push('/studio');
     } catch {
       setError('Network error. Check your connection and try again.');
     } finally {

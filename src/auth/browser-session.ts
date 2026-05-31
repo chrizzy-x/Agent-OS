@@ -1,5 +1,9 @@
 export interface BrowserSession {
   agentName: string | null;
+  plan?: string;
+  planLabel?: string;
+  accountType?: 'retail' | 'enterprise';
+  capabilities?: string[];
   expiresAt: string | null;
 }
 

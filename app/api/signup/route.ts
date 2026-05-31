@@ -3,7 +3,9 @@ import { createAgentToken } from '@/src/auth/agent-identity';
 import { setAgentSessionCookie } from '@/src/auth/session-cookie';
 import { hashPassword } from '@/src/auth/password';
 import { createAgentAccount, findAccountsByEmail } from '@/src/auth/agent-store';
-import { isValidTier } from '@/src/auth/tiers';
+import { parsePlanSelection, PLAN_LABELS, type AccountType, type AgentPlan } from '@/src/auth/tiers';
+import { getPlanDescriptor } from '@/src/auth/capabilities';
+import { provisionAgentOSAccount } from '@/src/agentos/provisioning';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -28,15 +30,12 @@ export async function POST(req: NextRequest) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
   const agentName = typeof body.agentName === 'string' ? body.agentName.trim() : '';
-  const accountType = body.accountType === 'enterprise' ? 'enterprise' : 'retail';
-  const selectedPlan = isValidTier(body.selectedPlan) ? body.selectedPlan : 'free';
-  const requestedTier = accountType === 'enterprise'
-    ? 'enterprise'
-    : selectedPlan === 'enterprise'
-      ? 'free'
-      : selectedPlan;
+  const accountType = body.accountType === 'enterprise' ? 'enterprise' : body.accountType === 'retail' ? 'retail' : null;
   const planSelectionSkipped = body.planSelectionSkipped === true;
-  const tier = planSelectionSkipped ? 'free' : requestedTier;
+  const selectedPlan = typeof body.selectedPlan === 'string' ? body.selectedPlan : undefined;
+  const plan = planSelectionSkipped
+    ? 'retail_free'
+    : parsePlanSelection(accountType, selectedPlan);
 
   if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: 'invalid_email', message: 'Valid email required' }, { status: 400 });
@@ -44,6 +43,16 @@ export async function POST(req: NextRequest) {
 
   if (!password || password.length < 8) {
     return NextResponse.json({ error: 'invalid_password', message: 'Password must be at least 8 characters' }, { status: 400 });
+  }
+
+  if (!accountType || !plan) {
+    return NextResponse.json(
+      {
+        error: 'invalid_plan',
+        message: 'Choose Retail Free, Retail Pro, Enterprise Plus, or Enterprise Max under the matching account type.',
+      },
+      { status: 400 },
+    );
   }
 
   const existingAccounts = await findAccountsByEmail(email);
@@ -61,11 +70,11 @@ export async function POST(req: NextRequest) {
     : 'My Agent';
   let name = agentName || fallbackName;
   const passwordHash = await hashPassword(password);
-  let created = await createAgentAccount({ id: agentId, name, email, passwordHash, tier, accountType, planSelectionSkipped });
+  let created = await createAgentAccount({ id: agentId, name, email, passwordHash, tier: plan, plan, accountType: accountType as AccountType, planSelectionSkipped });
 
   if (created.duplicate && created.conflictField === 'name' && !agentName) {
     name = `${fallbackName} ${crypto.randomBytes(3).toString('hex')}`;
-    created = await createAgentAccount({ id: agentId, name, email, passwordHash, tier, accountType, planSelectionSkipped });
+    created = await createAgentAccount({ id: agentId, name, email, passwordHash, tier: plan, plan, accountType: accountType as AccountType, planSelectionSkipped });
   }
 
   if (created.duplicate) {
@@ -92,16 +101,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let provisioning;
+  try {
+    provisioning = await provisionAgentOSAccount({
+      agentId,
+      agentName: name,
+      email,
+      accountType: accountType as AccountType,
+      plan: plan as AgentPlan,
+    });
+  } catch {
+    return NextResponse.json(
+      { error: 'provisioning_failed', message: 'Account was created but AgentOS provisioning failed. Contact support before signing in.' },
+      { status: 500 },
+    );
+  }
+
+  const planDescriptor = getPlanDescriptor(plan);
+  const canIssueBearerToken = planDescriptor.capabilities.includes('use_bearer_token');
   const response = NextResponse.json(
     {
       success: true,
+      redirectTo: '/studio',
+      provisioning,
       credentials: {
-        bearerToken,
-        apiKey: bearerToken,
+        bearerToken: canIssueBearerToken ? bearerToken : null,
+        apiKey: canIssueBearerToken ? bearerToken : null,
         agentName: name,
-        tier,
+        tier: plan,
+        plan,
+        planLabel: PLAN_LABELS[plan as AgentPlan],
+        planPriceUsd: 0,
         accountType,
         planSelectionSkipped,
+        capabilities: planDescriptor.capabilities,
         expiresIn: '90 days',
       },
     },
