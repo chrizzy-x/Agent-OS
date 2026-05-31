@@ -4,7 +4,8 @@ import {
   getAgentAppBySlug,
   recordAgentAppDownload,
 } from '@/src/appstore/service';
-import { hasAdminAccess, requireRouteCapability } from '@/src/auth/request';
+import { hasAdminAccess, requireAgentContext } from '@/src/auth/request';
+import { listWorkspaces } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -14,19 +15,26 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   try {
-    const ctx = await requireRouteCapability(request.headers, 'apps.install');
     const { slug } = await params;
-    const app = await getAgentAppBySlug(slug, { includePrivate: true });
-    if (!app) {
-      return NextResponse.json({ error: 'App not found' }, { status: 404 });
-    }
-    if (!app.published && !hasAdminAccess(request.headers)) {
-      if (ctx.agentId !== app.publisherId) {
-        return NextResponse.json({ error: 'App not found' }, { status: 404 });
+    const canManageAll = hasAdminAccess(request.headers);
+    let viewerAgentId: string | null = null;
+    let viewerWorkspaceIds: string[] = [];
+    if (!canManageAll) {
+      try {
+        const ctx = requireAgentContext(request.headers);
+        viewerAgentId = ctx.agentId;
+        viewerWorkspaceIds = (await listWorkspaces(ctx.agentId)).map(workspace => workspace.id);
+      } catch {
+        viewerAgentId = null;
       }
     }
 
-    if (app.published) await recordAgentAppDownload(app.slug);
+    const app = await getAgentAppBySlug(slug, { viewerAgentId, viewerWorkspaceIds, canManageAll });
+    if (!app) {
+      return NextResponse.json({ error: 'App not found' }, { status: 404 });
+    }
+
+    if (app.visibility !== 'private') await recordAgentAppDownload(app.slug);
     const filename = `${app.slug.replace(/[^a-z0-9-]/g, '')}.agentos-app.json`;
 
     return new NextResponse(JSON.stringify(buildAgentAppPackage(app), null, 2), {

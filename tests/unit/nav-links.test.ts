@@ -3,7 +3,7 @@ import { buildSessionNavLinks } from '../../components/Nav.js';
 import type { BrowserSession } from '../../src/auth/browser-session.js';
 
 describe('studio-first navigation links', () => {
-  it('shows retail navigation without enterprise-only surfaces', () => {
+  it('shows the simplified signed-in top navigation', () => {
     const retailSession: BrowserSession = {
       agentName: 'Retail',
       plan: 'retail_free',
@@ -14,15 +14,10 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toContain('Studio');
-    expect(links.map(item => item.label)).toContain('Settings');
-    expect(links.map(item => item.label)).not.toContain('Developer Console');
-    expect(links.map(item => item.label)).not.toContain('SDK');
-    expect(links.map(item => item.label)).not.toContain('Publishing');
-    expect(links.map(item => item.label)).not.toContain('Team Management');
+    expect(links.map(item => item.label)).toEqual(['Studio', 'Appstore', 'Developer', 'Settings']);
   });
 
-  it('shows enterprise developer surfaces for enterprise sessions', () => {
+  it('keeps the same top-level navigation for enterprise sessions', () => {
     const enterpriseSession: BrowserSession = {
       agentName: 'Enterprise',
       plan: 'enterprise_plus',
@@ -33,9 +28,11 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(enterpriseSession);
-    expect(links.map(item => item.label)).toContain('Developer Console');
-    expect(links.map(item => item.label)).toContain('SDK');
-    expect(links.map(item => item.label)).toContain('Publishing');
-    expect(links.map(item => item.label)).toContain('Team Management');
+    expect(links.map(item => item.label)).toEqual(['Studio', 'Appstore', 'Developer', 'Settings']);
+  });
+
+  it('shows a minimal unauthenticated navigation', () => {
+    const links = buildSessionNavLinks(null);
+    expect(links.map(item => item.label)).toEqual(['Appstore']);
   });
 });

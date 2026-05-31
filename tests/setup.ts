@@ -66,12 +66,21 @@ export const mockSupabaseFrom = vi.fn(() => ({
   delete: vi.fn().mockReturnThis(),
   select: vi.fn().mockReturnThis(),
   eq: vi.fn().mockReturnThis(),
+  neq: vi.fn().mockReturnThis(),
+  gt: vi.fn().mockReturnThis(),
+  gte: vi.fn().mockReturnThis(),
+  lt: vi.fn().mockReturnThis(),
+  lte: vi.fn().mockReturnThis(),
+  ilike: vi.fn().mockReturnThis(),
+  or: vi.fn().mockReturnThis(),
+  contains: vi.fn().mockReturnThis(),
   maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
   single: vi.fn().mockResolvedValue({ data: null, error: null }),
   order: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
   range: vi.fn().mockResolvedValue({ data: [], error: null, count: 0 }),
   in: vi.fn().mockReturnThis(),
+  then: undefined,
 }));
 
 export const mockSupabase = {

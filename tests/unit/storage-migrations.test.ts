@@ -97,5 +97,17 @@ describe('storage migrations', () => {
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_workflows_workspace_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_workflows_canonical_idx');
   });
+
+  it('formalizes kernel registry and visibility-aware app catalog fields', () => {
+    const sql = readFileSync(join(migrationsDir, '019_kernel_registry_and_app_visibility.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS kernel_registry');
+    expect(sql).toContain('UNIQUE (agent_id, product)');
+    expect(sql).toContain("ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'internal'");
+    expect(sql).toContain("ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'public'");
+    expect(sql).toContain('ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS workspace_id TEXT');
+    expect(sql).toContain('ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS screenshots JSONB NOT NULL DEFAULT');
+    expect(sql).toContain('ALTER TABLE kernel_registry ENABLE ROW LEVEL SECURITY');
+  });
 });
 

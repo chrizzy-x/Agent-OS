@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
@@ -11,56 +11,29 @@ interface NavProps {
 export function buildSessionNavLinks(session: BrowserSession | null): Array<{ href: string; label: string }> {
   if (!session) {
     return [
-      { href: '/marketplace', label: 'Skills' },
-      { href: '/appstore', label: 'Apps' },
-      { href: '/docs', label: 'Docs' },
+      { href: '/appstore', label: 'Appstore' },
     ];
   }
 
-  const canUseDeveloperConsole = session.capabilities?.includes('access_developer_console') === true;
   return [
     { href: '/studio', label: 'Studio' },
-    { href: '/workspaces', label: 'Projects' },
-    { href: '/marketplace', label: 'Skills' },
-    { href: '/appstore', label: 'Apps' },
-    { href: '/vault', label: 'Vault' },
-    { href: '/analytics', label: 'Analytics' },
-    { href: '/workspace', label: 'Workspace' },
+    { href: '/appstore', label: 'Appstore' },
+    { href: '/developer', label: 'Developer' },
     { href: '/settings', label: 'Settings' },
-    ...(canUseDeveloperConsole ? [
-      { href: '/developer', label: 'Developer Console' },
-      { href: '/docs/sdk', label: 'SDK' },
-      { href: '/publishing', label: 'Publishing' },
-      { href: '/team', label: 'Team Management' },
-    ] : []),
   ];
 }
 
 export default function Nav({ activePath }: NavProps) {
-  const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [session, setSession] = useState<BrowserSession | null>(null);
-  const [sessionChecked, setSessionChecked] = useState(false);
-
-  useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 8);
-    window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
-  }, []);
-
-  // Close menu on resize to desktop
-  useEffect(() => {
-    const handler = () => { if (window.innerWidth > 768) setMenuOpen(false); };
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let active = true;
     void fetchBrowserSession()
-      .then(nextSession => { if (active) setSession(nextSession); })
+      .then(current => { if (active) setSession(current); })
       .catch(() => { if (active) setSession(null); })
-      .finally(() => { if (active) setSessionChecked(true); });
+      .finally(() => { if (active) setReady(true); });
     return () => { active = false; };
   }, []);
 
@@ -68,264 +41,138 @@ export default function Nav({ activePath }: NavProps) {
 
   return (
     <>
-      <nav
+      <header
         style={{
           position: 'sticky',
           top: 0,
-          zIndex: 50,
-          width: '100%',
-          backgroundColor: scrolled ? 'rgba(10,10,10,0.9)' : 'var(--bg-primary)',
-          backdropFilter: scrolled ? 'blur(12px)' : 'none',
-          WebkitBackdropFilter: scrolled ? 'blur(12px)' : 'none',
-          borderBottom: `1px solid ${scrolled ? 'var(--border)' : 'transparent'}`,
-          transition: 'background-color 200ms ease, border-color 200ms ease, backdrop-filter 200ms ease',
+          zIndex: 60,
+          borderBottom: '1px solid var(--border)',
+          background: 'rgba(9, 9, 12, 0.84)',
+          backdropFilter: 'blur(18px)',
         }}
       >
-        <div style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
-          padding: '0 24px',
-          height: '56px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '32px',
-        }}>
-          {/* Logo */}
-          <Link href="/" style={{ textDecoration: 'none', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="AgentOS by PRIME" style={{ width: '32px', height: '32px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }} />
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
-                  fontWeight: 700,
-                  fontSize: '14px',
-                  color: 'var(--text-primary)',
-                  letterSpacing: '-0.02em',
-                }}>AgentOS</span>
-                <span style={{
-                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-                  fontWeight: 500,
-                  fontSize: '10px',
-                  color: 'var(--text-secondary)',
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                }}>by PRIME</span>
-              </div>
+        <div className="container" style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <Link href={session ? '/studio' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                display: 'grid',
+                placeItems: 'center',
+                background: 'rgba(139, 92, 246, 0.14)',
+                border: '1px solid rgba(139, 92, 246, 0.22)',
+                color: '#ddd6fe',
+                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontWeight: 700,
+                fontSize: 12,
+              }}
+            >
+              OS
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+              <span style={{ fontWeight: 700 }}>AgentOS</span>
+              <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>AI operating system</span>
             </div>
           </Link>
 
-          {/* Desktop links */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px',
-            flex: 1,
-          }} className="nav-desktop-links">
+          <nav className="nav-desktop-links" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {links.map(link => (
               <Link
                 key={link.href}
                 href={link.href}
                 style={{
-                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  color: activePath === link.href ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  minHeight: 38,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  border: `1px solid ${activePath === link.href ? 'rgba(139, 92, 246, 0.26)' : 'transparent'}`,
+                  background: activePath === link.href ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                  color: activePath === link.href ? '#ddd6fe' : 'var(--text-secondary)',
                   textDecoration: 'none',
-                  padding: '6px 14px',
-                  transition: 'color 150ms ease',
-                  borderBottom: activePath === link.href ? '1px solid var(--accent)' : '1px solid transparent',
+                  fontWeight: 600,
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = activePath === link.href ? 'var(--text-primary)' : 'var(--text-secondary)'; }}
               >
                 {link.label}
               </Link>
             ))}
-          </div>
+          </nav>
 
-          {/* Desktop CTAs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }} className="nav-desktop-ctas">
-            {sessionChecked && session && (
+          <div className="nav-desktop-ctas" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {ready && session ? (
               <>
-                <span style={{
-                  maxWidth: '180px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                }}>
-                  {session.agentName ?? 'Account'}
+                <span style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {session.agentName ?? 'AgentOS'}
                 </span>
-                <Link href="/studio" style={{
-                  fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: 'var(--bg-primary)',
-                  backgroundColor: 'var(--accent)',
-                  textDecoration: 'none',
-                  padding: '8px 18px',
-                  transition: 'background-color 200ms ease, box-shadow 200ms ease',
-                  whiteSpace: 'nowrap',
-                }}
-                  onMouseEnter={e => {
-                    const el = e.currentTarget as HTMLAnchorElement;
-                    el.style.backgroundColor = 'var(--accent-dim)';
-                    el.style.boxShadow = '0 0 16px var(--accent-glow)';
-                  }}
-                  onMouseLeave={e => {
-                    const el = e.currentTarget as HTMLAnchorElement;
-                    el.style.backgroundColor = 'var(--accent)';
-                    el.style.boxShadow = 'none';
-                  }}
-                >Studio</Link>
+                <Link href="/studio" className="btn-primary">Open Studio</Link>
+              </>
+            ) : (
+              <>
+                <Link href="/signin" className="btn-ghost">Sign in</Link>
+                <Link href="/signup" className="btn-primary">Get started</Link>
               </>
             )}
-            <Link href="/signin" style={{
-              display: sessionChecked && !session ? undefined : 'none',
-              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-              fontSize: '14px',
-              fontWeight: 500,
-              color: 'var(--text-secondary)',
-              textDecoration: 'none',
-              padding: '6px 14px',
-              transition: 'color 150ms ease',
-            }}
-              onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-primary)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-secondary)'; }}
-            >Sign in</Link>
-            <Link href="/signup" style={{
-              display: sessionChecked && !session ? undefined : 'none',
-              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-              fontSize: '14px',
-              fontWeight: 600,
-              color: 'var(--bg-primary)',
-              backgroundColor: 'var(--accent)',
-              textDecoration: 'none',
-              padding: '8px 18px',
-              transition: 'background-color 200ms ease, box-shadow 200ms ease',
-              whiteSpace: 'nowrap',
-            }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLAnchorElement;
-                el.style.backgroundColor = 'var(--accent-dim)';
-                el.style.boxShadow = '0 0 16px var(--accent-glow)';
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLAnchorElement;
-                el.style.backgroundColor = 'var(--accent)';
-                el.style.boxShadow = 'none';
-              }}
-            >Get started</Link>
           </div>
 
-          {/* Mobile hamburger */}
           <button
+            type="button"
             className="nav-hamburger"
-            onClick={() => setMenuOpen(v => !v)}
-            aria-label="Toggle menu"
+            aria-label="Toggle navigation"
+            onClick={() => setMenuOpen(current => !current)}
             style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '8px',
               display: 'none',
-              flexDirection: 'column',
-              gap: '5px',
+              width: 42,
+              height: 42,
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'rgba(255,255,255,0.02)',
+              color: 'var(--text-primary)',
             }}
           >
-            <span style={{ display: 'block', width: '20px', height: '1px', background: menuOpen ? 'var(--accent)' : 'var(--text-primary)', transition: 'transform 200ms, background 200ms', transform: menuOpen ? 'rotate(45deg) translateY(6px)' : 'none' }} />
-            <span style={{ display: 'block', width: '20px', height: '1px', background: menuOpen ? 'var(--accent)' : 'var(--text-primary)', transition: 'opacity 200ms', opacity: menuOpen ? 0 : 1 }} />
-            <span style={{ display: 'block', width: '20px', height: '1px', background: menuOpen ? 'var(--accent)' : 'var(--text-primary)', transition: 'transform 200ms, background 200ms', transform: menuOpen ? 'rotate(-45deg) translateY(-6px)' : 'none' }} />
+            {menuOpen ? '×' : '☰'}
           </button>
         </div>
-      </nav>
 
-      {/* Mobile menu overlay */}
-      {menuOpen && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          top: '56px',
-          zIndex: 49,
-          backgroundColor: 'var(--bg-primary)',
-          borderTop: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '0',
-          overflowY: 'auto',
-        }}>
-          {links.map(link => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setMenuOpen(false)}
-              style={{
-                fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-                fontSize: '16px',
-                fontWeight: 500,
-                color: activePath === link.href ? 'var(--accent)' : 'var(--text-primary)',
-                textDecoration: 'none',
-                padding: '16px 24px',
-                borderBottom: '1px solid var(--border)',
-                minHeight: '56px',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              {link.label}
-            </Link>
-          ))}
-          {sessionChecked && session && (
-            <Link href="/studio" onClick={() => setMenuOpen(false)} style={{
-              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-              fontSize: '16px',
-              fontWeight: 600,
-              color: 'var(--accent)',
-              textDecoration: 'none',
-              padding: '16px 24px',
-              borderBottom: '1px solid var(--border)',
-              minHeight: '56px',
-              display: 'flex',
-              alignItems: 'center',
-            }}>Studio</Link>
-          )}
-          <Link href="/signin" onClick={() => setMenuOpen(false)} style={{
-            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-            fontSize: '16px',
-            fontWeight: 500,
-            color: 'var(--text-secondary)',
-            textDecoration: 'none',
-            padding: '16px 24px',
-            borderBottom: '1px solid var(--border)',
-            minHeight: '56px',
-            display: sessionChecked && !session ? 'flex' : 'none',
-            alignItems: 'center',
-          }}>Sign in</Link>
-          <div style={{ padding: '16px 24px', marginTop: 'auto', display: sessionChecked && !session ? 'block' : 'none' }}>
-            <Link href="/signup" onClick={() => setMenuOpen(false)} style={{
-              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-              fontSize: '16px',
-              fontWeight: 600,
-              color: 'var(--bg-primary)',
-              backgroundColor: 'var(--accent)',
-              textDecoration: 'none',
-              padding: '14px 24px',
-              display: 'block',
-              textAlign: 'center',
-            }}>Get started</Link>
+        {menuOpen ? (
+          <div className="container" style={{ paddingBottom: 16 }}>
+            <div className="card" style={{ padding: 10 }}>
+              <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {links.map(link => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => setMenuOpen(false)}
+                    style={{
+                      minHeight: 44,
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: activePath === link.href ? '#ddd6fe' : 'var(--text-secondary)',
+                      background: activePath === link.href ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                    }}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+                {!session ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
+                    <Link href="/signin" className="btn-ghost" onClick={() => setMenuOpen(false)}>Sign in</Link>
+                    <Link href="/signup" className="btn-primary" onClick={() => setMenuOpen(false)}>Get started</Link>
+                  </div>
+                ) : null}
+              </nav>
+            </div>
           </div>
-        </div>
-      )}
+        ) : null}
+      </header>
 
       <style>{`
-        @media (max-width: 768px) {
-          .nav-desktop-links { display: none !important; }
-          .nav-desktop-ctas  { display: none !important; }
-          .nav-hamburger     { display: flex !important; }
+        @media (max-width: 860px) {
+          .nav-desktop-links, .nav-desktop-ctas { display: none !important; }
+          .nav-hamburger { display: inline-flex !important; align-items: center; justify-content: center; }
         }
       `}</style>
     </>

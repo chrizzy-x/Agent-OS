@@ -20,7 +20,7 @@ export function clearLegacyBrowserAuth(): void {
 }
 
 export async function fetchBrowserSession(): Promise<BrowserSession | null> {
-  const response = await fetch('/api/session', { cache: 'no-store', credentials: 'include' });
+  const response = await fetch('/api/session?optional=1', { cache: 'no-store', credentials: 'include' });
   if (!response.ok) {
     clearLegacyBrowserAuth();
     return null;

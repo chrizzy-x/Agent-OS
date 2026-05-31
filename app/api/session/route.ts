@@ -15,6 +15,7 @@ function readSessionToken(headers: Headers | globalThis.Headers): string | undef
 }
 
 export async function GET(request: NextRequest) {
+  const optional = new URL(request.url).searchParams.get('optional') === '1';
   try {
     const context = await requireAgentContextWithTier(request.headers);
     try {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
   } catch {
     const response = NextResponse.json(
       { authenticated: false, error: 'unauthorized', message: 'Not signed in' },
-      { status: 401 },
+      { status: optional ? 200 : 401 },
     );
     clearAgentSessionCookie(response);
     return response;

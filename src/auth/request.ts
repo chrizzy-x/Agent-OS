@@ -7,6 +7,8 @@ import { ROUTE_CAPABILITY_POLICY, type RoutePolicyKey } from './route-policy.js'
 import { extractBearerToken, verifyAgentToken, verifyAgentTokenWithTier } from './agent-identity.js';
 import { extractSessionTokenFromCookie } from './session-cookie.js';
 import { getAdminToken, getCronSecret } from '../config/env.js';
+import { requireSdkKernelContext } from '../sdk/auth.js';
+import { resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
 
 function readAuthorization(headers: Headers | globalThis.Headers): string | undefined {
   return headers.get('authorization') ?? headers.get('Authorization') ?? undefined;
@@ -19,6 +21,13 @@ function readCookie(headers: Headers | globalThis.Headers): string | undefined {
 function readAgentToken(headers: Headers | globalThis.Headers): string | undefined {
   return extractBearerToken(readAuthorization(headers)) ?? extractSessionTokenFromCookie(readCookie(headers));
 }
+
+export type KernelRouteContext = AgentContext & {
+  workspaceId: string | null;
+  authSource: 'agent' | 'sdk';
+  sdkCredentialId?: string | null;
+  sdkScopes?: string[] | null;
+};
 
 export function requireAgentContext(headers: Headers | globalThis.Headers): AgentContext {
   const token = readAgentToken(headers);
@@ -51,6 +60,31 @@ export async function requireRouteCapability(
   route: RoutePolicyKey,
 ): Promise<AgentContext> {
   return requireAgentCapability(headers, ROUTE_CAPABILITY_POLICY[route]);
+}
+
+export async function requireKernelRouteAccess(
+  headers: Headers | globalThis.Headers,
+  access: 'read' | 'register' | 'command',
+): Promise<KernelRouteContext> {
+  const bearer = extractBearerToken(readAuthorization(headers));
+  if (bearer?.startsWith('sdk_')) {
+    const requiredScopes = access === 'read'
+      ? ['kernel.read', 'kernel']
+      : access === 'command'
+        ? ['kernel.command', 'kernel.write', 'kernel']
+        : ['kernel.register', 'kernel.write', 'kernel'];
+    return requireSdkKernelContext(bearer, requiredScopes);
+  }
+
+  const ctx = await requireRouteCapability(headers, 'sdk.kernel');
+  const workspace = await resolveDefaultWorkspaceForAgent(ctx.agentId);
+  return {
+    ...ctx,
+    workspaceId: workspace?.id ?? null,
+    authSource: 'agent',
+    sdkCredentialId: null,
+    sdkScopes: null,
+  };
 }
 
 export function hasAgentAccess(headers: Headers | globalThis.Headers): boolean {

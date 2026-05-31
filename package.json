@@ -9,10 +9,10 @@
         "build": "next build",
         "start": "next start",
         "dev:api": "tsx src/index.ts",
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "test:coverage": "vitest run --coverage",
-        "lint": "tsc --noEmit --incremental false"
+        "test": "node scripts/run-vitest.mjs run",
+        "test:watch": "node scripts/run-vitest.mjs watch",
+        "test:coverage": "node scripts/run-vitest.mjs run --coverage",
+        "lint": "tsc --noEmit --incremental false -p tsconfig.lint.json"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.78.0",

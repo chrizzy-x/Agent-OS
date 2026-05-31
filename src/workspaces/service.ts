@@ -29,6 +29,11 @@ export type WorkspaceAgent = {
   addedAt: string;
 };
 
+export type WorkspaceMemberProfile = WorkspaceMember & {
+  name: string | null;
+  email: string | null;
+};
+
 export type WorkspaceAudit = {
   id: string;
   workspaceId: string;
@@ -221,6 +226,197 @@ export async function addWorkspaceMember(params: { workspaceId: string; userId: 
 
   await appendAudit(member.workspaceId, params.actorId, 'workspace.member_added', { userId: member.userId, role: member.role });
   return member;
+}
+
+async function getAccountProfileMap(userIds: string[]): Promise<Map<string, { name: string | null; email: string | null }>> {
+  const uniqueIds = [...new Set(userIds)].filter(Boolean);
+  const profiles = new Map<string, { name: string | null; email: string | null }>();
+  if (uniqueIds.length === 0) return profiles;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('agents')
+      .select('id,name,metadata')
+      .in('id', uniqueIds);
+
+    if (!error && data) {
+      for (const row of data as Array<Record<string, unknown>>) {
+        const metadata = (row.metadata as Record<string, unknown> | null | undefined) ?? {};
+        profiles.set(String(row.id), {
+          name: typeof row.name === 'string' ? row.name : null,
+          email: typeof metadata.email === 'string' ? metadata.email : null,
+        });
+      }
+      return profiles;
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const state = await readLocalRuntimeState();
+  for (const account of Object.values(state.accounts)) {
+    if (uniqueIds.includes(account.agentId)) {
+      profiles.set(account.agentId, { name: account.agentName, email: account.email });
+    }
+  }
+  return profiles;
+}
+
+export async function listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberProfile[]> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('workspace_members')
+      .select('workspace_id,user_id,role,joined_at')
+      .eq('workspace_id', workspaceId)
+      .order('joined_at', { ascending: true });
+
+    if (!error) {
+      const rows = (data ?? []) as Array<Record<string, unknown>>;
+      const profiles = await getAccountProfileMap(rows.map(row => String(row.user_id)));
+      return rows.map(row => ({
+        workspaceId: String(row.workspace_id),
+        userId: String(row.user_id),
+        role: (row.role as WorkspaceRole) ?? 'member',
+        joinedAt: String(row.joined_at ?? new Date().toISOString()),
+        name: profiles.get(String(row.user_id))?.name ?? null,
+        email: profiles.get(String(row.user_id))?.email ?? null,
+      }));
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const members = [...(localMembers.get(workspaceId) ?? [])];
+  const profiles = await getAccountProfileMap(members.map(member => member.userId));
+  return members.map(member => ({
+    ...member,
+    name: profiles.get(member.userId)?.name ?? null,
+    email: profiles.get(member.userId)?.email ?? null,
+  }));
+}
+
+export async function updateWorkspaceMemberRole(params: {
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceRole;
+  actorId: string;
+}): Promise<WorkspaceMember> {
+  if (params.role === 'owner') {
+    throw new PermissionError('Owner role cannot be reassigned from this endpoint');
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('workspace_members')
+      .update({ role: params.role })
+      .eq('workspace_id', params.workspaceId)
+      .eq('user_id', params.userId)
+      .select('workspace_id,user_id,role,joined_at')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+      const member: WorkspaceMember = {
+        workspaceId: String(data.workspace_id),
+        userId: String(data.user_id),
+        role: (data.role as WorkspaceRole) ?? params.role,
+        joinedAt: String(data.joined_at ?? new Date().toISOString()),
+      };
+      await appendAudit(params.workspaceId, params.actorId, 'workspace.member_role_updated', { userId: member.userId, role: member.role });
+      return member;
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const members = localMembers.get(params.workspaceId) ?? [];
+  const existing = members.find(member => member.userId === params.userId);
+  if (!existing) {
+    throw new PermissionError('Workspace member not found');
+  }
+  existing.role = params.role;
+  await appendAudit(params.workspaceId, params.actorId, 'workspace.member_role_updated', { userId: existing.userId, role: existing.role });
+  return existing;
+}
+
+export async function removeWorkspaceMember(params: {
+  workspaceId: string;
+  userId: string;
+  actorId: string;
+}): Promise<{ removed: boolean }> {
+  const workspace = await assertWorkspaceOwnership(params.workspaceId, params.actorId);
+  if (workspace.ownerId === params.userId) {
+    throw new PermissionError('Workspace owner cannot be removed');
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('workspace_members')
+      .delete()
+      .eq('workspace_id', params.workspaceId)
+      .eq('user_id', params.userId);
+    if (error) throw error;
+  } catch {
+    const members = localMembers.get(params.workspaceId) ?? [];
+    localMembers.set(params.workspaceId, members.filter(member => member.userId !== params.userId));
+  }
+
+  await appendAudit(params.workspaceId, params.actorId, 'workspace.member_removed', { userId: params.userId });
+  return { removed: true };
+}
+
+export async function updateWorkspace(params: {
+  workspaceId: string;
+  actorId: string;
+  name?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<Workspace> {
+  const existing = await assertWorkspaceOwnership(params.workspaceId, params.actorId);
+  const nextName = typeof params.name === 'string' && params.name.trim() ? params.name.trim() : existing.name;
+  const nextSlug = normalizeSlug(nextName);
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('workspaces')
+      .update({
+        name: nextName,
+        slug: nextSlug,
+        metadata: params.metadata ?? undefined,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', params.workspaceId)
+      .select('id,name,slug,owner_id,plan,created_at')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (data) {
+      await appendAudit(params.workspaceId, params.actorId, 'workspace.updated', { name: nextName });
+      return {
+        id: String(data.id),
+        name: String(data.name),
+        slug: String(data.slug),
+        ownerId: String(data.owner_id),
+        plan: String(data.plan),
+        createdAt: String(data.created_at),
+      };
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const workspace = localWorkspaces.get(params.workspaceId);
+  if (!workspace) {
+    throw new PermissionError('Workspace not found or not accessible');
+  }
+  workspace.name = nextName;
+  workspace.slug = nextSlug;
+  await appendAudit(params.workspaceId, params.actorId, 'workspace.updated', { name: nextName });
+  return workspace;
 }
 
 export async function addWorkspaceAgent(params: { workspaceId: string; agentId: string; actorId: string }): Promise<WorkspaceAgent> {

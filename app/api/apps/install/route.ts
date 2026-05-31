@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRouteCapability } from '@/src/auth/request';
+import { hasAdminAccess, requireRouteCapability } from '@/src/auth/request';
 import { installAgentApp } from '@/src/appstore/service';
-import { assertWorkspaceMembership } from '@/src/workspaces/service';
+import { assertWorkspaceMembership, listWorkspaces } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
       agentId: ctx.agentId,
       slug,
       workspaceId,
+      viewerWorkspaceIds: (await listWorkspaces(ctx.agentId)).map(workspace => workspace.id),
+      canManageAll: hasAdminAccess(request.headers),
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error: unknown) {

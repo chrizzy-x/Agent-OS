@@ -22,6 +22,7 @@ export const metadata: Metadata = {
   description:
     'Agent OS combines primitives, universal MCP routing, consensus controls, a Skill Store, an App Store, and an autonomous operations crew for production AI agents.',
   keywords: 'AI agents, MCP, autonomous agents, skill store, agentic app store, agent infrastructure, consensus',
+  metadataBase: new URL(APP_URL),
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

@@ -3,10 +3,14 @@ export type AgentAppCommand = {
   description: string;
 };
 
+export type AgentAppSource = 'internal' | 'external_sdk';
+export type AgentAppVisibility = 'public' | 'private' | 'unlisted';
+export type AgentAppRuntimeType = 'agentos-app' | 'external-app' | 'workspace-app';
+
 export type AgentAppManifest = {
   schemaVersion: 'agentos.app.v1';
   version: string;
-  runtime: 'agentos-app' | 'external-app' | 'workspace-app';
+  runtime: AgentAppRuntimeType;
   entrypoint: string;
   primitives: string[];
   skills: string[];
@@ -17,6 +21,7 @@ export type AgentAppManifest = {
 
 export type AgentAppListing = {
   id: string;
+  workspaceId: string | null;
   name: string;
   slug: string;
   category: string;
@@ -29,6 +34,16 @@ export type AgentAppListing = {
   deviceTargets: string[];
   manifest: AgentAppManifest;
   defaultConfig: Record<string, unknown>;
+  permissionsRequired: string[];
+  requiredSecrets: string[];
+  screenshots: string[];
+  source: AgentAppSource;
+  visibility: AgentAppVisibility;
+  runtimeType: AgentAppRuntimeType;
+  kernelProduct: string | null;
+  kernelCommandTopic: string | null;
+  kernelStatusTopic: string | null;
+  lastHeartbeatAt: string | null;
   installCount: number;
   verified: boolean;
   published: boolean;

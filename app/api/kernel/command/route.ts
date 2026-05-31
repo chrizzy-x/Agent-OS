@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRouteCapability } from '@/src/auth/request';
+import { requireKernelRouteAccess } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 // POST /api/kernel/command
 export async function POST(req: NextRequest) {
   try {
-    const ctx = await requireRouteCapability(req.headers, 'sdk.kernel');
+    const ctx = await requireKernelRouteAccess(req.headers, 'command');
 
     let body: { product?: string; command?: string; payload?: Record<string, unknown> };
     try { body = await req.json(); } catch {
@@ -23,12 +23,15 @@ export async function POST(req: NextRequest) {
 
     // Resolve the command topic for this product
     const supabase = getSupabaseAdmin();
-    const { data: kernel, error } = await supabase
+    let query = supabase
       .from('kernel_registry')
       .select('command_topic, available_commands')
       .eq('agent_id', ctx.agentId)
-      .eq('product', product)
-      .single();
+      .eq('product', product);
+    if (ctx.workspaceId) {
+      query = query.eq('workspace_id', ctx.workspaceId);
+    }
+    const { data: kernel, error } = await query.single();
 
     if (error || !kernel) {
       return NextResponse.json({ error: `Product "${product}" not registered` }, { status: 404 });

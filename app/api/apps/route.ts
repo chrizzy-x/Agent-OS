@@ -5,6 +5,7 @@ import { hasAdminAccess, requireAgentContext, requireRouteCapability } from '@/s
 import { AGENT_APP_CATEGORIES } from '@/src/appstore/catalog';
 import { listAgentApps, publishAgentApp, updateAgentAppVisibility } from '@/src/appstore/service';
 import { ValidationError, toErrorResponse } from '@/src/utils/errors';
+import { assertWorkspaceMembership, listWorkspaces, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
 
@@ -18,19 +19,28 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const ownCatalog = searchParams.get('mine') === '1' || searchParams.get('mine') === 'true';
     let publisherId = searchParams.get('publisher') ?? searchParams.get('author');
-    let includePrivate = false;
+    let includeHidden = false;
+    let viewerAgentId: string | null = null;
+    let viewerWorkspaceIds: string[] = [];
+    const canManageAll = hasAdminAccess(request.headers);
 
     if (ownCatalog) {
-      publisherId = requireAgentContext(request.headers).agentId;
-      includePrivate = true;
+      const viewer = requireAgentContext(request.headers);
+      viewerAgentId = viewer.agentId;
+      viewerWorkspaceIds = (await listWorkspaces(viewer.agentId)).map(workspace => workspace.id);
+      publisherId = viewer.agentId;
+      includeHidden = true;
     } else if (publisherId) {
-      if (hasAdminAccess(request.headers)) {
-        includePrivate = true;
+      if (canManageAll) {
+        includeHidden = true;
       } else {
         try {
-          includePrivate = requireAgentContext(request.headers).agentId === publisherId;
+          const viewer = requireAgentContext(request.headers);
+          viewerAgentId = viewer.agentId;
+          viewerWorkspaceIds = (await listWorkspaces(viewer.agentId)).map(workspace => workspace.id);
+          includeHidden = viewer.agentId === publisherId;
         } catch {
-          includePrivate = false;
+          includeHidden = false;
         }
       }
     }
@@ -40,7 +50,13 @@ export async function GET(request: NextRequest) {
       search: searchParams.get('search'),
       sort: searchParams.get('sort'),
       publisherId,
-      includePrivate,
+      source: searchParams.get('source'),
+      runtimeType: searchParams.get('runtimeType') ?? searchParams.get('runtime'),
+      visibility: searchParams.get('visibility'),
+      includeHidden,
+      viewerAgentId,
+      viewerWorkspaceIds,
+      canManageAll,
     });
 
     return NextResponse.json({
@@ -66,6 +82,10 @@ export async function POST(request: NextRequest) {
     }
 
     const publisherAccount = await findAccountById(agentCtx.agentId);
+    const requestedWorkspaceId = stringBodyValue(body, 'workspaceId', 'workspace_id') ?? '';
+    const workspaceId = requestedWorkspaceId
+      ? (await assertWorkspaceMembership(requestedWorkspaceId, agentCtx.agentId)).workspace.id
+      : (await resolveDefaultWorkspaceForAgent(agentCtx.agentId))?.id ?? null;
     const app = await publishAgentApp({
       name: stringBodyValue(body, 'name', 'name'),
       slug: stringBodyValue(body, 'slug', 'slug'),
@@ -74,14 +94,17 @@ export async function POST(request: NextRequest) {
       longDescription: stringBodyValue(body, 'longDescription', 'long_description'),
       publisherId: agentCtx.agentId,
       publisherName: stringBodyValue(body, 'publisherName', 'publisher_name') ?? publisherAccount?.name ?? 'AgentOS Publisher',
+      workspaceId,
       appUrl: stringBodyValue(body, 'appUrl', 'app_url') ?? null,
       repositoryUrl: stringBodyValue(body, 'repositoryUrl', 'repository_url') ?? null,
       deviceTargets: body.deviceTargets ?? body.device_targets,
       manifest: body.manifest,
       defaultConfig: body.defaultConfig ?? body.default_config,
-      published: typeof body.published === 'boolean' ? body.published : stringBodyValue(body, 'visibility', 'visibility') !== 'private',
+      published: typeof body.published === 'boolean' ? body.published : undefined,
+      visibility: stringBodyValue(body, 'visibility', 'visibility'),
       permissionsRequired: body.permissions_required,
       requiredSecrets: body.required_secrets,
+      screenshots: body.screenshots,
       publishState: typeof body.publish_state === 'string' ? body.publish_state : undefined,
     });
 
@@ -105,20 +128,18 @@ export async function PATCH(request: NextRequest) {
 
     const slug = stringBodyValue(body, 'slug', 'slug');
     const visibility = stringBodyValue(body, 'visibility', 'visibility');
-    const published = typeof body.published === 'boolean'
-      ? body.published
-      : visibility === 'public'
-        ? true
-        : visibility === 'private'
-          ? false
-          : undefined;
+    const normalizedVisibility = visibility === 'public' || visibility === 'private' || visibility === 'unlisted'
+      ? visibility
+      : typeof body.published === 'boolean'
+        ? body.published ? 'public' : 'private'
+        : undefined;
 
     if (!slug) throw new ValidationError('App slug required');
-    if (typeof published !== 'boolean') throw new ValidationError('Visibility must be public or private');
+    if (!normalizedVisibility) throw new ValidationError('Visibility must be public, private, or unlisted');
 
     const app = await updateAgentAppVisibility({
       slug,
-      published,
+      visibility: normalizedVisibility,
       publisherId: agentCtx?.agentId,
       canManageAll,
     });

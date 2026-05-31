@@ -41,6 +41,19 @@ export async function listPrivateSubagents(ownerAgentId: string): Promise<Privat
   return ((data ?? []) as Record<string, unknown>[]).map(mapSubagent);
 }
 
+export async function getPrivateSubagent(ownerAgentId: string, subagentId: string): Promise<PrivateSubagent> {
+  const { data, error } = await getSupabaseAdmin()
+    .from('private_subagents')
+    .select('*')
+    .eq('id', subagentId)
+    .eq('owner_agent_id', ownerAgentId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load private subagent: ${error.message}`);
+  if (!data) throw new PermissionError('Private subagent not found or not accessible');
+  return mapSubagent(data as Record<string, unknown>);
+}
+
 export async function createPrivateSubagent(params: {
   ownerAgentId: string;
   workspaceId: string;
