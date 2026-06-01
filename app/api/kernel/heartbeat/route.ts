@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     }
 
     const availableCommands = Array.isArray(body.availableCommands) ? body.availableCommands : Array.isArray(existing?.available_commands) ? existing.available_commands : [];
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('kernel_registry')
       .upsert({
         agent_id: ctx.agentId,
@@ -82,7 +82,32 @@ export async function POST(req: NextRequest) {
       }, { onConflict: 'agent_id,product' })
       .select()
       .single();
-    if (error) throw error;
+    const legacy = primary.error
+      ? await supabase
+        .from('kernel_registry')
+        .upsert({
+          agent_id: ctx.agentId,
+          workspace_id: ctx.workspaceId,
+          product: String(body.product),
+          command_topic: String(existing?.command_topic ?? ''),
+          status_topic: String(existing?.status_topic ?? ''),
+          available_commands: availableCommands,
+          status: healthStatus,
+          registered_at: String(existing?.registered_at ?? now),
+          last_heartbeat_at: now,
+          last_status_payload: {
+            ...(typeof existing?.last_status_payload === 'object' && existing.last_status_payload ? existing.last_status_payload as Record<string, unknown> : {}),
+            heartbeatAt: now,
+            status: healthStatus,
+            endpointStatus,
+            lastError: body.lastError ?? null,
+            version: typeof body.app?.manifest?.version === 'string' ? body.app.manifest.version : String(existing?.version ?? '1.0.0'),
+          },
+        }, { onConflict: 'agent_id,product' })
+        .select()
+        .single()
+      : { data: primary.data, error: primary.error };
+    if (legacy.error) throw legacy.error;
 
     const publisher = await findAccountById(ctx.agentId);
     const listing = await upsertExternalSdkAgentApp({
@@ -111,7 +136,7 @@ export async function POST(req: NextRequest) {
       payload: { product: String(body.product), slug: listing.slug, status: healthStatus },
     });
 
-    return NextResponse.json({ heartbeat: true, kernel: data, app: listing });
+    return NextResponse.json({ heartbeat: true, kernel: legacy.data, app: listing });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

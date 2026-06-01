@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('kernel_registry')
       .upsert({
         agent_id: ctx.agentId,
@@ -95,8 +95,30 @@ export async function POST(req: NextRequest) {
       }, { onConflict: 'agent_id,product' })
       .select()
       .single();
+    const legacy = primary.error
+      ? await supabase
+        .from('kernel_registry')
+        .upsert({
+          agent_id: ctx.agentId,
+          workspace_id: ctx.workspaceId,
+          product: String(product),
+          command_topic: String(commandTopic),
+          status_topic: String(statusTopic),
+          available_commands: normalizedCommands,
+          status: 'online',
+          registered_at: now,
+          last_heartbeat_at: now,
+          last_status_payload: {
+            status: 'online',
+            endpointStatus: 'healthy',
+            version: typeof app?.manifest?.version === 'string' ? app.manifest.version : '1.0.0',
+          },
+        }, { onConflict: 'agent_id,product' })
+        .select()
+        .single()
+      : { data: primary.data, error: primary.error };
 
-    if (error) throw error;
+    if (legacy.error) throw legacy.error;
 
     const publisher = await findAccountById(ctx.agentId);
     const listing = await upsertExternalSdkAgentApp({
@@ -122,7 +144,7 @@ export async function POST(req: NextRequest) {
       payload: { product: String(product), slug: listing.slug },
     });
 
-    return NextResponse.json({ registered: true, kernel: data, app: listing });
+    return NextResponse.json({ registered: true, kernel: legacy.data, app: listing });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

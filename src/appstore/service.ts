@@ -166,6 +166,7 @@ type DbKernelRegistryRow = {
   version?: unknown;
   registered_at?: unknown;
   last_heartbeat_at?: unknown;
+  last_status_payload?: unknown;
   last_error?: unknown;
   disabled?: unknown;
   heartbeat_count?: unknown;
@@ -176,7 +177,11 @@ type SaveAgentAppInput = PublishAgentAppInput & {
 };
 
 const APP_SELECT = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,last_command_at,last_error,health_status,endpoint_status,disabled,heartbeat_count,open_count,web_open_count,android_download_count,ios_download_count,install_count,verified,published,created_at,updated_at';
+const APP_SELECT_LEGACY = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,install_count,verified,published,created_at,updated_at';
 const APP_INSTALLATION_SELECT = 'id,app_id,agent_id,workspace_id,status,favorite,permissions_approved,open_count,last_opened_at,installed_at,updated_at';
+const APP_INSTALLATION_SELECT_LEGACY = 'id,app_id,agent_id,workspace_id,status,installed_at,updated_at';
+const KERNEL_REGISTRY_DISCOVERY_SELECT = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,health_status,endpoint_status,version,registered_at,last_heartbeat_at,last_error,disabled,heartbeat_count';
+const KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -444,12 +449,51 @@ function toDbPayload(app: AgentAppListing, publishState = 'draft'): Record<strin
   };
 }
 
+function toLegacyDbPayload(app: AgentAppListing, publishState = 'draft'): Record<string, unknown> {
+  return {
+    id: app.id,
+    workspace_id: app.workspaceId,
+    name: app.name,
+    slug: app.slug,
+    category: app.category,
+    description: app.description,
+    long_description: app.longDescription,
+    publisher_id: app.publisherId,
+    publisher_name: app.publisherName,
+    app_url: app.appUrl,
+    repository_url: app.repositoryUrl,
+    device_targets: app.deviceTargets,
+    manifest: app.manifest,
+    default_config: app.defaultConfig,
+    permissions_required: app.permissionsRequired,
+    required_secrets: app.requiredSecrets,
+    screenshots: app.screenshots,
+    publish_state: publishState,
+    source: app.source,
+    visibility: app.visibility,
+    runtime_type: app.runtimeType,
+    kernel_product: app.kernelProduct,
+    kernel_command_topic: app.kernelCommandTopic,
+    kernel_status_topic: app.kernelStatusTopic,
+    last_heartbeat_at: app.lastHeartbeatAt,
+    install_count: app.installCount,
+    verified: app.verified,
+    published: app.published,
+    created_at: app.createdAt,
+    updated_at: app.updatedAt,
+  };
+}
+
 async function loadStoredApps(): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.from('agent_apps').select(APP_SELECT);
     if (!error) {
       return ((data ?? []) as DbAgentAppRow[]).map(fromDbRow);
+    }
+    const legacy = await supabase.from('agent_apps').select(APP_SELECT_LEGACY);
+    if (!legacy.error) {
+      return ((legacy.data ?? []) as DbAgentAppRow[]).map(fromDbRow);
     }
   } catch {
     // Local fallback below.
@@ -651,14 +695,22 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('agent_apps')
       .upsert(toDbPayload(app, publishState), { onConflict: 'slug' })
       .select(APP_SELECT)
       .single();
 
-    if (!error && data) return fromDbRow(data as DbAgentAppRow);
-    if (error?.code === '23505' || error?.message?.toLowerCase().includes('duplicate')) {
+    if (!primary.error && primary.data) return fromDbRow(primary.data as DbAgentAppRow);
+    const legacy = await supabase
+      .from('agent_apps')
+      .upsert(toLegacyDbPayload(app, publishState), { onConflict: 'slug' })
+      .select(APP_SELECT_LEGACY)
+      .single();
+
+    if (!legacy.error && legacy.data) return fromDbRow(legacy.data as DbAgentAppRow);
+    const upsertError = primary.error ?? legacy.error;
+    if (upsertError?.code === '23505' || upsertError?.message?.toLowerCase().includes('duplicate')) {
       throw new ValidationError('App slug already exists');
     }
   } catch (error) {
@@ -682,12 +734,19 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
 async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data: registryRows, error } = await supabase
+    const primary = await supabase
       .from('kernel_registry')
-      .select('agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,health_status,endpoint_status,version,registered_at,last_heartbeat_at,last_error,disabled,heartbeat_count')
+      .select(KERNEL_REGISTRY_DISCOVERY_SELECT)
       .order('registered_at', { ascending: false });
+    const legacy = primary.error
+      ? await supabase
+        .from('kernel_registry')
+        .select(KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY)
+        .order('registered_at', { ascending: false })
+      : { data: primary.data, error: primary.error };
+    const registryRows = (legacy.data ?? primary.data) as DbKernelRegistryRow[] | null;
 
-    if (error || !registryRows || registryRows.length === 0) {
+    if (legacy.error || !registryRows || registryRows.length === 0) {
       return existingApps;
     }
 
@@ -714,7 +773,7 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
     }
 
     let changed = false;
-    for (const row of registryRows as DbKernelRegistryRow[]) {
+    for (const row of registryRows) {
       const product = stringValue(row.product).trim();
       const publisherId = stringValue(row.agent_id).trim();
       if (!product || !publisherId) continue;
@@ -736,8 +795,9 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
           }))
         : [];
 
+      const statusPayload = isRecord((row as Record<string, unknown>).last_status_payload) ? (row as Record<string, unknown>).last_status_payload as Record<string, unknown> : {};
       const healthStatus = normalizeHealthStatus(row.health_status ?? row.status ?? 'unknown');
-      const endpointStatus = normalizeEndpointStatus(row.endpoint_status ?? (healthStatus === 'online' ? 'healthy' : 'unknown'));
+      const endpointStatus = normalizeEndpointStatus(row.endpoint_status ?? statusPayload.endpointStatus ?? (healthStatus === 'online' ? 'healthy' : 'unknown'));
       await saveAgentApp({
         workspaceId: nullableString(row.workspace_id),
         publisherId,
@@ -768,7 +828,7 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
         healthStatus,
         endpointStatus,
         lastHeartbeatAt: nullableString(row.last_heartbeat_at) ?? nullableString(row.registered_at),
-        lastError: nullableString(row.last_error),
+        lastError: nullableString(row.last_error) ?? nullableString(statusPayload.lastError),
         disabled: row.disabled === true || row.status === 'disabled',
         heartbeatCount: Number(row.heartbeat_count ?? 0),
       });
@@ -952,13 +1012,20 @@ export async function recordAgentAppDownload(slug: string, target: 'web' | 'andr
   const normalizedSlug = normalizeAgentAppSlug(slug);
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('agent_apps')
       .select(APP_SELECT)
       .eq('slug', normalizedSlug)
       .maybeSingle();
-    if (!error && data) {
-      const app = fromDbRow(data as DbAgentAppRow);
+    const legacy = primary.error
+      ? await supabase
+        .from('agent_apps')
+        .select(APP_SELECT_LEGACY)
+        .eq('slug', normalizedSlug)
+        .maybeSingle()
+      : { data: primary.data, error: primary.error };
+    if (!legacy.error && legacy.data) {
+      const app = fromDbRow(legacy.data as DbAgentAppRow);
       const patch: Record<string, unknown> = {
         install_count: app.installCount + 1,
         updated_at: new Date().toISOString(),
@@ -966,7 +1033,13 @@ export async function recordAgentAppDownload(slug: string, target: 'web' | 'andr
       if (target === 'web') patch.web_open_count = app.webOpenCount + 1;
       if (target === 'android') patch.android_download_count = app.androidDownloadCount + 1;
       if (target === 'ios') patch.ios_download_count = app.iosDownloadCount + 1;
-      await supabase.from('agent_apps').update(patch).eq('slug', normalizedSlug);
+      const update = await supabase.from('agent_apps').update(patch).eq('slug', normalizedSlug);
+      if (update.error) {
+        await supabase.from('agent_apps').update({
+          install_count: app.installCount + 1,
+          updated_at: new Date().toISOString(),
+        }).eq('slug', normalizedSlug);
+      }
       return;
     }
   } catch {
@@ -1053,7 +1126,7 @@ export async function installAgentApp(params: {
   const now = new Date().toISOString();
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('app_installations')
       .upsert({
         id: randomUUID(),
@@ -1071,11 +1144,26 @@ export async function installAgentApp(params: {
       .select(APP_INSTALLATION_SELECT)
       .single();
 
-    if (error) throw new Error(error.message);
+    const legacy = primary.error
+      ? await supabase
+        .from('app_installations')
+        .upsert({
+          id: randomUUID(),
+          app_id: readiness.app.id,
+          agent_id: params.agentId,
+          workspace_id: params.workspaceId ?? readiness.app.workspaceId ?? null,
+          status: 'active',
+          installed_at: now,
+          updated_at: now,
+        }, { onConflict: 'app_id,agent_id' })
+        .select(APP_INSTALLATION_SELECT_LEGACY)
+        .single()
+      : { data: primary.data, error: primary.error };
+    if (legacy.error) throw new Error(legacy.error.message);
     await recordAgentAppDownload(readiness.app.slug);
     return {
       app: readiness.app,
-      installation: mapInstallationRow((data as DbAppInstallationRow) ?? {}),
+      installation: mapInstallationRow((legacy.data as DbAppInstallationRow) ?? {}),
     };
   } catch {
     const installation = mapInstallationRow({
@@ -1134,13 +1222,20 @@ export async function listInstalledAgentApps(agentId: string): Promise<Array<{ a
   let installations: AgentAppInstallation[] = [];
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('app_installations')
       .select(APP_INSTALLATION_SELECT)
       .eq('agent_id', agentId)
       .order('updated_at', { ascending: false });
-    if (!error) {
-      installations = ((data ?? []) as DbAppInstallationRow[])
+    const legacy = primary.error
+      ? await supabase
+        .from('app_installations')
+        .select(APP_INSTALLATION_SELECT_LEGACY)
+        .eq('agent_id', agentId)
+        .order('updated_at', { ascending: false })
+      : { data: primary.data, error: primary.error };
+    if (!legacy.error) {
+      installations = ((legacy.data ?? []) as DbAppInstallationRow[])
         .map(mapInstallationRow)
         .filter(installation => installation.status !== 'removed');
     }
@@ -1180,30 +1275,50 @@ export async function updateAgentAppInstallation(params: {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data: existing, error: lookupError } = await supabase
+    const lookup = await supabase
       .from('app_installations')
       .select(APP_INSTALLATION_SELECT)
       .eq('agent_id', params.agentId)
       .eq('app_id', app.id)
       .maybeSingle();
-    if (lookupError) throw new Error(lookupError.message);
-    if (!existing) throw new ValidationError('App is not installed');
-    const current = mapInstallationRow(existing as DbAppInstallationRow);
+    const legacyLookup = lookup.error
+      ? await supabase
+        .from('app_installations')
+        .select(APP_INSTALLATION_SELECT_LEGACY)
+        .eq('agent_id', params.agentId)
+        .eq('app_id', app.id)
+        .maybeSingle()
+      : { data: lookup.data, error: lookup.error };
+    if (legacyLookup.error) throw new Error(legacyLookup.error.message);
+    if (!legacyLookup.data) throw new ValidationError('App is not installed');
+    const current = mapInstallationRow(legacyLookup.data as DbAppInstallationRow);
     const patch = {
       favorite: typeof params.favorite === 'boolean' ? params.favorite : current.favorite,
       permissions_approved: params.permissionsApproved ?? current.permissionsApproved,
       status: params.status ?? current.status,
       updated_at: now,
     };
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('app_installations')
       .update(patch)
       .eq('agent_id', params.agentId)
       .eq('app_id', app.id)
       .select(APP_INSTALLATION_SELECT)
       .single();
-    if (error) throw new Error(error.message);
-    return { app, installation: mapInstallationRow(data as DbAppInstallationRow) };
+    const legacy = primary.error
+      ? await supabase
+        .from('app_installations')
+        .update({
+          status: params.status ?? current.status,
+          updated_at: now,
+        })
+        .eq('agent_id', params.agentId)
+        .eq('app_id', app.id)
+        .select(APP_INSTALLATION_SELECT_LEGACY)
+        .single()
+      : { data: primary.data, error: primary.error };
+    if (legacy.error) throw new Error(legacy.error.message);
+    return { app, installation: mapInstallationRow(legacy.data as DbAppInstallationRow) };
   } catch {
     const installation = await updateLocalRuntimeState(state => {
       state.agentApps.installations[params.agentId] ??= [];
@@ -1239,7 +1354,7 @@ export async function recordAgentAppOpen(params: {
   const now = new Date().toISOString();
   try {
     const supabase = getSupabaseAdmin();
-    await supabase
+    const installationUpdate = await supabase
       .from('app_installations')
       .update({
         open_count: installation.openCount + 1,
@@ -1248,7 +1363,7 @@ export async function recordAgentAppOpen(params: {
       })
       .eq('agent_id', params.agentId)
       .eq('app_id', app.id);
-    await supabase
+    const appUpdate = await supabase
       .from('agent_apps')
       .update({
         open_count: app.openCount + 1,
@@ -1257,6 +1372,22 @@ export async function recordAgentAppOpen(params: {
         updated_at: now,
       })
       .eq('id', app.id);
+    if (installationUpdate.error) {
+      await supabase
+        .from('app_installations')
+        .update({ updated_at: now })
+        .eq('agent_id', params.agentId)
+        .eq('app_id', app.id);
+    }
+    if (appUpdate.error) {
+      await supabase
+        .from('agent_apps')
+        .update({
+          install_count: app.installCount,
+          updated_at: now,
+        })
+        .eq('id', app.id);
+    }
   } catch {
     await updateLocalRuntimeState(state => {
       const entry = state.agentApps.catalog.find(item => item.id === app.id);
