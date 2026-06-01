@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
@@ -86,23 +87,19 @@ export default function Nav({ activePath }: NavProps) {
       >
         <div className="container" style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <Link href={session ? '/studio' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
-            <div
+            <Image
+              src="/logo.png"
+              alt="AgentOS logo"
+              width={36}
+              height={36}
               style={{
                 width: 36,
                 height: 36,
                 borderRadius: 8,
-                display: 'grid',
-                placeItems: 'center',
-                background: 'rgba(139, 92, 246, 0.14)',
-                border: '1px solid rgba(139, 92, 246, 0.22)',
-                color: '#ddd6fe',
-                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
-                fontWeight: 700,
-                fontSize: 12,
+                objectFit: 'cover',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
               }}
-            >
-              OS
-            </div>
+            />
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
               <span style={{ fontWeight: 700 }}>AgentOS</span>
               <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>AI operating system</span>

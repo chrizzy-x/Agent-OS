@@ -1,10 +1,14 @@
 # AgentOS
 
+<p align="center">
+  <img src="public/logo.png" alt="AgentOS logo" width="220" />
+</p>
+
 > Built by **riz** · v6 "Public Launch"
 
 **OS-level primitives for AI agents — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
 
-🚀 **Live:** [agentos.services](https://agentos.services) · [Get started free →](https://agentos-app.vercel.app/signup)
+🚀 **Live:** [agentos.services](https://agentos.services) · [Get started free →](https://www.agentos.services/signup)
 Official CA : GtpxyYeFGDA8WoxA5buhRXMcBKweMCpK9S2CShmCpump
 
 AgentOS is a production infrastructure layer that gives any agent or app a safe, isolated environment to persist data, run code, make HTTP requests, publish events, and coordinate with other agents — without touching the host system. Each client gets its own namespace, enforced quotas, rate limits, and a full audit trail.
@@ -67,17 +71,17 @@ GET  /api/kernel/status/:product  # heartbeat + available commands
 
 ### Option A: Hosted
 
-[Sign up at agentos-app.vercel.app/signup](https://agentos-app.vercel.app/signup) — get your bearer token in 30 seconds. Agent IDs stay private; browser screens and APIs use agent names or public action refs. No credit card required.
+[Sign up at agentos.services/signup](https://www.agentos.services/signup) — get your bearer token in 30 seconds. Agent IDs stay private; browser screens and APIs use agent names or public action refs. No credit card required.
 
 ```bash
 # Store a value
-curl -X POST https://agentos-app.vercel.app/mcp \
+curl -X POST https://www.agentos.services/mcp \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"tool":"agentos.mem_set","input":{"key":"hello","value":"world","ttl":3600}}'
 
 # Fetch live data
-curl -X POST https://agentos-app.vercel.app/mcp \
+curl -X POST https://www.agentos.services/mcp \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"tool":"agentos.net_http_get","input":{"url":"https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"}}'
@@ -114,7 +118,7 @@ NEXT_PUBLIC_APP_URL=
 SDK users access the full dashboard (FFP audit trail, consensus, workflows) using their API key:
 
 ```js
-const res = await fetch('https://agentos-app.vercel.app/api/session/from-key', {
+const res = await fetch('https://www.agentos.services/api/session/from-key', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ apiKey: process.env.AGENT_OS_KEY }),
@@ -279,3 +283,5 @@ Built and maintained by **riz**.
 ## License
 
 MIT
+
+

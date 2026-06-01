@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import Nav from '@/components/Nav';
 import DocsFooter from '@/components/DocsFooter';
 import Badge from '@/components/Badge';
@@ -142,6 +143,31 @@ export default function DocsPage() {
           <main style={{ flex: 1, minWidth: 0, paddingBottom: '80px' }}>
             {/* Header */}
             <div style={{ marginBottom: '48px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                <Image
+                  src="/logo.png"
+                  alt="AgentOS logo"
+                  width={72}
+                  height={72}
+                  style={{ borderRadius: '18px', objectFit: 'cover', border: '1px solid var(--border)' }}
+                />
+                <div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'var(--text-tertiary)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: '6px',
+                  }}>AgentOS</div>
+                  <div style={{
+                    fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                    fontSize: '15px',
+                    color: 'var(--text-secondary)',
+                  }}>Platform docs, SDK routes, workflows, apps, and FFP.</div>
+                </div>
+              </div>
               <Badge variant="accent" style={{ marginBottom: '16px' }}>Reference</Badge>
               <h1 style={{
                 fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
