@@ -102,13 +102,13 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
             fontWeight: 600,
             color: 'var(--text-primary)',
             margin: 0,
-          }}>Agent created!</h2>
+          }}>Super AgentOS ready.</h2>
           <p style={{
             fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
             fontSize: '13px',
             color: 'var(--text-secondary)',
             margin: 0,
-          }}>Save your bearer token — it&apos;s shown only once.</p>
+          }}>Your Super AgentOS, NL Studio, workspace, and Vault are provisioned. Save your bearer token if your plan includes one.</p>
         </div>
       </div>
 
@@ -198,8 +198,8 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
       {/* Navigation links */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
         {[
-          { href: '/dashboard', label: 'Dashboard', primary: true },
-          { href: '/studio', label: 'Studio', primary: false },
+          { href: '/studio', label: 'Open Studio', primary: true },
+          { href: '/dashboard', label: 'Workspace', primary: false },
           { href: '/docs', label: 'Docs', primary: false },
           { href: '/marketplace', label: 'Skills', primary: false },
           { href: '/appstore', label: 'Apps', primary: false },
@@ -431,9 +431,9 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
                 <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Creating agent...
+              Provisioning AgentOS...
             </span>
-          ) : 'Create agent'}
+          ) : 'Create AgentOS account'}
         </button>
 
         <p style={{
@@ -442,7 +442,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
           fontSize: '12px',
           color: 'var(--text-tertiary)',
           margin: 0,
-        }}>No credit card required. Free to use.</p>
+        }}>Every account includes Super AgentOS, NL Studio, a workspace, and Vault. No credit card required.</p>
       </form>
 
       <div style={{
@@ -529,15 +529,15 @@ export default function SignupPage() {
               color: 'var(--text-primary)',
               marginBottom: '6px',
               marginTop: 0,
-            }}>Create your account</h1>
+            }}>Create AgentOS account</h1>
             <p style={{
               fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
               fontSize: '14px',
               color: 'var(--text-secondary)',
               marginBottom: '28px',
               marginTop: 0,
-            }}>Get started with AgentOS in seconds.</p>
-            <SignupForm onSuccess={() => router.replace('/studio')} />
+            }}>Provision Super AgentOS, NL Studio, your workspace, and Vault in one step.</p>
+            <SignupForm onSuccess={setCredentials} />
           </>
         ) : (
           <CredentialsPanel credentials={credentials} />

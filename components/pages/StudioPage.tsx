@@ -81,6 +81,24 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
     [activeSessionId, sessions],
   );
 
+  useEffect(() => {
+    if (!activeSessionId) return undefined;
+    const source = new EventSource(`/api/studio/sessions/${activeSessionId}/stream?cursor=${encodeURIComponent(events.at(-1)?.createdAt ?? new Date(0).toISOString())}`);
+    const onMessage = (message: MessageEvent<string>) => {
+      try {
+        const payload = JSON.parse(message.data) as StudioEvent;
+        setEvents(current => current.some(event => event.id === payload.id) ? current : [...current, payload]);
+      } catch {
+        // no-op
+      }
+    };
+    source.addEventListener('studio_event', onMessage as EventListener);
+    return () => {
+      source.removeEventListener('studio_event', onMessage as EventListener);
+      source.close();
+    };
+  }, [activeSessionId, events]);
+
   const loadBundle = useCallback(async (sessionId: string) => {
     const res = await fetch(`/api/studio/sessions/${sessionId}`, { cache: 'no-store' });
     if (!res.ok) return;

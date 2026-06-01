@@ -14,10 +14,10 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toEqual(['Studio', 'Appstore', 'Developer', 'Settings']);
+    expect(links.map(item => item.label)).toEqual(['Studio', 'Projects', 'Workflows', 'Agents', 'Skills', 'Apps', 'Vault', 'Analytics', 'Settings']);
   });
 
-  it('keeps the same top-level navigation for enterprise sessions', () => {
+  it('shows enterprise-only modules only for enterprise sessions', () => {
     const enterpriseSession: BrowserSession = {
       agentName: 'Enterprise',
       plan: 'enterprise_plus',
@@ -28,11 +28,11 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(enterpriseSession);
-    expect(links.map(item => item.label)).toEqual(['Studio', 'Appstore', 'Developer', 'Settings']);
+    expect(links.map(item => item.label)).toEqual(['Studio', 'Projects', 'Workflows', 'Agents', 'Skills', 'Apps', 'FFP', 'Vault', 'SDK', 'Developer', 'Analytics', 'Settings']);
   });
 
   it('shows a minimal unauthenticated navigation', () => {
     const links = buildSessionNavLinks(null);
-    expect(links.map(item => item.label)).toEqual(['Appstore']);
+    expect(links.map(item => item.label)).toEqual(['Home', 'Studio', 'Skills', 'Appstore', 'Signup']);
   });
 });

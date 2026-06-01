@@ -3,6 +3,7 @@ import { findAccountById } from '@/src/auth/agent-store';
 import { upsertExternalSdkAgentApp } from '@/src/appstore/service';
 import { requireKernelRouteAccess } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
+import { appendLatestStudioEvent } from '@/src/studio/persistence';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -11,6 +12,16 @@ type RegisterCommand = {
   name: string;
   description?: string;
 };
+
+function hasValidManifest(manifest: Record<string, unknown> | undefined): boolean {
+  if (!manifest) return true;
+  const runtime = manifest.runtime;
+  const entrypoint = manifest.entrypoint;
+  return (
+    (runtime === 'external-app' || runtime === 'agentos-app' || runtime === 'workspace-app' || runtime === undefined)
+    && (typeof entrypoint === 'string' ? entrypoint.trim().length > 0 : true)
+  );
+}
 
 // POST /api/kernel/register
 export async function POST(req: NextRequest) {
@@ -44,6 +55,15 @@ export async function POST(req: NextRequest) {
     if (!product || !commandTopic || !statusTopic) {
       return NextResponse.json({ error: 'product, commandTopic, and statusTopic are required' }, { status: 400 });
     }
+    if (!app?.name?.trim() || !app?.description?.trim()) {
+      return NextResponse.json({ error: 'SDK app name and description are required' }, { status: 400 });
+    }
+    if (Array.isArray(app.deviceTargets) && app.deviceTargets.length === 0) {
+      return NextResponse.json({ error: 'SDK app device targets are required' }, { status: 400 });
+    }
+    if (!hasValidManifest(app.manifest)) {
+      return NextResponse.json({ error: 'Invalid SDK app manifest' }, { status: 400 });
+    }
     const normalizedCommands = Array.isArray(availableCommands)
       ? availableCommands
           .filter((item): item is RegisterCommand => Boolean(item) && typeof item === 'object' && typeof (item as RegisterCommand).name === 'string')
@@ -65,6 +85,10 @@ export async function POST(req: NextRequest) {
         status_topic: String(statusTopic),
         available_commands: normalizedCommands,
         status: 'online',
+        health_status: 'online',
+        endpoint_status: 'healthy',
+        version: typeof app?.manifest?.version === 'string' ? app.manifest.version : '1.0.0',
+        disabled: false,
         registered_at: now,
         last_heartbeat_at: now,
         last_status_payload: {},
@@ -83,7 +107,19 @@ export async function POST(req: NextRequest) {
       commandTopic: String(commandTopic),
       statusTopic: String(statusTopic),
       availableCommands: normalizedCommands,
+      healthStatus: 'online',
+      endpointStatus: 'healthy',
       app,
+    });
+    await appendLatestStudioEvent({
+      ownerAgentId: ctx.agentId,
+      type: 'sdk_app_registered',
+      payload: { product: String(product), slug: listing.slug },
+    });
+    await appendLatestStudioEvent({
+      ownerAgentId: ctx.agentId,
+      type: 'app_discovered',
+      payload: { product: String(product), slug: listing.slug },
     });
 
     return NextResponse.json({ registered: true, kernel: data, app: listing });

@@ -12,6 +12,7 @@ export type StudioEventType =
   | 'subagent_created'
   | 'workflow_created'
   | 'workflow_updated'
+  | 'workflow_code_updated'
   | 'task_started'
   | 'task_progress'
   | 'task_completed'
@@ -22,6 +23,10 @@ export type StudioEventType =
   | 'secret_added'
   | 'secret_access_granted'
   | 'secret_access_denied'
+  | 'app_discovered'
+  | 'app_installed'
+  | 'sdk_app_registered'
+  | 'sdk_app_heartbeat'
   | 'app_creation_blocked'
   | 'sdk_access_blocked'
   | 'skill_creation_blocked'
@@ -270,6 +275,22 @@ export async function appendStudioEvent(params: {
 
   if (error) throw new Error(`Failed to append Studio event: ${error.message}`);
   return mapEvent(data as Record<string, unknown>);
+}
+
+export async function appendLatestStudioEvent(params: {
+  ownerAgentId: string;
+  type: StudioEventType;
+  payload?: Record<string, unknown>;
+}): Promise<StudioEventRecord | null> {
+  const sessions = await listStudioSessions(params.ownerAgentId);
+  const latest = sessions[0];
+  if (!latest) return null;
+  return appendStudioEvent({
+    ownerAgentId: params.ownerAgentId,
+    sessionId: latest.id,
+    type: params.type,
+    payload: params.payload,
+  });
 }
 
 export async function listStudioEventsSince(params: {

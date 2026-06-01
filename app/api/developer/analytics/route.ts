@@ -16,6 +16,11 @@ export async function GET(request: NextRequest) {
     const days = Math.min(90, Math.max(1, parseInt(searchParams.get('days') || '30')));
 
     const supabase = getSupabaseAdmin();
+    const { data: myApps } = await supabase
+      .from('agent_apps')
+      .select('id,name,slug,source,runtime_type,install_count,open_count,web_open_count,android_download_count,ios_download_count,heartbeat_count,last_heartbeat_at,last_error,health_status')
+      .eq('publisher_id', agentCtx.agentId)
+      .order('updated_at', { ascending: false });
 
     // Verify ownership if skill_id is provided
     if (skillId) {
@@ -41,21 +46,15 @@ export async function GET(request: NextRequest) {
       ? [skillId]
       : (mySkills ?? []).map(s => s.id);
 
-    if (skillIds.length === 0) {
-      return NextResponse.json({ skills: [], usage_by_day: [], totals: { calls: 0, errors: 0, avg_ms: 0 } });
-    }
-
-    // Pull usage from the last N days
     const since = new Date(Date.now() - days * 86400000).toISOString();
-
-    const { data: usageRows } = await supabase
-      .from('skill_usage')
-      .select('skill_id, capability_name, success, execution_time_ms, timestamp, cost')
-      .in('skill_id', skillIds)
-      .gte('timestamp', since)
-      .order('timestamp', { ascending: true });
-
-    const rows = usageRows ?? [];
+    const rows = skillIds.length === 0
+      ? []
+      : (await supabase
+        .from('skill_usage')
+        .select('skill_id, capability_name, success, execution_time_ms, timestamp, cost')
+        .in('skill_id', skillIds)
+        .gte('timestamp', since)
+        .order('timestamp', { ascending: true })).data ?? [];
 
     // Aggregate by day
     const byDay: Record<string, { calls: number; errors: number; revenue: number }> = {};
@@ -87,15 +86,48 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const apps = (myApps ?? []).map(row => ({
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      source: row.source,
+      runtimeType: row.runtime_type,
+      installCount: Number(row.install_count ?? 0),
+      openCount: Number(row.open_count ?? 0),
+      webOpenCount: Number(row.web_open_count ?? 0),
+      androidDownloadCount: Number(row.android_download_count ?? 0),
+      iosDownloadCount: Number(row.ios_download_count ?? 0),
+      heartbeatCount: Number(row.heartbeat_count ?? 0),
+      lastHeartbeatAt: typeof row.last_heartbeat_at === 'string' ? row.last_heartbeat_at : null,
+      lastError: typeof row.last_error === 'string' ? row.last_error : null,
+      healthStatus: typeof row.health_status === 'string' ? row.health_status : 'unknown',
+    }));
+    const appTotals = apps.reduce((acc, app) => ({
+      installs: acc.installs + app.installCount,
+      opens: acc.opens + app.openCount,
+      downloads: acc.downloads + app.androidDownloadCount + app.iosDownloadCount,
+      heartbeats: acc.heartbeats + app.heartbeatCount,
+      online: acc.online + (app.healthStatus === 'online' ? 1 : 0),
+    }), {
+      installs: 0,
+      opens: 0,
+      downloads: 0,
+      heartbeats: 0,
+      online: 0,
+    });
+
     return NextResponse.json({
       skills: mySkills ?? [],
+      apps,
       usage_by_day: usageByDay,
       totals: {
         calls: totalCalls,
         errors: totalErrors,
         error_rate: totalCalls > 0 ? ((totalErrors / totalCalls) * 100).toFixed(1) : '0.0',
         avg_ms: msCount > 0 ? Math.round(totalMs / msCount) : 0,
+        active_users: appTotals.opens,
       },
+      app_totals: appTotals,
       days,
     });
   } catch (error: unknown) {

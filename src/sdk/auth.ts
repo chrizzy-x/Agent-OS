@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { hasCapability } from '../auth/capabilities.js';
 import type { AgentContext } from '../auth/permissions.js';
 import { TIER_QUOTAS, normalizePlan } from '../auth/tiers.js';
 import { findAccountById } from '../auth/agent-store.js';
@@ -99,6 +100,9 @@ export async function requireSdkKernelContext(token: string, requiredScopes: str
   const credential = await verifySdkCredentialToken(token, requiredScopes);
   const account = await findAccountById(credential.ownerAgentId);
   const plan = normalizePlan(account?.metadata.plan ?? 'enterprise_plus');
+  if (!hasCapability(plan, 'access_sdk')) {
+    throw new PermissionError('Enterprise Plus or Enterprise Max is required for SDK access');
+  }
 
   return {
     agentId: credential.ownerAgentId,

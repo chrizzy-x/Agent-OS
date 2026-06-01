@@ -6,6 +6,14 @@ export type AgentAppCommand = {
 export type AgentAppSource = 'internal' | 'external_sdk';
 export type AgentAppVisibility = 'public' | 'private' | 'unlisted';
 export type AgentAppRuntimeType = 'agentos-app' | 'external-app' | 'workspace-app';
+export type AgentAppHealthStatus = 'online' | 'offline' | 'degraded' | 'disabled' | 'unknown';
+export type AgentAppEndpointStatus = 'healthy' | 'offline' | 'degraded' | 'disabled' | 'unknown';
+
+export type AgentAppDistribution = {
+  webUrl: string | null;
+  androidUrl: string | null;
+  iosUrl: string | null;
+};
 
 export type AgentAppManifest = {
   schemaVersion: 'agentos.app.v1';
@@ -14,9 +22,12 @@ export type AgentAppManifest = {
   entrypoint: string;
   primitives: string[];
   skills: string[];
+  requiredSkills: string[];
+  bundledSkills: string[];
   permissions: string[];
   requiredSecrets: string[];
   commands: AgentAppCommand[];
+  distribution?: Partial<AgentAppDistribution>;
 };
 
 export type AgentAppListing = {
@@ -43,11 +54,36 @@ export type AgentAppListing = {
   kernelProduct: string | null;
   kernelCommandTopic: string | null;
   kernelStatusTopic: string | null;
+  distribution: AgentAppDistribution;
+  healthStatus: AgentAppHealthStatus;
+  endpointStatus: AgentAppEndpointStatus;
   lastHeartbeatAt: string | null;
+  lastCommandAt: string | null;
+  lastError: string | null;
+  disabled: boolean;
+  heartbeatCount: number;
+  openCount: number;
+  webOpenCount: number;
+  androidDownloadCount: number;
+  iosDownloadCount: number;
   installCount: number;
   verified: boolean;
   published: boolean;
   createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentAppInstallation = {
+  id: string;
+  appId: string;
+  agentId: string;
+  workspaceId: string | null;
+  status: 'active' | 'disabled' | 'removed';
+  favorite: boolean;
+  permissionsApproved: string[];
+  openCount: number;
+  lastOpenedAt: string | null;
+  installedAt: string;
   updatedAt: string;
 };
 

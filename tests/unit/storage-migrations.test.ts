@@ -109,5 +109,16 @@ describe('storage migrations', () => {
     expect(sql).toContain('ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS screenshots JSONB NOT NULL DEFAULT');
     expect(sql).toContain('ALTER TABLE kernel_registry ENABLE ROW LEVEL SECURITY');
   });
+
+  it('adds sdk heartbeat health and app runtime installation metadata', () => {
+    const sql = readFileSync(join(migrationsDir, '020_sdk_health_app_runtime.sql'), 'utf8');
+
+    expect(sql).toContain('ALTER TABLE kernel_registry ADD COLUMN IF NOT EXISTS health_status');
+    expect(sql).toContain('ALTER TABLE kernel_registry ADD COLUMN IF NOT EXISTS endpoint_status');
+    expect(sql).toContain('ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS heartbeat_count');
+    expect(sql).toContain('ALTER TABLE agent_apps ADD COLUMN IF NOT EXISTS open_count');
+    expect(sql).toContain('ALTER TABLE app_installations ADD COLUMN IF NOT EXISTS favorite');
+    expect(sql).toContain("ALTER TABLE app_installations ADD COLUMN IF NOT EXISTS permissions_approved JSONB NOT NULL DEFAULT '[]'::jsonb");
+  });
 });
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
 interface NavProps {
@@ -11,19 +12,38 @@ interface NavProps {
 export function buildSessionNavLinks(session: BrowserSession | null): Array<{ href: string; label: string }> {
   if (!session) {
     return [
+      { href: '/', label: 'Home' },
+      { href: '/studio', label: 'Studio' },
+      { href: '/marketplace', label: 'Skills' },
       { href: '/appstore', label: 'Appstore' },
+      { href: '/signup', label: 'Signup' },
     ];
   }
 
-  return [
+  const enterprise = session.accountType === 'enterprise' || session.capabilities?.includes('access_sdk') === true;
+  const links: Array<{ href: string; label: string }> = [
     { href: '/studio', label: 'Studio' },
-    { href: '/appstore', label: 'Appstore' },
-    { href: '/developer', label: 'Developer' },
+    { href: '/projects', label: 'Projects' },
+    { href: '/workflows', label: 'Workflows' },
+    { href: '/subagents', label: 'Agents' },
+    { href: '/skills', label: 'Skills' },
+    { href: '/appstore', label: 'Apps' },
+    { href: '/vault', label: 'Vault' },
+    { href: '/analytics', label: 'Analytics' },
     { href: '/settings', label: 'Settings' },
   ];
+
+  if (enterprise) {
+    links.splice(6, 0, { href: '/ffp', label: 'FFP' });
+    links.splice(8, 0, { href: '/sdk', label: 'SDK' });
+    links.splice(9, 0, { href: '/developer', label: 'Developer' });
+  }
+
+  return links;
 }
 
 export default function Nav({ activePath }: NavProps) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [ready, setReady] = useState(false);
@@ -36,6 +56,19 @@ export default function Nav({ activePath }: NavProps) {
       .finally(() => { if (active) setReady(true); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setMenuOpen(false);
+        router.push('/search');
+      }
+    }
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [router]);
 
   const links = buildSessionNavLinks(session);
 
@@ -100,6 +133,7 @@ export default function Nav({ activePath }: NavProps) {
           </nav>
 
           <div className="nav-desktop-ctas" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Link href="/search" className="btn-ghost">Search</Link>
             {ready && session ? (
               <>
                 <span style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -110,7 +144,7 @@ export default function Nav({ activePath }: NavProps) {
             ) : (
               <>
                 <Link href="/signin" className="btn-ghost">Sign in</Link>
-                <Link href="/signup" className="btn-primary">Get started</Link>
+                <Link href="/signup" className="btn-primary">Create AgentOS account</Link>
               </>
             )}
           </div>
@@ -130,7 +164,7 @@ export default function Nav({ activePath }: NavProps) {
               color: 'var(--text-primary)',
             }}
           >
-            {menuOpen ? '×' : '☰'}
+            {menuOpen ? 'X' : 'Menu'}
           </button>
         </div>
 
@@ -157,10 +191,26 @@ export default function Nav({ activePath }: NavProps) {
                     {link.label}
                   </Link>
                 ))}
+                <Link
+                  href="/search"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    minHeight: 44,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: activePath === '/search' ? '#ddd6fe' : 'var(--text-secondary)',
+                    background: activePath === '/search' ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                  }}
+                >
+                  Search
+                </Link>
                 {!session ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
                     <Link href="/signin" className="btn-ghost" onClick={() => setMenuOpen(false)}>Sign in</Link>
-                    <Link href="/signup" className="btn-primary" onClick={() => setMenuOpen(false)}>Get started</Link>
+                    <Link href="/signup" className="btn-primary" onClick={() => setMenuOpen(false)}>Create AgentOS account</Link>
                   </div>
                 ) : null}
               </nav>

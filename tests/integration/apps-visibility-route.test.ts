@@ -46,7 +46,18 @@ function appRecord(overrides: Partial<Record<string, unknown>>) {
     kernelProduct: null,
     kernelCommandTopic: null,
     kernelStatusTopic: null,
+    distribution: { webUrl: null, androidUrl: null, iosUrl: null },
+    healthStatus: 'unknown',
+    endpointStatus: 'unknown',
     lastHeartbeatAt: null,
+    lastCommandAt: null,
+    lastError: null,
+    disabled: false,
+    heartbeatCount: 0,
+    openCount: 0,
+    webOpenCount: 0,
+    androidDownloadCount: 0,
+    iosDownloadCount: 0,
     installCount: Number(overrides.installCount ?? 0),
     verified: false,
     published: visibility === 'public',
@@ -146,5 +157,86 @@ describe.sequential('app visibility routes', () => {
       { params: Promise.resolve({ slug: 'private-app' }) },
     );
     expect(adminResponse.status).toBe(200);
+  });
+
+  it('backfills older SDK registrations into the public App Store', async () => {
+    let catalogRows: Record<string, unknown>[] = [];
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'agent_apps') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: catalogRows[0] ?? null, error: null }),
+          upsert: vi.fn().mockImplementation((payload: Record<string, unknown>) => {
+            catalogRows = [payload];
+            return {
+              select: vi.fn().mockReturnThis(),
+              single: vi.fn().mockResolvedValue({ data: payload, error: null }),
+            };
+          }),
+          data: catalogRows,
+          error: null,
+        };
+      }
+
+      if (table === 'kernel_registry') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          data: [{
+            agent_id: 'enterprise-owner',
+            workspace_id: 'workspace-1',
+            product: 'legacy-sdk-app',
+            command_topic: 'kernel.legacy.commands',
+            status_topic: 'kernel.legacy.status',
+            available_commands: [{ name: 'run', description: 'Run legacy app' }],
+            status: 'online',
+            health_status: 'online',
+            endpoint_status: 'healthy',
+            version: '1.4.0',
+            registered_at: '2026-05-01T10:00:00Z',
+            last_heartbeat_at: '2026-06-01T10:00:00Z',
+            last_error: null,
+            disabled: false,
+            heartbeat_count: 4,
+          }],
+          error: null,
+        };
+      }
+
+      if (table === 'agents') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          in: vi.fn().mockResolvedValue({
+            data: [{
+              id: 'enterprise-owner',
+              name: 'Enterprise Owner',
+              tier: 'enterprise_plus',
+              metadata: { plan: 'enterprise_plus' },
+            }],
+            error: null,
+          }),
+        };
+      }
+
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        insert: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        order: vi.fn().mockReturnThis(),
+        data: [],
+        error: null,
+      };
+    });
+
+    const response = await getApps(new NextRequest('http://localhost/api/apps'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.apps.map((app: { slug: string }) => app.slug)).toContain('legacy-sdk-app');
   });
 });

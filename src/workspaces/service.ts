@@ -1,5 +1,6 @@
 ﻿import { randomUUID } from 'crypto';
 import { normalizeAgentDisplayName } from '../auth/agent-names.js';
+import { normalizePlan } from '../auth/tiers.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { PermissionError } from '../utils/errors.js';
@@ -171,7 +172,7 @@ export async function createWorkspace(params: { name: string; ownerId: string; s
     name: params.name,
     slug: params.slug?.trim() || normalizeSlug(params.name),
     ownerId: params.ownerId,
-    plan: params.plan ?? 'free',
+    plan: normalizePlan(params.plan ?? 'retail_free'),
     createdAt: new Date().toISOString(),
   };
 

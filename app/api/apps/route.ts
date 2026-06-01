@@ -102,8 +102,8 @@ export async function POST(request: NextRequest) {
       defaultConfig: body.defaultConfig ?? body.default_config,
       published: typeof body.published === 'boolean' ? body.published : undefined,
       visibility: stringBodyValue(body, 'visibility', 'visibility'),
-      permissionsRequired: body.permissions_required,
-      requiredSecrets: body.required_secrets,
+      permissionsRequired: body.permissionsRequired ?? body.permissions_required,
+      requiredSecrets: body.requiredSecrets ?? body.required_secrets,
       screenshots: body.screenshots,
       publishState: typeof body.publish_state === 'string' ? body.publish_state : undefined,
     });

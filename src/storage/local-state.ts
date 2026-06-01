@@ -138,6 +138,19 @@ export type LocalExternalAgentRegistrationRecord = {
 };
 
 export type LocalAgentAppRecord = AgentAppListing;
+export type LocalAppInstallationRecord = {
+  id: string;
+  app_id: string;
+  agent_id: string;
+  workspace_id: string | null;
+  status: 'active' | 'disabled' | 'removed';
+  favorite: boolean;
+  permissions_approved: string[];
+  open_count: number;
+  last_opened_at: string | null;
+  installed_at: string;
+  updated_at: string;
+};
 
 export type LocalRuntimeState = {
   accounts: Record<string, LocalAccountRecord>;
@@ -157,6 +170,7 @@ export type LocalRuntimeState = {
   };
   agentApps: {
     catalog: LocalAgentAppRecord[];
+    installations: Record<string, LocalAppInstallationRecord[]>;
   };
 };
 
@@ -168,6 +182,12 @@ const defaultSkillIcon = '[skill]';
 
 function getStateFilePath(): string {
   return process.env.AGENTOS_STATE_FILE?.trim() || DEFAULT_STATE_FILE;
+}
+
+function assertLocalRuntimeStateEnabled(): void {
+  if (process.env.NODE_ENV === 'production' && process.env.AGENTOS_ALLOW_LOCAL_STATE !== '1') {
+    throw new Error('Local runtime state is disabled in production');
+  }
 }
 
 function defaultSkillCatalog(): LocalSkillRecord[] {
@@ -218,6 +238,7 @@ function createDefaultState(): LocalRuntimeState {
     },
     agentApps: {
       catalog: [],
+      installations: {},
     },
   };
 }
@@ -248,6 +269,7 @@ function normalizeState(value: unknown): LocalRuntimeState {
     },
     agentApps: {
       catalog: state.agentApps?.catalog ?? defaults.agentApps.catalog,
+      installations: state.agentApps?.installations ?? defaults.agentApps.installations,
     },
   };
 }
@@ -257,6 +279,7 @@ async function ensureStateDirectory(): Promise<void> {
 }
 
 export async function readLocalRuntimeState(): Promise<LocalRuntimeState> {
+  assertLocalRuntimeStateEnabled();
   try {
     const raw = await readFile(getStateFilePath(), 'utf8');
     return normalizeState(JSON.parse(raw) as unknown);
@@ -270,6 +293,7 @@ let writeQueue: Promise<void> = Promise.resolve();
 export async function updateLocalRuntimeState<T>(
   updater: (state: LocalRuntimeState) => Promise<T> | T,
 ): Promise<T> {
+  assertLocalRuntimeStateEnabled();
   let result!: T;
 
   const next = writeQueue.then(async () => {

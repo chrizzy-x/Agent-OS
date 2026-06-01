@@ -8,6 +8,7 @@ vi.mock('../../src/mcp/registry.js', () => ({
 }));
 
 import { POST as postKernelRegister } from '../../app/api/kernel/register/route.js';
+import { POST as postKernelHeartbeat } from '../../app/api/kernel/heartbeat/route.js';
 import { GET as getKernelRegistry } from '../../app/api/kernel/registry/route.js';
 import { GET as getKernelStatus } from '../../app/api/kernel/status/[product]/route.js';
 import { POST as postKernelCommand } from '../../app/api/kernel/command/route.js';
@@ -226,6 +227,83 @@ describe.sequential('kernel register discoverability flow', () => {
     }));
     expect(commandResponse.status).toBe(200);
     expect(vi.mocked(executeUniversalToolCall)).toHaveBeenCalled();
+  });
+
+  it('updates sdk app health through heartbeat calls', async () => {
+    await postKernelRegister(sdkRequest('http://localhost/api/kernel/register', 'POST', sdkToken, {
+      product: 'research-kit',
+      commandTopic: 'kernel.research.commands',
+      statusTopic: 'kernel.research.status',
+      availableCommands: [{ name: 'run' }],
+      app: {
+        name: 'Research Kit',
+        description: 'SDK app',
+        category: 'Research',
+      },
+    }));
+
+    const response = await postKernelHeartbeat(sdkRequest('http://localhost/api/kernel/heartbeat', 'POST', sdkToken, {
+      product: 'research-kit',
+      status: 'degraded',
+      endpointStatus: 'degraded',
+      lastError: 'timeout',
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.app.healthStatus).toBe('degraded');
+    expect(body.app.lastError).toBe('timeout');
+    expect(db.tables.kernel_registry[0].status).toBe('degraded');
+  });
+
+  it('rejects sdk registration when the owning account no longer has enterprise sdk access', async () => {
+    db.tables.agents[0].tier = 'retail_free';
+    db.tables.agents[0].metadata = { plan: 'retail_free', email: 'owner@example.com' };
+
+    const response = await postKernelRegister(sdkRequest('http://localhost/api/kernel/register', 'POST', sdkToken, {
+      product: 'research-kit',
+      commandTopic: 'kernel.research.commands',
+      statusTopic: 'kernel.research.status',
+      availableCommands: [{ name: 'run' }],
+      app: {
+        name: 'Research Kit',
+        description: 'SDK app',
+        category: 'Research',
+      },
+    }));
+
+    expect(response.status).toBe(403);
+  });
+
+  it('rejects sdk registration when required metadata is missing', async () => {
+    const response = await postKernelRegister(sdkRequest('http://localhost/api/kernel/register', 'POST', sdkToken, {
+      product: 'research-kit',
+      commandTopic: 'kernel.research.commands',
+      statusTopic: 'kernel.research.status',
+      availableCommands: [{ name: 'run' }],
+      app: {
+        name: '',
+        description: '',
+      },
+    }));
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects invalid sdk manifests', async () => {
+    const response = await postKernelRegister(sdkRequest('http://localhost/api/kernel/register', 'POST', sdkToken, {
+      product: 'research-kit',
+      commandTopic: 'kernel.research.commands',
+      statusTopic: 'kernel.research.status',
+      availableCommands: [{ name: 'run' }],
+      app: {
+        name: 'Research Kit',
+        description: 'SDK app',
+        manifest: { runtime: 'broken-runtime', entrypoint: '' },
+      },
+    }));
+
+    expect(response.status).toBe(400);
   });
 
   it('backfills app rows from legacy kernel registrations', async () => {

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prod
     const supabase = getSupabaseAdmin();
     let query = supabase
       .from('kernel_registry')
-      .select('status_topic, available_commands, status, registered_at, last_heartbeat_at, last_status_payload')
+      .select('status_topic, available_commands, status, health_status, endpoint_status, registered_at, last_heartbeat_at, last_status_payload, last_command_at, last_error, version, disabled')
       .eq('agent_id', ctx.agentId)
       .eq('product', product);
     if (ctx.workspaceId) {
@@ -43,10 +43,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prod
     return NextResponse.json({
       product,
       status: kernel.status,
+      healthStatus: kernel.health_status ?? kernel.status,
+      endpointStatus: kernel.endpoint_status ?? 'unknown',
+      version: kernel.version ?? null,
+      disabled: kernel.disabled === true,
       statusTopic: kernel.status_topic,
       availableCommands: kernel.available_commands ?? [],
       registeredAt: kernel.registered_at,
       lastHeartbeatAt: kernel.last_heartbeat_at ?? null,
+      lastCommandAt: kernel.last_command_at ?? null,
+      lastError: kernel.last_error ?? null,
       lastStatusPayload: kernel.last_status_payload ?? null,
       latestHeartbeat: latestStatus,
     });

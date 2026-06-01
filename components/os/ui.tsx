@@ -201,7 +201,7 @@ export function ErrorState(props: { title: string; body: string; action?: ReactN
 export function SearchBar(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="os-search">
-      <span className="os-search-icon" aria-hidden="true">⌕</span>
+      <span className="os-search-icon" aria-hidden="true">/</span>
       <Input {...props} />
     </div>
   );
@@ -296,7 +296,7 @@ export function AppCard(props: {
         </div>
       </div>
       <div className="os-entity-meta">
-        {typeof props.rating === 'number' ? <span>{props.rating.toFixed(1)} ★</span> : null}
+        {typeof props.rating === 'number' ? <span>{props.rating.toFixed(1)} *</span> : null}
         {typeof props.installs === 'number' ? <span>{props.installs.toLocaleString()} installs</span> : null}
       </div>
       {props.footer ? <div className="os-entity-footer">{props.footer}</div> : null}

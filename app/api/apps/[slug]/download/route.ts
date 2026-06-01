@@ -16,6 +16,12 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
+    const { searchParams } = new URL(request.url);
+    const target = searchParams.get('target') === 'android'
+      ? 'android'
+      : searchParams.get('target') === 'ios'
+        ? 'ios'
+        : 'web';
     const canManageAll = hasAdminAccess(request.headers);
     let viewerAgentId: string | null = null;
     let viewerWorkspaceIds: string[] = [];
@@ -34,7 +40,7 @@ export async function GET(
       return NextResponse.json({ error: 'App not found' }, { status: 404 });
     }
 
-    if (app.visibility !== 'private') await recordAgentAppDownload(app.slug);
+    if (app.visibility !== 'private') await recordAgentAppDownload(app.slug, target);
     const filename = `${app.slug.replace(/[^a-z0-9-]/g, '')}.agentos-app.json`;
 
     return new NextResponse(JSON.stringify(buildAgentAppPackage(app), null, 2), {

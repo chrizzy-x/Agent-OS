@@ -61,9 +61,9 @@ export default function AppstorePage() {
       setApps(publicData.apps ?? []);
       setSession(currentSession);
       if (currentSession) {
-        const mineRes = await fetch('/api/apps?mine=1&sort=recent', { cache: 'no-store' });
-        const mineData = await mineRes.json();
-        setInstalledApps(mineData.apps ?? []);
+        const installedRes = await fetch('/api/apps/installed', { cache: 'no-store' });
+        const installedData = await installedRes.json();
+        setInstalledApps(installedData.installedApps ?? []);
       } else {
         setInstalledApps([]);
       }
@@ -103,7 +103,7 @@ export default function AppstorePage() {
                 items={[
                   { href: '/studio', label: 'Studio' },
                   { href: '/appstore', label: 'Appstore', active: true },
-                  { href: '/developer', label: 'Developer' },
+                  ...(session?.capabilities?.includes('access_developer_console') ? [{ href: '/developer', label: 'Developer' }] : []),
                   { href: '/projects', label: 'Projects' },
                   { href: '/workflows', label: 'Workflows' },
                   { href: '/vault', label: 'Vault' },
@@ -154,7 +154,7 @@ export default function AppstorePage() {
           eyebrow="AgentOS Appstore"
           title="Appstore"
           subtitle="Discover powerful apps, skills, and SDK-backed tools for your agents."
-          actions={<Button href="/publishing/new" variant="secondary">Publish app</Button>}
+          actions={session?.capabilities?.includes('create_app') ? <Button href="/publishing/new" variant="secondary">Publish app</Button> : undefined}
         />
 
         <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps, SDK tools, finance, research, data..." />
@@ -191,7 +191,7 @@ export default function AppstorePage() {
                     footer={(
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <StatusPill status={app.visibility} />
-                        <Button href={`/appstore/${app.slug}`} variant="primary">Open</Button>
+                        <Button href={`/appstore/${app.slug}`} variant="primary">{installedApps.some(installed => installed.slug === app.slug) ? 'Open' : 'Install'}</Button>
                       </div>
                     )}
                   />
@@ -214,7 +214,7 @@ export default function AppstorePage() {
                   footer={(
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                       <span className="os-entity-meta">{app.deviceTargets.slice(0, 2).join(' • ')}</span>
-                      <Button href={`/appstore/${app.slug}`}>{app.installCount > 0 ? 'Open' : 'Install'}</Button>
+                      <Button href={`/appstore/${app.slug}`}>{installedApps.some(installed => installed.slug === app.slug) ? 'Open' : 'Install'}</Button>
                     </div>
                   )}
                 />
