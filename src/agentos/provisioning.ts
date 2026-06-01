@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { normalizePlan, PLAN_LABELS, type AccountType, type AgentPlan } from '../auth/tiers.js';
 
@@ -11,6 +12,13 @@ export type AgentOSProvisioningResult = {
 
 function stableId(prefix: string, agentId: string, suffix = ''): string {
   return `${prefix}_${agentId.replace(/[^a-zA-Z0-9_-]/g, '_')}${suffix}`;
+}
+
+function stableUuid(seed: string): string {
+  const hex = crypto.createHash('sha256').update(seed).digest('hex').slice(0, 32).split('');
+  hex[12] = '4';
+  hex[16] = ((Number.parseInt(hex[16] ?? '0', 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8).join('')}-${hex.slice(8, 12).join('')}-${hex.slice(12, 16).join('')}-${hex.slice(16, 20).join('')}-${hex.slice(20, 32).join('')}`;
 }
 
 function workspaceName(agentName: string | null | undefined, accountType: AccountType): string {
@@ -30,6 +38,24 @@ async function upsert(table: string, payload: Record<string, unknown>, conflict 
   }
 }
 
+async function resolveProvisionedWorkspaceId(agentId: string): Promise<string> {
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('workspaces')
+      .select('id')
+      .eq('owner_id', agentId)
+      .order('created_at', { ascending: true })
+      .maybeSingle();
+    if (!error && typeof data?.id === 'string' && data.id.trim()) {
+      return data.id;
+    }
+  } catch {
+    // Fall back to deterministic UUID below.
+  }
+
+  return stableUuid(`workspace:${agentId}`);
+}
+
 export async function provisionAgentOSAccount(params: {
   agentId: string;
   agentName: string;
@@ -38,7 +64,7 @@ export async function provisionAgentOSAccount(params: {
   plan: AgentPlan;
 }): Promise<AgentOSProvisioningResult> {
   const now = new Date().toISOString();
-  const workspaceId = stableId('workspace', params.agentId);
+  const workspaceId = await resolveProvisionedWorkspaceId(params.agentId);
   const superAgentId = stableId('super_agentos', params.agentId);
   const instructionProfileId = stableId('instructions', params.agentId, '_default');
   const studioSessionId = stableId('studio_session', params.agentId, '_default');
