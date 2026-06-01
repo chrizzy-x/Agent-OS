@@ -332,4 +332,83 @@ describe.sequential('kernel register discoverability flow', () => {
     expect(db.tables.agent_apps).toHaveLength(1);
     expect(db.tables.agent_apps[0].slug).toBe('legacy-sync');
   });
+
+  it('registers successfully against pre-workspace kernel_registry and pre-019 agent_apps schemas', async () => {
+    const baseFrom = db.client.from;
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'kernel_registry') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: db.tables.kernel_registry[0] ?? null, error: null }),
+          single: vi.fn().mockResolvedValue({ data: db.tables.kernel_registry[0] ?? null, error: db.tables.kernel_registry[0] ? null : { message: 'not found' } }),
+          upsert: vi.fn((payload: TableRow) => ({
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockImplementation(async () => {
+              if ('workspace_id' in payload || 'health_status' in payload || 'endpoint_status' in payload) {
+                return { data: null, error: { message: 'column missing' } };
+              }
+              db.tables.kernel_registry[0] = payload;
+              return { data: payload, error: null };
+            }),
+          })),
+        };
+      }
+
+      if (table === 'agent_apps') {
+        return {
+          select: vi.fn((columns?: string) => {
+            if (typeof columns === 'string' && (columns.includes('workspace_id') || columns.includes('source'))) {
+              return { data: null, error: { message: 'column missing' } };
+            }
+            return { data: db.tables.agent_apps, error: null };
+          }),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: db.tables.agent_apps[0] ?? null, error: null }),
+          upsert: vi.fn((payload: TableRow) => ({
+            select: vi.fn((columns?: string) => ({
+              single: vi.fn().mockImplementation(async () => {
+                if (typeof columns === 'string' && (columns.includes('workspace_id') || columns.includes('source'))) {
+                  return { data: null, error: { message: 'column missing' } };
+                }
+                db.tables.agent_apps[0] = payload;
+                return { data: payload, error: null };
+              }),
+            })),
+          })),
+        };
+      }
+
+      return baseFrom(table);
+    });
+
+    const response = await postKernelRegister(sdkRequest('http://localhost/api/kernel/register', 'POST', sdkToken, {
+      product: 'compat-research-kit',
+      commandTopic: 'kernel.compat.commands',
+      statusTopic: 'kernel.compat.status',
+      availableCommands: [{ name: 'run', description: 'Run the compat workflow' }],
+      app: {
+        name: 'Compat Research Kit',
+        description: 'SDK app on older schema',
+        category: 'Research',
+        deviceTargets: ['Web'],
+        manifest: {
+          version: '1.0.0',
+          runtime: 'external-app',
+          entrypoint: 'https://apps.example.com/compat-research-kit',
+          distribution: { webUrl: 'https://apps.example.com/compat-research-kit' },
+        },
+      },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.registered).toBe(true);
+    expect(db.tables.kernel_registry).toHaveLength(1);
+    expect(db.tables.agent_apps).toHaveLength(1);
+    expect(db.tables.agent_apps[0].slug).toBe('compat-research-kit');
+  });
 });

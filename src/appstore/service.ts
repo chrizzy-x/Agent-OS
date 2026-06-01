@@ -178,10 +178,12 @@ type SaveAgentAppInput = PublishAgentAppInput & {
 
 const APP_SELECT = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,last_command_at,last_error,health_status,endpoint_status,disabled,heartbeat_count,open_count,web_open_count,android_download_count,ios_download_count,install_count,verified,published,created_at,updated_at';
 const APP_SELECT_LEGACY = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,install_count,verified,published,created_at,updated_at';
+const APP_SELECT_PRE_019 = 'id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,publish_state,permissions_required,required_secrets,install_count,verified,published,created_at,updated_at';
 const APP_INSTALLATION_SELECT = 'id,app_id,agent_id,workspace_id,status,favorite,permissions_approved,open_count,last_opened_at,installed_at,updated_at';
 const APP_INSTALLATION_SELECT_LEGACY = 'id,app_id,agent_id,workspace_id,status,installed_at,updated_at';
 const KERNEL_REGISTRY_DISCOVERY_SELECT = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,health_status,endpoint_status,version,registered_at,last_heartbeat_at,last_error,disabled,heartbeat_count';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
+const KERNEL_REGISTRY_DISCOVERY_SELECT_PRE_WORKSPACE = 'agent_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -349,8 +351,8 @@ function normalizeLocalApp(row: Partial<AgentAppListing>): AgentAppListing {
 function fromDbRow(row: DbAgentAppRow): AgentAppListing {
   const slug = stringValue(row.slug);
   const visibility = normalizeVisibility(row.visibility, row.published);
-  const source = normalizeSource(row.source);
   const runtimeType = normalizeRuntimeType(row.runtime_type, isRecord(row.manifest) ? row.manifest.runtime : undefined);
+  const source = normalizeSource(row.source ?? (runtimeType === 'external-app' ? 'external_sdk' : 'internal'));
   const description = stringValue(row.description);
   const createdAt = stringValue(row.created_at, new Date().toISOString());
   const manifest = normalizeManifest(row.manifest, slug, {
@@ -359,6 +361,9 @@ function fromDbRow(row: DbAgentAppRow): AgentAppListing {
   });
   const appUrl = nullableString(row.app_url);
   const distribution = normalizeDistribution(manifest.distribution, appUrl);
+  const inferredKernelProduct = source === 'external_sdk' && manifest.entrypoint.startsWith('agentos://kernel/')
+    ? manifest.entrypoint.slice('agentos://kernel/'.length)
+    : null;
 
   return {
     id: stringValue(row.id),
@@ -381,7 +386,7 @@ function fromDbRow(row: DbAgentAppRow): AgentAppListing {
     source,
     visibility,
     runtimeType,
-    kernelProduct: nullableString(row.kernel_product),
+    kernelProduct: nullableString(row.kernel_product) ?? inferredKernelProduct,
     kernelCommandTopic: nullableString(row.kernel_command_topic),
     kernelStatusTopic: nullableString(row.kernel_status_topic),
     distribution,
@@ -484,6 +489,32 @@ function toLegacyDbPayload(app: AgentAppListing, publishState = 'draft'): Record
   };
 }
 
+function toPre019DbPayload(app: AgentAppListing, publishState = 'draft'): Record<string, unknown> {
+  return {
+    id: app.id,
+    name: app.name,
+    slug: app.slug,
+    category: app.category,
+    description: app.description,
+    long_description: app.longDescription,
+    publisher_id: app.publisherId,
+    publisher_name: app.publisherName,
+    app_url: app.appUrl,
+    repository_url: app.repositoryUrl,
+    device_targets: app.deviceTargets,
+    manifest: app.manifest,
+    default_config: app.defaultConfig,
+    publish_state: publishState,
+    permissions_required: app.permissionsRequired,
+    required_secrets: app.requiredSecrets,
+    install_count: app.installCount,
+    verified: app.verified,
+    published: app.published,
+    created_at: app.createdAt,
+    updated_at: app.updatedAt,
+  };
+}
+
 async function loadStoredApps(): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
@@ -494,6 +525,10 @@ async function loadStoredApps(): Promise<AgentAppListing[]> {
     const legacy = await supabase.from('agent_apps').select(APP_SELECT_LEGACY);
     if (!legacy.error) {
       return ((legacy.data ?? []) as DbAgentAppRow[]).map(fromDbRow);
+    }
+    const pre019 = await supabase.from('agent_apps').select(APP_SELECT_PRE_019);
+    if (!pre019.error) {
+      return ((pre019.data ?? []) as DbAgentAppRow[]).map(fromDbRow);
     }
   } catch {
     // Local fallback below.
@@ -709,7 +744,14 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
       .single();
 
     if (!legacy.error && legacy.data) return fromDbRow(legacy.data as DbAgentAppRow);
-    const upsertError = primary.error ?? legacy.error;
+    const pre019 = await supabase
+      .from('agent_apps')
+      .upsert(toPre019DbPayload(app, publishState), { onConflict: 'slug' })
+      .select(APP_SELECT_PRE_019)
+      .single();
+
+    if (!pre019.error && pre019.data) return fromDbRow(pre019.data as DbAgentAppRow);
+    const upsertError = primary.error ?? legacy.error ?? pre019.error;
     if (upsertError?.code === '23505' || upsertError?.message?.toLowerCase().includes('duplicate')) {
       throw new ValidationError('App slug already exists');
     }
@@ -744,9 +786,15 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
         .select(KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY)
         .order('registered_at', { ascending: false })
       : { data: primary.data, error: primary.error };
-    const registryRows = (legacy.data ?? primary.data) as DbKernelRegistryRow[] | null;
+    const preWorkspace = legacy.error
+      ? await supabase
+        .from('kernel_registry')
+        .select(KERNEL_REGISTRY_DISCOVERY_SELECT_PRE_WORKSPACE)
+        .order('registered_at', { ascending: false })
+      : { data: legacy.data ?? primary.data, error: legacy.error };
+    const registryRows = (preWorkspace.data ?? legacy.data ?? primary.data) as DbKernelRegistryRow[] | null;
 
-    if (legacy.error || !registryRows || registryRows.length === 0) {
+    if (preWorkspace.error || !registryRows || registryRows.length === 0) {
       return existingApps;
     }
 
@@ -782,7 +830,13 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
       if (!owner?.enterprise) continue;
 
       const slug = normalizeAgentAppSlug(product);
-      if (existingApps.some(app => app.slug === slug || app.kernelProduct === product)) {
+      const existingApp = existingApps.find(app => app.slug === slug || app.kernelProduct === product);
+      if (
+        existingApp
+        && existingApp.source === 'external_sdk'
+        && existingApp.kernelCommandTopic
+        && existingApp.kernelStatusTopic
+      ) {
         continue;
       }
 

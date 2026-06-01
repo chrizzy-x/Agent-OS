@@ -117,8 +117,29 @@ export async function POST(req: NextRequest) {
         .select()
         .single()
       : { data: primary.data, error: primary.error };
+    const compat = legacy.error
+      ? await supabase
+        .from('kernel_registry')
+        .upsert({
+          agent_id: ctx.agentId,
+          product: String(product),
+          command_topic: String(commandTopic),
+          status_topic: String(statusTopic),
+          available_commands: normalizedCommands,
+          status: 'online',
+          registered_at: now,
+          last_heartbeat_at: now,
+          last_status_payload: {
+            status: 'online',
+            endpointStatus: 'healthy',
+            version: typeof app?.manifest?.version === 'string' ? app.manifest.version : '1.0.0',
+          },
+        }, { onConflict: 'agent_id,product' })
+        .select()
+        .single()
+      : { data: legacy.data, error: legacy.error };
 
-    if (legacy.error) throw legacy.error;
+    if (compat.error) throw compat.error;
 
     const publisher = await findAccountById(ctx.agentId);
     const listing = await upsertExternalSdkAgentApp({
@@ -144,7 +165,7 @@ export async function POST(req: NextRequest) {
       payload: { product: String(product), slug: listing.slug },
     });
 
-    return NextResponse.json({ registered: true, kernel: legacy.data, app: listing });
+    return NextResponse.json({ registered: true, kernel: compat.data, app: listing });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

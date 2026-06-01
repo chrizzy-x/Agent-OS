@@ -24,18 +24,23 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const primary = await supabase
       .from('kernel_registry')
       .select('agent_id,workspace_id,product,command_topic,status_topic,available_commands');
+    const compat = primary.error
+      ? await supabase
+        .from('kernel_registry')
+        .select('agent_id,product,command_topic,status_topic,available_commands')
+      : { data: primary.data, error: primary.error };
 
-    if (error) throw error;
+    if (compat.error) throw compat.error;
 
     let created = 0;
     let updated = 0;
     let skipped = 0;
     const existingApps = await listAgentApps({ includeHidden: true, canManageAll: true });
 
-    for (const row of (data ?? []) as KernelRow[]) {
+    for (const row of (compat.data ?? []) as KernelRow[]) {
       const agentId = typeof row.agent_id === 'string' ? row.agent_id : '';
       const product = typeof row.product === 'string' ? row.product : '';
       const commandTopic = typeof row.command_topic === 'string' ? row.command_topic : '';

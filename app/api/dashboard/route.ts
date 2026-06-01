@@ -18,6 +18,22 @@ function summarizeEventPayload(payload: Record<string, unknown>): string {
   return keys.slice(0, 4).join(', ');
 }
 
+async function loadEnterpriseKernelRows(agentId: string) {
+  const supabase = getSupabaseAdmin();
+  const primary = await supabase
+    .from('kernel_registry')
+    .select('product,health_status,status_topic,last_heartbeat_at,last_error,registered_at')
+    .eq('agent_id', agentId)
+    .order('registered_at', { ascending: false });
+  if (!primary.error) return primary;
+
+  return supabase
+    .from('kernel_registry')
+    .select('product,status,status_topic,last_heartbeat_at,last_status_payload,registered_at')
+    .eq('agent_id', agentId)
+    .order('registered_at', { ascending: false });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireAgentContextWithTier(request.headers);
@@ -47,11 +63,7 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .limit(12),
       enterprise
-        ? getSupabaseAdmin()
-          .from('kernel_registry')
-          .select('product,health_status,status_topic,last_heartbeat_at,last_error,registered_at')
-          .eq('agent_id', ctx.agentId)
-          .order('registered_at', { ascending: false })
+        ? loadEnterpriseKernelRows(ctx.agentId)
         : Promise.resolve({ data: [], error: null }),
       enterprise
         ? getSupabaseAdmin()
@@ -111,13 +123,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const sdkApps = ((kernelsResult.data ?? []) as Array<Record<string, unknown>>).map(row => ({
-      product: String(row.product ?? ''),
-      healthStatus: String(row.health_status ?? 'unknown'),
-      statusTopic: typeof row.status_topic === 'string' ? row.status_topic : '',
-      lastHeartbeatAt: typeof row.last_heartbeat_at === 'string' ? row.last_heartbeat_at : null,
-      lastError: typeof row.last_error === 'string' ? row.last_error : null,
-    }));
+    const sdkApps = ((kernelsResult.data ?? []) as Array<Record<string, unknown>>).map(row => {
+      const statusPayload = row.last_status_payload && typeof row.last_status_payload === 'object' && !Array.isArray(row.last_status_payload)
+        ? row.last_status_payload as Record<string, unknown>
+        : {};
+      return {
+        product: String(row.product ?? ''),
+        healthStatus: String(row.health_status ?? row.status ?? statusPayload.status ?? 'unknown'),
+        statusTopic: typeof row.status_topic === 'string' ? row.status_topic : '',
+        lastHeartbeatAt: typeof row.last_heartbeat_at === 'string' ? row.last_heartbeat_at : null,
+        lastError: typeof row.last_error === 'string' ? row.last_error : typeof statusPayload.lastError === 'string' ? statusPayload.lastError : null,
+      };
+    });
 
     const chainMap = new Map<string, { executions: number; lastExecution: string | null }>();
     for (const row of (ffpResult.data ?? []) as Array<Record<string, unknown>>) {

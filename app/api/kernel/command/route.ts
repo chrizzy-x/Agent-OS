@@ -31,13 +31,21 @@ export async function POST(req: NextRequest) {
     if (ctx.workspaceId) {
       query = query.eq('workspace_id', ctx.workspaceId);
     }
-    const { data: kernel, error } = await query.single();
+    const primary = await query.single();
+    const compat = primary.error && ctx.workspaceId
+      ? await supabase
+        .from('kernel_registry')
+        .select('command_topic, available_commands')
+        .eq('agent_id', ctx.agentId)
+        .eq('product', product)
+        .single()
+      : primary;
 
-    if (error || !kernel) {
+    if (compat.error || !compat.data) {
       return NextResponse.json({ error: `Product "${product}" not registered` }, { status: 404 });
     }
 
-    const topic = kernel.command_topic as string;
+    const topic = compat.data.command_topic as string;
 
     // Publish to the command topic via events primitive
     const result = await executeUniversalToolCall({
