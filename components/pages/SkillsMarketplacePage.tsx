@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
-import { fetchBrowserSession } from '@/src/auth/browser-session';
+import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
   AppShell,
   Badge,
@@ -32,6 +32,7 @@ type Skill = {
 const CATEGORIES = ['All', 'AI Search', 'Data Analysis', 'Code Interpreter', 'File Analysis', 'Browser Automation', 'Database Query', 'Email Sender', 'Image Generator', 'Research', 'Dev Tools'];
 
 export default function SkillsMarketplacePage() {
+  const [session, setSession] = useState<BrowserSession | null>(null);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [installed, setInstalled] = useState<Array<{ skill: Skill }>>([]);
   const [search, setSearch] = useState('');
@@ -41,13 +42,14 @@ export default function SkillsMarketplacePage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [skillsRes, session] = await Promise.all([
+      const [skillsRes, currentSession] = await Promise.all([
         fetch('/api/skills?sort=popular&limit=50', { cache: 'no-store' }),
         fetchBrowserSession().catch(() => null),
       ]);
       const skillsData = await skillsRes.json();
       setSkills(skillsData.skills ?? []);
-      if (session) {
+      setSession(currentSession);
+      if (currentSession) {
         const installedRes = await fetch('/api/skills/installed', { cache: 'no-store' });
         const installedData = await installedRes.json();
         setInstalled(installedData.installed_skills ?? []);
@@ -88,7 +90,7 @@ export default function SkillsMarketplacePage() {
                   { href: '/studio', label: 'Studio' },
                   { href: '/skills', label: 'Skills', active: true },
                   { href: '/appstore', label: 'Appstore' },
-                  { href: '/developer', label: 'Developer' },
+                  ...(session?.capabilities?.includes('access_developer_console') ? [{ href: '/developer', label: 'Developer' }] : []),
                   { href: '/settings', label: 'Settings' },
                 ]}
               />
@@ -111,12 +113,16 @@ export default function SkillsMarketplacePage() {
                 }))} />
               )}
             </SidebarSection>
-            <SidebarSection title="Recommended">
-              <SidebarNav items={skills.slice(0, 5).map(skill => ({
-                href: `/skills/${skill.slug}`,
-                label: skill.name,
-                subtitle: `${skill.total_installs.toLocaleString()} installs`,
-              }))} />
+            <SidebarSection title="Published now">
+              {skills.length === 0 ? (
+                <div className="os-empty-body">No published skills yet.</div>
+              ) : (
+                <SidebarNav items={skills.slice(0, 5).map(skill => ({
+                  href: `/skills/${skill.slug}`,
+                  label: skill.name,
+                  subtitle: `${skill.total_installs.toLocaleString()} installs`,
+                }))} />
+              )}
             </SidebarSection>
           </>
         )}
@@ -124,8 +130,8 @@ export default function SkillsMarketplacePage() {
         <PageHeader
           eyebrow="Skill marketplace"
           title="Skill Marketplace"
-          subtitle="Install focused capabilities for search, analysis, browser automation, code execution, and research."
-          actions={<Button href="/developer" variant="secondary">Publish skill</Button>}
+          subtitle="Only real published skills appear here. Install focused capabilities for search, analysis, browser automation, code execution, and research."
+          actions={session?.capabilities?.includes('create_skill') ? <Button href="/developer" variant="secondary">Publish skill</Button> : undefined}
         />
 
         <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search skills, categories, permissions..." />
@@ -136,7 +142,10 @@ export default function SkillsMarketplacePage() {
             {[0, 1, 2].map(item => <LoadingState key={item} label="Loading skills" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState title="No skills found" body="Try another search or category." />
+          <EmptyState
+            title={skills.length === 0 ? 'No published skills yet' : 'No skills found'}
+            body={skills.length === 0 ? 'This marketplace stays empty until a real skill is published.' : 'Try another search or category.'}
+          />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
             {filtered.map(skill => {
@@ -149,7 +158,7 @@ export default function SkillsMarketplacePage() {
                   description={skill.description}
                   category={skill.category}
                   installs={skill.total_installs}
-                  rating={skill.rating}
+                  rating={skill.rating > 0 ? skill.rating : undefined}
                   footer={(
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <div style={{ display: 'flex', gap: 8 }}>

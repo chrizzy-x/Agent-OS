@@ -120,5 +120,16 @@ describe('storage migrations', () => {
     expect(sql).toContain('ALTER TABLE app_installations ADD COLUMN IF NOT EXISTS favorite');
     expect(sql).toContain("ALTER TABLE app_installations ADD COLUMN IF NOT EXISTS permissions_approved JSONB NOT NULL DEFAULT '[]'::jsonb");
   });
+
+  it('adds app version history, session branching lineage, and Vault runtime subjects', () => {
+    const sql = readFileSync(join(migrationsDir, '021_app_versions_session_branching.sql'), 'utf8');
+
+    expect(sql).toContain('ALTER TABLE app_installations ADD COLUMN IF NOT EXISTS installed_version TEXT');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_app_versions');
+    expect(sql).toContain('ALTER TABLE nl_studio_sessions ADD COLUMN IF NOT EXISTS parent_session_id');
+    expect(sql).toContain('ALTER TABLE nl_studio_sessions ADD COLUMN IF NOT EXISTS parent_snapshot_id');
+    expect(sql).toContain("'app', 'skill'");
+    expect(sql).toContain('ALTER TABLE agent_app_versions ENABLE ROW LEVEL SECURITY');
+  });
 });
 

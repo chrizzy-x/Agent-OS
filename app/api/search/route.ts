@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listAgentApps, listInstalledAgentApps } from '@/src/appstore/service';
 import { requireAgentContext } from '@/src/auth/request';
+import { DOCS_CATALOG } from '@/src/docs/catalog';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { listStudioSessions } from '@/src/studio/persistence';
 import { listPrivateSubagents } from '@/src/subagents/service';
@@ -21,13 +22,6 @@ type SearchResult = {
   actionLabel: string;
   updatedAt: string | null;
 };
-
-const DOCS = [
-  { id: 'docs-guide', title: 'Platform Guide', subtitle: 'How AgentOS works', href: '/docs/guide' },
-  { id: 'docs-api', title: 'API Reference', subtitle: 'Routes, payloads, and examples', href: '/docs/api' },
-  { id: 'docs-sdk', title: 'SDK Guide', subtitle: 'Register and manage SDK apps', href: '/docs/sdk' },
-  { id: 'docs-templates', title: 'Templates', subtitle: 'Starter templates and flows', href: '/docs/templates' },
-];
 
 function matchesSearch(search: string, ...values: Array<string | null | undefined>): boolean {
   if (!search) return true;
@@ -52,17 +46,19 @@ export async function GET(request: NextRequest) {
     const search = url.searchParams.get('q')?.trim().toLowerCase() ?? '';
     const type = (url.searchParams.get('type')?.trim().toLowerCase() ?? 'all') as SearchKind | 'all';
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
+    const workspacePromise = listWorkspaces(ctx.agentId);
 
     const [apps, installedApps, sessions, workspaces, subagents, workflowsResult, publishedSkillsResult, ownSkillsResult] = await Promise.all([
       listAgentApps({
         viewerAgentId: ctx.agentId,
+        viewerWorkspaceIds: (await workspacePromise).map(workspace => workspace.id),
         includeHidden: true,
         search: search || undefined,
         sort: 'recent',
       }),
       listInstalledAgentApps(ctx.agentId).catch(() => []),
       listStudioSessions(ctx.agentId),
-      listWorkspaces(ctx.agentId),
+      workspacePromise,
       listPrivateSubagents(ctx.agentId),
       getSupabaseAdmin()
         .from('agent_workflows')
@@ -185,8 +181,8 @@ export async function GET(request: NextRequest) {
           updatedAt: item.createdAt,
         })),
       vault: vaultResults.filter(() => type === 'all' || type === 'vault'),
-      doc: DOCS
-        .filter(item => matchesSearch(search, item.title, item.subtitle))
+      doc: DOCS_CATALOG
+        .filter(item => matchesSearch(search, item.title, item.subtitle, ...(item.keywords ?? [])))
         .filter(() => type === 'all' || type === 'doc')
         .map(item => ({
           ...item,

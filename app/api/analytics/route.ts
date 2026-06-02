@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
       .map(app => ({
         name: app.name,
         slug: app.slug,
-        runs: app.installCount,
+        runs: app.openCount,
         installs: app.installCount,
         runtimeType: app.runtimeType,
       }))

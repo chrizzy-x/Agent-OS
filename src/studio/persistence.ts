@@ -40,11 +40,19 @@ export type StudioSessionRecord = {
   workspaceId: string;
   ownerAgentId: string;
   superAgentId: string | null;
+  parentSessionId: string | null;
+  parentSnapshotId: string | null;
+  branchLabel: string | null;
   title: string;
   status: string;
   state: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+};
+
+export type StudioSessionLineage = {
+  parent: Pick<StudioSessionRecord, 'id' | 'title' | 'updatedAt'> | null;
+  children: Array<Pick<StudioSessionRecord, 'id' | 'title' | 'updatedAt'>>;
 };
 
 export type StudioMessageRecord = {
@@ -83,6 +91,9 @@ function mapSession(row: Record<string, unknown>): StudioSessionRecord {
     workspaceId: String(row.workspace_id),
     ownerAgentId: String(row.owner_agent_id),
     superAgentId: typeof row.super_agent_id === 'string' ? row.super_agent_id : null,
+    parentSessionId: typeof row.parent_session_id === 'string' ? row.parent_session_id : null,
+    parentSnapshotId: typeof row.parent_snapshot_id === 'string' ? row.parent_snapshot_id : null,
+    branchLabel: typeof row.branch_label === 'string' ? row.branch_label : null,
     title: typeof row.title === 'string' ? row.title : 'AgentOS Studio',
     status: typeof row.status === 'string' ? row.status : 'active',
     state: asRecord(row.state),
@@ -155,6 +166,10 @@ export async function createStudioSession(params: {
   workspaceId: string;
   superAgentId?: string | null;
   title?: string;
+  parentSessionId?: string | null;
+  parentSnapshotId?: string | null;
+  branchLabel?: string | null;
+  initialState?: Record<string, unknown>;
 }): Promise<StudioSessionRecord> {
   await assertWorkspaceMembership(params.workspaceId, params.ownerAgentId);
   const now = new Date().toISOString();
@@ -166,9 +181,12 @@ export async function createStudioSession(params: {
       workspace_id: params.workspaceId,
       owner_agent_id: params.ownerAgentId,
       super_agent_id: params.superAgentId ?? null,
+      parent_session_id: params.parentSessionId ?? null,
+      parent_snapshot_id: params.parentSnapshotId ?? null,
+      branch_label: params.branchLabel?.trim() || null,
       title: params.title?.trim() || 'New Studio Session',
       status: 'active',
-      state: {
+      state: params.initialState ?? {
         workflowGraph: { nodes: [], edges: [] },
         workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
         artifacts: [],
@@ -189,10 +207,11 @@ export async function getStudioSessionBundle(ownerAgentId: string, sessionId: st
   session: StudioSessionRecord;
   messages: StudioMessageRecord[];
   events: StudioEventRecord[];
+  lineage: StudioSessionLineage;
 }> {
   const row = await assertSessionOwner(sessionId, ownerAgentId);
   const supabase = getSupabaseAdmin();
-  const [messages, events] = await Promise.all([
+  const [messages, events, lineage] = await Promise.all([
     supabase
       .from('nl_studio_messages')
       .select('*')
@@ -203,6 +222,7 @@ export async function getStudioSessionBundle(ownerAgentId: string, sessionId: st
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true }),
+    getStudioSessionLineage(ownerAgentId, sessionId),
   ]);
 
   if (messages.error) throw new Error(`Failed to load Studio messages: ${messages.error.message}`);
@@ -212,6 +232,44 @@ export async function getStudioSessionBundle(ownerAgentId: string, sessionId: st
     session: mapSession(row),
     messages: ((messages.data ?? []) as Record<string, unknown>[]).map(mapMessage),
     events: ((events.data ?? []) as Record<string, unknown>[]).map(mapEvent),
+    lineage,
+  };
+}
+
+export async function getStudioSessionLineage(ownerAgentId: string, sessionId: string): Promise<StudioSessionLineage> {
+  const current = mapSession(await assertSessionOwner(sessionId, ownerAgentId));
+  const supabase = getSupabaseAdmin();
+
+  const [parentResult, childResult] = await Promise.all([
+    current.parentSessionId
+      ? supabase
+        .from('nl_studio_sessions')
+        .select('*')
+        .eq('id', current.parentSessionId)
+        .eq('owner_agent_id', ownerAgentId)
+        .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    supabase
+      .from('nl_studio_sessions')
+      .select('*')
+      .eq('owner_agent_id', ownerAgentId)
+      .eq('parent_session_id', sessionId)
+      .order('updated_at', { ascending: false }),
+  ]);
+
+  if (childResult.error) throw new Error(`Failed to load Studio session lineage: ${childResult.error.message}`);
+  if (parentResult && 'error' in parentResult && parentResult.error) {
+    throw new Error(`Failed to load Studio session lineage: ${parentResult.error.message}`);
+  }
+
+  const parent = parentResult && 'data' in parentResult && parentResult.data
+    ? mapSession(parentResult.data as Record<string, unknown>)
+    : null;
+  const children = ((childResult.data ?? []) as Record<string, unknown>[]).map(mapSession);
+
+  return {
+    parent: parent ? { id: parent.id, title: parent.title, updatedAt: parent.updatedAt } : null,
+    children: children.map(child => ({ id: child.id, title: child.title, updatedAt: child.updatedAt })),
   };
 }
 
@@ -401,4 +459,32 @@ export async function listStudioSnapshots(params: {
 
   if (error) throw new Error(`Failed to list Studio snapshots: ${error.message}`);
   return ((data ?? []) as Record<string, unknown>[]).map(mapSnapshot);
+}
+
+export async function createStudioSessionBranch(params: {
+  ownerAgentId: string;
+  sessionId: string;
+  snapshotId?: string | null;
+  title?: string;
+  branchLabel?: string;
+}): Promise<StudioSessionRecord> {
+  const session = mapSession(await assertSessionOwner(params.sessionId, params.ownerAgentId));
+  const snapshots = await listStudioSnapshots({
+    ownerAgentId: params.ownerAgentId,
+    sessionId: params.sessionId,
+  });
+  const snapshot = params.snapshotId
+    ? snapshots.find(item => item.id === params.snapshotId) ?? null
+    : snapshots[0] ?? null;
+
+  return createStudioSession({
+    ownerAgentId: params.ownerAgentId,
+    workspaceId: session.workspaceId,
+    superAgentId: session.superAgentId,
+    title: params.title?.trim() || `${session.title} Branch`,
+    parentSessionId: session.id,
+    parentSnapshotId: snapshot?.id ?? null,
+    branchLabel: params.branchLabel?.trim() || snapshot?.label || 'Branch',
+    initialState: snapshot?.state ?? session.state,
+  });
 }

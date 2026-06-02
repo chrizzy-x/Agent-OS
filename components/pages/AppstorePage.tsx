@@ -24,6 +24,14 @@ import {
 const CATEGORY_CHIPS = ['All', 'Featured', 'Popular', 'New', 'External SDK', 'Internal Apps', 'Skills', 'Finance', 'Productivity', 'Dev Tools', 'Data', 'Research'];
 const RUNTIME_FILTERS = ['all', 'external-app', 'agentos-app', 'workspace-app'];
 
+type InstalledAppCard = AgentAppListing & {
+  installation?: {
+    updateAvailable?: boolean;
+    favorite?: boolean;
+    installedVersion?: string | null;
+  };
+};
+
 function runtimeLabel(app: AgentAppListing): string {
   if (app.source === 'external_sdk') return 'External SDK';
   if (app.runtimeType === 'workspace-app') return 'Workspace App';
@@ -44,7 +52,7 @@ function matchCategory(app: AgentAppListing, category: string): boolean {
 export default function AppstorePage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [apps, setApps] = useState<AgentAppListing[]>([]);
-  const [installedApps, setInstalledApps] = useState<AgentAppListing[]>([]);
+  const [installedApps, setInstalledApps] = useState<InstalledAppCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
@@ -88,6 +96,10 @@ export default function AppstorePage() {
     [apps, category, runtimeType, search],
   );
 
+  const installedBySlug = useMemo(
+    () => new Map(installedApps.map(app => [app.slug, app.installation ?? null])),
+    [installedApps],
+  );
   const featured = filtered.filter(app => app.verified || app.source === 'external_sdk').slice(0, 3);
   const trending = filtered.slice(0, 5);
 
@@ -136,7 +148,7 @@ export default function AppstorePage() {
                 <SidebarNav items={installedApps.slice(0, 6).map(app => ({
                   href: `/appstore/${app.slug}`,
                   label: app.name,
-                  subtitle: runtimeLabel(app),
+                  subtitle: app.installation?.updateAvailable ? `${runtimeLabel(app)} - update available` : runtimeLabel(app),
                 }))} />
               )}
             </SidebarSection>
@@ -153,12 +165,11 @@ export default function AppstorePage() {
         <PageHeader
           eyebrow="AgentOS Appstore"
           title="Appstore"
-          subtitle="Discover powerful apps, skills, and SDK-backed tools for your agents."
+          subtitle="Public listings come only from real SDK registrations, published AgentOS apps, and official system apps."
           actions={session?.capabilities?.includes('create_app') ? <Button href="/publishing/new" variant="secondary">Publish app</Button> : undefined}
         />
 
         <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps, SDK tools, finance, research, data..." />
-
         <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
 
         {loading ? (
@@ -166,14 +177,14 @@ export default function AppstorePage() {
             {[0, 1, 2].map(item => <LoadingState key={item} label="Loading app listings" />)}
           </div>
         ) : featured.length === 0 && filtered.length === 0 ? (
-          <EmptyState title="No public apps yet" body="Public listings appear here automatically for SDK apps and when internal publishers switch visibility to public." />
+          <EmptyState title="No public apps yet" body="Public listings appear here automatically for validated SDK apps and published AgentOS releases." />
         ) : (
           <>
             <Card>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
                 <div>
                   <div className="os-entity-title">Featured apps</div>
-                  <div className="os-entity-copy">Auto-discovered SDK apps and verified internal releases.</div>
+                  <div className="os-entity-copy">Verified releases and SDK apps that completed registration and indexing.</div>
                 </div>
                 <Badge tone="accent">{filtered.length} public apps</Badge>
               </div>
@@ -191,7 +202,9 @@ export default function AppstorePage() {
                     footer={(
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <StatusPill status={app.visibility} />
-                        <Button href={`/appstore/${app.slug}`} variant="primary">{installedApps.some(installed => installed.slug === app.slug) ? 'Open' : 'Install'}</Button>
+                        <Button href={`/appstore/${app.slug}`} variant="primary">
+                          {installedBySlug.get(app.slug)?.updateAvailable ? 'Update' : installedBySlug.has(app.slug) ? 'Open' : 'Install'}
+                        </Button>
                       </div>
                     )}
                   />
@@ -209,12 +222,17 @@ export default function AppstorePage() {
                   runtime={runtimeLabel(app)}
                   verified={app.verified}
                   installs={app.installCount}
-                  rating={4.5}
                   badge={app.source === 'external_sdk' ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge> : undefined}
                   footer={(
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span className="os-entity-meta">{app.deviceTargets.slice(0, 2).join(' • ')}</span>
-                      <Button href={`/appstore/${app.slug}`}>{installedApps.some(installed => installed.slug === app.slug) ? 'Open' : 'Install'}</Button>
+                      <span className="os-entity-meta">
+                        {installedBySlug.get(app.slug)?.updateAvailable
+                          ? `Installed ${installedBySlug.get(app.slug)?.installedVersion ?? 'older'} -> ${app.manifest.version}`
+                          : app.deviceTargets.slice(0, 2).join(' / ') || 'AgentOS Cloud'}
+                      </span>
+                      <Button href={`/appstore/${app.slug}`}>
+                        {installedBySlug.get(app.slug)?.updateAvailable ? 'Update' : installedBySlug.has(app.slug) ? 'Open' : 'Install'}
+                      </Button>
                     </div>
                   )}
                 />

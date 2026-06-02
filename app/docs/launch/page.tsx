@@ -8,6 +8,7 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
+  'v6.1 - real-data-only marketplace surfaces, stricter SDK app discovery, FFP restoration, session branching, app version history, and request-access billing flows.',
   'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
   'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
   'Browser sessions now expose account name and expiry only. API callers continue to use bearer tokens; IDs stay inside signed tokens and server-side storage.',
@@ -20,6 +21,11 @@ const releaseHighlights = [
 ];
 
 const changelog = [
+  'Removed fake App Store ratings, placeholder marketplace cards, seeded user-facing skill records, and fabricated fallback analytics from launch-facing surfaces.',
+  'Restricted SDK backfill and discovery flows to real metadata only, surfaced discovery/index status in developer and SDK views, and preserved app version history.',
+  'Restored FFP as a first-class module with dashboard status panels, related workflows, related apps, activity, and logs.',
+  'Added Studio session branching, lineage tracking, runtime app permission enforcement, and vault runtime secret injection for skill execution.',
+  'Replaced self-serve billing transitions in the public UI with request-access and contact-sales flows until real billing is shipped.',
   'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
   'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
   'Changed /api/session to return only authenticated session display fields; no private agent ID leaves the browser session endpoint.',

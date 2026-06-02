@@ -105,15 +105,6 @@ const USE_CASES = [
   { title: 'Data Pipeline', chain: 'net → fs → proc → db → events', detail: 'Download, write, transform, load, notify downstream.' },
 ];
 
-const MARKETPLACE_SKILLS = [
-  { name: 'JSON Transformer', cat: 'Data', desc: 'Parse, filter, and reshape JSON.', slug: 'json-transformer' },
-  { name: 'Text Utilities', cat: 'Documents', desc: 'Slugify, truncate, extract emails.', slug: 'text-utils' },
-  { name: 'Math & Stats', cat: 'Analytics', desc: 'Mean, median, std dev, averages.', slug: 'math-stats' },
-  { name: 'Date & Time', cat: 'Utilities', desc: 'Parse, format, diff, add dates.', slug: 'date-time' },
-  { name: 'HTTP Builder', cat: 'Web', desc: 'Build headers, encode params.', slug: 'http-request-builder' },
-  { name: 'CSV Processor', cat: 'Documents', desc: 'Parse CSV, filter rows, aggregate.', slug: 'csv-processor' },
-];
-
 export default function HomePage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
@@ -462,24 +453,21 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)', marginBottom: '24px' }}>
-              {MARKETPLACE_SKILLS.map(s => (
-                <Link key={s.slug} href={`/marketplace/${s.slug}`} className="hover-surface" style={{
-                  display: 'block',
-                  backgroundColor: 'var(--bg-primary)',
-                  padding: '24px',
-                  textDecoration: 'none',
-                  transition: 'background-color 200ms',
-                }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '10px', color: 'var(--text-tertiary)', letterSpacing: '0.06em' }}>{s.cat}</span>
-                    <span style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '11px', color: 'var(--accent)' }}>Free</span>
-                  </div>
-                  <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>{s.name}</div>
-                  <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>{s.desc}</div>
-                </Link>
-              ))}
+            <div className="marketplace-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1px', border: '1px solid var(--border)', backgroundColor: 'var(--border)', marginBottom: '24px' }}>
+              <div style={{ backgroundColor: 'var(--bg-primary)', padding: '24px' }}>
+                <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '10px', color: 'var(--text-tertiary)', letterSpacing: '0.06em', marginBottom: '12px' }}>SKILLS</div>
+                <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>Real published skills only</div>
+                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  The Skill Store stays empty until a real skill is published.
+                </div>
+              </div>
+              <div style={{ backgroundColor: 'var(--bg-primary)', padding: '24px' }}>
+                <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '10px', color: 'var(--text-tertiary)', letterSpacing: '0.06em', marginBottom: '12px' }}>APPS</div>
+                <div style={{ fontFamily: 'var(--font-mono), JetBrains Mono, monospace', fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '6px' }}>SDK and AgentOS discovery</div>
+                <div style={{ fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  The App Store shows only validated SDK registrations, published AgentOS apps, and official system apps.
+                </div>
+              </div>
             </div>
 
             {/* Developer CTA */}
@@ -569,7 +557,7 @@ export default function HomePage() {
               { href: '/connect', label: 'Connect', external: false },
               { href: '/docs', label: 'Docs', external: false },
               { href: '/developer', label: 'Developer', external: false },
-              { href: '/token', label: 'Token', external: false },
+              { href: '/signup', label: 'Sign Up', external: false },
             ].map(link => link.external ? (
               <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer"
                 className="hover-text-secondary"
@@ -597,6 +585,7 @@ export default function HomePage() {
         @media (max-width: 1023px) {
           .primitive-grid { grid-template-columns: 1fr 1fr !important; }
           .use-case-grid { grid-template-columns: 1fr !important; }
+          .marketplace-grid { grid-template-columns: 1fr !important; }
           section > div > div[style*="grid-template-columns: 1fr 1fr"] {
             grid-template-columns: 1fr !important;
           }

@@ -306,7 +306,7 @@ describe.sequential('kernel register discoverability flow', () => {
     expect(response.status).toBe(400);
   });
 
-  it('backfills app rows from legacy kernel registrations', async () => {
+  it('backfills legacy kernel registrations only when real app metadata already exists', async () => {
     db.tables.kernel_registry.push({
       id: 'kernel-1',
       agent_id: 'owner-agent',
@@ -320,6 +320,60 @@ describe.sequential('kernel register discoverability flow', () => {
       last_heartbeat_at: '2026-05-31T01:00:00Z',
       last_status_payload: { status: 'healthy' },
     });
+    db.tables.agent_apps.push({
+      id: 'app-existing',
+      workspace_id: 'workspace-1',
+      name: 'Legacy Sync',
+      slug: 'legacy-sync',
+      category: 'Operations',
+      description: 'Existing published metadata',
+      long_description: 'Existing published metadata',
+      publisher_id: 'owner-agent',
+      publisher_name: 'SDK Owner',
+      app_url: 'https://apps.example.com/legacy-sync',
+      repository_url: null,
+      device_targets: ['AgentOS Cloud'],
+      manifest: {
+        schemaVersion: 'agentos.app.v1',
+        version: '1.0.0',
+        runtime: 'external-app',
+        entrypoint: 'agentos://kernel/legacy-sync',
+        primitives: [],
+        skills: [],
+        requiredSkills: [],
+        bundledSkills: [],
+        permissions: [],
+        requiredSecrets: [],
+        commands: [{ name: 'sync', description: 'Sync' }],
+      },
+      default_config: {},
+      permissions_required: [],
+      required_secrets: [],
+      screenshots: [],
+      publish_state: 'published',
+      source: 'internal',
+      visibility: 'public',
+      runtime_type: 'external-app',
+      kernel_product: null,
+      kernel_command_topic: null,
+      kernel_status_topic: null,
+      last_heartbeat_at: null,
+      health_status: 'unknown',
+      endpoint_status: 'unknown',
+      last_command_at: null,
+      last_error: null,
+      disabled: false,
+      heartbeat_count: 0,
+      open_count: 0,
+      web_open_count: 0,
+      android_download_count: 0,
+      ios_download_count: 0,
+      install_count: 0,
+      verified: false,
+      published: true,
+      created_at: '2026-05-31T00:00:00Z',
+      updated_at: '2026-05-31T00:00:00Z',
+    });
 
     const response = await postKernelBackfill(new NextRequest('http://localhost/api/kernel/backfill-apps', {
       method: 'POST',
@@ -328,9 +382,40 @@ describe.sequential('kernel register discoverability flow', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.created).toBe(1);
+    expect(body.created).toBe(0);
+    expect(body.updated).toBe(1);
+    expect(body.blockedMetadata).toBe(0);
     expect(db.tables.agent_apps).toHaveLength(1);
     expect(db.tables.agent_apps[0].slug).toBe('legacy-sync');
+    expect(db.tables.agent_apps[0].source).toBe('external_sdk');
+  });
+
+  it('reports blocked metadata instead of fabricating legacy sdk listings', async () => {
+    db.tables.kernel_registry.push({
+      id: 'kernel-2',
+      agent_id: 'owner-agent',
+      workspace_id: 'workspace-1',
+      product: 'missing-metadata',
+      command_topic: 'kernel.missing.commands',
+      status_topic: 'kernel.missing.status',
+      available_commands: [{ name: 'run', description: 'Run' }],
+      status: 'healthy',
+      registered_at: '2026-05-31T00:00:00Z',
+      last_heartbeat_at: '2026-05-31T01:00:00Z',
+      last_status_payload: { status: 'healthy' },
+    });
+
+    const response = await postKernelBackfill(new NextRequest('http://localhost/api/kernel/backfill-apps', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.ADMIN_TOKEN}` },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.created).toBe(0);
+    expect(body.updated).toBe(0);
+    expect(body.blockedMetadata).toBe(1);
+    expect(db.tables.agent_apps).toHaveLength(0);
   });
 
   it('registers successfully against pre-workspace kernel_registry and pre-019 agent_apps schemas', async () => {

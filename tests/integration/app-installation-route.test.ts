@@ -200,7 +200,7 @@ describe.sequential('app installation lifecycle routes', () => {
     });
   });
 
-  it('requires permission approval, then installs, opens, pins, and uninstalls an app', async () => {
+  it('requires permission approval, then installs, opens, updates, pins, and uninstalls an app', async () => {
     const blocked = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
       slug: 'research-kit',
     }));
@@ -223,6 +223,26 @@ describe.sequential('app installation lifecycle routes', () => {
 
     expect(installedList.status).toBe(200);
     expect(installedListBody.installedApps).toHaveLength(1);
+    expect(installedListBody.installedApps[0].installation.installedVersion).toBe('1.0.0');
+
+    db.tables.agent_apps[0].manifest = {
+      ...(db.tables.agent_apps[0].manifest as Record<string, unknown>),
+      version: '2.0.0',
+    };
+
+    const updateList = await getInstalled(agentRequest('http://localhost/api/apps/installed', 'GET', token));
+    const updateListBody = await updateList.json();
+
+    expect(updateListBody.installedApps[0].installation.updateAvailable).toBe(true);
+
+    const updated = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
+      slug: 'research-kit',
+      permissionsApproved: ['access_network'],
+    }));
+    const updatedBody = await updated.json();
+
+    expect(updated.status).toBe(201);
+    expect(updatedBody.installation.installedVersion).toBe('2.0.0');
 
     const opened = await postOpen(agentRequest('http://localhost/api/apps/research-kit/open', 'POST', token), {
       params: Promise.resolve({ slug: 'research-kit' }),

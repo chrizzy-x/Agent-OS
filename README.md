@@ -29,10 +29,11 @@ AgentOS is a production infrastructure layer that gives any agent or app a safe,
 | **proc** | Sandboxed code execution (Python, JS, Bash) + cron scheduling | Sandboxed subprocess |
 
 ### Marketplace
-The marketplace is split into two stores:
+The marketplace is split into two stores and both are real-data only:
 
-- **Skill Store:** install pre-built capabilities into an agent. Developers earn 70% revenue share on paid skill usage.
-- **App Store:** download full agentic apps built on AgentOS. Enterprise subscribers can publish app packages with manifests, device targets, default config, and public/private visibility.
+- **Skill Store:** shows only real published skills. If nothing is published, it stays empty.
+- **App Store:** shows only validated SDK-discovered apps, real published AgentOS apps, and official system apps.
+- No demo apps, placeholder listings, fake install counts, fake ratings, or hardcoded marketplace records ship in production surfaces.
 
 ### Universal MCP Router
 One endpoint routes to built-in primitives, installed skills, or any external MCP server (Gmail, Slack, GitHub, etc.).
@@ -44,10 +45,10 @@ One endpoint routes to built-in primitives, installed skills, or any external MC
 | External MCP | `mcp.{server}.{tool}` | `mcp.gmail.send_email` |
 
 ### FFP (Furge Fabric Protocol)
-Every agent operation can be logged to an immutable audit chain. Sensitive operations can require multi-party consensus before executing. View your audit trail and consensus history directly in the dashboard under the FFP tab.
+FFP is a first-class AgentOS module with dashboard, activity, logs, related workflows, related apps, and status panels. Sensitive operations can require multi-party consensus before executing.
 
 ### Studio v4 — Natural Language Workflows
-Describe what you want in plain English. Claude maps it to primitives, returns a step-by-step plan, you confirm, it executes and saves as a reusable workflow.
+Describe what you want in plain English. Studio returns a step-by-step plan, you confirm, it executes and saves as a reusable workflow. Sessions support branching with lineage preserved from the source snapshot.
 
 ```
 POST /api/studio/intent
@@ -64,6 +65,9 @@ POST /api/kernel/register   # register your product
 POST /api/kernel/command    # dispatch a command
 GET  /api/kernel/status/:product  # heartbeat + available commands
 ```
+
+### Billing status
+Capability gating is live, but self-serve plan checkout is disabled until real billing is implemented and verified. Public plan changes use request-access and contact-sales flows instead of fake checkout.
 
 ---
 

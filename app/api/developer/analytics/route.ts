@@ -21,6 +21,13 @@ export async function GET(request: NextRequest) {
       .select('id,name,slug,source,runtime_type,install_count,open_count,web_open_count,android_download_count,ios_download_count,heartbeat_count,last_heartbeat_at,last_error,health_status')
       .eq('publisher_id', agentCtx.agentId)
       .order('updated_at', { ascending: false });
+    const appIds = (myApps ?? []).map(app => app.id).filter(Boolean);
+    const { data: appInstallations } = appIds.length === 0
+      ? { data: [] }
+      : await supabase
+        .from('app_installations')
+        .select('agent_id,app_id')
+        .in('app_id', appIds);
 
     // Verify ownership if skill_id is provided
     if (skillId) {
@@ -115,6 +122,8 @@ export async function GET(request: NextRequest) {
       heartbeats: 0,
       online: 0,
     });
+    const activeUsers = new Set(((appInstallations ?? []) as Array<Record<string, unknown>>).map(row => String(row.agent_id ?? '')).filter(Boolean)).size;
+    const totalRevenue = usageByDay.reduce((sum, row) => sum + Number(row.revenue), 0);
 
     return NextResponse.json({
       skills: mySkills ?? [],
@@ -125,7 +134,8 @@ export async function GET(request: NextRequest) {
         errors: totalErrors,
         error_rate: totalCalls > 0 ? ((totalErrors / totalCalls) * 100).toFixed(1) : '0.0',
         avg_ms: msCount > 0 ? Math.round(totalMs / msCount) : 0,
-        active_users: appTotals.opens,
+        active_users: activeUsers,
+        revenue_usd: Number(totalRevenue.toFixed(4)),
       },
       app_totals: appTotals,
       days,

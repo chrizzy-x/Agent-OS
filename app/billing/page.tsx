@@ -5,20 +5,10 @@ import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
-const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'retail_free', label: 'Retail Free' },
-  { value: 'retail_pro', label: 'Retail Pro' },
-  { value: 'enterprise_plus', label: 'Enterprise Plus' },
-  { value: 'enterprise_max', label: 'Enterprise Max' },
-];
-
 export default function BillingPage() {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [loading, setLoading] = useState(true);
-  const [targetPlan, setTargetPlan] = useState('retail_pro');
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -30,43 +20,17 @@ export default function BillingPage() {
         return;
       }
       setSession(current);
-      setTargetPlan(current.plan === 'retail_free' ? 'retail_pro' : 'enterprise_plus');
       setLoading(false);
     }
     void bootstrap();
     return () => { active = false; };
   }, [router]);
 
-  const currentPlan = useMemo(() => session?.plan ?? 'retail_free', [session?.plan]);
-
-  async function transitionPlan() {
-    if (busy) return;
-    setBusy(true);
-    setMessage('');
-    try {
-      const res = await fetch('/api/plans/transition', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currentPlan,
-          newPlan: targetPlan,
-          reason: 'user_requested_transition',
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.message ?? data.error ?? 'Failed to change plan');
-        return;
-      }
-      setMessage(`Plan updated to ${data.transition?.newPlan ?? targetPlan}. Capability changes are now enforced server-side.`);
-      const refreshed = await fetchBrowserSession();
-      setSession(refreshed);
-    } catch {
-      setMessage('Failed to change plan');
-    } finally {
-      setBusy(false);
-    }
-  }
+  const nextAction = useMemo(() => {
+    if (!session) return 'Request access';
+    if ((session.plan ?? '').startsWith('enterprise')) return 'Contact sales';
+    return 'Request upgrade';
+  }, [session]);
 
   if (loading) return <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }} />;
 
@@ -78,27 +42,40 @@ export default function BillingPage() {
           <div style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '.08em' }}>
             Billing & plans
           </div>
-          <h1 style={{ margin: '8px 0', color: 'var(--text-primary)' }}>Plan transitions</h1>
+          <h1 style={{ margin: '8px 0', color: 'var(--text-primary)' }}>Plan access</h1>
           <p style={{ margin: 0, color: 'var(--text-secondary)' }}>
-            Upgrades and downgrades preserve data and recompute capabilities.
+            Capability gating stays enforced by plan. Self-serve checkout is disabled until real billing is live.
           </p>
         </div>
 
-        <section className="card" style={{ padding: '18px' }}>
+        <section className="card" style={{ padding: '18px', marginBottom: '16px' }}>
           <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '10px' }}>
-            Current plan: <strong style={{ color: 'var(--text-primary)' }}>{session?.planLabel ?? currentPlan}</strong>
+            Current plan: <strong style={{ color: 'var(--text-primary)' }}>{session?.planLabel ?? session?.plan ?? 'Unknown'}</strong>
           </div>
-          <select className="input-dark" value={targetPlan} onChange={event => setTargetPlan(event.target.value)}>
-            {PLAN_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-          <div style={{ marginTop: '12px' }}>
-            <button type="button" className="btn-primary" onClick={() => void transitionPlan()} disabled={busy}>
-              {busy ? 'Updating...' : 'Change plan'}
-            </button>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
+            Active capabilities: {(session?.capabilities ?? []).slice(0, 8).join(', ') || 'None'}
           </div>
-          {message && <p style={{ margin: '12px 0 0', color: message.toLowerCase().includes('failed') || message.toLowerCase().includes('invalid') ? '#fca5a5' : '#86efac' }}>{message}</p>}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <a
+              href={`mailto:sales@agentos.app?subject=${encodeURIComponent(`AgentOS ${nextAction.toLowerCase()}`)}`}
+              className="btn-primary"
+            >
+              {nextAction}
+            </a>
+            <a
+              href="mailto:sales@agentos.app?subject=AgentOS enterprise rollout"
+              className="btn-outline"
+            >
+              Contact sales
+            </a>
+          </div>
+        </section>
+
+        <section className="card" style={{ padding: '18px' }}>
+          <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '10px' }}>What happens next</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: 1.7 }}>
+            Access requests are handled outside checkout for now. Production workspaces keep their current plan until AgentOS billing is implemented and verified end to end.
+          </div>
         </section>
       </main>
     </div>

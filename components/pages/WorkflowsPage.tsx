@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
 import {
   ActivityFeed,
@@ -36,12 +37,14 @@ type Workflow = {
 const TABS = ['Chat', 'Visual', 'Code', 'Runs', 'Settings'];
 
 export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [activeId, setActiveId] = useState(selectedId ?? '');
   const [tab, setTab] = useState('Chat');
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
+  const [working, setWorking] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +78,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
 
   async function runWorkflow() {
     if (!active) return;
+    setWorking(true);
     setNotice('');
     try {
       const res = await fetch('/api/agent/workflows/run-due', {
@@ -83,11 +87,58 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         body: JSON.stringify({ workflowId: active.id, force: true }),
       });
       const data = await res.json();
-      setNotice(res.ok ? `Run started (${data.ran ?? 0})` : data.error ?? 'Run failed');
+      setNotice(res.ok ? `Run started (${data.ran ?? 0}).` : data.error ?? 'Run failed');
       await load();
     } catch {
       setNotice('Run failed');
+    } finally {
+      setWorking(false);
     }
+  }
+
+  async function toggleStatus() {
+    if (!active) return;
+    setWorking(true);
+    setNotice('');
+    try {
+      const nextStatus = active.status === 'paused' ? 'active' : 'paused';
+      const res = await fetch(`/api/agent/workflows/${active.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      setNotice(res.ok ? `Workflow ${nextStatus}.` : data.error ?? 'Status update failed');
+      await load();
+    } catch {
+      setNotice('Status update failed');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function validateWorkflow() {
+    if (!active) return;
+    const issues: string[] = [];
+    if ((active.steps?.length ?? 0) === 0 && !active.code_state && !active.graph_state) {
+      issues.push('No steps, graph, or code found.');
+    }
+    if ((active.steps ?? []).some(step => !step.tool)) {
+      issues.push('One or more steps are missing a tool.');
+    }
+    if (!active.summary?.trim()) {
+      issues.push('Summary is empty.');
+    }
+    if (active.last_error) {
+      issues.push(`Last run failed: ${active.last_error}`);
+    }
+    setNotice(issues.length === 0 ? 'Validation passed. Workflow has runnable structure and metadata.' : `Validation failed: ${issues.join(' ')}`);
+  }
+
+  function sendToStudio() {
+    if (!active) return;
+    const prompt = `Review workflow "${active.name}" and improve reliability, validation, scheduling, and run safety. Current summary: ${active.summary || 'None'}. Current steps: ${(active.steps ?? []).map(step => step.tool).join(', ') || 'None'}.`;
+    router.push(`/studio?prompt=${encodeURIComponent(prompt)}`);
   }
 
   return (
@@ -128,12 +179,13 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
                   <div className="os-entity-copy">{active.summary || 'No summary provided.'}</div>
                   <div className="os-entity-copy">{active.steps.length} steps</div>
                   <div className="os-entity-copy">{active.schedule || 'No schedule'}</div>
+                  <div className="os-entity-copy">Status: {active.last_error ? 'error' : active.status}</div>
                 </div>
               ) : <div className="os-empty-body">Select a workflow.</div>}
             </SidebarSection>
             <SidebarSection title="Recent runs">
               <ActivityFeed
-                items={(filtered.slice(0, 5)).map(item => ({
+                items={filtered.slice(0, 5).map(item => ({
                   id: item.id,
                   title: item.name,
                   subtitle: item.last_error || 'Ready',
@@ -150,9 +202,10 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
           subtitle={active?.summary || 'Build, run, schedule, and publish workflows.'}
           actions={(
             <>
-              <Button variant="secondary" onClick={() => void runWorkflow()}>Test Run</Button>
-              <Button variant="ghost">Validate</Button>
-              <Button variant="ghost">AI Assist</Button>
+              <Button variant="secondary" onClick={() => void runWorkflow()}>{working ? 'Working...' : 'Test Run'}</Button>
+              {active ? <Button variant="secondary" onClick={() => void toggleStatus()}>{working ? 'Working...' : active.status === 'paused' ? 'Resume' : 'Pause'}</Button> : null}
+              <Button variant="ghost" onClick={validateWorkflow}>Validate</Button>
+              <Button variant="ghost" onClick={sendToStudio}>AI Assist</Button>
               <Button href={`/publishing/new${active ? `?workflowId=${active.id}` : ''}`}>Publish</Button>
             </>
           )}
@@ -173,7 +226,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
                 title={active.name}
                 description={active.summary || 'No summary provided.'}
                 status={active.last_error ? 'error' : active.status}
-                footer={<div className="os-entity-copy">{active.steps.length} steps · {active.schedule || 'Manual'}</div>}
+                footer={<div className="os-entity-copy">{active.steps.length} steps | {active.schedule || 'Manual'}</div>}
               />
             ) : null}
 
@@ -201,7 +254,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
             {tab === 'Settings' ? (
               <Card>
                 <div className="os-entity-title" style={{ marginBottom: 12 }}>Workflow settings</div>
-                <div className="os-entity-copy">Version {active.version ?? 1} · {active.schedule || 'No schedule'} · Visibility is selected in the publish wizard.</div>
+                <div className="os-entity-copy">Version {active.version ?? 1} | {active.schedule || 'No schedule'} | Visibility is selected in the publish wizard.</div>
               </Card>
             ) : null}
           </>

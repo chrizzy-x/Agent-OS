@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Nav from '@/components/Nav';
 import {
+  ActivityFeed,
   AppShell,
   Button,
   Card,
@@ -20,6 +21,7 @@ import {
 
 type Workspace = { id: string; name: string; plan: string };
 type Member = { userId: string; name: string | null; email: string | null; role: string; joinedAt: string };
+type AuditEntry = { id: string; actorLabel: string | null; action: string; metadata: Record<string, unknown>; createdAt: string };
 
 const TABS = ['Members', 'Roles & Permissions', 'Activity Log', 'SSO & Security'];
 
@@ -27,11 +29,13 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [activity, setActivity] = useState<AuditEntry[]>([]);
   const [workspaceId, setWorkspaceId] = useState('');
   const [tab, setTab] = useState('Members');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
   const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,19 +43,26 @@ export default function TeamPage() {
       const workspacesRes = await fetch('/api/workspaces', { cache: 'no-store' });
       const workspacesData = await workspacesRes.json();
       const nextWorkspaces = workspacesData.workspaces ?? [];
-      setWorkspaces(nextWorkspaces);
       const targetWorkspaceId = workspaceId || nextWorkspaces[0]?.id || '';
+      setWorkspaces(nextWorkspaces);
       setWorkspaceId(targetWorkspaceId);
-      if (targetWorkspaceId) {
-        const membersRes = await fetch(`/api/workspaces/${targetWorkspaceId}/members`, { cache: 'no-store' });
-        const membersData = await membersRes.json();
-        setMembers(membersData.members ?? []);
-      } else {
+      if (!targetWorkspaceId) {
         setMembers([]);
+        setActivity([]);
+        return;
       }
+      const [membersRes, auditRes] = await Promise.all([
+        fetch(`/api/workspaces/${targetWorkspaceId}/members`, { cache: 'no-store' }),
+        fetch(`/api/workspaces/${targetWorkspaceId}/audit`, { cache: 'no-store' }),
+      ]);
+      const membersData = await membersRes.json();
+      const auditData = await auditRes.json();
+      setMembers(membersData.members ?? []);
+      setActivity(auditData.audit ?? []);
     } catch {
       setWorkspaces([]);
       setMembers([]);
+      setActivity([]);
     } finally {
       setLoading(false);
     }
@@ -61,16 +72,57 @@ export default function TeamPage() {
     void load();
   }, [load]);
 
+  async function inviteMember() {
+    if (!workspaceId || !inviteEmail.trim()) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
+      const payload = await response.json();
+      setMessage(response.ok ? `Added ${inviteEmail.trim()} as ${inviteRole}.` : payload.message ?? payload.error ?? 'Invite failed');
+      if (response.ok) {
+        setInviteEmail('');
+        await load();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function updateRole(userId: string, role: string) {
     if (!workspaceId) return;
-    const response = await fetch(`/api/workspaces/${workspaceId}/members`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, role }),
-    });
-    const payload = await response.json();
-    setMessage(response.ok ? 'Role updated' : payload.error ?? 'Role update failed');
-    await load();
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/members`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, role }),
+      });
+      const payload = await response.json();
+      setMessage(response.ok ? 'Role updated.' : payload.error ?? 'Role update failed');
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeMember(userId: string) {
+    if (!workspaceId) return;
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/members?user_id=${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      });
+      const payload = await response.json();
+      setMessage(response.ok ? 'Member removed.' : payload.error ?? 'Removal failed');
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
   const selectedWorkspace = workspaces.find(item => item.id === workspaceId) ?? null;
@@ -95,13 +147,22 @@ export default function TeamPage() {
         <PageHeader
           eyebrow="Team & workspace"
           title="Members and permissions"
-          subtitle="Enterprise member management, roles, and workspace access."
+          subtitle="Enterprise member management, roles, audit history, and workspace access."
         />
 
         {loading ? <LoadingState label="Loading team" /> : !selectedWorkspace ? (
           <EmptyState title="No workspace selected" body="Create or join a workspace before managing team access." />
         ) : (
           <>
+            <Card>
+              <div style={{ display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: 12, alignItems: 'center' }}>
+                <div className="os-sidebar-title">Workspace</div>
+                <Select value={workspaceId} onChange={event => setWorkspaceId(event.target.value)}>
+                  {workspaces.map(item => <option key={item.id} value={item.id}>{item.name} ({item.plan})</option>)}
+                </Select>
+              </div>
+            </Card>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
               <MetricCard label="Total members" value={members.length} />
               <MetricCard label="Admins" value={members.filter(item => item.role === 'admin' || item.role === 'owner').length} />
@@ -122,21 +183,24 @@ export default function TeamPage() {
                     <option value="admin">Admin</option>
                     <option value="viewer">Viewer</option>
                   </Select>
-                  <Button variant="secondary" disabled>Invite</Button>
+                  <Button variant="secondary" onClick={() => void inviteMember()} disabled={saving || !inviteEmail.trim()}>
+                    {saving ? 'Working...' : 'Add member'}
+                  </Button>
                 </div>
-                <div className="os-entity-copy" style={{ marginBottom: 16 }}>Email invitations are not wired on this backend yet. Role updates work for existing members.</div>
                 <DataTable
-                  columns={['Name', 'Email', 'Role', 'Joined', 'Update']}
+                  columns={['Name', 'Email', 'Role', 'Joined', 'Update', 'Remove']}
                   rows={members.map(member => [
                     member.name ?? member.userId,
-                    member.email ?? '—',
+                    member.email ?? '-',
                     member.role,
                     new Date(member.joinedAt).toLocaleDateString(),
                     <Select key={`${member.userId}-role`} value={member.role} onChange={event => void updateRole(member.userId, event.target.value)}>
                       <option value="member">Member</option>
                       <option value="admin">Admin</option>
                       <option value="viewer">Viewer</option>
+                      <option value="owner">Owner</option>
                     </Select>,
+                    <Button key={`${member.userId}-remove`} variant="ghost" onClick={() => void removeMember(member.userId)} disabled={saving}>Remove</Button>,
                   ])}
                 />
               </Card>
@@ -149,14 +213,22 @@ export default function TeamPage() {
             ) : null}
 
             {tab === 'Activity Log' ? (
-              <Card>
-                <div className="os-entity-copy">Workspace audit events are available in the workspace APIs and surface here when audit log UI is expanded.</div>
-              </Card>
+              activity.length === 0 ? <EmptyState title="No workspace activity yet" body="Workspace membership, plan, and security events appear here as they happen." /> : (
+                <Card>
+                  <ActivityFeed items={activity.map(item => ({
+                    id: item.id,
+                    title: item.action,
+                    subtitle: item.actorLabel || JSON.stringify(item.metadata).slice(0, 80),
+                    time: new Date(item.createdAt).toLocaleString(),
+                  }))} />
+                </Card>
+              )
             ) : null}
 
             {tab === 'SSO & Security' ? (
               <Card>
-                <div className="os-entity-copy">SSO configuration is not present in this repo yet. The page stays responsive and clear instead of showing a broken form.</div>
+                <div className="os-entity-copy" style={{ marginBottom: 12 }}>SSO setup is not implemented in this repo yet. Use workspace roles today and request enterprise rollout support when you need SAML or SCIM.</div>
+                <Button href="/billing" variant="secondary">Request enterprise access</Button>
               </Card>
             ) : null}
 

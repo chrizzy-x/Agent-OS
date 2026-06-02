@@ -314,7 +314,7 @@ export function SkillCard(props: {
   description: string;
   category: string;
   installs: number;
-  rating: number;
+  rating?: number;
   footer?: ReactNode;
 }) {
   return (

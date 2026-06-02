@@ -15,6 +15,13 @@ export type AgentAppDistribution = {
   iosUrl: string | null;
 };
 
+export type AgentAppVersionEntry = {
+  id: string;
+  version: string;
+  changeSummary: string | null;
+  createdAt: string;
+};
+
 export type AgentAppManifest = {
   schemaVersion: 'agentos.app.v1';
   version: string;
@@ -71,6 +78,7 @@ export type AgentAppListing = {
   published: boolean;
   createdAt: string;
   updatedAt: string;
+  versionHistory: AgentAppVersionEntry[];
 };
 
 export type AgentAppInstallation = {
@@ -85,6 +93,8 @@ export type AgentAppInstallation = {
   lastOpenedAt: string | null;
   installedAt: string;
   updatedAt: string;
+  installedVersion: string | null;
+  updateAvailable?: boolean;
 };
 
 export const AGENT_APP_CATEGORIES = [

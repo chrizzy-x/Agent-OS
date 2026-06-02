@@ -159,7 +159,7 @@ describe.sequential('app visibility routes', () => {
     expect(adminResponse.status).toBe(200);
   });
 
-  it('backfills older SDK registrations into the public App Store', async () => {
+  it('does not publicize older SDK registrations without real app metadata', async () => {
     let catalogRows: Record<string, unknown>[] = [];
 
     mockSupabase.from.mockImplementation((table: string) => {
@@ -237,10 +237,10 @@ describe.sequential('app visibility routes', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.apps.map((app: { slug: string }) => app.slug)).toContain('legacy-sdk-app');
+    expect(body.apps.map((app: { slug: string }) => app.slug)).not.toContain('legacy-sdk-app');
   });
 
-  it('backfills SDK apps from pre-019 app schema and pre-workspace kernel rows', async () => {
+  it('keeps pre-019 SDK registrations hidden until real metadata exists', async () => {
     let catalogRows: Record<string, unknown>[] = [];
     const missingColumn = { message: 'column missing' };
 
@@ -326,6 +326,6 @@ describe.sequential('app visibility routes', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.apps.map((app: { slug: string }) => app.slug)).toContain('pre019-sdk-app');
+    expect(body.apps.map((app: { slug: string }) => app.slug)).not.toContain('pre019-sdk-app');
   });
 });

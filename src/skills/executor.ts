@@ -27,23 +27,25 @@ function parseCapabilityDefinitions(raw: unknown): CapabilityDefinition[] {
   return Array.isArray(raw) ? raw as CapabilityDefinition[] : [];
 }
 
-function buildWrapper(sourceCode: string, capability: string, params: unknown): string {
+function buildWrapper(sourceCode: string, capability: string, params: unknown, secrets: Record<string, string>): string {
   if (sourceCode.length > maxSourceLength) {
     throw new ValidationError('Skill source code exceeds the maximum supported size');
   }
 
   const encodedParams = Buffer.from(ensureSerializable(params, 'Skill params'), 'utf8').toString('base64');
+  const encodedSecrets = Buffer.from(ensureSerializable(secrets, 'Skill secrets'), 'utf8').toString('base64');
 
   return [
     "'use strict';",
     'const params = JSON.parse(Buffer.from(' + JSON.stringify(encodedParams) + ", 'base64').toString('utf8'));",
+    'const secrets = JSON.parse(Buffer.from(' + JSON.stringify(encodedSecrets) + ", 'base64').toString('utf8'));",
     'const safeStringify = (value) => JSON.stringify(value, (_key, current) => typeof current === \"bigint\" ? current.toString() : current);',
     '(async () => {',
     '  try {',
     '    const console = { log() {}, info() {}, warn() {}, error() {} };',
     `    ${sourceCode}`,
     '    if (typeof Skill !== \"function\") { throw new Error(\"Skill must define a Skill class\"); }',
-    '    const instance = new Skill({});',
+    '    const instance = new Skill({ secrets, env: secrets });',
     `    if (typeof instance[${JSON.stringify(capability)}] !== 'function') { throw new Error('Requested capability is not callable'); }`,
     `    const result = await Promise.resolve(instance[${JSON.stringify(capability)}](params));`,
     '    const payload = safeStringify({ ok: true, result });',
@@ -67,6 +69,7 @@ export async function executeSkillCapability(params: {
   capability: string;
   capabilityDefinitions: unknown;
   input: unknown;
+  secrets?: Record<string, string>;
 }) {
   const { sourceCode, capability, capabilityDefinitions, input } = params;
 
@@ -85,7 +88,7 @@ export async function executeSkillCapability(params: {
     );
   }
 
-  const wrappedCode = buildWrapper(sourceCode, capability, input);
+  const wrappedCode = buildWrapper(sourceCode, capability, input, params.secrets ?? {});
   const execution = await executeCode(wrappedCode, 'javascript', 10_000);
 
   if (!execution.stdout) {

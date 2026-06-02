@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAgentAppByKernelProduct } from '@/src/appstore/service';
 import { requireKernelRouteAccess } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
@@ -64,6 +65,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prod
     const statusPayload = typeof record.last_status_payload === 'object' && record.last_status_payload
       ? record.last_status_payload as Record<string, unknown>
       : {};
+    const app = await getAgentAppByKernelProduct(product, { canManageAll: true });
+    const discoveryStatus = !app
+      ? 'metadata_required'
+      : app.disabled
+        ? 'disabled'
+        : app.visibility === 'public'
+          ? 'indexed'
+          : 'hidden';
 
     return NextResponse.json({
       product,
@@ -80,6 +89,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prod
       lastError: record.last_error ?? statusPayload.lastError ?? null,
       lastStatusPayload: record.last_status_payload ?? null,
       latestHeartbeat: latestStatus,
+      appSlug: app?.slug ?? null,
+      appVisibility: app?.visibility ?? null,
+      discoveryStatus,
+      discoveryError: !app
+        ? 'SDK metadata must be re-registered with name, description, version, and launch targets before the app can be indexed publicly.'
+        : null,
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

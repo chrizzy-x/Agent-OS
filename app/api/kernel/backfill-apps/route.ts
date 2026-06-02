@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     let created = 0;
     let updated = 0;
     let skipped = 0;
+    let blockedMetadata = 0;
     const existingApps = await listAgentApps({ includeHidden: true, canManageAll: true });
 
     for (const row of (compat.data ?? []) as KernelRow[]) {
@@ -58,19 +59,37 @@ export async function POST(request: NextRequest) {
         ? row.workspace_id
         : (await resolveDefaultWorkspaceForAgent(agentId))?.id ?? null;
 
-      await upsertExternalSdkAgentApp({
-        workspaceId,
-        publisherId: agentId,
-        publisherName: publisher?.name ?? undefined,
-        product,
-        commandTopic,
-        statusTopic,
-        availableCommands: Array.isArray(row.available_commands)
-          ? row.available_commands
-              .filter((item): item is { name: string; description?: string } => Boolean(item) && typeof item === 'object' && typeof (item as { name?: string }).name === 'string')
-              .map(command => ({ name: command.name, description: command.description }))
-          : [],
-      });
+      try {
+        await upsertExternalSdkAgentApp({
+          workspaceId,
+          publisherId: agentId,
+          publisherName: publisher?.name ?? undefined,
+          product,
+          commandTopic,
+          statusTopic,
+          availableCommands: Array.isArray(row.available_commands)
+            ? row.available_commands
+                .filter((item): item is { name: string; description?: string } => Boolean(item) && typeof item === 'object' && typeof (item as { name?: string }).name === 'string')
+                .map(command => ({ name: command.name, description: command.description }))
+            : [],
+          app: existing ? {
+            name: existing.name,
+            slug: existing.slug,
+            category: existing.category,
+            description: existing.description,
+            longDescription: existing.longDescription,
+            appUrl: existing.appUrl ?? undefined,
+            repositoryUrl: existing.repositoryUrl ?? undefined,
+            deviceTargets: existing.deviceTargets,
+            manifest: existing.manifest,
+            defaultConfig: existing.defaultConfig,
+            visibility: existing.visibility,
+          } : undefined,
+        });
+      } catch {
+        blockedMetadata += 1;
+        continue;
+      }
 
       if (existing) {
         updated += 1;
@@ -79,7 +98,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ created, updated, skipped });
+    return NextResponse.json({ created, updated, skipped, blockedMetadata });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

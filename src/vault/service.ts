@@ -16,7 +16,7 @@ export type VaultSecretMetadata = {
   lastAccessedAt: string | null;
 };
 
-export type VaultSubjectType = 'super_agentos' | 'subagent' | 'workflow' | 'session' | 'sdk_credential';
+export type VaultSubjectType = 'super_agentos' | 'subagent' | 'workflow' | 'session' | 'sdk_credential' | 'app' | 'skill';
 
 export type VaultSecretVersion = {
   id: string;
@@ -206,6 +206,8 @@ const VAULT_SUBJECT_TYPES = new Set<VaultSubjectType>([
   'workflow',
   'session',
   'sdk_credential',
+  'app',
+  'skill',
 ]);
 
 function assertSubjectType(subjectType: string): VaultSubjectType {
@@ -755,4 +757,36 @@ export async function grantRuntimeSecretAccess(params: {
       liveValue = null;
     },
   };
+}
+
+export async function grantRuntimeSecretsAccess(params: {
+  ownerAgentId: string;
+  workspaceId?: string;
+  names: string[];
+  subjectType?: string;
+  subjectId?: string;
+}): Promise<{ secrets: Record<string, string>; cleanup: () => void }> {
+  const names = [...new Set(params.names.map(name => name.trim().toUpperCase()).filter(Boolean))];
+  const grants: Array<{ name: string; value: string; cleanup: () => void }> = [];
+  try {
+    for (const name of names) {
+      grants.push(await grantRuntimeSecretAccess({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: params.workspaceId,
+        name,
+        subjectType: params.subjectType,
+        subjectId: params.subjectId,
+      }));
+    }
+
+    return {
+      secrets: Object.fromEntries(grants.map(grant => [grant.name, grant.value])),
+      cleanup() {
+        for (const grant of grants) grant.cleanup();
+      },
+    };
+  } catch (error) {
+    for (const grant of grants) grant.cleanup();
+    throw error;
+  }
 }

@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
         status: app.source === 'external_sdk' ? 'sdk' : 'internal',
         visibility: app.visibility,
         updatedAt: app.updatedAt,
-        runs: app.installCount,
+        runs: app.openCount,
         users: app.installCount,
         href: `/appstore/${app.slug}`,
       })),
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
         totalUsers: skills.reduce((sum, item) => sum + item.users, 0),
       },
       projects,
-      favorites: projects.slice(0, 4),
+      favorites: [],
       chart: [...runsByDay.entries()].map(([label, value]) => ({ label, value })),
     });
   } catch (error) {

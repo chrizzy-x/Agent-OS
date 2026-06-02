@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { findAccountsByEmail } from '@/src/auth/agent-store';
 import { requireAgentContext } from '@/src/auth/request';
 import {
   addWorkspaceMember,
@@ -46,15 +47,24 @@ export async function POST(
     const agentContext = requireAgentContext(request.headers);
     const { id } = await params;
     await assertWorkspaceOwnership(id, agentContext.agentId);
-    const body = await request.json() as { user_id?: string; role?: 'owner' | 'admin' | 'member' | 'viewer' };
+    const body = await request.json() as { user_id?: string; email?: string; role?: 'owner' | 'admin' | 'member' | 'viewer' };
 
-    if (typeof body.user_id !== 'string' || !body.user_id.trim()) {
-      return NextResponse.json({ error: 'validation_error', message: 'user_id is required' }, { status: 400 });
+    let userId = typeof body.user_id === 'string' ? body.user_id.trim() : '';
+    if (!userId && typeof body.email === 'string' && body.email.trim()) {
+      const matches = await findAccountsByEmail(body.email.trim().toLowerCase());
+      if (matches.length !== 1) {
+        return NextResponse.json({ error: 'validation_error', message: 'A single AgentOS account matching that email is required' }, { status: 400 });
+      }
+      userId = matches[0].id;
+    }
+
+    if (!userId) {
+      return NextResponse.json({ error: 'validation_error', message: 'user_id or email is required' }, { status: 400 });
     }
 
     const member = await addWorkspaceMember({
       workspaceId: id,
-      userId: body.user_id.trim(),
+      userId,
       role: body.role ?? 'member',
       actorId: agentContext.agentId,
     });

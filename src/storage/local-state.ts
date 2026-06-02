@@ -1,7 +1,6 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
-import { OFFICIAL_VERIFIED_SKILLS } from '../skills/official-catalog.js';
 import type { AgentAppListing } from '../appstore/catalog.js';
 
 export type LocalAccountRecord = {
@@ -114,6 +113,8 @@ export type LocalSkillRecord = {
   tags: string[];
   published: boolean;
   verified: boolean;
+  permissions_required?: string[];
+  required_secrets?: string[];
   created_at: string;
   source_code: string | null;
 };
@@ -150,6 +151,7 @@ export type LocalAppInstallationRecord = {
   last_opened_at: string | null;
   installed_at: string;
   updated_at: string;
+  installed_version?: string | null;
 };
 
 export type LocalRuntimeState = {
@@ -175,11 +177,6 @@ export type LocalRuntimeState = {
 };
 
 const DEFAULT_STATE_FILE = join(tmpdir(), 'agentos-runtime-state.json');
-const defaultSkillCapabilities: LocalSkillCapability[] = [
-  { name: 'run', description: 'Execute the skill with the supplied params.' },
-];
-const defaultSkillIcon = '[skill]';
-
 function getStateFilePath(): string {
   return process.env.AGENTOS_STATE_FILE?.trim() || DEFAULT_STATE_FILE;
 }
@@ -191,32 +188,7 @@ function assertLocalRuntimeStateEnabled(): void {
 }
 
 function defaultSkillCatalog(): LocalSkillRecord[] {
-  const now = new Date().toISOString();
-  return OFFICIAL_VERIFIED_SKILLS.map(skill => ({
-    id: `official-${skill.slug}`,
-    name: skill.name,
-    slug: skill.slug,
-    version: '1.0.0',
-    author_id: 'agentos',
-    author_name: 'AgentOS',
-    category: skill.category,
-    description: skill.summary,
-    icon: defaultSkillIcon,
-    pricing_model: 'free',
-    price_per_call: 0,
-    free_tier_calls: 1000,
-    total_installs: 0,
-    total_calls: 0,
-    rating: 5,
-    review_count: 1,
-    primitives_required: [],
-    capabilities: [...defaultSkillCapabilities],
-    tags: [skill.pack, skill.category],
-    published: true,
-    verified: true,
-    created_at: now,
-    source_code: null,
-  }));
+  return [];
 }
 
 function createDefaultState(): LocalRuntimeState {

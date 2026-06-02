@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 import { getPlanDescriptor } from '../auth/capabilities.js';
 import { normalizePlan } from '../auth/tiers.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
-import { ValidationError } from '../utils/errors.js';
+import { PermissionError, ValidationError } from '../utils/errors.js';
 import { validateRequiredSecrets } from '../vault/service.js';
 import {
   AGENT_APP_CATEGORIES,
@@ -15,6 +15,7 @@ import {
   type AgentAppEndpointStatus,
   type AgentAppRuntimeType,
   type AgentAppSource,
+  type AgentAppVersionEntry,
   type AgentAppVisibility,
 } from './catalog.js';
 
@@ -151,6 +152,15 @@ type DbAppInstallationRow = {
   last_opened_at?: unknown;
   installed_at?: unknown;
   updated_at?: unknown;
+  installed_version?: unknown;
+};
+
+type DbAgentAppVersionRow = {
+  id?: unknown;
+  app_id?: unknown;
+  version?: unknown;
+  change_summary?: unknown;
+  created_at?: unknown;
 };
 
 type DbKernelRegistryRow = {
@@ -179,8 +189,9 @@ type SaveAgentAppInput = PublishAgentAppInput & {
 const APP_SELECT = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,last_command_at,last_error,health_status,endpoint_status,disabled,heartbeat_count,open_count,web_open_count,android_download_count,ios_download_count,install_count,verified,published,created_at,updated_at';
 const APP_SELECT_LEGACY = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,install_count,verified,published,created_at,updated_at';
 const APP_SELECT_PRE_019 = 'id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,publish_state,permissions_required,required_secrets,install_count,verified,published,created_at,updated_at';
-const APP_INSTALLATION_SELECT = 'id,app_id,agent_id,workspace_id,status,favorite,permissions_approved,open_count,last_opened_at,installed_at,updated_at';
-const APP_INSTALLATION_SELECT_LEGACY = 'id,app_id,agent_id,workspace_id,status,installed_at,updated_at';
+const APP_INSTALLATION_SELECT = 'id,app_id,agent_id,workspace_id,status,favorite,permissions_approved,open_count,last_opened_at,installed_at,updated_at,installed_version';
+const APP_INSTALLATION_SELECT_LEGACY = 'id,app_id,agent_id,workspace_id,status,installed_at,updated_at,installed_version';
+const APP_VERSION_SELECT = 'id,app_id,version,change_summary,created_at';
 const KERNEL_REGISTRY_DISCOVERY_SELECT = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,health_status,endpoint_status,version,registered_at,last_heartbeat_at,last_error,disabled,heartbeat_count';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_PRE_WORKSPACE = 'agent_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
@@ -292,6 +303,19 @@ function normalizeDefaultConfig(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
 }
 
+function normalizePermissionName(permission: string): string {
+  return permission.trim().toLowerCase().replace(/^access[_:-]?/, '');
+}
+
+function mapVersionRow(row: DbAgentAppVersionRow): AgentAppVersionEntry {
+  return {
+    id: stringValue(row.id),
+    version: stringValue(row.version, '1.0.0'),
+    changeSummary: nullableString(row.change_summary),
+    createdAt: stringValue(row.created_at, new Date().toISOString()),
+  };
+}
+
 function normalizeLocalApp(row: Partial<AgentAppListing>): AgentAppListing {
   const slug = normalizeAgentAppSlug(String(row.slug ?? ''));
   const runtimeType = normalizeRuntimeType(row.runtimeType, row.manifest?.runtime);
@@ -345,6 +369,7 @@ function normalizeLocalApp(row: Partial<AgentAppListing>): AgentAppListing {
     published: publishedFromVisibility(visibility),
     createdAt: String(row.createdAt ?? new Date().toISOString()),
     updatedAt: String(row.updatedAt ?? row.createdAt ?? new Date().toISOString()),
+    versionHistory: Array.isArray(row.versionHistory) ? row.versionHistory : [],
   };
 }
 
@@ -406,6 +431,7 @@ function fromDbRow(row: DbAgentAppRow): AgentAppListing {
     published: publishedFromVisibility(visibility),
     createdAt,
     updatedAt: stringValue(row.updated_at, createdAt),
+    versionHistory: [],
   };
 }
 
@@ -515,20 +541,62 @@ function toPre019DbPayload(app: AgentAppListing, publishState = 'draft'): Record
   };
 }
 
+async function loadAppVersionHistory(appIds: string[]): Promise<Map<string, AgentAppVersionEntry[]>> {
+  const history = new Map<string, AgentAppVersionEntry[]>();
+  const normalizedIds = [...new Set(appIds.filter(Boolean))];
+  if (normalizedIds.length === 0) return history;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('agent_app_versions')
+      .select(APP_VERSION_SELECT)
+      .in('app_id', normalizedIds)
+      .order('created_at', { ascending: false });
+    if (!error) {
+      for (const row of (data ?? []) as DbAgentAppVersionRow[]) {
+        const appId = stringValue(row.app_id);
+        const entry = mapVersionRow(row);
+        const existing = history.get(appId) ?? [];
+        existing.push(entry);
+        history.set(appId, existing);
+      }
+      return history;
+    }
+  } catch {
+    // Fall back to local state below.
+  }
+
+  const state = await readLocalRuntimeState();
+  for (const app of state.agentApps.catalog) {
+    if (!normalizedIds.includes(app.id)) continue;
+    history.set(app.id, Array.isArray(app.versionHistory) ? [...app.versionHistory] : []);
+  }
+  return history;
+}
+
+async function attachAppVersionHistory(apps: AgentAppListing[]): Promise<AgentAppListing[]> {
+  const history = await loadAppVersionHistory(apps.map(app => app.id));
+  return apps.map(app => ({
+    ...app,
+    versionHistory: history.get(app.id) ?? [],
+  }));
+}
+
 async function loadStoredApps(): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.from('agent_apps').select(APP_SELECT);
     if (!error) {
-      return ((data ?? []) as DbAgentAppRow[]).map(fromDbRow);
+      return attachAppVersionHistory(((data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
     const legacy = await supabase.from('agent_apps').select(APP_SELECT_LEGACY);
     if (!legacy.error) {
-      return ((legacy.data ?? []) as DbAgentAppRow[]).map(fromDbRow);
+      return attachAppVersionHistory(((legacy.data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
     const pre019 = await supabase.from('agent_apps').select(APP_SELECT_PRE_019);
     if (!pre019.error) {
-      return ((pre019.data ?? []) as DbAgentAppRow[]).map(fromDbRow);
+      return attachAppVersionHistory(((pre019.data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
   } catch {
     // Local fallback below.
@@ -578,6 +646,8 @@ function mapInstallationRow(row: DbAppInstallationRow): AgentAppInstallation {
     lastOpenedAt: nullableString(row.last_opened_at),
     installedAt: stringValue(row.installed_at, new Date().toISOString()),
     updatedAt: stringValue(row.updated_at, new Date().toISOString()),
+    installedVersion: nullableString(row.installed_version),
+    updateAvailable: false,
   };
 }
 
@@ -639,6 +709,41 @@ function ensureSdkDiscoveryMetadata(input: SaveAgentAppInput, manifest: AgentApp
   if (launchTargets.length === 0) throw new ValidationError('SDK apps need at least one web, Android, or iOS target');
 }
 
+async function persistAgentAppVersion(app: AgentAppListing, changeSummary: string | null = null): Promise<void> {
+  const entry: AgentAppVersionEntry = {
+    id: randomUUID(),
+    version: app.manifest.version,
+    changeSummary,
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    const supabase = getSupabaseAdmin();
+    await supabase
+      .from('agent_app_versions')
+      .upsert({
+        id: entry.id,
+        app_id: app.id,
+        version: entry.version,
+        change_summary: entry.changeSummary,
+        manifest: app.manifest,
+        created_at: entry.createdAt,
+      }, { onConflict: 'app_id,version' });
+    return;
+  } catch {
+    // Local fallback below.
+  }
+
+  await updateLocalRuntimeState(state => {
+    const target = state.agentApps.catalog.find(item => item.id === app.id);
+    if (!target) return;
+    target.versionHistory ??= [];
+    if (!target.versionHistory.some(item => item.version === entry.version)) {
+      target.versionHistory.unshift(entry);
+    }
+  });
+}
+
 async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> {
   const name = input.name?.trim() ?? '';
   const slug = normalizeAgentAppSlug(input.slug?.trim() || input.slugFallback || name);
@@ -674,6 +779,7 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
   }
   const appUrl = nullableString(input.appUrl) ?? existing?.appUrl ?? null;
   const distribution = normalizeDistribution(manifest.distribution, appUrl);
+  const versionChanged = !existing || existing.manifest.version !== manifest.version;
 
   const app: AgentAppListing = {
     id: existing?.id ?? randomUUID(),
@@ -720,6 +826,7 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
     published: publishedFromVisibility(visibility),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+    versionHistory: existing?.versionHistory ?? [],
   };
 
   const publishState = input.publishState && ['draft', 'submitted', 'published', 'rejected'].includes(input.publishState)
@@ -736,21 +843,36 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
       .select(APP_SELECT)
       .single();
 
-    if (!primary.error && primary.data) return fromDbRow(primary.data as DbAgentAppRow);
+    if (!primary.error && primary.data) {
+      const stored = fromDbRow(primary.data as DbAgentAppRow);
+      if (versionChanged) await persistAgentAppVersion(stored);
+      const [hydrated] = await attachAppVersionHistory([stored]);
+      return hydrated;
+    }
     const legacy = await supabase
       .from('agent_apps')
       .upsert(toLegacyDbPayload(app, publishState), { onConflict: 'slug' })
       .select(APP_SELECT_LEGACY)
       .single();
 
-    if (!legacy.error && legacy.data) return fromDbRow(legacy.data as DbAgentAppRow);
+    if (!legacy.error && legacy.data) {
+      const stored = fromDbRow(legacy.data as DbAgentAppRow);
+      if (versionChanged) await persistAgentAppVersion(stored);
+      const [hydrated] = await attachAppVersionHistory([stored]);
+      return hydrated;
+    }
     const pre019 = await supabase
       .from('agent_apps')
       .upsert(toPre019DbPayload(app, publishState), { onConflict: 'slug' })
       .select(APP_SELECT_PRE_019)
       .single();
 
-    if (!pre019.error && pre019.data) return fromDbRow(pre019.data as DbAgentAppRow);
+    if (!pre019.error && pre019.data) {
+      const stored = fromDbRow(pre019.data as DbAgentAppRow);
+      if (versionChanged) await persistAgentAppVersion(stored);
+      const [hydrated] = await attachAppVersionHistory([stored]);
+      return hydrated;
+    }
     const upsertError = primary.error ?? legacy.error ?? pre019.error;
     if (upsertError?.code === '23505' || upsertError?.message?.toLowerCase().includes('duplicate')) {
       throw new ValidationError('App slug already exists');
@@ -764,6 +886,16 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
       item.slug === slug
       || (app.kernelProduct && item.kernelProduct === app.kernelProduct)
     );
+    const versionEntry: AgentAppVersionEntry = {
+      id: randomUUID(),
+      version: app.manifest.version,
+      changeSummary: null,
+      createdAt: now,
+    };
+    app.versionHistory = existing?.versionHistory ?? [];
+    if (versionChanged && !app.versionHistory.some(item => item.version === versionEntry.version)) {
+      app.versionHistory = [versionEntry, ...app.versionHistory];
+    }
     if (index >= 0) {
       state.agentApps.catalog[index] = app;
       return app;
@@ -852,28 +984,32 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
       const statusPayload = isRecord((row as Record<string, unknown>).last_status_payload) ? (row as Record<string, unknown>).last_status_payload as Record<string, unknown> : {};
       const healthStatus = normalizeHealthStatus(row.health_status ?? row.status ?? 'unknown');
       const endpointStatus = normalizeEndpointStatus(row.endpoint_status ?? statusPayload.endpointStatus ?? (healthStatus === 'online' ? 'healthy' : 'unknown'));
+      if (!existingApp) {
+        continue;
+      }
+
       await saveAgentApp({
         workspaceId: nullableString(row.workspace_id),
         publisherId,
         publisherName: owner.name,
-        name: titleCaseSlug(slug),
-        slug,
-        category: 'Operations',
-        description: `External SDK app for ${product}.`,
-        longDescription: `External SDK app for ${product}.`,
-        deviceTargets: ['AgentOS Cloud'],
+        name: existingApp.name,
+        slug: existingApp.slug,
+        category: existingApp.category,
+        description: existingApp.description,
+        longDescription: existingApp.longDescription,
+        appUrl: existingApp.appUrl,
+        repositoryUrl: existingApp.repositoryUrl,
+        deviceTargets: existingApp.deviceTargets,
         manifest: {
+          ...existingApp.manifest,
           schemaVersion: 'agentos.app.v1',
-          version: stringValue(row.version, '1.0.0'),
+          version: stringValue(row.version, existingApp.manifest.version),
           runtime: 'external-app',
           entrypoint: `agentos://kernel/${product}`,
-          commands,
-          permissions: [],
-          primitives: [],
-          skills: [],
-          requiredSecrets: [],
+          commands: commands.length > 0 ? commands : existingApp.manifest.commands,
         },
-        visibility: 'public',
+        defaultConfig: existingApp.defaultConfig,
+        visibility: existingApp.visibility,
         source: 'external_sdk',
         runtimeType: 'external-app',
         kernelProduct: product,
@@ -885,6 +1021,9 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
         lastError: nullableString(row.last_error) ?? nullableString(statusPayload.lastError),
         disabled: row.disabled === true || row.status === 'disabled',
         heartbeatCount: Number(row.heartbeat_count ?? 0),
+        permissionsRequired: existingApp.permissionsRequired,
+        requiredSecrets: existingApp.requiredSecrets,
+        screenshots: existingApp.screenshots,
       });
       changed = true;
     }
@@ -936,6 +1075,15 @@ export async function getAgentAppBySlug(slug: string, options: AgentAppAccessOpt
   return canAccessAppBySlug(app, options) ? app : null;
 }
 
+export async function getAgentAppByKernelProduct(product: string, options: AgentAppAccessOptions = {}): Promise<AgentAppListing | null> {
+  const normalizedProduct = product.trim();
+  if (!normalizedProduct) return null;
+  const apps = await reconcileLegacySdkApps(await loadStoredApps());
+  const app = apps.find(item => item.kernelProduct === normalizedProduct) ?? null;
+  if (!app) return null;
+  return canAccessAppBySlug(app, options) ? app : null;
+}
+
 export async function publishAgentApp(input: PublishAgentAppInput): Promise<AgentAppListing> {
   return saveAgentApp({
     ...input,
@@ -974,12 +1122,23 @@ export async function upsertExternalSdkAgentApp(input: {
   };
 }): Promise<AgentAppListing> {
   const product = input.product.trim();
-  const defaultName = input.app?.name?.trim() || product;
   const slug = normalizeAgentAppSlug(input.app?.slug?.trim() || product);
+  const existing = await getAgentAppByKernelProduct(product)
+    ?? await getAgentAppBySlug(slug, { canManageAll: true });
+  const defaultName = input.app?.name?.trim() || existing?.name || product;
+  const description = input.app?.description?.trim() ?? existing?.description ?? '';
+  const longDescription = input.app?.longDescription?.trim() || description;
   const commands = input.availableCommands.map(command => ({
     name: command.name,
     description: command.description?.trim() || `Run ${command.name}`,
   }));
+
+  if (!defaultName.trim()) {
+    throw new ValidationError('SDK app name is required');
+  }
+  if (!description) {
+    throw new ValidationError('SDK app description is required');
+  }
 
   return saveAgentApp({
     workspaceId: input.workspaceId,
@@ -988,13 +1147,14 @@ export async function upsertExternalSdkAgentApp(input: {
     name: defaultName,
     slug,
     slugFallback: product,
-    category: input.app?.category ?? 'Operations',
-    description: input.app?.description ?? `External SDK app for ${product}.`,
-    longDescription: input.app?.longDescription ?? input.app?.description ?? `External SDK app for ${product}.`,
-    appUrl: input.app?.appUrl ?? null,
-    repositoryUrl: input.app?.repositoryUrl ?? null,
-    deviceTargets: input.app?.deviceTargets ?? ['AgentOS Cloud'],
+    category: input.app?.category ?? existing?.category ?? 'Operations',
+    description,
+    longDescription,
+    appUrl: input.app?.appUrl ?? existing?.appUrl ?? null,
+    repositoryUrl: input.app?.repositoryUrl ?? existing?.repositoryUrl ?? null,
+    deviceTargets: input.app?.deviceTargets ?? existing?.deviceTargets ?? ['AgentOS Cloud'],
     manifest: {
+      ...existing?.manifest,
       ...input.app?.manifest,
       runtime: input.app?.manifest?.runtime ?? 'external-app',
       entrypoint: input.app?.manifest?.entrypoint ?? `agentos://kernel/${product}`,
@@ -1002,8 +1162,8 @@ export async function upsertExternalSdkAgentApp(input: {
         ? input.app?.manifest?.commands
         : commands,
     },
-    defaultConfig: input.app?.defaultConfig ?? {},
-    visibility: input.app?.visibility ?? 'public',
+    defaultConfig: input.app?.defaultConfig ?? existing?.defaultConfig ?? {},
+    visibility: input.app?.visibility ?? existing?.visibility ?? 'public',
     source: 'external_sdk',
     runtimeType: 'external-app',
     kernelProduct: product,
@@ -1016,7 +1176,7 @@ export async function upsertExternalSdkAgentApp(input: {
     lastError: input.lastError ?? null,
     disabled: input.disabled ?? false,
     heartbeatCount: input.heartbeatCount ?? 0,
-    requiredSecrets: input.app?.manifest?.requiredSecrets,
+    requiredSecrets: input.app?.manifest?.requiredSecrets ?? existing?.requiredSecrets,
   });
 }
 
@@ -1062,7 +1222,7 @@ export async function updateAgentAppVisibility(params: {
   });
 }
 
-export async function recordAgentAppDownload(slug: string, target: 'web' | 'android' | 'ios' = 'web'): Promise<void> {
+export async function recordAgentAppInstall(slug: string): Promise<void> {
   const normalizedSlug = normalizeAgentAppSlug(slug);
   try {
     const supabase = getSupabaseAdmin();
@@ -1084,9 +1244,6 @@ export async function recordAgentAppDownload(slug: string, target: 'web' | 'andr
         install_count: app.installCount + 1,
         updated_at: new Date().toISOString(),
       };
-      if (target === 'web') patch.web_open_count = app.webOpenCount + 1;
-      if (target === 'android') patch.android_download_count = app.androidDownloadCount + 1;
-      if (target === 'ios') patch.ios_download_count = app.iosDownloadCount + 1;
       const update = await supabase.from('agent_apps').update(patch).eq('slug', normalizedSlug);
       if (update.error) {
         await supabase.from('agent_apps').update({
@@ -1104,7 +1261,44 @@ export async function recordAgentAppDownload(slug: string, target: 'web' | 'andr
     const app = state.agentApps.catalog.find(item => item.slug === normalizedSlug);
     if (!app) return;
     app.installCount += 1;
-    if (target === 'web') app.webOpenCount += 1;
+  });
+}
+
+export async function recordAgentAppDownload(slug: string, target: 'web' | 'android' | 'ios' = 'web'): Promise<void> {
+  if (target === 'web') return;
+
+  const normalizedSlug = normalizeAgentAppSlug(slug);
+  try {
+    const supabase = getSupabaseAdmin();
+    const primary = await supabase
+      .from('agent_apps')
+      .select(APP_SELECT)
+      .eq('slug', normalizedSlug)
+      .maybeSingle();
+    const legacy = primary.error
+      ? await supabase
+        .from('agent_apps')
+        .select(APP_SELECT_LEGACY)
+        .eq('slug', normalizedSlug)
+        .maybeSingle()
+      : { data: primary.data, error: primary.error };
+    if (!legacy.error && legacy.data) {
+      const app = fromDbRow(legacy.data as DbAgentAppRow);
+      const patch: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (target === 'android') patch.android_download_count = app.androidDownloadCount + 1;
+      if (target === 'ios') patch.ios_download_count = app.iosDownloadCount + 1;
+      await supabase.from('agent_apps').update(patch).eq('slug', normalizedSlug);
+      return;
+    }
+  } catch {
+    // Local fallback below.
+  }
+
+  await updateLocalRuntimeState(state => {
+    const app = state.agentApps.catalog.find(item => item.slug === normalizedSlug);
+    if (!app) return;
     if (target === 'android') app.androidDownloadCount += 1;
     if (target === 'ios') app.iosDownloadCount += 1;
   });
@@ -1139,8 +1333,8 @@ export async function getAgentAppInstallReadiness(params: {
   }
 
   const requiredPermissions = [...new Set((app.permissionsRequired.length > 0 ? app.permissionsRequired : app.manifest.permissions).filter(Boolean))];
-  const approvedSet = new Set((params.permissionsApproved ?? []).map(permission => permission.trim()).filter(Boolean));
-  const missingPermissions = requiredPermissions.filter(permission => !approvedSet.has(permission));
+  const approvedSet = new Set((params.permissionsApproved ?? []).map(normalizePermissionName).filter(Boolean));
+  const missingPermissions = requiredPermissions.filter(permission => !approvedSet.has(normalizePermissionName(permission)));
   const secretValidation = await validateRequiredSecrets({
     ownerAgentId: params.agentId,
     workspaceId: params.workspaceId ?? app.workspaceId ?? undefined,
@@ -1180,20 +1374,37 @@ export async function installAgentApp(params: {
   const now = new Date().toISOString();
   try {
     const supabase = getSupabaseAdmin();
+    const lookup = await supabase
+      .from('app_installations')
+      .select(APP_INSTALLATION_SELECT)
+      .eq('agent_id', params.agentId)
+      .eq('app_id', readiness.app.id)
+      .maybeSingle();
+    const existingRow = lookup.error
+      ? await supabase
+        .from('app_installations')
+        .select(APP_INSTALLATION_SELECT_LEGACY)
+        .eq('agent_id', params.agentId)
+        .eq('app_id', readiness.app.id)
+        .maybeSingle()
+      : { data: lookup.data, error: lookup.error };
+    const existingInstallation = existingRow.data ? mapInstallationRow(existingRow.data as DbAppInstallationRow) : null;
+    const shouldCountInstall = !existingInstallation || existingInstallation.status === 'removed';
     const primary = await supabase
       .from('app_installations')
       .upsert({
-        id: randomUUID(),
+        id: existingInstallation?.id ?? randomUUID(),
         app_id: readiness.app.id,
         agent_id: params.agentId,
         workspace_id: params.workspaceId ?? readiness.app.workspaceId ?? null,
         status: 'active',
-        favorite: false,
+        favorite: existingInstallation?.favorite ?? false,
         permissions_approved: readiness.requiredPermissions,
-        open_count: 0,
-        last_opened_at: null,
-        installed_at: now,
+        open_count: existingInstallation?.openCount ?? 0,
+        last_opened_at: existingInstallation?.lastOpenedAt ?? null,
+        installed_at: existingInstallation?.installedAt ?? now,
         updated_at: now,
+        installed_version: readiness.app.manifest.version,
       }, { onConflict: 'app_id,agent_id' })
       .select(APP_INSTALLATION_SELECT)
       .single();
@@ -1202,69 +1413,68 @@ export async function installAgentApp(params: {
       ? await supabase
         .from('app_installations')
         .upsert({
-          id: randomUUID(),
+          id: existingInstallation?.id ?? randomUUID(),
           app_id: readiness.app.id,
           agent_id: params.agentId,
           workspace_id: params.workspaceId ?? readiness.app.workspaceId ?? null,
           status: 'active',
-          installed_at: now,
+          installed_at: existingInstallation?.installedAt ?? now,
           updated_at: now,
+          installed_version: readiness.app.manifest.version,
         }, { onConflict: 'app_id,agent_id' })
         .select(APP_INSTALLATION_SELECT_LEGACY)
         .single()
       : { data: primary.data, error: primary.error };
     if (legacy.error) throw new Error(legacy.error.message);
-    await recordAgentAppDownload(readiness.app.slug);
+    if (shouldCountInstall) await recordAgentAppInstall(readiness.app.slug);
     return {
       app: readiness.app,
       installation: mapInstallationRow((legacy.data as DbAppInstallationRow) ?? {}),
     };
   } catch {
-    const installation = mapInstallationRow({
+    let shouldCountInstall = false;
+    const installation = await updateLocalRuntimeState(state => {
+      state.agentApps.installations[params.agentId] ??= [];
+      const entries = state.agentApps.installations[params.agentId];
+      const existing = entries.findIndex(item => item.app_id === readiness.app.id);
+      if (existing >= 0) {
+        shouldCountInstall = entries[existing].status === 'removed';
+        entries[existing] = {
+          id: entries[existing].id,
+          app_id: readiness.app.id,
+          agent_id: params.agentId,
+          workspace_id: params.workspaceId ?? readiness.app.workspaceId ?? null,
+          status: 'active',
+          favorite: entries[existing].favorite,
+          permissions_approved: readiness.requiredPermissions,
+          open_count: entries[existing].open_count,
+          last_opened_at: entries[existing].last_opened_at,
+          installed_at: entries[existing].installed_at,
+          updated_at: now,
+          installed_version: readiness.app.manifest.version,
+        };
+        return mapInstallationRow(entries[existing]);
+      }
+
+      shouldCountInstall = true;
+      const next = {
         id: randomUUID(),
         app_id: readiness.app.id,
         agent_id: params.agentId,
         workspace_id: params.workspaceId ?? readiness.app.workspaceId ?? null,
-        status: 'active',
+        status: 'active' as const,
         favorite: false,
         permissions_approved: readiness.requiredPermissions,
         open_count: 0,
         last_opened_at: null,
         installed_at: now,
         updated_at: now,
-      });
-    await updateLocalRuntimeState(state => {
-      state.agentApps.installations[params.agentId] ??= [];
-      const entries = state.agentApps.installations[params.agentId];
-      const existing = entries.findIndex(item => item.app_id === readiness.app.id);
-      if (existing >= 0) entries[existing] = {
-        id: installation.id,
-        app_id: installation.appId,
-        agent_id: installation.agentId,
-        workspace_id: installation.workspaceId,
-        status: installation.status,
-        favorite: installation.favorite,
-        permissions_approved: installation.permissionsApproved,
-        open_count: installation.openCount,
-        last_opened_at: installation.lastOpenedAt,
-        installed_at: installation.installedAt,
-        updated_at: installation.updatedAt,
+        installed_version: readiness.app.manifest.version,
       };
-      else entries.unshift({
-        id: installation.id,
-        app_id: installation.appId,
-        agent_id: installation.agentId,
-        workspace_id: installation.workspaceId,
-        status: installation.status,
-        favorite: installation.favorite,
-        permissions_approved: installation.permissionsApproved,
-        open_count: installation.openCount,
-        last_opened_at: installation.lastOpenedAt,
-        installed_at: installation.installedAt,
-        updated_at: installation.updatedAt,
-      });
+      entries.unshift(next);
+      return mapInstallationRow(next);
     });
-    await recordAgentAppDownload(readiness.app.slug);
+    if (shouldCountInstall) await recordAgentAppInstall(readiness.app.slug);
     return {
       app: readiness.app,
       installation,
@@ -1305,12 +1515,43 @@ export async function listInstalledAgentApps(agentId: string): Promise<Array<{ a
   }
 
   const apps = await loadStoredApps();
-  return installations
-    .map(installation => ({
-      installation,
-      app: apps.find(app => app.id === installation.appId) ?? null,
-    }))
-    .filter((entry): entry is { app: AgentAppListing; installation: AgentAppInstallation } => entry.app !== null);
+  const entries: Array<{ app: AgentAppListing | null; installation: AgentAppInstallation }> = installations
+    .map(installation => {
+      const app = apps.find(item => item.id === installation.appId) ?? null;
+      return {
+        installation: {
+          ...installation,
+          updateAvailable: Boolean(app?.manifest.version && app.manifest.version !== installation.installedVersion),
+        },
+        app,
+      };
+    });
+
+  return entries.filter((entry): entry is { app: AgentAppListing; installation: AgentAppInstallation } => entry.app !== null);
+}
+
+export async function getInstalledAgentApp(agentId: string, slug: string): Promise<{ app: AgentAppListing; installation: AgentAppInstallation } | null> {
+  const normalizedSlug = normalizeAgentAppSlug(slug);
+  const installations = await listInstalledAgentApps(agentId);
+  return installations.find(entry => entry.app.slug === normalizedSlug) ?? null;
+}
+
+export async function assertAgentAppPermissionAccess(params: {
+  agentId: string;
+  slug: string;
+  permission: string;
+}): Promise<{ app: AgentAppListing; installation: AgentAppInstallation }> {
+  const entry = await getInstalledAgentApp(params.agentId, params.slug);
+  if (!entry) throw new PermissionError('App is not installed');
+  if (entry.installation.status !== 'active') throw new PermissionError('App is not active');
+
+  const normalizedPermission = normalizePermissionName(params.permission);
+  const approved = new Set(entry.installation.permissionsApproved.map(normalizePermissionName));
+  if (!approved.has(normalizedPermission)) {
+    throw new PermissionError(`Permission approval required: ${params.permission}`);
+  }
+
+  return entry;
 }
 
 export async function updateAgentAppInstallation(params: {
@@ -1319,6 +1560,7 @@ export async function updateAgentAppInstallation(params: {
   favorite?: boolean;
   permissionsApproved?: string[];
   status?: 'active' | 'disabled' | 'removed';
+  installedVersion?: string | null;
 }): Promise<{ app: AgentAppListing; installation: AgentAppInstallation }> {
   const app = await getAgentAppBySlug(params.slug, {
     viewerAgentId: params.agentId,
@@ -1351,6 +1593,7 @@ export async function updateAgentAppInstallation(params: {
       permissions_approved: params.permissionsApproved ?? current.permissionsApproved,
       status: params.status ?? current.status,
       updated_at: now,
+      installed_version: params.installedVersion ?? current.installedVersion,
     };
     const primary = await supabase
       .from('app_installations')
@@ -1382,6 +1625,7 @@ export async function updateAgentAppInstallation(params: {
       if (typeof params.favorite === 'boolean') existing.favorite = params.favorite;
       if (Array.isArray(params.permissionsApproved)) existing.permissions_approved = [...params.permissionsApproved];
       if (params.status) existing.status = params.status;
+      if (params.installedVersion !== undefined) existing.installed_version = params.installedVersion;
       existing.updated_at = now;
       return mapInstallationRow(existing);
     });
@@ -1399,8 +1643,8 @@ export async function recordAgentAppOpen(params: {
     status: 'active',
   });
   const requiredPermissions = [...new Set((app.permissionsRequired.length > 0 ? app.permissionsRequired : app.manifest.permissions).filter(Boolean))];
-  const approved = new Set(installation.permissionsApproved);
-  const missing = requiredPermissions.filter(permission => !approved.has(permission));
+  const approved = new Set(installation.permissionsApproved.map(normalizePermissionName));
+  const missing = requiredPermissions.filter(permission => !approved.has(normalizePermissionName(permission)));
   if (missing.length > 0) {
     throw new ValidationError(`Missing permission approval: ${missing.join(', ')}`);
   }

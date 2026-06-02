@@ -19,7 +19,7 @@ function buildFallbackMetrics() {
       totalCatalogItems: getFeatureCoverageSummary().totalCatalogItems,
       fullyCovered: Object.keys(TOOLS).length,
       coveragePercent: Number(((Object.keys(TOOLS).length / Math.max(getFeatureCoverageSummary().totalCatalogItems, 1)) * 100).toFixed(2)),
-      healthyActiveAgents: 1,
+      healthyActiveAgents: 0,
       degradedActiveAgents: 0,
       openTasks: 0,
       failoverEvents: 0,

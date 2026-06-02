@@ -25,6 +25,8 @@ type StudioSession = {
   workspaceId: string;
   title: string;
   updatedAt: string;
+  parentSessionId?: string | null;
+  branchLabel?: string | null;
 };
 
 type StudioMessage = {
@@ -45,6 +47,10 @@ type Workflow = { id: string; name: string; summary: string | null; status: stri
 type Subagent = { id: string; name: string; description: string | null };
 type VaultSecret = { id: string; name: string; maskedValue: string };
 type Workspace = { id: string; name: string };
+type SessionLineage = {
+  parent: { id: string; title: string; updatedAt: string } | null;
+  children: Array<{ id: string; title: string; updatedAt: string }>;
+};
 
 type PendingPlan = {
   summary: string;
@@ -56,7 +62,7 @@ const MODE_TABS = ['Chat', 'Plan', 'Workflow', 'Files', 'Memory'];
 const CONTEXT_TABS = ['Context', 'Workflow', 'Memory', 'Logs', 'Settings'];
 const QUICK_ACTIONS = ['Build Workflow', 'Install App', 'Add Secret', 'Create Agent', 'Analyze Data', 'Run Code', 'Generate Report'];
 
-export default function StudioPage({ initialSessionId }: { initialSessionId?: string | null }) {
+export default function StudioPage({ initialSessionId, initialPrompt }: { initialSessionId?: string | null; initialPrompt?: string | null }) {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +81,7 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [activeSessionId, setActiveSessionId] = useState(initialSessionId ?? '');
+  const [lineage, setLineage] = useState<SessionLineage>({ parent: null, children: [] });
 
   const activeSession = useMemo(
     () => sessions.find(item => item.id === activeSessionId) ?? sessions[0] ?? null,
@@ -89,7 +96,7 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
         const payload = JSON.parse(message.data) as StudioEvent;
         setEvents(current => current.some(event => event.id === payload.id) ? current : [...current, payload]);
       } catch {
-        // no-op
+        // ignore malformed events
       }
     };
     source.addEventListener('studio_event', onMessage as EventListener);
@@ -99,12 +106,19 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
     };
   }, [activeSessionId, events]);
 
+  useEffect(() => {
+    if (initialPrompt?.trim()) {
+      setPrompt(initialPrompt);
+    }
+  }, [initialPrompt]);
+
   const loadBundle = useCallback(async (sessionId: string) => {
     const res = await fetch(`/api/studio/sessions/${sessionId}`, { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
     setMessages(data.messages ?? []);
     setEvents(data.events ?? []);
+    setLineage(data.lineage ?? { parent: null, children: [] });
   }, []);
 
   const load = useCallback(async () => {
@@ -142,11 +156,16 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
       if (nextSessionId) {
         setActiveSessionId(nextSessionId);
         await loadBundle(nextSessionId);
+      } else {
+        setMessages([]);
+        setEvents([]);
+        setLineage({ parent: null, children: [] });
       }
     } catch {
       setSessions([]);
       setMessages([]);
       setEvents([]);
+      setLineage({ parent: null, children: [] });
     } finally {
       setLoading(false);
     }
@@ -171,6 +190,32 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
         router.replace(`/studio?session=${data.session.id}`);
         await load();
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function branchSession() {
+    if (!activeSession) return;
+    setBusy(true);
+    setNotice('');
+    try {
+      const res = await fetch(`/api/studio/sessions/${activeSession.id}/branch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${activeSession.title} Branch`,
+          branchLabel: activeSession.title,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? 'Branch failed');
+        return;
+      }
+      setActiveSessionId(data.session.id);
+      router.replace(`/studio?session=${data.session.id}`);
+      await load();
     } finally {
       setBusy(false);
     }
@@ -235,7 +280,7 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
               <SidebarNav items={sessions.map(item => ({
                 href: `/studio?session=${item.id}`,
                 label: item.title,
-                subtitle: new Date(item.updatedAt).toLocaleString(),
+                subtitle: item.branchLabel || new Date(item.updatedAt).toLocaleString(),
                 active: activeSession?.id === item.id,
               }))} />
             </SidebarSection>
@@ -247,9 +292,9 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
               <Tabs tabs={CONTEXT_TABS.map(item => ({ key: item, label: item }))} active={contextTab} onChange={setContextTab} />
               {contextTab === 'Context' ? (
                 <div style={{ display: 'grid', gap: 10 }}>
-                  <div className="os-entity-copy">Attached apps: {workflows.slice(0, 2).map(item => item.name).join(' • ') || 'None'}</div>
-                  <div className="os-entity-copy">Installed skills: {skills.map(item => item.skill?.name || item.skill?.slug || 'Skill').join(' • ') || 'None'}</div>
-                  <div className="os-entity-copy">Secrets: {vaultSecrets.slice(0, 3).map(item => item.name).join(' • ') || 'None'}</div>
+                  <div className="os-entity-copy">Attached apps: {workflows.slice(0, 2).map(item => item.name).join(' / ') || 'None'}</div>
+                  <div className="os-entity-copy">Installed skills: {skills.map(item => item.skill?.name || item.skill?.slug || 'Skill').join(' / ') || 'None'}</div>
+                  <div className="os-entity-copy">Secrets: {vaultSecrets.slice(0, 3).map(item => item.name).join(' / ') || 'None'}</div>
                 </div>
               ) : null}
               {contextTab === 'Workflow' ? (
@@ -272,7 +317,11 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
                 }))} />
               ) : null}
               {contextTab === 'Settings' ? (
-                <div className="os-entity-copy">Workspace: {workspaces[0]?.name ?? '—'} · Mode tabs and context panels are responsive on mobile.</div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div className="os-entity-copy">Workspace: {workspaces[0]?.name ?? '-'} | Mode tabs and context panels stay responsive on mobile.</div>
+                  <div className="os-entity-copy">Parent session: {lineage.parent?.title ?? 'None'}</div>
+                  <div className="os-entity-copy">Branches: {lineage.children.length}</div>
+                </div>
               ) : null}
             </SidebarSection>
           </>
@@ -282,7 +331,12 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
           eyebrow="Studio"
           title={activeSession?.title || 'Super AgentOS'}
           subtitle="Chat-first agent workspace with tools, workflows, apps, memory, and logs."
-          actions={<Badge tone="accent">{session?.planLabel ?? 'Retail Free'}</Badge>}
+          actions={(
+            <>
+              {activeSession ? <Button variant="secondary" onClick={() => void branchSession()}>{busy ? 'Working...' : 'Branch session'}</Button> : null}
+              <Badge tone="accent">{session?.planLabel ?? 'Retail Free'}</Badge>
+            </>
+          )}
         />
 
         <Tabs tabs={MODE_TABS.map(item => ({ key: item, label: item }))} active={activeMode} onChange={setActiveMode} />
@@ -325,6 +379,21 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
               </div>
             </Card>
 
+            {lineage.parent || lineage.children.length > 0 ? (
+              <Card>
+                <div className="os-entity-title" style={{ marginBottom: 12 }}>Session lineage</div>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <div className="os-entity-copy">Parent: {lineage.parent ? `${lineage.parent.title} (${new Date(lineage.parent.updatedAt).toLocaleString()})` : 'None'}</div>
+                  <ActivityFeed items={lineage.children.map(child => ({
+                    id: child.id,
+                    title: child.title,
+                    subtitle: 'Branch session',
+                    time: new Date(child.updatedAt).toLocaleString(),
+                  }))} />
+                </div>
+              </Card>
+            ) : null}
+
             {pendingPlan ? (
               <Card>
                 <div className="os-entity-title" style={{ marginBottom: 12 }}>Plan preview</div>
@@ -343,7 +412,7 @@ export default function StudioPage({ initialSessionId }: { initialSessionId?: st
             <Card>
               <Textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Ask AgentOS to build workflows, install apps, add secrets, or analyze data..." />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-                <div className="os-entity-copy">{subagents.length} agents · {workflows.length} workflows · {skills.length} skills</div>
+                <div className="os-entity-copy">{subagents.length} agents | {workflows.length} workflows | {skills.length} skills</div>
                 <Button onClick={() => void sendPrompt()}>{busy ? 'Sending...' : 'Send'}</Button>
               </div>
               {notice ? <div className="os-entity-copy" style={{ marginTop: 12 }}>{notice}</div> : null}

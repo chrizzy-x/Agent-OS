@@ -25,6 +25,7 @@ type DeveloperAnalytics = {
     calls?: number;
     error_rate?: string;
     active_users?: number;
+    revenue_usd?: number;
   };
   app_totals?: {
     installs?: number;
@@ -43,6 +44,9 @@ type KernelEntry = {
   status: string;
   registeredAt: string;
   lastHeartbeatAt?: string | null;
+  discoveryStatus?: string;
+  discoveryError?: string | null;
+  appSlug?: string | null;
 };
 
 type DeveloperApp = {
@@ -102,6 +106,9 @@ export default function DeveloperConsolePage() {
           status: String(item.health_status ?? item.status ?? 'unknown'),
           registeredAt: String(item.registered_at ?? item.registeredAt ?? new Date().toISOString()),
           lastHeartbeatAt: typeof (item.last_heartbeat_at ?? item.lastHeartbeatAt) === 'string' ? String(item.last_heartbeat_at ?? item.lastHeartbeatAt) : null,
+          discoveryStatus: typeof (item.discovery_status ?? item.discoveryStatus) === 'string' ? String(item.discovery_status ?? item.discoveryStatus) : 'unknown',
+          discoveryError: typeof (item.discovery_error ?? item.discoveryError) === 'string' ? String(item.discovery_error ?? item.discoveryError) : null,
+          appSlug: typeof (item.app_slug ?? item.appSlug) === 'string' ? String(item.app_slug ?? item.appSlug) : null,
         })));
       } else {
         setRegistry([]);
@@ -182,7 +189,7 @@ export default function DeveloperConsolePage() {
               <MetricCard label="Total apps" value={apps.length} />
               <MetricCard label="Installs" value={analytics?.app_totals?.installs ?? apps.reduce((sum, app) => sum + app.installCount, 0)} />
               <MetricCard label="Active users" value={analytics?.totals?.active_users ?? analytics?.app_totals?.opens ?? 0} />
-              <MetricCard label="Revenue" value="$0" />
+              <MetricCard label="Revenue" value={`$${analytics?.totals?.revenue_usd?.toFixed(2) ?? '0.00'}`} />
               <MetricCard label="SDK health" value={`${analytics?.app_totals?.online ?? registry.filter(item => item.status === 'online').length}/${Math.max(apps.length, registry.length)}`} />
               <MetricCard label="Heartbeats" value={analytics?.app_totals?.heartbeats ?? registry.filter(item => item.lastHeartbeatAt).length} />
               <MetricCard label="API calls" value={analytics?.totals?.calls ?? 0} />
@@ -197,7 +204,7 @@ export default function DeveloperConsolePage() {
                 <div className="os-empty-body">No SDK registrations yet.</div>
               ) : (
                 <DataTable
-                  columns={['App', 'Type', 'Registered', 'Status', 'Installs', 'Last heartbeat']}
+                  columns={['App', 'Type', 'Registered', 'Health', 'Discovery', 'Installs', 'Last heartbeat']}
                   rows={registry.map(item => {
                     const match = apps.find(app => app.slug === item.product || app.name === item.product);
                     return [
@@ -205,6 +212,11 @@ export default function DeveloperConsolePage() {
                       match?.source === 'external_sdk' ? 'External SDK' : 'Internal',
                       new Date(item.registeredAt).toLocaleDateString(),
                       <StatusPill key={`${item.product}-status`} status={item.status} />,
+                      item.discoveryStatus === 'metadata_required'
+                        ? (item.discoveryError ?? 'Metadata required')
+                        : item.appSlug
+                          ? `Indexed as ${item.appSlug}`
+                          : item.discoveryStatus ?? 'unknown',
                       String(match?.installCount ?? 0),
                       item.lastHeartbeatAt ? new Date(item.lastHeartbeatAt).toLocaleString() : 'n/a',
                     ];
