@@ -32,6 +32,14 @@ export async function POST(request: NextRequest) {
       canManageAll: hasAdminAccess(request.headers),
       permissionsApproved,
     });
+    if (readiness.appUnavailableReason) {
+      return NextResponse.json({
+        code: 'APP_UNAVAILABLE',
+        error: readiness.appUnavailableReason,
+        message: readiness.appUnavailableReason,
+        appUnavailableReason: readiness.appUnavailableReason,
+      }, { status: 409 });
+    }
     if (readiness.missingSecrets.length > 0) {
       if (sessionId) {
         await appendStudioEvent({
@@ -89,6 +97,7 @@ export async function POST(request: NextRequest) {
         missingPermissions: [],
         missingSecrets: [],
         missingSkills: [],
+        appUnavailableReason: null,
         ready: true,
         updateAvailable: false,
         targets: readiness.targets,

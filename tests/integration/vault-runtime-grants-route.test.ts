@@ -39,6 +39,8 @@ function createVaultSupabase() {
     agent_apps: [],
     app_installations: [],
     agent_app_versions: [],
+    nl_studio_sessions: [],
+    nl_studio_events: [],
   };
 
   function applyFilters(rows: TableRow[], filters: Array<{ field: string; value: unknown }>) {
@@ -190,6 +192,20 @@ describe.sequential('vault runtime grant routes', () => {
       updated_at: '2026-06-01T00:00:00Z',
       last_accessed_at: null,
     });
+    db.tables.nl_studio_sessions.push({
+      id: 'session-1',
+      workspace_id: 'workspace-1',
+      owner_agent_id: 'agent-enterprise',
+      super_agent_id: null,
+      parent_session_id: null,
+      parent_snapshot_id: null,
+      branch_label: null,
+      title: 'Runtime session',
+      status: 'active',
+      state: {},
+      created_at: '2026-06-01T00:00:00Z',
+      updated_at: '2026-06-01T00:00:00Z',
+    });
     db.tables.agent_apps.push({
       id: 'app-1',
       workspace_id: 'workspace-1',
@@ -292,6 +308,7 @@ describe.sequential('vault runtime grant routes', () => {
       workspaceId: 'workspace-1',
       name: 'OPENAI_API_KEY',
       appSlug: 'research-kit',
+      sessionId: 'session-1',
     }));
     const createBody = await createResponse.json();
 
@@ -302,12 +319,22 @@ describe.sequential('vault runtime grant routes', () => {
 
     const consumeResponse = await postConsumeGrant(agentRequest('http://localhost/api/vault/runtime-grants/consume', 'POST', sdkToken, {
       grantId: createBody.grant.id,
+      sessionId: 'session-1',
     }));
     const consumeBody = await consumeResponse.json();
 
     expect(consumeResponse.status).toBe(200);
     expect(consumeBody.secret.name).toBe('OPENAI_API_KEY');
     expect(consumeBody.secret.value).toBe('sk-live-secret-value');
+    expect(db.tables.nl_studio_events).toHaveLength(1);
+    expect(db.tables.nl_studio_events[0].type).toBe('secret_access_granted');
+    expect(db.tables.nl_studio_events[0].payload).toEqual({
+      name: 'OPENAI_API_KEY',
+      subjectType: 'app',
+      subjectId: 'app-1',
+      grantId: createBody.grant.id,
+    });
+    expect(JSON.stringify(db.tables.nl_studio_events[0])).not.toContain('sk-live-secret-value');
 
     const repeatConsume = await postConsumeGrant(agentRequest('http://localhost/api/vault/runtime-grants/consume', 'POST', sdkToken, {
       grantId: createBody.grant.id,
@@ -345,5 +372,30 @@ describe.sequential('vault runtime grant routes', () => {
     expect(consumeResponse.status).toBe(403);
     expect(consumeBody.code).toBe('PERMISSION_DENIED');
     expect(db.tables.vault_runtime_grants[0].status).toBe('expired');
+  });
+
+  it('emits denied Studio events when scoped runtime access is rejected', async () => {
+    db.tables.vault_assignments = [];
+
+    const response = await postVaultAccess(agentRequest('http://localhost/api/vault/access', 'POST', agentToken, {
+      action: 'runtime',
+      workspaceId: 'workspace-1',
+      name: 'OPENAI_API_KEY',
+      appSlug: 'research-kit',
+      sessionId: 'session-1',
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.code).toBe('PERMISSION_DENIED');
+    expect(db.tables.nl_studio_events).toHaveLength(1);
+    expect(db.tables.nl_studio_events[0].type).toBe('secret_access_denied');
+    expect(db.tables.nl_studio_events[0].payload).toEqual({
+      name: 'OPENAI_API_KEY',
+      reason: 'assignment_missing',
+      subjectType: 'app',
+      subjectId: 'app-1',
+    });
+    expect(JSON.stringify(db.tables.nl_studio_events[0])).not.toContain('sk-live-secret-value');
   });
 });

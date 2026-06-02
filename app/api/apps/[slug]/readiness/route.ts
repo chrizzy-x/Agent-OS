@@ -21,6 +21,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       viewerWorkspaceIds,
       canManageAll: hasAdminAccess(request.headers),
     });
+    if (readiness.appUnavailableReason) {
+      return NextResponse.json({
+        code: 'APP_UNAVAILABLE',
+        error: readiness.appUnavailableReason,
+        message: readiness.appUnavailableReason,
+        app: omitAgentIdentifierFields(readiness.app),
+        installation: readiness.installation,
+        requiredPermissions: readiness.requiredPermissions,
+        missingPermissions: readiness.missingPermissions,
+        missingSecrets: readiness.missingSecrets,
+        missingSkills: readiness.missingSkills,
+        appUnavailableReason: readiness.appUnavailableReason,
+        ready: false,
+        updateAvailable: readiness.updateAvailable,
+        targets: readiness.targets,
+      }, { status: 409 });
+    }
     return NextResponse.json({
       app: omitAgentIdentifierFields(readiness.app),
       installation: readiness.installation,
@@ -28,6 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       missingPermissions: readiness.missingPermissions,
       missingSecrets: readiness.missingSecrets,
       missingSkills: readiness.missingSkills,
+      appUnavailableReason: readiness.appUnavailableReason,
       ready: readiness.ready,
       updateAvailable: readiness.updateAvailable,
       targets: readiness.targets,

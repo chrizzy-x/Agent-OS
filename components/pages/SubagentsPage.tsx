@@ -69,7 +69,7 @@ export default function SubagentsPage() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/studio" />
+      <Nav activePath="/subagents" />
       <AppShell
         sidebar={(
           <SidebarSection title="Agents">
@@ -87,7 +87,7 @@ export default function SubagentsPage() {
           eyebrow="Private agents"
           title="Subagents"
           subtitle="Create Derek-like private agents for focused instructions, memory, skills, and tools."
-          actions={<Button onClick={() => void createSubagent()}>Create agent</Button>}
+          actions={<Button onClick={() => void createSubagent()}>Create subagent</Button>}
         />
 
         <div style={{ display: 'grid', gap: 12 }}>

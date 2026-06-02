@@ -1,11 +1,11 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { registerExternalAgent, resolveVisibleExternalAgentRef } from '@/src/external-agents/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { toErrorResponse, NotFoundError } from '@/src/utils/errors';
+import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
 import { callClaude, tokenSet, tokenGet, tokenDel, TOKEN_TTL_SECONDS } from '@/src/studio/planner';
 import { DEFAULT_QUOTAS } from '@/src/auth/permissions';
 import { logOperation } from '@/src/runtime/audit';
@@ -122,7 +122,8 @@ async function executeAgentPlan(params: {
 
   const answer = buildAgentAnswer(results);
   const taskId = findScheduledTaskId(results);
-  const publicResults = omitAgentIdentifierFields(results);
+  const publicResults = sanitizeOutput(results);
+  const publicAnswer = answer ? sanitizeErrorMessage(answer) : null;
   const ranAt = new Date().toISOString();
   const supabase = getSupabaseAdmin();
   const { data: wf } = await supabase.from('agent_workflows').insert({
@@ -132,7 +133,7 @@ async function executeAgentPlan(params: {
     steps: params.plan.steps,
     schedule: params.plan.schedule,
     task_id: taskId,
-    last_result: answer ? { answer, results: publicResults } : { results: publicResults },
+    last_result: publicAnswer ? { answer: publicAnswer, results: publicResults } : { results: publicResults },
     last_run_at: ranAt,
     status: 'active',
   }).select('id').single();
@@ -155,11 +156,11 @@ async function executeAgentPlan(params: {
       workflowId: wf?.id ?? null,
       schedule: params.plan.schedule,
       agentName: params.agentName,
-      result: answer ? { answer, results: publicResults } : { results: publicResults },
+      result: publicAnswer ? { answer: publicAnswer, results: publicResults } : { results: publicResults },
     },
   });
 
-  return { results: publicResults, answer, workflowId: wf?.id ?? null };
+  return { results: publicResults, answer: publicAnswer, workflowId: wf?.id ?? null };
 }
 
 export async function POST(
@@ -224,7 +225,8 @@ export async function POST(
           tool: 'delegate_task',
           result: item,
         }));
-        const publicResults = omitAgentIdentifierFields(results);
+        const publicResults = sanitizeOutput(results);
+        const publicAnswer = sanitizeErrorMessage(answer);
         const ranAt = new Date().toISOString();
         const supabase = getSupabaseAdmin();
         const { data: wf } = await supabase.from('agent_workflows').insert({
@@ -233,7 +235,7 @@ export async function POST(
           summary: plan.summary,
           steps: plan.steps,
           schedule: null,
-          last_result: { answer, results: publicResults },
+          last_result: { answer: publicAnswer, results: publicResults },
           last_run_at: ranAt,
           status: 'active',
         }).select('id').single();
@@ -246,11 +248,11 @@ export async function POST(
           metadata: {
             workflowId: wf?.id ?? null,
             delegatedCount: delegated.length,
-            result: { answer, results: publicResults },
+            result: { answer: publicAnswer, results: publicResults },
           },
         });
 
-        return NextResponse.json({ executed: true, delegated: true, results: publicResults, answer, workflowId: wf?.id ?? null });
+        return NextResponse.json({ executed: true, delegated: true, results: publicResults, answer: publicAnswer, workflowId: wf?.id ?? null });
       }
 
       const run = await executeAgentPlan({
@@ -260,7 +262,7 @@ export async function POST(
         plan,
       });
 
-      return NextResponse.json({ executed: true, results: omitAgentIdentifierFields(run.results), answer: run.answer, workflowId: run.workflowId });
+      return NextResponse.json({ executed: true, results: run.results, answer: run.answer, workflowId: run.workflowId });
     }
 
     // ── PLAN GENERATION ─────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
-import { redactSecretsDeep, redactSecretsInString } from '../vault/service.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
 
 export type StudioEventType =

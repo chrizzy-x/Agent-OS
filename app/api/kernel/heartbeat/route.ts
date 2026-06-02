@@ -5,6 +5,7 @@ import { requireKernelRouteAccess } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { appendLatestStudioEvent } from '@/src/studio/persistence';
 import { toErrorResponse } from '@/src/utils/errors';
+import { sanitizeErrorMessage } from '@/src/utils/output-sanitizer';
 
 export const runtime = 'nodejs';
 
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest) {
     const endpointStatus = body.endpointStatus === 'offline' || body.endpointStatus === 'degraded' || body.endpointStatus === 'disabled' || body.endpointStatus === 'unknown'
       ? body.endpointStatus
       : 'healthy';
+    const lastError = typeof body.lastError === 'string' && body.lastError.trim()
+      ? sanitizeErrorMessage(body.lastError)
+      : null;
     const supabase = getSupabaseAdmin();
     const { data: existing } = await supabase
       .from('kernel_registry')
@@ -68,7 +72,7 @@ export async function POST(req: NextRequest) {
         health_status: healthStatus,
         endpoint_status: endpointStatus,
         version: typeof body.app?.manifest?.version === 'string' ? body.app.manifest.version : String(existing?.version ?? '1.0.0'),
-        last_error: body.lastError ?? null,
+        last_error: lastError,
         last_command_at: now,
         disabled: healthStatus === 'disabled',
         registered_at: String(existing?.registered_at ?? now),
@@ -100,7 +104,7 @@ export async function POST(req: NextRequest) {
             heartbeatAt: now,
             status: healthStatus,
             endpointStatus,
-            lastError: body.lastError ?? null,
+            lastError,
             version: typeof body.app?.manifest?.version === 'string' ? body.app.manifest.version : String(existing?.version ?? '1.0.0'),
           },
         }, { onConflict: 'agent_id,product' })
@@ -124,7 +128,7 @@ export async function POST(req: NextRequest) {
             heartbeatAt: now,
             status: healthStatus,
             endpointStatus,
-            lastError: body.lastError ?? null,
+            lastError,
             version: typeof body.app?.manifest?.version === 'string' ? body.app.manifest.version : String(existing?.version ?? '1.0.0'),
           },
         }, { onConflict: 'agent_id,product' })
@@ -148,7 +152,7 @@ export async function POST(req: NextRequest) {
       healthStatus,
       endpointStatus,
       lastCommandAt: now,
-      lastError: body.lastError ?? null,
+      lastError,
       heartbeatCount: Number(existing?.heartbeat_count ?? 0) + 1,
       disabled: healthStatus === 'disabled',
       app: body.app,

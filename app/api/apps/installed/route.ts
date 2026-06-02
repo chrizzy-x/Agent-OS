@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
           missingPermissions: readiness.missingPermissions,
           missingSecrets: readiness.missingSecrets,
           missingSkills: readiness.missingSkills,
+          appUnavailableReason: readiness.appUnavailableReason,
           ready: readiness.ready,
           updateAvailable: readiness.updateAvailable,
           targets: readiness.targets,

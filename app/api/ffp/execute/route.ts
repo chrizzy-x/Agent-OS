@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { verifyConsensusProof, hashInput } from '@/src/ffp/chain-verifier';
 import type { ConsensusProof } from '@/src/ffp/chain-verifier';
@@ -7,6 +6,7 @@ import { buildChainScopedContext, getScopedAgentId } from '@/src/ffp/chain-conte
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse, ValidationError } from '@/src/utils/errors';
+import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
 
 export const runtime = 'nodejs';
 
@@ -63,9 +63,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
     } catch (execError) {
       status = 'failed';
-      errorMessage = execError instanceof Error ? execError.message : String(execError);
+      errorMessage = sanitizeErrorMessage(execError);
       result = null;
     }
+
+    const sanitizedInput = sanitizeOutput(inputObj);
+    const sanitizedResult = sanitizeOutput(result ?? null);
 
     // 6. Log execution to ffp_chain_executions
     const supabase = getSupabaseAdmin();
@@ -77,8 +80,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         scoped_agent_id: scopedAgentId,
         proposal_id: typedProof.proposalId,
         tool,
-        input: inputObj,
-        result: result ?? null,
+        input: sanitizedInput,
+        result: sanitizedResult,
         status,
         error_message: errorMessage,
         consensus_threshold: typedProof.threshold,
@@ -105,12 +108,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       executed: true,
-      result: omitAgentIdentifierFields(result),
+      result: sanitizedResult,
       executionId,
       chainId: typedProof.chainId,
     });
   } catch (error) {
-    console.error('[ffp/execute]', error instanceof Error ? error.message : error);
+    console.error('[ffp/execute]', sanitizeErrorMessage(error));
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
   }

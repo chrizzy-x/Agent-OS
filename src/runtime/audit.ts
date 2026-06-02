@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { sanitizeErrorMessage, sanitizeOutput } from '../utils/output-sanitizer.js';
 
 interface AuditEntry {
   agentId: string;
@@ -21,8 +22,8 @@ export async function logOperation(entry: AuditEntry): Promise<void> {
       operation: entry.operation,
       success: entry.success,
       duration_ms: entry.durationMs,
-      metadata: entry.metadata ?? {},
-      error: entry.error,
+      metadata: sanitizeOutput(entry.metadata ?? {}),
+      error: entry.error ? sanitizeErrorMessage(entry.error) : null,
     });
   } catch (err) {
     // Log to stderr but don't propagate - audit failure must not break agent operations

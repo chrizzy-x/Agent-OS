@@ -1,3 +1,5 @@
+import { redactSecretsInString } from '../security/secret-redaction.js';
+
 // Custom error hierarchy for AgentOS - each error type maps to a specific failure mode
 
 export class AgentOSError extends Error {
@@ -39,6 +41,13 @@ export class PermissionError extends AgentOSError {
   }
 }
 
+export class AppUnavailableError extends AgentOSError {
+  constructor(message: string) {
+    super(message, 'APP_UNAVAILABLE', 409);
+    this.name = 'AppUnavailableError';
+  }
+}
+
 export class ValidationError extends AgentOSError {
   constructor(message: string) {
     super(message, 'VALIDATION_ERROR', 400);
@@ -64,7 +73,7 @@ export function toErrorResponse(error: unknown): { code: string; message: string
   if (error instanceof AgentOSError) {
     return {
       code: error.code,
-      message: error.message,
+      message: redactSecretsInString(error.message),
       statusCode: error.statusCode,
     };
   }

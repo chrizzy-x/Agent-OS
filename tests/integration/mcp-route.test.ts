@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createAgentToken } from '../../src/auth/agent-identity.js';
+import * as mcpRegistry from '../../src/mcp/registry.js';
 import { mockRedis, mockSupabase } from '../setup.js';
 import { POST } from '../../app/mcp/route.js';
 
@@ -29,7 +30,7 @@ describe('POST /mcp', () => {
       name: 'External Agent',
       status: 'active',
       allowed_domains: ['*'],
-      allowed_tools: ['agentos.mem_set'],
+      allowed_tools: ['agentos.mem_set', 'agentos.mem_get'],
       total_calls: 0,
       last_active_at: null,
       created_at: '2026-03-22T00:00:00Z',
@@ -52,6 +53,39 @@ describe('POST /mcp', () => {
     expect(body.success).toBe(true);
     expect(body.result.key).toBe('hello');
     expect(mockSupabase.rpc).toHaveBeenCalledWith('increment_ext_agent_calls', { row_agent_id: 'external-agent-1' });
+  });
+
+  it('redacts secret-like result values before returning MCP responses', async () => {
+    mockSupabase.from.mockReturnValue(maybeSingleBuilder({
+      agent_id: 'external-agent-1',
+      name: 'External Agent',
+      status: 'active',
+      allowed_domains: ['*'],
+      allowed_tools: ['agentos.mem_get'],
+      total_calls: 0,
+      last_active_at: null,
+      created_at: '2026-03-22T00:00:00Z',
+    }));
+    vi.spyOn(mcpRegistry, 'executeUniversalToolCall').mockResolvedValue({
+      value: 'OPENAI_API_KEY=sk-live-secret-value',
+    });
+
+    const token = createAgentToken('external-agent-1', { allowedDomains: ['*'], expiresIn: '1h' });
+    const request = new NextRequest('http://localhost/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ tool: 'agentos.mem_get', input: { key: 'secret' } }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.result.value).toBe('OPENAI_API_KEY=[redacted]');
   });
 
   it('blocks tools that were not granted to the external agent', async () => {

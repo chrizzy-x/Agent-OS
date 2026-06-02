@@ -430,6 +430,7 @@ export async function executeUniversalToolCall(params: {
   if (normalized.kind === 'skill') {
     const execution = await runInstalledSkill({
       agentId: params.agentContext.agentId,
+      studioSessionId: params.agentContext.studioSessionId,
       skillSlug: normalized.skillSlug,
       capability: normalized.capability,
       input: 'params' in input && typeof input.params === 'object' && input.params !== null ? input.params : input,

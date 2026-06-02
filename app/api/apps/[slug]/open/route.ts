@@ -27,6 +27,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         ready: false,
       }, { status: 400 });
     }
+    if (readiness.appUnavailableReason) {
+      return NextResponse.json({
+        code: 'APP_UNAVAILABLE',
+        error: readiness.appUnavailableReason,
+        message: readiness.appUnavailableReason,
+        ready: false,
+      }, { status: 409 });
+    }
     if (!readiness.ready) {
       return NextResponse.json({
         code: readiness.missingPermissions.length > 0

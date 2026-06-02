@@ -60,7 +60,7 @@ type PendingPlan = {
 
 const MODE_TABS = ['Chat', 'Plan', 'Workflow', 'Files', 'Memory'];
 const CONTEXT_TABS = ['Context', 'Workflow', 'Memory', 'Logs', 'Settings'];
-const QUICK_ACTIONS = ['Build Workflow', 'Install App', 'Add Secret', 'Create Agent', 'Analyze Data', 'Run Code', 'Generate Report'];
+const QUICK_ACTIONS = ['Build Workflow', 'Install App', 'Add Secret', 'Create Subagent', 'Analyze Data', 'Run Code', 'Generate Report'];
 
 export default function StudioPage({ initialSessionId, initialPrompt }: { initialSessionId?: string | null; initialPrompt?: string | null }) {
   const router = useRouter();

@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 import { getPlanDescriptor } from '../auth/capabilities.js';
 import { normalizePlan } from '../auth/tiers.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
-import { PermissionError, ValidationError } from '../utils/errors.js';
+import { AppUnavailableError, PermissionError, ValidationError } from '../utils/errors.js';
 import { validateRequiredSecrets } from '../vault/service.js';
 import {
   AGENT_APP_CATEGORIES,
@@ -706,9 +706,19 @@ function canAccessHiddenApp(app: AgentAppListing, options: AgentAppAccessOptions
   return false;
 }
 
+function canManageDisabledApp(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
+  if (options.canManageAll) return true;
+  return Boolean(options.viewerAgentId && app.publisherId === options.viewerAgentId);
+}
+
 function canAccessAppBySlug(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
+  if (app.disabled && !canManageDisabledApp(app, options)) return false;
   if (app.visibility === 'public' || app.visibility === 'unlisted') return true;
   return canAccessHiddenApp(app, options);
+}
+
+function getAppUnavailableReason(app: AgentAppListing): string | null {
+  return app.disabled ? 'App is disabled and unavailable.' : null;
 }
 
 function ensureSdkDiscoveryMetadata(input: SaveAgentAppInput, manifest: AgentAppManifest): void {
@@ -1073,8 +1083,8 @@ export async function listAgentApps(options: ListAgentAppsOptions = {}): Promise
     if (source && source !== 'all' && app.source !== source) return false;
     if (runtimeType && runtimeType !== 'all' && app.runtimeType !== runtimeType) return false;
     if (visibility && visibility !== 'all' && app.visibility !== visibility) return false;
-    if (!options.includeHidden) return app.visibility === 'public';
-    return app.visibility === 'public' || canAccessHiddenApp(app, options);
+    if (!options.includeHidden) return app.visibility === 'public' && !app.disabled;
+    return canAccessAppBySlug(app, options);
   });
 
   if (category && category !== 'All' && category.toLowerCase() !== 'all') {
@@ -1330,12 +1340,20 @@ export async function getAgentAppInstallReadiness(params: {
   missingPermissions: string[];
   missingSecrets: string[];
   missingSkills: string[];
+  appUnavailableReason: string | null;
 }> {
-  const app = await getAgentAppBySlug(params.slug, {
+  const viewer = {
     viewerAgentId: params.agentId,
     viewerWorkspaceIds: params.viewerWorkspaceIds,
     canManageAll: params.canManageAll,
-  });
+  };
+  let app = await getAgentAppBySlug(params.slug, viewer);
+  if (!app) {
+    const candidate = await getAgentAppBySlug(params.slug, { canManageAll: true });
+    if (candidate && candidate.disabled && (candidate.visibility === 'public' || canAccessHiddenApp(candidate, viewer))) {
+      app = candidate;
+    }
+  }
   if (!app) throw new ValidationError('App not found');
   if (app.visibility === 'private' && !canAccessHiddenApp(app, {
     viewerAgentId: params.agentId,
@@ -1362,6 +1380,7 @@ export async function getAgentAppInstallReadiness(params: {
     missingPermissions,
     missingSecrets: secretValidation.missing,
     missingSkills,
+    appUnavailableReason: getAppUnavailableReason(app),
   };
 }
 
@@ -1379,6 +1398,7 @@ export async function getAgentAppReadiness(params: {
   missingPermissions: string[];
   missingSecrets: string[];
   missingSkills: string[];
+  appUnavailableReason: string | null;
   ready: boolean;
   updateAvailable: boolean;
   targets: Array<{ target: AgentAppOpenTarget; url: string }>;
@@ -1395,9 +1415,11 @@ export async function getAgentAppReadiness(params: {
     missingPermissions: readiness.missingPermissions,
     missingSecrets: readiness.missingSecrets,
     missingSkills: readiness.missingSkills,
+    appUnavailableReason: readiness.appUnavailableReason,
     ready: readiness.missingPermissions.length === 0
       && readiness.missingSecrets.length === 0
       && readiness.missingSkills.length === 0
+      && readiness.appUnavailableReason === null
       && installation?.installation.status !== 'disabled'
       && installation?.installation.status !== 'removed',
     updateAvailable: installation?.installation.updateAvailable === true,
@@ -1414,6 +1436,9 @@ export async function installAgentApp(params: {
   permissionsApproved?: string[];
 }): Promise<{ app: AgentAppListing; installation: AgentAppInstallation }> {
   const readiness = await getAgentAppInstallReadiness(params);
+  if (readiness.appUnavailableReason) {
+    throw new AppUnavailableError(readiness.appUnavailableReason);
+  }
   if (readiness.missingPermissions.length > 0) {
     throw new ValidationError(`Missing permission approval: ${readiness.missingPermissions.join(', ')}`);
   }
@@ -1596,6 +1621,7 @@ export async function assertAgentAppPermissionAccess(params: {
 }): Promise<{ app: AgentAppListing; installation: AgentAppInstallation }> {
   const entry = await getInstalledAgentApp(params.agentId, params.slug);
   if (!entry) throw new PermissionError('App is not installed');
+  if (entry.app.disabled) throw new AppUnavailableError('App is disabled and unavailable.');
   if (entry.installation.status !== 'active') throw new PermissionError('App is not active');
 
   const normalizedPermission = normalizePermissionName(params.permission);
@@ -1697,6 +1723,9 @@ export async function recordAgentAppOpen(params: {
     slug: params.slug,
     status: 'active',
   });
+  if (app.disabled) {
+    throw new AppUnavailableError('App is disabled and unavailable.');
+  }
   const requiredPermissions = [...new Set((app.permissionsRequired.length > 0 ? app.permissionsRequired : app.manifest.permissions).filter(Boolean))];
   const approved = new Set(installation.permissionsApproved.map(normalizePermissionName));
   const missing = requiredPermissions.filter(permission => !approved.has(normalizePermissionName(permission)));

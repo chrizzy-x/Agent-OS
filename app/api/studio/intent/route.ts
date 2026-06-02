@@ -1,10 +1,10 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireRouteCapability } from '@/src/auth/request';
 import { capabilityMessage, hasCapability } from '@/src/auth/capabilities';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
+import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
 import { registerExternalAgent } from '@/src/external-agents/service';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
@@ -145,7 +145,6 @@ async function resolveSessionWorkspaceId(agentId: string, sessionId: string | un
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireRouteCapability(req.headers, 'studio.intent');
-    const studioCtx = withStudioDefaultAllowedDomains(ctx);
 
     let body: { instruction?: string; confirm?: boolean; confirmToken?: string | null; sessionId?: string };
     try { body = await req.json(); } catch {
@@ -153,6 +152,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { instruction, confirm = false, confirmToken, sessionId } = body;
+    const studioCtx = withStudioDefaultAllowedDomains({ ...ctx, studioSessionId: sessionId ?? null });
 
     // ── CONFIRM EXECUTION ───────────────────────────────────────────────────
     if (confirm && confirmToken) {
@@ -203,7 +203,8 @@ export async function POST(req: NextRequest) {
 
       const answer = buildStudioAnswer(results);
       const taskId = findScheduledTaskId(results);
-      const publicResults = omitAgentIdentifierFields(results);
+      const publicResults = sanitizeOutput(results);
+      const publicAnswer = answer ? sanitizeErrorMessage(answer) : null;
       let workflowId: string | null = null;
       if (shouldPersistWorkflow(plan)) {
         const supabase = getSupabaseAdmin();
@@ -224,7 +225,7 @@ export async function POST(req: NextRequest) {
           canonical_doc: workflowSync.canonical,
           schedule: plan.schedule,
           task_id: taskId,
-          last_result: answer ? { answer, results: publicResults } : { results: publicResults },
+          last_result: publicAnswer ? { answer: publicAnswer, results: publicResults } : { results: publicResults },
           last_run_at: new Date().toISOString(),
           status: 'active',
         }).select('id').single();
@@ -243,12 +244,12 @@ export async function POST(req: NextRequest) {
       }
 
       await recordStudioEvent(ctx.agentId, sessionId, 'task_completed', { workflowId, schedule: plan.schedule });
-      if (answer) await recordStudioTurn(ctx.agentId, sessionId, 'assistant', answer);
+      if (publicAnswer) await recordStudioTurn(ctx.agentId, sessionId, 'assistant', publicAnswer);
 
       return NextResponse.json({
         executed: true,
         results: publicResults,
-        answer,
+        answer: publicAnswer,
         workflowId,
         schedule: plan.schedule,
       });
@@ -304,7 +305,7 @@ export async function POST(req: NextRequest) {
       requiresInput: false,
     });
   } catch (error: unknown) {
-    console.error('[studio/intent]', error instanceof Error ? error.message : error);
+    console.error('[studio/intent]', sanitizeErrorMessage(error));
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }

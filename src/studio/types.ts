@@ -4,6 +4,7 @@ export type StudioCommandRequest = {
   command: string;
   confirmToken?: string;
   advancedMode?: boolean;
+  sessionId?: string;
 };
 
 export type StudioPreview = {

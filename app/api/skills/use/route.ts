@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { runInstalledSkill } from '@/src/skills/service';
 import { toErrorResponse } from '@/src/utils/errors';
+import { sanitizeOutput } from '@/src/utils/output-sanitizer';
 
 export const runtime = 'nodejs';
 
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      result: omitAgentIdentifierFields(execution.result),
+      result: sanitizeOutput(execution.result),
       execution_time_ms: execution.executionTimeMs,
     });
   } catch (error: unknown) {

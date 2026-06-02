@@ -28,6 +28,8 @@ function createAppSupabase() {
     agent_apps: [],
     app_installations: [],
     skill_installations: [],
+    vaults: [],
+    vault_secrets: [],
   };
 
   function applyFilters(rows: TableRow[], filters: Array<{ field: string; value: unknown }>) {
@@ -38,6 +40,7 @@ function createAppSupabase() {
     const filters: Array<{ field: string; value: unknown }> = [];
     let orderField: string | null = null;
     let ascending = true;
+    let limitCount: number | null = null;
     let updatePayload: TableRow | null = null;
 
     const query = {
@@ -51,8 +54,20 @@ function createAppSupabase() {
         ascending = options?.ascending !== false;
         return query;
       },
+      limit(value: number) {
+        limitCount = value;
+        return query;
+      },
       maybeSingle() {
-        const rows = applyFilters(tables[table] ?? [], filters);
+        let rows = applyFilters(tables[table] ?? [], filters);
+        if (orderField) {
+          rows = [...rows].sort((left, right) => {
+            const a = String(left[orderField] ?? '');
+            const b = String(right[orderField] ?? '');
+            return ascending ? a.localeCompare(b) : b.localeCompare(a);
+          });
+        }
+        if (typeof limitCount === 'number') rows = rows.slice(0, limitCount);
         if (updatePayload && rows[0]) {
           Object.assign(rows[0], updatePayload);
           return Promise.resolve({ data: rows[0], error: null });
@@ -94,6 +109,7 @@ function createAppSupabase() {
             return ascending ? a.localeCompare(b) : b.localeCompare(a);
           });
         }
+        if (typeof limitCount === 'number') rows = rows.slice(0, limitCount);
         return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
       },
     };
@@ -139,6 +155,12 @@ describe.sequential('app installation lifecycle routes', () => {
         plan: 'retail_free',
         created_at: '2026-06-01T00:00:00Z',
       },
+    });
+    db.tables.vaults.push({
+      id: 'vault-1',
+      workspace_id: 'workspace-1',
+      owner_agent_id: 'agent-retail',
+      created_at: '2026-06-01T00:00:00Z',
     });
     db.tables.agent_apps.push({
       id: 'app-1',
@@ -306,5 +328,90 @@ describe.sequential('app installation lifecycle routes', () => {
 
     expect(removed.status).toBe(200);
     expect(removedBody.removed).toBe(true);
+  });
+
+  it('blocks installs when required secrets or skills are missing', async () => {
+    db.tables.agent_apps[0].permissions_required = [];
+    db.tables.agent_apps[0].manifest = {
+      ...(db.tables.agent_apps[0].manifest as Record<string, unknown>),
+      permissions: [],
+      requiredSecrets: ['OPENAI_API_KEY'],
+      requiredSkills: [],
+      skills: [],
+    };
+    db.tables.agent_apps[0].required_secrets = ['OPENAI_API_KEY'];
+
+    const missingSecret = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
+      slug: 'research-kit',
+    }));
+    const missingSecretBody = await missingSecret.json();
+
+    expect(missingSecret.status).toBe(400);
+    expect(missingSecretBody.code).toBe('SECRET_REQUIRED');
+    expect(missingSecretBody.missingSecrets).toEqual(['OPENAI_API_KEY']);
+
+    db.tables.agent_apps[0].manifest = {
+      ...(db.tables.agent_apps[0].manifest as Record<string, unknown>),
+      requiredSecrets: [],
+      requiredSkills: ['email-skill'],
+      skills: [],
+    };
+    db.tables.agent_apps[0].required_secrets = [];
+
+    const missingSkill = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
+      slug: 'research-kit',
+    }));
+    const missingSkillBody = await missingSkill.json();
+
+    expect(missingSkill.status).toBe(400);
+    expect(missingSkillBody.code).toBe('SKILL_REQUIRED');
+    expect(missingSkillBody.missingSkills).toEqual(['email-skill']);
+  });
+
+  it('blocks disabled apps from install and open while keeping existing installs visible as unavailable', async () => {
+    const installed = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
+      slug: 'research-kit',
+      permissionsApproved: ['access_network'],
+    }));
+
+    expect(installed.status).toBe(201);
+
+    db.tables.agent_apps[0].disabled = true;
+    db.tables.agent_apps[0].health_status = 'disabled';
+    db.tables.agent_apps[0].endpoint_status = 'disabled';
+
+    const readiness = await getReadiness(agentRequest('http://localhost/api/apps/research-kit/readiness', 'GET', token), {
+      params: Promise.resolve({ slug: 'research-kit' }),
+    });
+    const readinessBody = await readiness.json();
+
+    expect(readiness.status).toBe(409);
+    expect(readinessBody.code).toBe('APP_UNAVAILABLE');
+    expect(readinessBody.appUnavailableReason).toBe('App is disabled and unavailable.');
+
+    const reinstall = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
+      slug: 'research-kit',
+      permissionsApproved: ['access_network'],
+    }));
+    const reinstallBody = await reinstall.json();
+
+    expect(reinstall.status).toBe(409);
+    expect(reinstallBody.code).toBe('APP_UNAVAILABLE');
+
+    const installedList = await getInstalled(agentRequest('http://localhost/api/apps/installed', 'GET', token));
+    const installedListBody = await installedList.json();
+
+    expect(installedList.status).toBe(200);
+    expect(installedListBody.installedApps).toHaveLength(1);
+    expect(installedListBody.installedApps[0].readiness.ready).toBe(false);
+    expect(installedListBody.installedApps[0].readiness.appUnavailableReason).toBe('App is disabled and unavailable.');
+
+    const openResponse = await postOpen(agentRequest('http://localhost/api/apps/research-kit/open', 'POST', token), {
+      params: Promise.resolve({ slug: 'research-kit' }),
+    });
+    const openBody = await openResponse.json();
+
+    expect(openResponse.status).toBe(409);
+    expect(openBody.code).toBe('APP_UNAVAILABLE');
   });
 });

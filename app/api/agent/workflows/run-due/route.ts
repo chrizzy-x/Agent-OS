@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { logOperation } from '@/src/runtime/audit';
 import { toErrorResponse } from '@/src/utils/errors';
+import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
 import { hydrateWorkflowDocument } from '@/src/workflows/canonical';
 
 export const runtime = 'nodejs';
@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
     if (adHocWorkflow) {
       const { workflow, execution } = adHocWorkflow;
       try {
-        const result = omitAgentIdentifierFields(await executeUniversalToolCall({
+        const result = sanitizeOutput(await executeUniversalToolCall({
           agentContext: ctx,
           name: execution.tool,
           server: undefined,
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
         results.push({ workflowId: workflow.id, tool: execution.tool, success: true, result });
       } catch (err) {
         const ranAt = new Date().toISOString();
-        const message = err instanceof Error ? err.message : String(err);
+        const message = sanitizeErrorMessage(err);
 
         await supabase
           .from('agent_workflows')
@@ -248,7 +248,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const result = omitAgentIdentifierFields(await executeUniversalToolCall({
+        const result = sanitizeOutput(await executeUniversalToolCall({
           agentContext: ctx,
           name: parsed.tool,
           server: undefined,
@@ -275,7 +275,7 @@ export async function POST(request: NextRequest) {
         results.push({ taskId: task.id, workflowId: task.workflow_id, tool: parsed.tool, success: true, result });
       } catch (err) {
         const ranAt = new Date().toISOString();
-        const message = err instanceof Error ? err.message : String(err);
+        const message = sanitizeErrorMessage(err);
 
         await supabase
           .from('scheduled_tasks')
@@ -310,7 +310,7 @@ export async function POST(request: NextRequest) {
         const execution = runnableFromWorkflow(workflow as WorkflowRow);
         if (execution) {
           try {
-            const result = omitAgentIdentifierFields(await executeUniversalToolCall({
+            const result = sanitizeOutput(await executeUniversalToolCall({
               agentContext: ctx,
               name: execution.tool,
               server: undefined,
@@ -332,7 +332,7 @@ export async function POST(request: NextRequest) {
             results.push({ workflowId: workflow.id, tool: execution.tool, success: true, result });
           } catch (err) {
             const ranAt = new Date().toISOString();
-            const message = err instanceof Error ? err.message : String(err);
+            const message = sanitizeErrorMessage(err);
             await supabase
               .from('agent_workflows')
               .update({ last_run_at: ranAt, last_error: message, updated_at: ranAt })
@@ -352,7 +352,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ran: results.length, results: omitAgentIdentifierFields(results) });
+    return NextResponse.json({ ran: results.length, results: sanitizeOutput(results) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

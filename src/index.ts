@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createServer } from 'http';
-import { omitAgentIdentifierFields } from './auth/display-redaction.js';
 import { createAgentToken, extractBearerToken, verifyAgentToken } from './auth/agent-identity.js';
 import { getFFPClient } from './ffp/client.js';
 import { assertExternalAgentToolAccess, trackExternalAgentCall } from './external-agents/service.js';
@@ -16,6 +15,7 @@ import { readJsonBody, sendJson } from './routes/http.js';
 import { handleRegister } from './routes/register.js';
 import { TOOLS } from './tools.js';
 import { toErrorResponse } from './utils/errors.js';
+import { sanitizeErrorMessage, sanitizeOutput } from './utils/output-sanitizer.js';
 
 const REQUIRED_ENV: string[] = [
   'SUPABASE_URL',
@@ -80,7 +80,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
 
     void trackExternalAgentCall(agentContext.agentId).catch(() => {});
 
-    sendJson(res, 200, { success: true, result: omitAgentIdentifierFields(normalizeCanonicalToolResult(toolName, result)) });
+    sendJson(res, 200, { success: true, result: sanitizeOutput(normalizeCanonicalToolResult(toolName, result)) });
   } catch (error) {
     const failure = buildCanonicalToolError(requestedTool, error);
     sendJson(res, failure.status, failure.body);
@@ -172,7 +172,7 @@ async function handleFFPAudit(req: IncomingMessage, res: ServerResponse, private
     const endTime = urlObj.searchParams.get('end_time') ? Number(urlObj.searchParams.get('end_time')) : undefined;
 
     const operations = await getFFPClient().queryOperations({ agentId: privateRef, chainId, startTime, endTime });
-    sendJson(res, 200, { operations: omitAgentIdentifierFields(operations), total: operations.length });
+    sendJson(res, 200, { operations: sanitizeOutput(operations), total: operations.length });
   } catch (error) {
     const err = toErrorResponse(error);
     sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
@@ -189,7 +189,7 @@ async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, pri
 
   try {
     const proposals = await getFFPClient().queryConsensusHistory(privateRef);
-    sendJson(res, 200, { proposals: omitAgentIdentifierFields(proposals), total: proposals.length });
+    sendJson(res, 200, { proposals: sanitizeOutput(proposals), total: proposals.length });
   } catch (error) {
     const err = toErrorResponse(error);
     sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
@@ -267,7 +267,7 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
     sendJson(res, 404, { error: 'not_found', message: `${method} ${pathname} not found` });
   } catch (error) {
     const err = toErrorResponse(error);
-    console.error('[router] unhandled error:', error);
+    console.error('[router] unhandled error:', sanitizeErrorMessage(error));
     sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
   }
 }

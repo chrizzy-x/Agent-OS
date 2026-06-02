@@ -73,8 +73,8 @@ export default function VaultPage() {
     total: secrets.length,
     active: secrets.filter(item => item.status === 'active').length,
     revoked: secrets.filter(item => item.status === 'disabled').length,
-    expiring: 0,
-  }), [secrets]);
+    auditEvents: history.length,
+  }), [history.length, secrets]);
 
   async function saveSecret() {
     const response = await fetch('/api/vault', {
@@ -104,16 +104,14 @@ export default function VaultPage() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/settings" />
+      <Nav activePath="/vault" />
       <AppShell
         sidebar={(
           <SidebarSection title="Vault">
             <SidebarNav
               items={[
                 { href: '/vault', label: 'Secrets', active: true },
-                { href: '/vault', label: 'API Keys' },
-                { href: '/vault', label: 'Tokens' },
-                { href: '/vault', label: 'Certificates' },
+                { href: '/vault#history', label: 'Audit history' },
               ]}
             />
           </SidebarSection>
@@ -144,7 +142,7 @@ export default function VaultPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
           <MetricCard label="Total secrets" value={summary.total} />
           <MetricCard label="Active" value={summary.active} />
-          <MetricCard label="Expiring soon" value={summary.expiring} />
+          <MetricCard label="Audit events" value={summary.auditEvents} />
           <MetricCard label="Revoked" value={summary.revoked} />
         </div>
 
@@ -161,11 +159,11 @@ export default function VaultPage() {
         ) : (
           <Card>
             <DataTable
-              columns={['Name', 'Type', 'Used in', 'Last updated', 'Status', 'Actions']}
+              columns={['Name', 'Masked value', 'Version', 'Last updated', 'Status', 'Actions']}
               rows={secrets.map(secret => [
                 <button key={`${secret.id}-pick`} type="button" onClick={() => setSelected(secret)} style={{ background: 'transparent', border: 0, padding: 0, color: 'var(--text-primary)', cursor: 'pointer' }}>{secret.name}</button>,
-                'Secret',
-                'Apps / Workflows / Agents',
+                secret.maskedValue,
+                `v${secret.version}`,
                 new Date(secret.updatedAt).toLocaleString(),
                 secret.status,
                 <div key={`${secret.id}-actions`} style={{ display: 'flex', gap: 8 }}>
@@ -176,15 +174,17 @@ export default function VaultPage() {
           </Card>
         )}
 
-        <Card>
-          <div className="os-entity-title" style={{ marginBottom: 12 }}>Audit trail</div>
-          {history.length === 0 ? <div className="os-empty-body">No audit events yet.</div> : (
-            <DataTable
-              columns={['Action', 'Timestamp']}
-              rows={history.slice(0, 12).map(item => [item.action, new Date(item.createdAt).toLocaleString()])}
-            />
-          )}
-        </Card>
+        <div id="history">
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Audit trail</div>
+            {history.length === 0 ? <div className="os-empty-body">No audit events yet.</div> : (
+              <DataTable
+                columns={['Action', 'Timestamp']}
+                rows={history.slice(0, 12).map(item => [item.action, new Date(item.createdAt).toLocaleString()])}
+              />
+            )}
+          </Card>
+        </div>
         {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
       </AppShell>
     </div>

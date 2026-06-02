@@ -143,7 +143,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/projects" />
+      <Nav activePath="/workflows" />
       <AppShell
         activePath="/workflows"
         sidebar={(

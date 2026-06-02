@@ -2,7 +2,7 @@ import { executeSkillCapability } from './executor.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { NotFoundError, PermissionError, SecurityError, ValidationError } from '../utils/errors.js';
-import { grantRuntimeSecretsAccess } from '../vault/service.js';
+import { withRuntimeSecretsAccess } from '../vault/service.js';
 
 export type InstalledSkillExecution = {
   result: unknown;
@@ -27,6 +27,7 @@ export async function runInstalledSkill(params: {
   skillSlug: string;
   capability: string;
   input: unknown;
+  studioSessionId?: string | null;
 }): Promise<InstalledSkillExecution> {
   const { agentId, skillSlug, capability, input } = params;
   const startedAt = Date.now();
@@ -61,29 +62,29 @@ export async function runInstalledSkill(params: {
     const runtimeSecrets = Array.isArray(skill.required_secrets)
       ? skill.required_secrets.filter((item: unknown): item is string => typeof item === 'string')
       : [];
-    const runtimeGrant = runtimeSecrets.length > 0
-      ? await grantRuntimeSecretsAccess({
-        ownerAgentId: agentId,
-        names: runtimeSecrets,
-        subjectType: 'skill',
-        subjectId: String(skill.id),
-      })
-      : null;
-
-    let execution: InstalledSkillExecution;
-    try {
-      execution = capability === 'run'
-        ? buildGenericExecution(skill.slug, capability, input, startedAt)
+    const execution = capability === 'run'
+      ? buildGenericExecution(skill.slug, capability, input, startedAt)
+      : runtimeSecrets.length > 0
+        ? await withRuntimeSecretsAccess({
+            ownerAgentId: agentId,
+            names: runtimeSecrets,
+            subjectType: 'skill',
+            subjectId: String(skill.id),
+            sessionId: params.studioSessionId,
+            handler: async secrets => executeSkillCapability({
+              sourceCode: skill.source_code,
+              capability,
+              capabilityDefinitions: skill.capabilities,
+              input,
+              secrets,
+            }),
+          })
         : await executeSkillCapability({
             sourceCode: skill.source_code,
             capability,
             capabilityDefinitions: skill.capabilities,
             input,
-            secrets: runtimeGrant?.secrets,
           });
-    } finally {
-      runtimeGrant?.cleanup();
-    }
 
     await supabase.from('skill_usage').insert({
       agent_id: agentId,

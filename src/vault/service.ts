@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { maskSecretValue, redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
+import { appendStudioEvent } from '../studio/persistence.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
 
@@ -61,31 +63,7 @@ export type VaultRuntimeGrantRecord = {
   createdAt: string;
 };
 
-const SECRET_VALUE_KEYS = new Set([
-  'secret',
-  'token',
-  'api_key',
-  'apikey',
-  'password',
-  'authorization',
-  'access_token',
-  'accesstoken',
-  'refresh_token',
-  'refreshtoken',
-  'private_key',
-]);
-
-export function redactSecretsInString(value: string): string {
-  return value
-    .replace(
-      /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|secret|token|password|authorization)\s*[:=]\s*["']?)([^"'\s,}]+)/gi,
-      '$1[redacted]',
-    )
-    .replace(
-      /(([A-Z0-9_]*(?:SECRET|TOKEN|API_KEY|PASSWORD)[A-Z0-9_]*)=)([^\s]+)/g,
-      '$1[redacted]',
-    );
-}
+export { maskSecretValue, redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
 
 function getEncryptionKey(): Buffer {
   const raw = process.env.VAULT_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
@@ -117,26 +95,6 @@ export function decryptVaultSecret(ciphertext: string): string {
     decipher.update(Buffer.from(encryptedRaw, 'base64url')),
     decipher.final(),
   ]).toString('utf8');
-}
-
-export function maskSecretValue(value?: string | null): string {
-  if (!value) return '****************';
-  return `${'*'.repeat(Math.max(12, Math.min(20, value.length)))}${value.length > 4 ? value.slice(-4) : ''}`;
-}
-
-export function redactSecretsDeep(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(redactSecretsDeep);
-  if (typeof value === 'string') return redactSecretsInString(value);
-  if (!value || typeof value !== 'object') return value;
-
-  const next: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    const normalized = key.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    next[key] = SECRET_VALUE_KEYS.has(normalized) || normalized.endsWith('_secret') || normalized.endsWith('_token')
-      ? '[redacted]'
-      : redactSecretsDeep(item);
-  }
-  return next;
 }
 
 function mapSecret(row: Record<string, unknown>): VaultSecretMetadata {
@@ -720,6 +678,7 @@ async function validateRuntimeSecretRequest(params: {
   subjectType?: string;
   subjectId?: string;
   appSlug?: string;
+  sessionId?: string | null;
 }): Promise<{
   name: string;
   vault: Record<string, unknown>;
@@ -746,6 +705,12 @@ async function validateRuntimeSecretRequest(params: {
       action: 'runtime_access_denied',
       metadata: { name },
     });
+    await appendRuntimeSecretStudioEvent({
+      ownerAgentId: params.ownerAgentId,
+      sessionId: params.sessionId,
+      type: 'secret_access_denied',
+      payload: { name, reason: 'missing_or_disabled' },
+    });
     throw new PermissionError('Required secret is missing or disabled');
   }
 
@@ -763,6 +728,12 @@ async function validateRuntimeSecretRequest(params: {
       action: 'runtime_access_denied',
       metadata: { name, reason: 'missing_subject' },
     });
+    await appendRuntimeSecretStudioEvent({
+      ownerAgentId: params.ownerAgentId,
+      sessionId: params.sessionId,
+      type: 'secret_access_denied',
+      payload: { name, reason: 'missing_subject' },
+    });
     throw new ValidationError('Both subjectType and subjectId are required for scoped runtime access');
   }
 
@@ -778,15 +749,32 @@ async function validateRuntimeSecretRequest(params: {
         action: 'runtime_access_denied',
         metadata: { name, reason: 'missing_app_slug', subjectType: scopedType, subjectId },
       });
+      await appendRuntimeSecretStudioEvent({
+        ownerAgentId: params.ownerAgentId,
+        sessionId: params.sessionId,
+        type: 'secret_access_denied',
+        payload: { name, reason: 'missing_app_slug', subjectType: scopedType, subjectId },
+      });
       throw new ValidationError('appSlug is required for app-scoped runtime access');
     }
 
     const { assertAgentAppPermissionAccess } = await import('../appstore/service.js');
-    const appAccess = await assertAgentAppPermissionAccess({
-      agentId: params.ownerAgentId,
-      slug: appSlug,
-      permission: 'vault',
-    });
+    let appAccess;
+    try {
+      appAccess = await assertAgentAppPermissionAccess({
+        agentId: params.ownerAgentId,
+        slug: appSlug,
+        permission: 'vault',
+      });
+    } catch (error) {
+      await appendRuntimeSecretStudioEvent({
+        ownerAgentId: params.ownerAgentId,
+        sessionId: params.sessionId,
+        type: 'secret_access_denied',
+        payload: { name, reason: 'app_access_denied', subjectType: scopedType, subjectId, appSlug },
+      });
+      throw error;
+    }
     if (appAccess.app.id !== subjectId) {
       await auditVault({
         ownerAgentId: params.ownerAgentId,
@@ -795,6 +783,12 @@ async function validateRuntimeSecretRequest(params: {
         secretId: String(secret.id),
         action: 'runtime_access_denied',
         metadata: { name, reason: 'app_subject_mismatch', subjectType: scopedType, subjectId, appSlug },
+      });
+      await appendRuntimeSecretStudioEvent({
+        ownerAgentId: params.ownerAgentId,
+        sessionId: params.sessionId,
+        type: 'secret_access_denied',
+        payload: { name, reason: 'app_subject_mismatch', subjectType: scopedType, subjectId, appSlug },
       });
       throw new PermissionError('App subject does not match the approved installed app');
     }
@@ -818,6 +812,12 @@ async function validateRuntimeSecretRequest(params: {
       secretId: String(secret.id),
       action: 'runtime_access_denied',
       metadata: { name, subjectType: scopedType, subjectId },
+    });
+    await appendRuntimeSecretStudioEvent({
+      ownerAgentId: params.ownerAgentId,
+      sessionId: params.sessionId,
+      type: 'secret_access_denied',
+      payload: { name, reason: 'assignment_missing', subjectType: scopedType, subjectId },
     });
     throw new PermissionError('Secret is not assigned to this runtime subject');
   }
@@ -865,6 +865,7 @@ export async function createRuntimeSecretGrant(params: {
   appSlug?: string;
   expiresInMs?: number;
   metadata?: Record<string, unknown>;
+  sessionId?: string | null;
 }): Promise<VaultRuntimeGrantRecord> {
   const validated = await validateRuntimeSecretRequest(params);
   const now = new Date();
@@ -881,6 +882,7 @@ export async function createRuntimeSecretGrant(params: {
     metadata: redactSecretsDeep({
       ...(params.metadata ?? {}),
       appSlug: params.appSlug ?? null,
+      sessionId: params.sessionId ?? null,
     }) as Record<string, unknown>,
     status: 'active' as const,
     expires_at: expiresAt,
@@ -923,11 +925,32 @@ export async function createRuntimeSecretGrant(params: {
   }
 }
 
+async function appendRuntimeSecretStudioEvent(params: {
+  ownerAgentId: string;
+  sessionId?: string | null;
+  type: 'secret_access_granted' | 'secret_access_denied';
+  payload: Record<string, unknown>;
+}): Promise<void> {
+  if (!params.sessionId?.trim()) return;
+  try {
+    await appendStudioEvent({
+      ownerAgentId: params.ownerAgentId,
+      sessionId: params.sessionId,
+      type: params.type,
+      payload: params.payload,
+    });
+  } catch {
+    // Vault audit remains authoritative if Studio event append fails.
+  }
+}
+
 export async function consumeRuntimeSecretGrant(params: {
   ownerAgentId: string;
   grantId: string;
+  sessionId?: string | null;
 }): Promise<{ grant: VaultRuntimeGrantRecord; name: string; value: string }> {
   const grant = await loadRuntimeGrant(params);
+  const sessionId = params.sessionId ?? (typeof grant.metadata.sessionId === 'string' ? grant.metadata.sessionId : null);
   const now = new Date().toISOString();
   if (new Date(grant.expiresAt).getTime() <= Date.now()) {
     await cleanupRuntimeSecretGrant({ ownerAgentId: params.ownerAgentId, grantId: grant.id, expired: true });
@@ -945,6 +968,7 @@ export async function consumeRuntimeSecretGrant(params: {
     subjectType: grant.subjectType,
     subjectId: grant.subjectId,
     appSlug,
+    sessionId,
   });
   const value = decryptVaultSecret(String(validated.secret.encrypted_value));
 
@@ -974,6 +998,12 @@ export async function consumeRuntimeSecretGrant(params: {
       action: 'runtime_access_granted',
       metadata: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, grantId: grant.id },
     });
+    await appendRuntimeSecretStudioEvent({
+      ownerAgentId: params.ownerAgentId,
+      sessionId,
+      type: 'secret_access_granted',
+      payload: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, grantId: grant.id },
+    });
     return { grant: mapRuntimeGrant(data as Record<string, unknown>), name: validated.name, value };
   } catch {
     const nextGrant = await updateLocalRuntimeState(state => {
@@ -990,6 +1020,12 @@ export async function consumeRuntimeSecretGrant(params: {
       secretId: String(validated.secret.id),
       action: 'runtime_access_granted',
       metadata: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, grantId: grant.id },
+    });
+    await appendRuntimeSecretStudioEvent({
+      ownerAgentId: params.ownerAgentId,
+      sessionId,
+      type: 'secret_access_granted',
+      payload: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, grantId: grant.id },
     });
     return { grant: mapRuntimeGrant(nextGrant as unknown as Record<string, unknown>), name: validated.name, value };
   }
@@ -1052,6 +1088,7 @@ export async function grantRuntimeSecretAccess(params: {
   subjectType?: string;
   subjectId?: string;
   appSlug?: string;
+  sessionId?: string | null;
 }): Promise<{ name: string; value: string; cleanup: () => void }> {
   const grant = await createRuntimeSecretGrant({
     ownerAgentId: params.ownerAgentId,
@@ -1060,10 +1097,12 @@ export async function grantRuntimeSecretAccess(params: {
     subjectType: params.subjectType,
     subjectId: params.subjectId,
     appSlug: params.appSlug,
+    sessionId: params.sessionId,
   });
   const consumed = await consumeRuntimeSecretGrant({
     ownerAgentId: params.ownerAgentId,
     grantId: grant.id,
+    sessionId: params.sessionId,
   });
 
   let liveValue: string | null = consumed.value;
@@ -1080,16 +1119,19 @@ export async function grantRuntimeSecretAccess(params: {
   };
 }
 
-export async function grantRuntimeSecretsAccess(params: {
+export async function withRuntimeSecretsAccess<T>(params: {
   ownerAgentId: string;
   workspaceId?: string;
   names: string[];
   subjectType?: string;
   subjectId?: string;
   appSlug?: string;
-}): Promise<{ secrets: Record<string, string>; cleanup: () => void }> {
+  sessionId?: string | null;
+  handler: (secrets: Record<string, string>) => Promise<T>;
+}): Promise<T> {
   const names = [...new Set(params.names.map(name => name.trim().toUpperCase()).filter(Boolean))];
   const grants: Array<{ name: string; value: string; cleanup: () => void }> = [];
+  const secrets: Record<string, string> = {};
   try {
     for (const name of names) {
       grants.push(await grantRuntimeSecretAccess({
@@ -1099,17 +1141,17 @@ export async function grantRuntimeSecretsAccess(params: {
         subjectType: params.subjectType,
         subjectId: params.subjectId,
         appSlug: params.appSlug,
+        sessionId: params.sessionId,
       }));
     }
-
-    return {
-      secrets: Object.fromEntries(grants.map(grant => [grant.name, grant.value])),
-      cleanup() {
-        for (const grant of grants) grant.cleanup();
-      },
-    };
-  } catch (error) {
+    for (const grant of grants) {
+      secrets[grant.name] = grant.value;
+    }
+    return await params.handler(secrets);
+  } finally {
+    for (const key of Object.keys(secrets)) {
+      delete secrets[key];
+    }
     for (const grant of grants) grant.cleanup();
-    throw error;
   }
 }

@@ -246,14 +246,15 @@ describe.sequential('kernel register discoverability flow', () => {
       product: 'research-kit',
       status: 'degraded',
       endpointStatus: 'degraded',
-      lastError: 'timeout',
+      lastError: 'OPENAI_API_KEY=sk-live-secret-value',
     }));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.app.healthStatus).toBe('degraded');
-    expect(body.app.lastError).toBe('timeout');
+    expect(body.app.lastError).toBe('OPENAI_API_KEY=[redacted]');
     expect(db.tables.kernel_registry[0].status).toBe('degraded');
+    expect(db.tables.kernel_registry[0].last_error).toBe('OPENAI_API_KEY=[redacted]');
   });
 
   it('rejects sdk registration when the owning account no longer has enterprise sdk access', async () => {

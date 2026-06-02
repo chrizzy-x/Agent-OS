@@ -24,6 +24,12 @@ export interface ExecutionResult {
   durationMs: number;
 }
 
+export interface ExecutionOptions {
+  timeoutMs?: number;
+  stdin?: string;
+  env?: Record<string, string>;
+}
+
 function normalizeOutput(value: unknown): string {
   if (typeof value === 'string') {
     return value;
@@ -154,8 +160,16 @@ function executeLanguageFallback(code: string, language: SupportedLanguage, time
   }
 }
 
-export async function executeCode(code: string, language: SupportedLanguage, timeoutMs = 30_000): Promise<ExecutionResult> {
+export async function executeCode(
+  code: string,
+  language: SupportedLanguage,
+  timeoutOrOptions: number | ExecutionOptions = 30_000,
+): Promise<ExecutionResult> {
   const maxTimeout = 5 * 60 * 1000;
+  const options = typeof timeoutOrOptions === 'number'
+    ? { timeoutMs: timeoutOrOptions }
+    : timeoutOrOptions;
+  const timeoutMs = options.timeoutMs ?? 30_000;
 
   if (timeoutMs > maxTimeout) {
     throw new ValidationError(`Execution timeout cannot exceed ${maxTimeout / 1000}s`);
@@ -173,7 +187,7 @@ export async function executeCode(code: string, language: SupportedLanguage, tim
     await writeFile(scriptPath, code, { mode: 0o700 });
     const args = [...(config.args ?? []), scriptPath];
     try {
-      const result = await runProcess(config.cmd, args, workDir, timeoutMs);
+      const result = await runProcess(config.cmd, args, workDir, timeoutMs, options);
       if (language === 'bash' && process.platform === 'win32' && result.exitCode !== 0) {
         return executeLanguageFallback(code, language, timeoutMs);
       }
@@ -199,7 +213,7 @@ export async function executeCode(code: string, language: SupportedLanguage, tim
   }
 }
 
-export function buildSandboxEnv(cwd: string): NodeJS.ProcessEnv {
+export function buildSandboxEnv(cwd: string, extraEnv?: Record<string, string>): NodeJS.ProcessEnv {
   const inheritedKeys = process.platform === 'win32' ? WINDOWS_ENV_KEYS : POSIX_ENV_KEYS;
   const env: NodeJS.ProcessEnv = {
     HOME: cwd,
@@ -223,18 +237,28 @@ export function buildSandboxEnv(cwd: string): NodeJS.ProcessEnv {
     env.PATH = process.env.PATH ?? '';
   }
 
+  for (const [key, value] of Object.entries(extraEnv ?? {})) {
+    env[key] = value;
+  }
+
   return env;
 }
 
-async function runProcess(cmd: string, args: string[], cwd: string, timeoutMs: number): Promise<ExecutionResult> {
+async function runProcess(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+  options?: ExecutionOptions,
+): Promise<ExecutionResult> {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const maxOutput = 1024 * 1024;
 
     const child = spawn(cmd, args, {
       cwd,
-      env: buildSandboxEnv(cwd),
-      stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildSandboxEnv(cwd, options?.env),
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     let stdout = '';
@@ -259,6 +283,11 @@ async function runProcess(cmd: string, args: string[], cwd: string, timeoutMs: n
         stderr += chunk.toString();
       }
     });
+
+    if (typeof options?.stdin === 'string') {
+      child.stdin?.write(options.stdin);
+    }
+    child.stdin?.end();
 
     const timer = setTimeout(() => {
       child.kill('SIGKILL');

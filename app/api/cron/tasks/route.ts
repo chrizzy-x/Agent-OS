@@ -5,6 +5,7 @@ import { requireCronAccess } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 import { DEFAULT_QUOTAS } from '@/src/auth/permissions';
 import { logOperation } from '@/src/runtime/audit';
+import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
 import type { AgentContext } from '@/src/auth/permissions';
 
 export const runtime = 'nodejs';
@@ -76,12 +77,12 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        const result = await executeUniversalToolCall({
+        const result = sanitizeOutput(await executeUniversalToolCall({
           agentContext: agentCtx,
           name: parsed.tool,
           server: undefined,
           arguments: parsed.input,
-        });
+        }));
 
         const ranAt = new Date().toISOString();
         await supabase
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
         results.push({ taskId: task.id as string, tool: parsed.tool, success: true });
       } catch (err) {
         const ranAt = new Date().toISOString();
-        const message = err instanceof Error ? err.message : String(err);
+        const message = sanitizeErrorMessage(err);
         await supabase
           .from('scheduled_tasks')
           .update({
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ran: results.length, results });
+    return NextResponse.json({ ran: results.length, results: sanitizeOutput(results) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const action = typeof body.action === 'string' ? body.action : 'validate';
     const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : undefined;
+    const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
 
     if (action === 'validate') {
       const names = Array.isArray(body.names)
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
             : undefined,
         appSlug: appAccess?.app.slug ?? (typeof body.appSlug === 'string' ? body.appSlug : undefined),
         expiresInMs: typeof body.expiresInMs === 'number' ? body.expiresInMs : undefined,
+        sessionId,
       });
       return NextResponse.json({
         granted: true,

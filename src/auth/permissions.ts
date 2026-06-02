@@ -15,8 +15,10 @@ export interface AgentQuotas {
 }
 
 export interface AgentContext {
-  // Stable identifier — used to namespace all resources
+  // Stable identifier used to namespace all resources
   agentId: string;
+  // Optional Studio session for session-scoped runtime events
+  studioSessionId?: string | null;
   // Domains this agent is allowed to reach via net primitive
   // Empty array = use global ALLOWED_DOMAINS env var
   allowedDomains: string[];

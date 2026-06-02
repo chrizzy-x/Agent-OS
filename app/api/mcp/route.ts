@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAgentContext } from '@/src/auth/request';
 import { executeUniversalToolCall, listUniversalMcpTools } from '@/src/mcp/registry';
 import { assertExternalAgentToolAccess, trackExternalAgentCall } from '@/src/external-agents/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
+import { sanitizeOutput } from '@/src/utils/output-sanitizer';
 
 export const runtime = 'nodejs';
 
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         jsonrpc: '2.0',
         id: body.id ?? 1,
-        result: omitAgentIdentifierFields(result),
+        result: sanitizeOutput(result),
         success: true,
       });
     }

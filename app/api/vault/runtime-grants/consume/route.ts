@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const grantId = typeof body.grantId === 'string' ? body.grantId : '';
     const action = typeof body.action === 'string' ? body.action : 'consume';
+    const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
     if (!grantId.trim()) {
       return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'grantId is required', message: 'grantId is required' }, { status: 400 });
     }
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
     const consumed = await consumeRuntimeSecretGrant({
       ownerAgentId: ctx.agentId,
       grantId,
+      sessionId,
     });
     return NextResponse.json({
       secret: {

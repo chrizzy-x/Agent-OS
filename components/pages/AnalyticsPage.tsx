@@ -92,7 +92,7 @@ export default function AnalyticsPage() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/settings" />
+      <Nav activePath="/analytics" />
       <AppShell
         sidebar={(
           <SidebarSection title="Analytics">

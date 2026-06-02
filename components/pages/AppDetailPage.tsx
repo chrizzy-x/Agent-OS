@@ -40,6 +40,7 @@ type AppReadiness = {
   missingPermissions: string[];
   missingSecrets: string[];
   missingSkills: string[];
+  appUnavailableReason?: string | null;
   ready: boolean;
   updateAvailable: boolean;
   targets: Array<{ target: AppOpenTarget; url: string }>;
@@ -69,6 +70,7 @@ function deriveTargets(app: AppDetails | null): Array<'web' | 'android' | 'ios'>
 
 function getReadinessBadge(readiness: AppReadiness | null, installation: Installation | null): { label: string; tone: 'default' | 'accent' | 'success' | 'warning' | 'danger' } | null {
   if (!installation) return null;
+  if (readiness?.appUnavailableReason) return { label: 'Unavailable', tone: 'danger' };
   if (installation.status === 'disabled') return { label: 'Disabled', tone: 'warning' };
   if (readiness?.updateAvailable) return { label: 'Update available', tone: 'accent' };
   if (readiness && !readiness.ready) {
@@ -103,7 +105,7 @@ export default function AppDetailPage() {
         nextSession ? fetch(`/api/apps/${slug}/readiness`, { cache: 'no-store' }).catch(() => null) : Promise.resolve(null),
       ]);
       const appData = await appRes.json().catch(() => ({}));
-      const readinessData = readinessRes?.ok ? await readinessRes.json().catch(() => ({})) : null;
+      const readinessData = readinessRes ? await readinessRes.json().catch(() => ({})) : null;
 
       setSession(nextSession ?? null);
       setApp(appData.app ?? null);
@@ -114,6 +116,7 @@ export default function AppDetailPage() {
         missingPermissions: readinessData.missingPermissions ?? [],
         missingSecrets: readinessData.missingSecrets ?? [],
         missingSkills: readinessData.missingSkills ?? [],
+        appUnavailableReason: typeof readinessData.appUnavailableReason === 'string' ? readinessData.appUnavailableReason : null,
         ready: readinessData.ready === true,
         updateAvailable: readinessData.updateAvailable === true,
         targets: readinessData.targets ?? [],
@@ -179,6 +182,7 @@ export default function AppDetailPage() {
   const availableTargets = readiness?.targets.length ? readiness.targets.map(item => item.target) : deriveTargets(app);
   const readinessBadge = getReadinessBadge(readiness, installation);
   const updateAvailable = readiness?.updateAvailable === true || installation?.updateAvailable === true;
+  const appUnavailable = app?.disabled === true || Boolean(readiness?.appUnavailableReason);
   const tabs = useMemo(() => {
     const items = ['Overview', 'Commands', 'Permissions', 'Secrets', 'Health'];
     if (viewerOwnsApp) items.push('Analytics');
@@ -186,17 +190,26 @@ export default function AppDetailPage() {
     items.push('Changelog');
     return items;
   }, [app, viewerOwnsApp]);
-  const installCta = updateAvailable ? 'Update' : installation ? 'Reinstall' : missingPermissionApprovals.length > 0 ? 'Approve & Install' : 'Install';
+  const installCta = appUnavailable
+    ? 'Unavailable'
+    : updateAvailable
+      ? 'Update'
+      : installation
+        ? 'Reinstall'
+        : missingPermissionApprovals.length > 0
+          ? 'Approve & Install'
+          : 'Install';
 
   function applyFailureReadiness(payload: Record<string, unknown>) {
-    setReadiness(current => current ? {
-      ...current,
-      missingPermissions: Array.isArray(payload.missingPermissions) ? payload.missingPermissions.filter((item): item is string => typeof item === 'string') : current.missingPermissions,
-      missingSecrets: Array.isArray(payload.missingSecrets) ? payload.missingSecrets.filter((item): item is string => typeof item === 'string') : current.missingSecrets,
-      missingSkills: Array.isArray(payload.missingSkills) ? payload.missingSkills.filter((item): item is string => typeof item === 'string') : current.missingSkills,
-      requiredPermissions: Array.isArray(payload.requiredPermissions) ? payload.requiredPermissions.filter((item): item is string => typeof item === 'string') : current.requiredPermissions,
-      ready: false,
-    } : current);
+      setReadiness(current => current ? {
+        ...current,
+        missingPermissions: Array.isArray(payload.missingPermissions) ? payload.missingPermissions.filter((item): item is string => typeof item === 'string') : current.missingPermissions,
+        missingSecrets: Array.isArray(payload.missingSecrets) ? payload.missingSecrets.filter((item): item is string => typeof item === 'string') : current.missingSecrets,
+        missingSkills: Array.isArray(payload.missingSkills) ? payload.missingSkills.filter((item): item is string => typeof item === 'string') : current.missingSkills,
+        requiredPermissions: Array.isArray(payload.requiredPermissions) ? payload.requiredPermissions.filter((item): item is string => typeof item === 'string') : current.requiredPermissions,
+        appUnavailableReason: typeof payload.appUnavailableReason === 'string' ? payload.appUnavailableReason : current.appUnavailableReason,
+        ready: false,
+      } : current);
   }
 
   async function install(permissionsApproved: string[] = requiredPermissions) {
@@ -374,9 +387,9 @@ export default function AppDetailPage() {
                 <Button href={`/api/apps/${app.slug}/download`} variant="secondary">Download package</Button>
                 {installation ? (
                   <>
-                    {availableTargets.includes('web') ? <Button variant="secondary" onClick={() => void openApp('web')} disabled={working || !readiness?.ready}>Open web</Button> : null}
-                    {availableTargets.includes('android') ? <Button variant="secondary" onClick={() => void openApp('android')} disabled={working || !readiness?.ready}>Open Android</Button> : null}
-                    {availableTargets.includes('ios') ? <Button variant="secondary" onClick={() => void openApp('ios')} disabled={working || !readiness?.ready}>Open iOS</Button> : null}
+                    {availableTargets.includes('web') ? <Button variant="secondary" onClick={() => void openApp('web')} disabled={working || !readiness?.ready || appUnavailable}>Open web</Button> : null}
+                    {availableTargets.includes('android') ? <Button variant="secondary" onClick={() => void openApp('android')} disabled={working || !readiness?.ready || appUnavailable}>Open Android</Button> : null}
+                    {availableTargets.includes('ios') ? <Button variant="secondary" onClick={() => void openApp('ios')} disabled={working || !readiness?.ready || appUnavailable}>Open iOS</Button> : null}
                   </>
                 ) : null}
               </div>
@@ -397,8 +410,8 @@ export default function AppDetailPage() {
                   <Badge tone="accent">{runtimeLabel(app)}</Badge>
                   {app.verified ? <Badge tone="success">Verified</Badge> : null}
                   {readinessBadge ? <Badge tone={readinessBadge.tone}>{readinessBadge.label}</Badge> : null}
-                  {installation ? <Button onClick={() => void openApp('web')} disabled={working || !availableTargets.includes('web') || !readiness?.ready}>{working ? 'Opening...' : 'Open'}</Button> : <Button onClick={() => void install()} disabled={installing}>{installing ? 'Installing...' : installCta}</Button>}
-                  {updateAvailable ? <Button variant="secondary" onClick={() => void install()} disabled={installing}>{installing ? 'Updating...' : 'Update'}</Button> : null}
+                  {installation ? <Button onClick={() => void openApp('web')} disabled={working || !availableTargets.includes('web') || !readiness?.ready || appUnavailable}>{working ? 'Opening...' : 'Open'}</Button> : <Button onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Installing...' : installCta}</Button>}
+                  {updateAvailable ? <Button variant="secondary" onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Updating...' : 'Update'}</Button> : null}
                   {installation ? (
                     <Button variant="secondary" onClick={() => void setInstallStatus(installation.status === 'disabled' ? 'active' : 'disabled')} disabled={working}>
                       {working ? 'Working...' : installation.status === 'disabled' ? 'Enable' : 'Disable'}
@@ -411,13 +424,14 @@ export default function AppDetailPage() {
             />
 
             <Card>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                <Badge tone="default">{app.installCount.toLocaleString()} installs</Badge>
-                <Badge tone="default">{app.publisherName || 'Unknown publisher'}</Badge>
-                <Badge tone="default">Updated {new Date(app.updatedAt).toLocaleDateString()}</Badge>
-                <Badge tone="default">Version {currentVersion}</Badge>
-                {installation ? <Badge tone="accent">Installed {installation.installedVersion || currentVersion}</Badge> : null}
-              </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                  <Badge tone="default">{app.installCount.toLocaleString()} installs</Badge>
+                  <Badge tone="default">{app.publisherName || 'Unknown publisher'}</Badge>
+                  <Badge tone="default">Updated {new Date(app.updatedAt).toLocaleDateString()}</Badge>
+                  <Badge tone="default">Version {currentVersion}</Badge>
+                  {appUnavailable ? <Badge tone="danger">{readiness?.appUnavailableReason ?? 'App disabled'}</Badge> : null}
+                  {installation ? <Badge tone="accent">Installed {installation.installedVersion || currentVersion}</Badge> : null}
+                </div>
               {notice ? <div className="os-entity-copy" style={{ marginBottom: 12 }}>{notice}</div> : null}
               <Tabs tabs={tabs.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
             </Card>

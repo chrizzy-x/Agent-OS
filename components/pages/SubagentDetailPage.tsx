@@ -100,7 +100,7 @@ export default function SubagentDetailPage() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/studio" />
+      <Nav activePath="/subagents" />
       <AppShell
         sidebar={(
           <SidebarSection title="Agents">

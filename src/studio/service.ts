@@ -875,6 +875,7 @@ async function executeParsedCommand(params: {
     case 'skills-use': {
       const execution = await runInstalledSkill({
         agentId: params.agentContext.agentId,
+        studioSessionId: params.agentContext.studioSessionId,
         skillSlug: params.parsed.skillSlug,
         capability: params.parsed.capability,
         input: params.parsed.input,

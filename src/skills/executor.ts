@@ -1,4 +1,5 @@
-﻿import { executeCode } from '../runtime/sandbox.js';
+import { executeCode } from '../runtime/sandbox.js';
+import { redactSecretsInString } from '../security/secret-redaction.js';
 import { SecurityError, ValidationError } from '../utils/errors.js';
 
 const maxSourceLength = 40_000;
@@ -27,24 +28,25 @@ function parseCapabilityDefinitions(raw: unknown): CapabilityDefinition[] {
   return Array.isArray(raw) ? raw as CapabilityDefinition[] : [];
 }
 
-function buildWrapper(sourceCode: string, capability: string, params: unknown, secrets: Record<string, string>): string {
+function buildWrapper(sourceCode: string, capability: string, params: unknown): string {
   if (sourceCode.length > maxSourceLength) {
     throw new ValidationError('Skill source code exceeds the maximum supported size');
   }
 
   const encodedParams = Buffer.from(ensureSerializable(params, 'Skill params'), 'utf8').toString('base64');
-  const encodedSecrets = Buffer.from(ensureSerializable(secrets, 'Skill secrets'), 'utf8').toString('base64');
 
   return [
     "'use strict';",
     'const params = JSON.parse(Buffer.from(' + JSON.stringify(encodedParams) + ", 'base64').toString('utf8'));",
-    'const secrets = JSON.parse(Buffer.from(' + JSON.stringify(encodedSecrets) + ", 'base64').toString('utf8'));",
-    'const safeStringify = (value) => JSON.stringify(value, (_key, current) => typeof current === \"bigint\" ? current.toString() : current);',
+    "const encodedSecrets = process.env.AGENTOS_RUNTIME_SECRETS_B64 || '';",
+    "delete process.env.AGENTOS_RUNTIME_SECRETS_B64;",
+    "const secrets = encodedSecrets ? JSON.parse(Buffer.from(encodedSecrets, 'base64').toString('utf8')) : {};",
+    'const safeStringify = (value) => JSON.stringify(value, (_key, current) => typeof current === "bigint" ? current.toString() : current);',
     '(async () => {',
     '  try {',
     '    const console = { log() {}, info() {}, warn() {}, error() {} };',
     `    ${sourceCode}`,
-    '    if (typeof Skill !== \"function\") { throw new Error(\"Skill must define a Skill class\"); }',
+    '    if (typeof Skill !== "function") { throw new Error("Skill must define a Skill class"); }',
     '    const instance = new Skill({ secrets, env: secrets });',
     `    if (typeof instance[${JSON.stringify(capability)}] !== 'function') { throw new Error('Requested capability is not callable'); }`,
     `    const result = await Promise.resolve(instance[${JSON.stringify(capability)}](params));`,
@@ -84,12 +86,23 @@ export async function executeSkillCapability(params: {
     throw new ValidationError(
       available
         ? `Capability '${capability}' not found. Available: ${available}`
-        : `Capability '${capability}' not found.`
+        : `Capability '${capability}' not found.`,
     );
   }
 
-  const wrappedCode = buildWrapper(sourceCode, capability, input, params.secrets ?? {});
-  const execution = await executeCode(wrappedCode, 'javascript', 10_000);
+  const wrappedCode = buildWrapper(sourceCode, capability, input);
+  const secretsEnv = Object.keys(params.secrets ?? {}).length > 0
+    ? {
+        AGENTOS_RUNTIME_SECRETS_B64: Buffer.from(
+          ensureSerializable(params.secrets ?? {}, 'Skill secrets'),
+          'utf8',
+        ).toString('base64'),
+      }
+    : undefined;
+  const execution = await executeCode(wrappedCode, 'javascript', {
+    timeoutMs: 10_000,
+    env: secretsEnv,
+  });
 
   if (!execution.stdout) {
     throw new SecurityError('Skill execution returned no output');
@@ -103,12 +116,12 @@ export async function executeSkillCapability(params: {
   }
 
   if (!parsed.ok) {
-    throw new SecurityError(parsed.error ?? 'Skill execution failed');
+    throw new SecurityError(redactSecretsInString(parsed.error ?? 'Skill execution failed'));
   }
 
   return {
     result: parsed.result,
     executionTimeMs: execution.durationMs,
-    stderr: execution.stderr,
+    stderr: redactSecretsInString(execution.stderr),
   };
 }

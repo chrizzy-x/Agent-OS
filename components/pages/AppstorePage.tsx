@@ -35,6 +35,7 @@ type InstalledAppCard = AgentAppListing & {
     missingPermissions: string[];
     missingSecrets: string[];
     missingSkills: string[];
+    appUnavailableReason?: string | null;
     ready: boolean;
     updateAvailable: boolean;
     targets: Array<{ target: 'web' | 'android' | 'ios'; url: string }>;
@@ -60,6 +61,7 @@ function matchCategory(app: AgentAppListing, category: string): boolean {
 
 function getInstalledState(app: InstalledAppCard | null | undefined): { label: string; tone: 'default' | 'accent' | 'success' | 'warning' | 'danger' } | null {
   if (!app?.installation) return null;
+  if (app.readiness?.appUnavailableReason) return { label: 'Unavailable', tone: 'danger' };
   if (app.installation.status === 'disabled') return { label: 'Disabled', tone: 'warning' };
   if (app.readiness?.updateAvailable) return { label: 'Update available', tone: 'accent' };
   if (app.readiness && !app.readiness.ready) {
@@ -238,7 +240,9 @@ export default function AppstorePage() {
                           footer={(
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                               <span className="os-entity-meta">
-                                {app.readiness?.missingSecrets.length
+                                {app.readiness?.appUnavailableReason
+                                  ? app.readiness.appUnavailableReason
+                                  : app.readiness?.missingSecrets.length
                                   ? `${app.readiness.missingSecrets.length} secret issue${app.readiness.missingSecrets.length === 1 ? '' : 's'}`
                                   : app.readiness?.missingSkills.length
                                     ? `${app.readiness.missingSkills.length} skill issue${app.readiness.missingSkills.length === 1 ? '' : 's'}`
@@ -247,7 +251,7 @@ export default function AppstorePage() {
                                       : app.readiness?.targets.map(item => item.target).join(' / ') || 'AgentOS Cloud'}
                               </span>
                               <Button href={`/appstore/${app.slug}`} variant="primary">
-                                {app.readiness?.updateAvailable ? 'Update' : 'Open'}
+                                {app.readiness?.appUnavailableReason ? 'Review' : app.readiness?.updateAvailable ? 'Update' : 'Open'}
                               </Button>
                             </div>
                           )}
@@ -289,7 +293,7 @@ export default function AppstorePage() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                           {installed ? <Badge tone={state?.tone ?? 'default'}>{state?.label ?? 'Installed'}</Badge> : <StatusPill status={app.visibility} />}
                           <Button href={`/appstore/${app.slug}`} variant="primary">
-                            {installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
+                            {installed?.readiness?.appUnavailableReason ? 'Review' : installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
                           </Button>
                         </div>
                       )}
@@ -320,7 +324,9 @@ export default function AppstorePage() {
                     footer={(
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                         <span className="os-entity-meta">
-                          {installed?.readiness?.updateAvailable
+                          {installed?.readiness?.appUnavailableReason
+                            ? installed.readiness.appUnavailableReason
+                            : installed?.readiness?.updateAvailable
                             ? `Installed ${installed.installation?.installedVersion ?? 'older'} -> ${app.manifest.version}`
                             : installed?.readiness && !installed.readiness.ready
                               ? [
@@ -331,7 +337,7 @@ export default function AppstorePage() {
                               : app.deviceTargets.slice(0, 2).join(' / ') || 'AgentOS Cloud'}
                         </span>
                         <Button href={`/appstore/${app.slug}`}>
-                          {installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
+                          {installed?.readiness?.appUnavailableReason ? 'Review' : installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
                         </Button>
                       </div>
                     )}
