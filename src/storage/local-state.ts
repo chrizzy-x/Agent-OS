@@ -271,7 +271,9 @@ async function ensureStateDirectory(): Promise<void> {
 }
 
 export async function readLocalRuntimeState(): Promise<LocalRuntimeState> {
-  assertLocalRuntimeStateEnabled();
+  if (process.env.NODE_ENV === 'production' && process.env.AGENTOS_ALLOW_LOCAL_STATE !== '1') {
+    return createDefaultState();
+  }
   try {
     const raw = await readFile(getStateFilePath(), 'utf8');
     return normalizeState(JSON.parse(raw) as unknown);
