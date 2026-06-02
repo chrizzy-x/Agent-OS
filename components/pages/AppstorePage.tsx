@@ -26,9 +26,18 @@ const RUNTIME_FILTERS = ['all', 'external-app', 'agentos-app', 'workspace-app'];
 
 type InstalledAppCard = AgentAppListing & {
   installation?: {
-    updateAvailable?: boolean;
     favorite?: boolean;
     installedVersion?: string | null;
+    status?: 'active' | 'disabled' | 'removed';
+  };
+  readiness?: {
+    requiredPermissions: string[];
+    missingPermissions: string[];
+    missingSecrets: string[];
+    missingSkills: string[];
+    ready: boolean;
+    updateAvailable: boolean;
+    targets: Array<{ target: 'web' | 'android' | 'ios'; url: string }>;
   };
 };
 
@@ -47,6 +56,25 @@ function matchCategory(app: AgentAppListing, category: string): boolean {
   if (category === 'External SDK') return app.source === 'external_sdk';
   if (category === 'Internal Apps') return app.source === 'internal';
   return `${app.category} ${app.description}`.toLowerCase().includes(category.toLowerCase());
+}
+
+function getInstalledState(app: InstalledAppCard | null | undefined): { label: string; tone: 'default' | 'accent' | 'success' | 'warning' | 'danger' } | null {
+  if (!app?.installation) return null;
+  if (app.installation.status === 'disabled') return { label: 'Disabled', tone: 'warning' };
+  if (app.readiness?.updateAvailable) return { label: 'Update available', tone: 'accent' };
+  if (app.readiness && !app.readiness.ready) {
+    if (app.readiness.missingPermissions.length > 0) return { label: 'Needs approval', tone: 'warning' };
+    if (app.readiness.missingSecrets.length > 0) return { label: 'Missing secrets', tone: 'danger' };
+    if (app.readiness.missingSkills.length > 0) return { label: 'Missing skills', tone: 'warning' };
+    return { label: 'Not ready', tone: 'warning' };
+  }
+  return { label: 'Ready', tone: 'success' };
+}
+
+function getInstalledSummary(app: InstalledAppCard): string {
+  const state = getInstalledState(app);
+  if (!state) return runtimeLabel(app);
+  return `${runtimeLabel(app)} - ${state.label.toLowerCase()}`;
 }
 
 export default function AppstorePage() {
@@ -97,7 +125,7 @@ export default function AppstorePage() {
   );
 
   const installedBySlug = useMemo(
-    () => new Map(installedApps.map(app => [app.slug, app.installation ?? null])),
+    () => new Map(installedApps.map(app => [app.slug, app])),
     [installedApps],
   );
   const featured = filtered.filter(app => app.verified || app.source === 'external_sdk').slice(0, 3);
@@ -115,6 +143,7 @@ export default function AppstorePage() {
                 items={[
                   { href: '/studio', label: 'Studio' },
                   { href: '/appstore', label: 'Appstore', active: true },
+                  { href: '/ffp', label: 'FFP' },
                   ...(session?.capabilities?.includes('access_developer_console') ? [{ href: '/developer', label: 'Developer' }] : []),
                   { href: '/projects', label: 'Projects' },
                   { href: '/workflows', label: 'Workflows' },
@@ -148,7 +177,8 @@ export default function AppstorePage() {
                 <SidebarNav items={installedApps.slice(0, 6).map(app => ({
                   href: `/appstore/${app.slug}`,
                   label: app.name,
-                  subtitle: app.installation?.updateAvailable ? `${runtimeLabel(app)} - update available` : runtimeLabel(app),
+                  subtitle: getInstalledSummary(app),
+                  badge: app.installation?.favorite ? 'Pinned' : undefined,
                 }))} />
               )}
             </SidebarSection>
@@ -180,6 +210,55 @@ export default function AppstorePage() {
           <EmptyState title="No public apps yet" body="Public listings appear here automatically for validated SDK apps and published AgentOS releases." />
         ) : (
           <>
+            {session ? (
+              <Card>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <div>
+                    <div className="os-entity-title">Installed apps</div>
+                    <div className="os-entity-copy">Readiness, pending approvals, missing secrets, and update state stay visible here.</div>
+                  </div>
+                  <Badge tone="accent">{installedApps.length} installed</Badge>
+                </div>
+                {installedApps.length === 0 ? (
+                  <div className="os-empty-body">No installed apps yet.</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+                    {installedApps.slice(0, 6).map(app => {
+                      const state = getInstalledState(app);
+                      return (
+                        <AppCard
+                          key={app.id}
+                          href={`/appstore/${app.slug}`}
+                          title={app.name}
+                          description={app.description}
+                          runtime={runtimeLabel(app)}
+                          verified={app.verified}
+                          installs={app.installCount}
+                          badge={state ? <Badge tone={state.tone}>{state.label}</Badge> : undefined}
+                          footer={(
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                              <span className="os-entity-meta">
+                                {app.readiness?.missingSecrets.length
+                                  ? `${app.readiness.missingSecrets.length} secret issue${app.readiness.missingSecrets.length === 1 ? '' : 's'}`
+                                  : app.readiness?.missingSkills.length
+                                    ? `${app.readiness.missingSkills.length} skill issue${app.readiness.missingSkills.length === 1 ? '' : 's'}`
+                                    : app.readiness?.missingPermissions.length
+                                      ? `${app.readiness.missingPermissions.length} approval issue${app.readiness.missingPermissions.length === 1 ? '' : 's'}`
+                                      : app.readiness?.targets.map(item => item.target).join(' / ') || 'AgentOS Cloud'}
+                              </span>
+                              <Button href={`/appstore/${app.slug}`} variant="primary">
+                                {app.readiness?.updateAvailable ? 'Update' : 'Open'}
+                              </Button>
+                            </div>
+                          )}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            ) : null}
+
             <Card>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
                 <div>
@@ -189,7 +268,42 @@ export default function AppstorePage() {
                 <Badge tone="accent">{filtered.length} public apps</Badge>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-                {featured.map(app => (
+                {featured.map(app => {
+                  const installed = installedBySlug.get(app.slug);
+                  const state = getInstalledState(installed);
+                  return (
+                    <AppCard
+                      key={app.id}
+                      href={`/appstore/${app.slug}`}
+                      title={app.name}
+                      description={app.description}
+                      runtime={runtimeLabel(app)}
+                      verified={app.verified}
+                      installs={app.installCount}
+                      badge={app.source === 'external_sdk'
+                        ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge>
+                        : state
+                          ? <Badge tone={state.tone}>{state.label}</Badge>
+                          : undefined}
+                      footer={(
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                          {installed ? <Badge tone={state?.tone ?? 'default'}>{state?.label ?? 'Installed'}</Badge> : <StatusPill status={app.visibility} />}
+                          <Button href={`/appstore/${app.slug}`} variant="primary">
+                            {installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
+                          </Button>
+                        </div>
+                      )}
+                    />
+                  );
+                })}
+              </div>
+            </Card>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+              {filtered.map(app => {
+                const installed = installedBySlug.get(app.slug);
+                const state = getInstalledState(installed);
+                return (
                   <AppCard
                     key={app.id}
                     href={`/appstore/${app.slug}`}
@@ -198,45 +312,32 @@ export default function AppstorePage() {
                     runtime={runtimeLabel(app)}
                     verified={app.verified}
                     installs={app.installCount}
-                    badge={app.source === 'external_sdk' ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge> : undefined}
+                    badge={app.source === 'external_sdk'
+                      ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge>
+                      : state
+                        ? <Badge tone={state.tone}>{state.label}</Badge>
+                        : undefined}
                     footer={(
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <StatusPill status={app.visibility} />
-                        <Button href={`/appstore/${app.slug}`} variant="primary">
-                          {installedBySlug.get(app.slug)?.updateAvailable ? 'Update' : installedBySlug.has(app.slug) ? 'Open' : 'Install'}
+                        <span className="os-entity-meta">
+                          {installed?.readiness?.updateAvailable
+                            ? `Installed ${installed.installation?.installedVersion ?? 'older'} -> ${app.manifest.version}`
+                            : installed?.readiness && !installed.readiness.ready
+                              ? [
+                                installed.readiness.missingPermissions.length > 0 ? 'Needs approval' : null,
+                                installed.readiness.missingSecrets.length > 0 ? 'Missing secrets' : null,
+                                installed.readiness.missingSkills.length > 0 ? 'Missing skills' : null,
+                              ].filter(Boolean).join(' | ') || 'Not ready'
+                              : app.deviceTargets.slice(0, 2).join(' / ') || 'AgentOS Cloud'}
+                        </span>
+                        <Button href={`/appstore/${app.slug}`}>
+                          {installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
                         </Button>
                       </div>
                     )}
                   />
-                ))}
-              </div>
-            </Card>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-              {filtered.map(app => (
-                <AppCard
-                  key={app.id}
-                  href={`/appstore/${app.slug}`}
-                  title={app.name}
-                  description={app.description}
-                  runtime={runtimeLabel(app)}
-                  verified={app.verified}
-                  installs={app.installCount}
-                  badge={app.source === 'external_sdk' ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge> : undefined}
-                  footer={(
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span className="os-entity-meta">
-                        {installedBySlug.get(app.slug)?.updateAvailable
-                          ? `Installed ${installedBySlug.get(app.slug)?.installedVersion ?? 'older'} -> ${app.manifest.version}`
-                          : app.deviceTargets.slice(0, 2).join(' / ') || 'AgentOS Cloud'}
-                      </span>
-                      <Button href={`/appstore/${app.slug}`}>
-                        {installedBySlug.get(app.slug)?.updateAvailable ? 'Update' : installedBySlug.has(app.slug) ? 'Open' : 'Install'}
-                      </Button>
-                    </div>
-                  )}
-                />
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -247,7 +348,7 @@ export default function AppstorePage() {
             position: 'sticky',
             bottom: 16,
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(5, 1fr)',
             gap: 8,
             padding: 8,
             border: '1px solid var(--border)',
@@ -257,6 +358,7 @@ export default function AppstorePage() {
         >
           <Link href="/studio" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>Studio</Link>
           <Link href="/appstore" className="os-chip active" style={{ textDecoration: 'none', justifyContent: 'center' }}>Apps</Link>
+          <Link href="/ffp" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>FFP</Link>
           <Link href="/subagents" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>Agents</Link>
           <Link href="/settings" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>Settings</Link>
         </nav>

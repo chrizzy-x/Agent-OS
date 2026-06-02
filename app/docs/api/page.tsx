@@ -3,9 +3,9 @@ import DocsFooter from '@/components/DocsFooter';
 import { APP_URL as BASE } from '@/lib/config';
 
 interface Endpoint {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
-  auth: 'None' | 'Browser Session or Bearer (Agent)' | 'Browser Session or Bearer (Ops Admin)' | 'Bearer (Cron/Admin)';
+  auth: 'None' | 'Browser Session or Bearer (Agent)' | 'Browser Session or Bearer (Ops Admin)' | 'Bearer (Cron/Admin)' | 'Bearer (SDK Kernel)';
   desc: string;
   body?: { field: string; type: string; required: boolean; desc: string }[];
   response?: string;
@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.0.0", "timestamp": "...", "tools": 32 }',
+    response: '{ "status": "ok", "version": "6.1.0", "timestamp": "...", "tools": 32 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -175,6 +175,16 @@ const endpoints: Endpoint[] = [
     response: '{ "apps": [...], "categories": ["All", "Research", "..."], "pagination": { "total": 6 } }',
   },
   {
+    method: 'GET', path: '/api/apps/{slug}', auth: 'None',
+    desc: 'Load a single App Store listing by slug. Includes visibility filtering and an owner flag when the caller is authenticated.',
+    response: '{ "app": {...}, "viewerOwnsApp": false }',
+  },
+  {
+    method: 'GET', path: '/api/apps/{slug}/readiness', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Resolve app readiness for the current viewer: installation state, required permissions, missing permissions, missing secrets, missing skills, updateAvailable, and target URLs.',
+    response: '{ "installation": {...}, "requiredPermissions": ["vault"], "missingPermissions": [], "missingSecrets": [], "missingSkills": [], "ready": true, "updateAvailable": false, "targets": [{ "target": "web", "url": "https://..." }] }',
+  },
+  {
     method: 'POST', path: '/api/apps', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Publish a full agentic app to the App Store automatically.',
     body: [
@@ -188,9 +198,69 @@ const endpoints: Endpoint[] = [
     response: '{ "success": true, "app": { "slug": "invoice-ops-agent", "published": true } }',
   },
   {
+    method: 'POST', path: '/api/apps/install', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Install or update an app for the current agent after re-running readiness checks.',
+    body: [
+      { field: 'slug', type: 'string', required: true, desc: 'App slug' },
+      { field: 'workspaceId', type: 'string', required: false, desc: 'Optional workspace override' },
+      { field: 'permissionsApproved', type: 'string[]', required: false, desc: 'Permission approvals to apply during install' },
+    ],
+    response: '{ "app": {...}, "installation": {...}, "readiness": { "ready": true, "targets": [{ "target": "web", "url": "https://..." }] } }',
+  },
+  {
+    method: 'GET', path: '/api/apps/installed', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List installed apps and their readiness state for the current agent.',
+    response: '{ "installedApps": [{ "slug": "research-kit", "installation": {...}, "readiness": { "ready": true, "updateAvailable": false } }] }',
+  },
+  {
+    method: 'POST', path: '/api/apps/{slug}/open', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Open an installed app on a specific target. Re-runs readiness and returns typed failures when the app is stale.',
+    body: [
+      { field: 'target', type: 'string', required: false, desc: 'One of web, android, or ios. Defaults to web.' },
+    ],
+    response: '{ "app": {...}, "installation": {...}, "openUrl": "https://...", "target": "web" }',
+  },
+  {
+    method: 'PATCH', path: '/api/apps/{slug}/installation', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Update installation state: favorite, permissionsApproved, active, or disabled.',
+    body: [
+      { field: 'favorite', type: 'boolean', required: false, desc: 'Pin or unpin the installed app' },
+      { field: 'permissionsApproved', type: 'string[]', required: false, desc: 'Updated permission approval set' },
+      { field: 'status', type: 'string', required: false, desc: 'active, disabled, or removed' },
+    ],
+    response: '{ "app": {...}, "installation": {...} }',
+  },
+  {
+    method: 'DELETE', path: '/api/apps/{slug}/installation', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Uninstall an app for the current agent.',
+    response: '{ "removed": true, "app": {...}, "installation": {...} }',
+  },
+  {
     method: 'GET', path: '/api/apps/{slug}/download', auth: 'None',
     desc: 'Download an AgentOS app package for device or workspace installation.',
     response: '{ "schema": "agentos.app.v1", "app": {...}, "manifest": {...}, "defaultConfig": {...} }',
+  },
+  {
+    method: 'POST', path: '/api/vault/access', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Validate assignment and create a temporary runtime secret grant for a skill or app-backed runtime subject.',
+    body: [
+      { field: 'action', type: 'string', required: true, desc: 'Use runtime for runtime grants' },
+      { field: 'workspaceId', type: 'string', required: true, desc: 'Workspace that owns the secret' },
+      { field: 'secretName', type: 'string', required: true, desc: 'Vault secret name' },
+      { field: 'subjectType', type: 'string', required: true, desc: 'skill or app' },
+      { field: 'subjectId', type: 'string', required: true, desc: 'Runtime subject identifier' },
+      { field: 'appSlug', type: 'string', required: false, desc: 'Required for app-scoped permission validation' },
+    ],
+    response: '{ "granted": true, "grant": { "id": "...", "name": "OPENAI_API_KEY", "status": "active", "expiresAt": "..." } }',
+  },
+  {
+    method: 'POST', path: '/api/vault/runtime-grants/consume', auth: 'Bearer (SDK Kernel)',
+    desc: 'Consume or clean up a runtime secret grant from an authenticated SDK kernel runtime.',
+    body: [
+      { field: 'grantId', type: 'string', required: true, desc: 'Runtime grant id from /api/vault/access' },
+      { field: 'action', type: 'string', required: false, desc: 'Use cleanup to revoke without consuming again' },
+    ],
+    response: '{ "secret": { "name": "OPENAI_API_KEY", "value": "..." }, "grant": { "id": "...", "status": "consumed" } }',
   },
   {
     method: 'POST', path: '/api/skills/install', auth: 'Browser Session or Bearer (Agent)',
@@ -249,6 +319,7 @@ const endpoints: Endpoint[] = [
 const methodColors: Record<string, string> = {
   GET: 'bg-green-100 text-green-800',
   POST: 'bg-blue-100 text-blue-800',
+  PATCH: 'bg-amber-100 text-amber-800',
   DELETE: 'bg-rose-100 text-rose-800',
 };
 
@@ -257,6 +328,7 @@ const authColors: Record<string, string> = {
   'Browser Session or Bearer (Agent)': 'text-blue-600',
   'Browser Session or Bearer (Ops Admin)': 'text-red-600',
   'Bearer (Cron/Admin)': 'text-amber-600',
+  'Bearer (SDK Kernel)': 'text-purple-600',
 };
 
 export default function ApiReferencePage() {

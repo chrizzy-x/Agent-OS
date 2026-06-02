@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findAccountById } from '@/src/auth/agent-store';
 import { getAgentAppBySlug, listAgentApps, normalizeAgentAppSlug, upsertExternalSdkAgentApp } from '@/src/appstore/service';
+import { getPlanDescriptor } from '@/src/auth/capabilities';
 import { hasAdminAccess, requireOpsAdminAccess } from '@/src/auth/request';
+import { normalizePlan } from '@/src/auth/tiers';
 import { resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -55,6 +57,11 @@ export async function POST(request: NextRequest) {
       const existing = existingApps.find(app => app.kernelProduct === product || app.slug === slug)
         ?? await getAgentAppBySlug(slug, { canManageAll: true });
       const publisher = await findAccountById(agentId);
+      const publisherPlan = normalizePlan(String(publisher?.metadata.plan ?? 'retail_free'));
+      if (!getPlanDescriptor(publisherPlan).enterprise) {
+        skipped += 1;
+        continue;
+      }
       const workspaceId = typeof row.workspace_id === 'string' && row.workspace_id.trim().length > 0
         ? row.workspace_id
         : (await resolveDefaultWorkspaceForAgent(agentId))?.id ?? null;

@@ -159,7 +159,7 @@ describe.sequential('app visibility routes', () => {
     expect(adminResponse.status).toBe(200);
   });
 
-  it('does not publicize older SDK registrations without real app metadata', async () => {
+  it('recovers older SDK registrations into factual public listings', async () => {
     let catalogRows: Record<string, unknown>[] = [];
 
     mockSupabase.from.mockImplementation((table: string) => {
@@ -237,10 +237,11 @@ describe.sequential('app visibility routes', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.apps.map((app: { slug: string }) => app.slug)).not.toContain('legacy-sdk-app');
+    expect(body.apps.map((app: { slug: string }) => app.slug)).toContain('legacy-sdk-app');
+    expect(body.apps.find((app: { slug: string }) => app.slug === 'legacy-sdk-app')?.source).toBe('external_sdk');
   });
 
-  it('keeps pre-019 SDK registrations hidden until real metadata exists', async () => {
+  it('recovers pre-019 SDK registrations into factual public listings', async () => {
     let catalogRows: Record<string, unknown>[] = [];
     const missingColumn = { message: 'column missing' };
 
@@ -326,6 +327,7 @@ describe.sequential('app visibility routes', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.apps.map((app: { slug: string }) => app.slug)).not.toContain('pre019-sdk-app');
+    expect(body.apps.map((app: { slug: string }) => app.slug)).toContain('pre019-sdk-app');
+    expect(body.apps.find((app: { slug: string }) => app.slug === 'pre019-sdk-app')?.source).toBe('external_sdk');
   });
 });

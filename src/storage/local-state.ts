@@ -154,6 +154,23 @@ export type LocalAppInstallationRecord = {
   installed_version?: string | null;
 };
 
+export type LocalVaultRuntimeGrantRecord = {
+  id: string;
+  secret_id: string;
+  vault_id: string;
+  workspace_id: string;
+  owner_agent_id: string;
+  name: string;
+  subject_type: string;
+  subject_id: string;
+  metadata: Record<string, unknown>;
+  status: 'active' | 'consumed' | 'cleaned' | 'expired';
+  expires_at: string;
+  consumed_at: string | null;
+  cleaned_up_at: string | null;
+  created_at: string;
+};
+
 export type LocalRuntimeState = {
   accounts: Record<string, LocalAccountRecord>;
   externalAgents: Record<string, LocalExternalAgentRegistrationRecord>;
@@ -174,6 +191,7 @@ export type LocalRuntimeState = {
     catalog: LocalAgentAppRecord[];
     installations: Record<string, LocalAppInstallationRecord[]>;
   };
+  vaultRuntimeGrants: LocalVaultRuntimeGrantRecord[];
 };
 
 const DEFAULT_STATE_FILE = join(tmpdir(), 'agentos-runtime-state.json');
@@ -212,6 +230,7 @@ function createDefaultState(): LocalRuntimeState {
       catalog: [],
       installations: {},
     },
+    vaultRuntimeGrants: [],
   };
 }
 
@@ -243,6 +262,7 @@ function normalizeState(value: unknown): LocalRuntimeState {
       catalog: state.agentApps?.catalog ?? defaults.agentApps.catalog,
       installations: state.agentApps?.installations ?? defaults.agentApps.installations,
     },
+    vaultRuntimeGrants: state.vaultRuntimeGrants ?? defaults.vaultRuntimeGrants,
   };
 }
 

@@ -390,7 +390,7 @@ describe.sequential('kernel register discoverability flow', () => {
     expect(db.tables.agent_apps[0].source).toBe('external_sdk');
   });
 
-  it('reports blocked metadata instead of fabricating legacy sdk listings', async () => {
+  it('creates factual legacy sdk listings when registry metadata is the only source available', async () => {
     db.tables.kernel_registry.push({
       id: 'kernel-2',
       agent_id: 'owner-agent',
@@ -412,10 +412,12 @@ describe.sequential('kernel register discoverability flow', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.created).toBe(0);
+    expect(body.created).toBe(1);
     expect(body.updated).toBe(0);
-    expect(body.blockedMetadata).toBe(1);
-    expect(db.tables.agent_apps).toHaveLength(0);
+    expect(body.blockedMetadata).toBe(0);
+    expect(db.tables.agent_apps).toHaveLength(1);
+    expect(db.tables.agent_apps[0].slug).toBe('missing-metadata');
+    expect(db.tables.agent_apps[0].source).toBe('external_sdk');
   });
 
   it('registers successfully against pre-workspace kernel_registry and pre-019 agent_apps schemas', async () => {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hasAdminAccess, requireRouteCapability } from '@/src/auth/request';
-import { getAgentAppInstallReadiness, installAgentApp } from '@/src/appstore/service';
+import { getAgentAppReadiness, installAgentApp } from '@/src/appstore/service';
 import { appendStudioEvent } from '@/src/studio/persistence';
 import { assertWorkspaceMembership, listWorkspaces } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       await assertWorkspaceMembership(workspaceId, ctx.agentId);
     }
     const viewerWorkspaceIds = (await listWorkspaces(ctx.agentId)).map(workspace => workspace.id);
-    const readiness = await getAgentAppInstallReadiness({
+    const readiness = await getAgentAppReadiness({
       agentId: ctx.agentId,
       slug,
       workspaceId,
@@ -82,7 +82,18 @@ export async function POST(request: NextRequest) {
         payload: { appSlug: result.app.slug, appName: result.app.name },
       });
     }
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json({
+      ...result,
+      readiness: {
+        requiredPermissions: readiness.requiredPermissions,
+        missingPermissions: [],
+        missingSecrets: [],
+        missingSkills: [],
+        ready: true,
+        updateAvailable: false,
+        targets: readiness.targets,
+      },
+    }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

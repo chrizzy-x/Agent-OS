@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
@@ -16,6 +16,13 @@ import {
   SidebarNav,
   SidebarSection,
 } from '@/components/os/ui';
+
+type FfpStatus = {
+  enabled: boolean;
+  chainId: string | null;
+  nodeUrl: string | null;
+  requireConsensus: boolean;
+};
 
 type Chain = {
   chainId: string;
@@ -57,8 +64,25 @@ type Session = {
   updatedAt: string;
 };
 
+function isEnterpriseSession(session: BrowserSession | null): boolean {
+  return session?.accountType === 'enterprise' || session?.capabilities?.includes('access_sdk') === true;
+}
+
+function summarizePayload(value: unknown): string {
+  if (!value || typeof value !== 'object') return 'No details';
+  const preview = JSON.stringify(value);
+  return preview.length > 120 ? `${preview.slice(0, 117)}...` : preview;
+}
+
+function formatTime(value: string | number | null | undefined): string {
+  if (typeof value === 'string' && value.trim()) return new Date(value).toLocaleString();
+  if (typeof value === 'number' && Number.isFinite(value)) return new Date(value).toLocaleString();
+  return 'Recorded';
+}
+
 export default function FfpPage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
+  const [status, setStatus] = useState<FfpStatus | null>(null);
   const [chains, setChains] = useState<Chain[]>([]);
   const [operations, setOperations] = useState<Array<Record<string, unknown>>>([]);
   const [proposals, setProposals] = useState<Array<Record<string, unknown>>>([]);
@@ -72,8 +96,11 @@ export default function FfpPage() {
     setLoading(true);
     try {
       const current = await fetchBrowserSession().catch(() => null);
+      const enterprise = isEnterpriseSession(current);
       setSession(current);
+
       if (!current) {
+        setStatus(null);
         setChains([]);
         setOperations([]);
         setProposals([]);
@@ -83,6 +110,26 @@ export default function FfpPage() {
         setSessions([]);
         return;
       }
+
+      const statusRes = await fetch('/ffp/status', { cache: 'no-store' }).catch(() => null);
+      if (statusRes?.ok) {
+        const payload = await statusRes.json();
+        setStatus(payload);
+      } else {
+        setStatus(null);
+      }
+
+      if (!enterprise) {
+        setChains([]);
+        setOperations([]);
+        setProposals([]);
+        setWorkflows([]);
+        setApps([]);
+        setEvents([]);
+        setSessions([]);
+        return;
+      }
+
       const [chainsRes, auditRes, consensusRes, dashboardRes, sessionsRes] = await Promise.all([
         fetch('/api/ffp/chains', { cache: 'no-store' }).catch(() => null),
         fetch('/api/agent/ffp/audit', { cache: 'no-store' }).catch(() => null),
@@ -90,24 +137,28 @@ export default function FfpPage() {
         fetch('/api/dashboard', { cache: 'no-store' }).catch(() => null),
         fetch('/api/studio/sessions', { cache: 'no-store' }).catch(() => null),
       ]);
+
       if (chainsRes?.ok) {
         const payload = await chainsRes.json();
         setChains(payload.chains ?? []);
       } else {
         setChains([]);
       }
+
       if (auditRes?.ok) {
         const payload = await auditRes.json();
         setOperations(payload.operations ?? []);
       } else {
         setOperations([]);
       }
+
       if (consensusRes?.ok) {
         const payload = await consensusRes.json();
         setProposals(payload.proposals ?? []);
       } else {
         setProposals([]);
       }
+
       if (dashboardRes?.ok) {
         const payload = await dashboardRes.json();
         setWorkflows(payload.workflows ?? []);
@@ -118,6 +169,7 @@ export default function FfpPage() {
         setApps([]);
         setEvents([]);
       }
+
       if (sessionsRes?.ok) {
         const payload = await sessionsRes.json();
         setSessions(payload.sessions ?? []);
@@ -133,7 +185,14 @@ export default function FfpPage() {
     void load();
   }, [load]);
 
-  const enterprise = session?.accountType === 'enterprise' || session?.capabilities?.includes('access_sdk') === true;
+  const enterprise = isEnterpriseSession(session);
+  const sidebarItems = useMemo(() => [
+    { href: '/studio', label: 'Studio' },
+    { href: '/ffp', label: 'FFP', active: true },
+    { href: '/workflows', label: 'Workflows' },
+    { href: '/appstore', label: 'Apps' },
+    ...(enterprise ? [{ href: '/sdk', label: 'SDK' }, { href: '/developer', label: 'Developer' }] : []),
+  ], [enterprise]);
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -142,24 +201,25 @@ export default function FfpPage() {
         activePath="/ffp"
         sidebar={(
           <SidebarSection title="FFP">
-            <SidebarNav
-              items={[
-                { href: '/studio', label: 'Studio' },
-                { href: '/ffp', label: 'FFP', active: true },
-                { href: '/workflows', label: 'Workflows' },
-                { href: '/appstore', label: 'Apps' },
-              ]}
-            />
+            <SidebarNav items={sidebarItems} />
           </SidebarSection>
         )}
         aside={(
           <SidebarSection title="Status">
             <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone={chains.length > 0 ? 'accent' : 'default'}>{chains.length > 0 ? 'FFP active' : 'FFP idle'}</Badge>
-              <div className="os-entity-copy">Operations: {operations.length}</div>
-              <div className="os-entity-copy">Consensus proposals: {proposals.length}</div>
-              <div className="os-entity-copy">Related workflows: {workflows.length}</div>
-              <div className="os-entity-copy">Related apps: {apps.length}</div>
+              <Badge tone={enterprise ? 'accent' : 'default'}>{enterprise ? 'Enterprise FFP' : 'FFP visible'}</Badge>
+              <Badge tone={status?.enabled ? 'success' : 'warning'}>{status?.enabled ? 'Runtime enabled' : 'Runtime disabled'}</Badge>
+              <div className="os-entity-copy">Mode: {enterprise ? 'Operational' : 'Locked'}</div>
+              <div className="os-entity-copy">Consensus: {status?.requireConsensus ? 'Required' : 'Optional'}</div>
+              {enterprise ? (
+                <>
+                  <div className="os-entity-copy">Sector chains: {chains.length}</div>
+                  <div className="os-entity-copy">Audit entries: {operations.length}</div>
+                  <div className="os-entity-copy">Consensus proposals: {proposals.length}</div>
+                </>
+              ) : (
+                <div className="os-entity-copy">Upgrade to inspect chains, audit history, and consensus logs.</div>
+              )}
             </div>
           </SidebarSection>
         )}
@@ -167,24 +227,50 @@ export default function FfpPage() {
         <PageHeader
           eyebrow="FFP"
           title="Fabric Flow Protocol"
-          subtitle="Consensus, audit chains, status panels, activity, logs, and related execution surfaces."
+          subtitle="Runtime status, audit logs, consensus history, and workspace execution surfaces."
           actions={<Button href="/studio">Open Studio</Button>}
         />
 
         {loading ? <LoadingState label="Loading FFP" /> : !session ? (
-          <EmptyState title="Sign in required" body="Sign in to inspect FFP operations and consensus history." action={<Button href="/signin">Sign in</Button>} />
+          <EmptyState title="Sign in required" body="Sign in to view FFP status, audit logs, and related runtime activity." action={<Button href="/signin">Sign in</Button>} />
         ) : !enterprise ? (
-          <EmptyState title="Enterprise access required" body="FFP stays visible for enterprise-capable workspaces only." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState
+            title="Enterprise access required"
+            body={`FFP stays visible, but chain activity, consensus history, and developer controls stay locked outside enterprise workspaces. Runtime is currently ${status?.enabled ? 'enabled' : 'disabled'}.`}
+            action={<Button href="/studio">Open Studio</Button>}
+          />
         ) : (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
+              <MetricCard label="Runtime" value={status?.enabled ? 'Enabled' : 'Disabled'} hint={status?.nodeUrl ? 'Node connected' : 'No node configured'} />
+              <MetricCard label="Consensus" value={status?.requireConsensus ? 'Required' : 'Optional'} />
               <MetricCard label="Sector chains" value={chains.length} />
-              <MetricCard label="Operations" value={operations.length} />
-              <MetricCard label="Consensus" value={proposals.length} />
-              <MetricCard label="Tracked apps" value={apps.length} />
-              <MetricCard label="Tracked workflows" value={workflows.length} />
-              <MetricCard label="Studio sessions" value={sessions.length} />
+              <MetricCard label="Audit entries" value={operations.length} />
+              <MetricCard label="Proposals" value={proposals.length} />
+              <MetricCard label="Related apps" value={apps.length} hint={`${workflows.length} workflows`} />
             </div>
+
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Runtime status</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                <Card>
+                  <div className="os-sidebar-title">Mode</div>
+                  <div className="os-entity-copy">{status?.enabled ? 'FFP enabled' : 'FFP disabled'}</div>
+                </Card>
+                <Card>
+                  <div className="os-sidebar-title">Chain</div>
+                  <div className="os-entity-copy">{status?.chainId || 'No chain configured'}</div>
+                </Card>
+                <Card>
+                  <div className="os-sidebar-title">Node</div>
+                  <div className="os-entity-copy">{status?.nodeUrl || 'No node configured'}</div>
+                </Card>
+                <Card>
+                  <div className="os-sidebar-title">Consensus gate</div>
+                  <div className="os-entity-copy">{status?.requireConsensus ? 'Required for execution' : 'Optional'}</div>
+                </Card>
+              </div>
+            </Card>
 
             <Card>
               <div className="os-entity-title" style={{ marginBottom: 12 }}>Sector chains</div>
@@ -194,7 +280,7 @@ export default function FfpPage() {
                 <ActivityFeed items={chains.map(chain => ({
                   id: chain.chainId,
                   title: chain.chainId,
-                  subtitle: `${chain.executions} executions | ${chain.successful} success | ${chain.failed} failed`,
+                  subtitle: `${chain.executions} executions | ${chain.successful} successful | ${chain.failed} failed`,
                   time: chain.lastExecution ? new Date(chain.lastExecution).toLocaleString() : 'No executions yet',
                 }))} />
               )}
@@ -202,15 +288,20 @@ export default function FfpPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
               <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Activity view</div>
+                <div className="os-entity-title" style={{ marginBottom: 12 }}>Audit history</div>
                 {operations.length === 0 ? (
                   <div className="os-empty-body">No audited operations yet.</div>
                 ) : (
                   <ActivityFeed items={operations.slice(0, 10).map((operation, index) => ({
-                    id: String(operation.timestamp ?? index),
+                    id: String(operation.id ?? operation.timestamp ?? index),
                     title: String(operation.action ?? operation.primitive ?? 'operation'),
-                    subtitle: JSON.stringify(operation.params ?? {}).slice(0, 100),
-                    time: typeof operation.timestamp === 'number' ? new Date(operation.timestamp).toLocaleString() : 'Recorded',
+                    subtitle: summarizePayload(operation.params ?? operation.result ?? {}),
+                    status: typeof operation.status === 'string' ? operation.status : undefined,
+                    time: formatTime(
+                      typeof operation.timestamp === 'string' || typeof operation.timestamp === 'number'
+                        ? operation.timestamp
+                        : null,
+                    ),
                   }))} />
                 )}
               </Card>
@@ -222,9 +313,16 @@ export default function FfpPage() {
                 ) : (
                   <ActivityFeed items={proposals.slice(0, 10).map((proposal, index) => ({
                     id: String(proposal.id ?? proposal.proposal_id ?? index),
-                    title: String(proposal.operation ?? proposal.status ?? 'proposal'),
-                    subtitle: JSON.stringify(proposal.params ?? proposal.proposal ?? {}).slice(0, 100),
+                    title: String(proposal.operation ?? proposal.type ?? 'proposal'),
+                    subtitle: summarizePayload(proposal.params ?? proposal.proposal ?? {}),
                     status: typeof proposal.status === 'string' ? proposal.status : undefined,
+                    time: formatTime(
+                      typeof proposal.timestamp === 'string' || typeof proposal.timestamp === 'number'
+                        ? proposal.timestamp
+                        : typeof proposal.created_at === 'string' || typeof proposal.createdAt === 'string'
+                          ? (proposal.created_at ?? proposal.createdAt) as string
+                          : null,
+                    ),
                   }))} />
                 )}
               </Card>
@@ -234,7 +332,7 @@ export default function FfpPage() {
               <Card>
                 <div className="os-entity-title" style={{ marginBottom: 12 }}>Related workflows</div>
                 {workflows.length === 0 ? (
-                  <div className="os-empty-body">No workflows connected to this workspace yet.</div>
+                  <div className="os-empty-body">No workspace workflows are linked to this runtime yet.</div>
                 ) : (
                   <ActivityFeed items={workflows.slice(0, 8).map(workflow => ({
                     id: workflow.id,
@@ -249,12 +347,12 @@ export default function FfpPage() {
               <Card>
                 <div className="os-entity-title" style={{ marginBottom: 12 }}>Related apps</div>
                 {apps.length === 0 ? (
-                  <div className="os-empty-body">No installed apps linked to this workspace yet.</div>
+                  <div className="os-empty-body">No installed workspace apps are linked to this runtime yet.</div>
                 ) : (
                   <ActivityFeed items={apps.slice(0, 8).map(app => ({
                     id: app.id,
                     title: app.name,
-                    subtitle: `${app.description} | opens ${app.openCount}`,
+                    subtitle: `${app.description} | ${app.openCount} opens`,
                     status: app.healthStatus,
                   }))} />
                 )}
@@ -267,7 +365,7 @@ export default function FfpPage() {
                 <div className="os-empty-body">No session or workflow log activity yet.</div>
               ) : (
                 <ActivityFeed items={[
-                  ...events.slice(0, 6).map(event => ({
+                  ...events.slice(0, 8).map(event => ({
                     id: event.id,
                     title: event.type,
                     subtitle: event.summary,

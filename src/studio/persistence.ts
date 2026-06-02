@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
+import { redactSecretsDeep, redactSecretsInString } from '../vault/service.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
 
 export type StudioEventType =
@@ -186,13 +187,13 @@ export async function createStudioSession(params: {
       branch_label: params.branchLabel?.trim() || null,
       title: params.title?.trim() || 'New Studio Session',
       status: 'active',
-      state: params.initialState ?? {
+      state: redactSecretsDeep(params.initialState ?? {
         workflowGraph: { nodes: [], edges: [] },
         workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
         artifacts: [],
         approvals: [],
         installedSkills: [],
-      },
+      }) as Record<string, unknown>,
       created_at: now,
       updated_at: now,
     })
@@ -291,7 +292,7 @@ export async function appendStudioMessage(params: {
       session_id: params.sessionId,
       owner_agent_id: params.ownerAgentId,
       role: params.role,
-      content: params.content,
+      content: redactSecretsInString(params.content),
       created_at: now,
     })
     .select()
@@ -325,7 +326,7 @@ export async function appendStudioEvent(params: {
       workspace_id: session.workspace_id,
       owner_agent_id: params.ownerAgentId,
       type: params.type,
-      payload: params.payload ?? {},
+      payload: redactSecretsDeep(params.payload ?? {}) as Record<string, unknown>,
       created_at: now,
     })
     .select()
@@ -384,7 +385,7 @@ export async function updateStudioSession(params: {
 }): Promise<StudioSessionRecord> {
   const current = await assertSessionOwner(params.sessionId, params.ownerAgentId);
   const nextState = params.statePatch
-    ? { ...asRecord(current.state), ...params.statePatch }
+    ? { ...asRecord(current.state), ...redactSecretsDeep(params.statePatch) as Record<string, unknown> }
     : asRecord(current.state);
   const patch: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -433,7 +434,7 @@ export async function createStudioSnapshot(params: {
       workspace_id: session.workspace_id,
       owner_agent_id: params.ownerAgentId,
       label,
-      state: asRecord(session.state),
+      state: redactSecretsDeep(asRecord(session.state)) as Record<string, unknown>,
       created_at: now,
     })
     .select('*')

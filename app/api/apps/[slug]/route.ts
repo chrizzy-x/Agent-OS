@@ -37,7 +37,10 @@ export async function GET(
       return NextResponse.json({ code: 'NOT_FOUND', error: 'App not found', message: 'App not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ app: omitAgentIdentifierFields(app) });
+    return NextResponse.json({
+      app: omitAgentIdentifierFields(app),
+      viewerOwnsApp: viewer.canManageAll || (viewer.viewerAgentId !== null && viewer.viewerAgentId === app.publisherId),
+    });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

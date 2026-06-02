@@ -14,7 +14,7 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toEqual(['Studio', 'Projects', 'Workflows', 'Agents', 'Skills', 'Apps', 'Vault', 'Analytics', 'Settings']);
+    expect(links.map(item => item.label)).toEqual(['Studio', 'Projects', 'Workflows', 'Agents', 'Skills', 'Apps', 'FFP', 'Vault', 'Analytics', 'Settings']);
   });
 
   it('shows enterprise-only modules only for enterprise sessions', () => {

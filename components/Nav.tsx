@@ -34,8 +34,9 @@ export function buildSessionNavLinks(session: BrowserSession | null): Array<{ hr
     { href: '/settings', label: 'Settings' },
   ];
 
+  links.splice(6, 0, { href: '/ffp', label: 'FFP' });
+
   if (enterprise) {
-    links.splice(6, 0, { href: '/ffp', label: 'FFP' });
     links.splice(8, 0, { href: '/sdk', label: 'SDK' });
     links.splice(9, 0, { href: '/developer', label: 'Developer' });
   }

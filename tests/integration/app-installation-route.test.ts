@@ -4,6 +4,7 @@ import { createAgentToken } from '../../src/auth/agent-identity.js';
 import { mockSupabase } from '../setup.js';
 import { POST as postInstall } from '../../app/api/apps/install/route.js';
 import { GET as getInstalled } from '../../app/api/apps/installed/route.js';
+import { GET as getReadiness } from '../../app/api/apps/[slug]/readiness/route.js';
 import { POST as postOpen } from '../../app/api/apps/[slug]/open/route.js';
 import { PATCH as patchInstallation, DELETE as deleteInstallation } from '../../app/api/apps/[slug]/installation/route.js';
 
@@ -200,7 +201,7 @@ describe.sequential('app installation lifecycle routes', () => {
     });
   });
 
-  it('requires permission approval, then installs, opens, updates, pins, and uninstalls an app', async () => {
+  it('requires permission approval, exposes readiness, blocks stale opens, and tracks install lifecycle', async () => {
     const blocked = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
       slug: 'research-kit',
     }));
@@ -208,6 +209,15 @@ describe.sequential('app installation lifecycle routes', () => {
 
     expect(blocked.status).toBe(400);
     expect(blockedBody.code).toBe('PERMISSION_REQUIRED');
+
+    const readinessBefore = await getReadiness(agentRequest('http://localhost/api/apps/research-kit/readiness', 'GET', token), {
+      params: Promise.resolve({ slug: 'research-kit' }),
+    });
+    const readinessBeforeBody = await readinessBefore.json();
+
+    expect(readinessBefore.status).toBe(200);
+    expect(readinessBeforeBody.ready).toBe(false);
+    expect(readinessBeforeBody.missingPermissions).toEqual(['access_network']);
 
     const installed = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
       slug: 'research-kit',
@@ -224,6 +234,8 @@ describe.sequential('app installation lifecycle routes', () => {
     expect(installedList.status).toBe(200);
     expect(installedListBody.installedApps).toHaveLength(1);
     expect(installedListBody.installedApps[0].installation.installedVersion).toBe('1.0.0');
+    expect(installedListBody.installedApps[0].readiness.ready).toBe(true);
+    expect(installedListBody.installedApps[0].readiness.targets.map((item: { target: string }) => item.target)).toEqual(['web', 'android', 'ios']);
 
     db.tables.agent_apps[0].manifest = {
       ...(db.tables.agent_apps[0].manifest as Record<string, unknown>),
@@ -234,6 +246,19 @@ describe.sequential('app installation lifecycle routes', () => {
     const updateListBody = await updateList.json();
 
     expect(updateListBody.installedApps[0].installation.updateAvailable).toBe(true);
+    expect(updateListBody.installedApps[0].readiness.updateAvailable).toBe(true);
+
+    db.tables.agent_apps[0].permissions_required = ['access_network', 'vault'];
+
+    const staleOpen = await postOpen(agentRequest('http://localhost/api/apps/research-kit/open', 'POST', token), {
+      params: Promise.resolve({ slug: 'research-kit' }),
+    });
+    const staleOpenBody = await staleOpen.json();
+
+    expect(staleOpen.status).toBe(400);
+    expect(staleOpenBody.code).toBe('PERMISSION_REQUIRED');
+
+    db.tables.agent_apps[0].permissions_required = ['access_network'];
 
     const updated = await postInstall(agentRequest('http://localhost/api/apps/install', 'POST', token, {
       slug: 'research-kit',
@@ -251,6 +276,18 @@ describe.sequential('app installation lifecycle routes', () => {
 
     expect(opened.status).toBe(200);
     expect(openedBody.openUrl).toBe('https://apps.example.com/research-kit');
+    expect(openedBody.target).toBe('web');
+
+    const androidOpen = await postOpen(agentRequest('http://localhost/api/apps/research-kit/open', 'POST', token, {
+      target: 'android',
+    }), {
+      params: Promise.resolve({ slug: 'research-kit' }),
+    });
+    const androidOpenBody = await androidOpen.json();
+
+    expect(androidOpen.status).toBe(200);
+    expect(androidOpenBody.openUrl).toBe('https://play.example.com/research-kit');
+    expect(androidOpenBody.target).toBe('android');
 
     const pinned = await patchInstallation(agentRequest('http://localhost/api/apps/research-kit/installation', 'PATCH', token, {
       favorite: true,

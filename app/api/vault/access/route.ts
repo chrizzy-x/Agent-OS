@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertAgentAppPermissionAccess } from '@/src/appstore/service';
 import { requireRouteCapability } from '@/src/auth/request';
-import { grantRuntimeSecretAccess, validateRequiredSecrets } from '@/src/vault/service';
+import { createRuntimeSecretGrant, validateRequiredSecrets } from '@/src/vault/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
           permission: 'vault',
         })
         : null;
-      const grant = await grantRuntimeSecretAccess({
+      const grant = await createRuntimeSecretGrant({
         ownerAgentId: ctx.agentId,
         workspaceId,
         name,
@@ -52,9 +52,21 @@ export async function POST(request: NextRequest) {
           : appAccess
             ? appAccess.app.id
             : undefined,
+        appSlug: appAccess?.app.slug ?? (typeof body.appSlug === 'string' ? body.appSlug : undefined),
+        expiresInMs: typeof body.expiresInMs === 'number' ? body.expiresInMs : undefined,
       });
-      grant.cleanup();
-      return NextResponse.json({ granted: true, name: grant.name, appSlug: appAccess?.app.slug ?? null });
+      return NextResponse.json({
+        granted: true,
+        grant: {
+          id: grant.id,
+          name: grant.name,
+          subjectType: grant.subjectType,
+          subjectId: grant.subjectId,
+          status: grant.status,
+          expiresAt: grant.expiresAt,
+        },
+        appSlug: appAccess?.app.slug ?? null,
+      });
     }
 
     return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'Unsupported vault access action', message: 'Unsupported vault access action' }, { status: 400 });

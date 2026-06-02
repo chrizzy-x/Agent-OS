@@ -38,4 +38,8 @@ describe('Vault security helpers', () => {
       },
     });
   });
+
+  it('redacts secret-shaped string payloads before persistence', () => {
+    expect(redactSecretsDeep('OPENAI_API_KEY=sk-live-secret-value')).toBe('OPENAI_API_KEY=[redacted]');
+  });
 });

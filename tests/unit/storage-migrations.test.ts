@@ -131,5 +131,15 @@ describe('storage migrations', () => {
     expect(sql).toContain("'app', 'skill'");
     expect(sql).toContain('ALTER TABLE agent_app_versions ENABLE ROW LEVEL SECURITY');
   });
+
+  it('adds durable Vault runtime grants with deny-all RLS', () => {
+    const sql = readFileSync(join(migrationsDir, '022_vault_runtime_grants.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS vault_runtime_grants');
+    expect(sql).toContain("CHECK (status IN ('active', 'consumed', 'cleaned', 'expired'))");
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS vault_runtime_grants_owner_idx');
+    expect(sql).toContain('ALTER TABLE vault_runtime_grants ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain('deny_all_vault_runtime_grants');
+  });
 });
 

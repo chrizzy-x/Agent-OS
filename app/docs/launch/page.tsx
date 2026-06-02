@@ -8,23 +8,25 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'v6.1 - real-data-only marketplace surfaces, stricter SDK app discovery, FFP restoration, session branching, app version history, and request-access billing flows.',
+  'v6.1 - real-data-only marketplace surfaces, FFP restoration, app readiness and lifecycle flows, Vault runtime grants, legacy SDK recovery, session branching, and request-access billing flows.',
   'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
   'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
   'Browser sessions now expose account name and expiry only. API callers continue to use bearer tokens; IDs stay inside signed tokens and server-side storage.',
   'Marketplace split is ready: Skill Store for installable capabilities, App Store for downloadable agentic apps built on AgentOS.',
   'v5 "Ares" - FFP Multi-Chain Router: FFP sector chains reach consensus on decisions, AgentOS executes them via a cryptographically verified bridge.',
   'POST /api/ffp/execute: consensus proof verification, chain-scoped execution, and immutable logging in ffp_chain_executions.',
-  'GET /api/ffp/chains: public discovery endpoint lists active FFP sector chains with execution stats.',
+  'GET /api/ffp/chains and GET /ffp/status: public FFP runtime and chain discovery endpoints.',
   'v4 "Hermes" - Natural Language Studio, Workflow Library, SDK Kernel, and Redis events command layer.',
   'Crypto-only payments: Solana and Base network USDC, verified on-chain without a payment processor.',
 ];
 
 const changelog = [
   'Removed fake App Store ratings, placeholder marketplace cards, seeded user-facing skill records, and fabricated fallback analytics from launch-facing surfaces.',
-  'Restricted SDK backfill and discovery flows to real metadata only, surfaced discovery/index status in developer and SDK views, and preserved app version history.',
-  'Restored FFP as a first-class module with dashboard status panels, related workflows, related apps, activity, and logs.',
-  'Added Studio session branching, lineage tracking, runtime app permission enforcement, and vault runtime secret injection for skill execution.',
+  'Recovered valid legacy SDK registry rows into factual external SDK App Store listings, including pre-metadata and pre-019 rows.',
+  'Restored FFP as a first-class module with visible navigation, runtime status, related workflows, related apps, activity, and logs.',
+  'Added app readiness resolution, target-aware open flows, install and update revalidation, and owner analytics on app profiles.',
+  'Added persisted Vault runtime grants, consume and cleanup flows, assignment and permission checks, and secret redaction in Studio persistence.',
+  'Added Studio session branching, lineage tracking, chosen and latest snapshot inheritance, and isolated branch messages and events.',
   'Replaced self-serve billing transitions in the public UI with request-access and contact-sales flows until real billing is shipped.',
   'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
   'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
@@ -71,17 +73,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v6 <span style={{ color: 'var(--accent)' }}>&ldquo;Public Launch&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">Agent OS v6.1 <span style={{ color: 'var(--accent)' }}>&ldquo;Public Launch&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6 ships the public launch privacy hardening: agent IDs are private like bearer tokens, deployed-agent actions use public refs, docs/API payloads avoid raw IDs, and the Skill Store/App Store/Studio/FFP surfaces are launch-aligned. Live at <code>{APP_URL}</code>.
+            v6.1 ships the public launch privacy hardening plus real app lifecycle flows, Vault runtime grants, restored FFP visibility, and legacy SDK recovery. Agent IDs stay private, deployed-agent actions use public refs, and docs and API payloads stay launch-aligned. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.1</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS is a production infrastructure layer for autonomous agents. One bearer token gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, and a Natural Language Studio. In v6, private agent IDs stay server-side and users operate with agent names, bearer tokens, and public action refs.
+              AgentOS is a production infrastructure layer for autonomous agents. One bearer token gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, and a Natural Language Studio. In v6.1, private agent IDs stay server-side and users operate with agent names, bearer tokens, public action refs, readiness-checked apps, and Vault-backed runtime grants.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

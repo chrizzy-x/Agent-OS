@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
@@ -43,6 +44,23 @@ export type VaultAccessHistoryRecord = {
   createdAt: string;
 };
 
+export type VaultRuntimeGrantRecord = {
+  id: string;
+  secretId: string;
+  vaultId: string;
+  workspaceId: string;
+  ownerAgentId: string;
+  name: string;
+  subjectType: VaultSubjectType;
+  subjectId: string;
+  metadata: Record<string, unknown>;
+  status: 'active' | 'consumed' | 'cleaned' | 'expired';
+  expiresAt: string;
+  consumedAt: string | null;
+  cleanedUpAt: string | null;
+  createdAt: string;
+};
+
 const SECRET_VALUE_KEYS = new Set([
   'secret',
   'token',
@@ -56,6 +74,18 @@ const SECRET_VALUE_KEYS = new Set([
   'refreshtoken',
   'private_key',
 ]);
+
+export function redactSecretsInString(value: string): string {
+  return value
+    .replace(
+      /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|secret|token|password|authorization)\s*[:=]\s*["']?)([^"'\s,}]+)/gi,
+      '$1[redacted]',
+    )
+    .replace(
+      /(([A-Z0-9_]*(?:SECRET|TOKEN|API_KEY|PASSWORD)[A-Z0-9_]*)=)([^\s]+)/g,
+      '$1[redacted]',
+    );
+}
 
 function getEncryptionKey(): Buffer {
   const raw = process.env.VAULT_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
@@ -96,6 +126,7 @@ export function maskSecretValue(value?: string | null): string {
 
 export function redactSecretsDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactSecretsDeep);
+  if (typeof value === 'string') return redactSecretsInString(value);
   if (!value || typeof value !== 'object') return value;
 
   const next: Record<string, unknown> = {};
@@ -125,6 +156,25 @@ function mapSecret(row: Record<string, unknown>): VaultSecretMetadata {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function mapRuntimeGrant(row: Record<string, unknown>): VaultRuntimeGrantRecord {
+  return {
+    id: String(row.id),
+    secretId: String(row.secret_id),
+    vaultId: String(row.vault_id),
+    workspaceId: String(row.workspace_id),
+    ownerAgentId: String(row.owner_agent_id),
+    name: String(row.name),
+    subjectType: String(row.subject_type) as VaultSubjectType,
+    subjectId: String(row.subject_id),
+    metadata: asRecord(row.metadata),
+    status: String(row.status ?? 'active') as VaultRuntimeGrantRecord['status'],
+    expiresAt: String(row.expires_at ?? new Date().toISOString()),
+    consumedAt: typeof row.consumed_at === 'string' ? row.consumed_at : null,
+    cleanedUpAt: typeof row.cleaned_up_at === 'string' ? row.cleaned_up_at : null,
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
 }
 
 function mapVersion(row: Record<string, unknown>): VaultSecretVersion {
@@ -663,13 +713,20 @@ export async function validateRequiredSecrets(params: {
   };
 }
 
-export async function grantRuntimeSecretAccess(params: {
+async function validateRuntimeSecretRequest(params: {
   ownerAgentId: string;
   workspaceId?: string;
   name: string;
   subjectType?: string;
   subjectId?: string;
-}): Promise<{ name: string; value: string; cleanup: () => void }> {
+  appSlug?: string;
+}): Promise<{
+  name: string;
+  vault: Record<string, unknown>;
+  secret: Record<string, unknown>;
+  scopedType: VaultSubjectType | null;
+  subjectId: string | null;
+}> {
   const name = params.name.trim().toUpperCase();
   const vault = await loadOwnedVault(params.ownerAgentId, params.workspaceId);
   const supabase = getSupabaseAdmin();
@@ -694,67 +751,331 @@ export async function grantRuntimeSecretAccess(params: {
 
   const subjectType = params.subjectType?.trim();
   const subjectId = params.subjectId?.trim();
-  if (subjectType || subjectId) {
-    if (!subjectType || !subjectId) {
+  if (!subjectType && !subjectId) {
+    return { name, vault, secret: secret as Record<string, unknown>, scopedType: null, subjectId: null };
+  }
+  if (!subjectType || !subjectId) {
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: String(secret.workspace_id),
+      vaultId: String(secret.vault_id),
+      secretId: String(secret.id),
+      action: 'runtime_access_denied',
+      metadata: { name, reason: 'missing_subject' },
+    });
+    throw new ValidationError('Both subjectType and subjectId are required for scoped runtime access');
+  }
+
+  const scopedType = assertSubjectType(subjectType);
+  if (scopedType === 'app') {
+    const appSlug = params.appSlug?.trim();
+    if (!appSlug) {
       await auditVault({
         ownerAgentId: params.ownerAgentId,
         workspaceId: String(secret.workspace_id),
         vaultId: String(secret.vault_id),
         secretId: String(secret.id),
         action: 'runtime_access_denied',
-        metadata: { name, reason: 'missing_subject' },
+        metadata: { name, reason: 'missing_app_slug', subjectType: scopedType, subjectId },
       });
-      throw new ValidationError('Both subjectType and subjectId are required for scoped runtime access');
+      throw new ValidationError('appSlug is required for app-scoped runtime access');
     }
 
-    const scopedType = assertSubjectType(subjectType);
-    const { data: assignment, error: assignmentError } = await supabase
-      .from('vault_assignments')
-      .select('id,status')
-      .eq('secret_id', secret.id)
-      .eq('owner_agent_id', params.ownerAgentId)
-      .eq('subject_type', scopedType)
-      .eq('subject_id', subjectId)
-      .maybeSingle();
-
-    if (assignmentError) throw new Error(`Failed to validate Vault assignment: ${assignmentError.message}`);
-    if (!assignment || assignment.status !== 'active') {
+    const { assertAgentAppPermissionAccess } = await import('../appstore/service.js');
+    const appAccess = await assertAgentAppPermissionAccess({
+      agentId: params.ownerAgentId,
+      slug: appSlug,
+      permission: 'vault',
+    });
+    if (appAccess.app.id !== subjectId) {
       await auditVault({
         ownerAgentId: params.ownerAgentId,
         workspaceId: String(secret.workspace_id),
         vaultId: String(secret.vault_id),
         secretId: String(secret.id),
         action: 'runtime_access_denied',
-        metadata: { name, subjectType: scopedType, subjectId },
+        metadata: { name, reason: 'app_subject_mismatch', subjectType: scopedType, subjectId, appSlug },
       });
-      throw new PermissionError('Secret is not assigned to this runtime subject');
+      throw new PermissionError('App subject does not match the approved installed app');
     }
   }
 
-  const value = decryptVaultSecret(String(secret.encrypted_value));
-  await supabase
-    .from('vault_secrets')
-    .update({ last_accessed_at: new Date().toISOString() })
-    .eq('id', secret.id)
-    .eq('owner_agent_id', params.ownerAgentId);
-  await auditVault({
-    ownerAgentId: params.ownerAgentId,
-    workspaceId: String(secret.workspace_id),
-    vaultId: String(secret.vault_id),
-    secretId: String(secret.id),
-    action: 'runtime_access_granted',
-    metadata: { name, subjectType: subjectType ?? null, subjectId: subjectId ?? null },
-  });
+  const { data: assignment, error: assignmentError } = await supabase
+    .from('vault_assignments')
+    .select('id,status')
+    .eq('secret_id', secret.id)
+    .eq('owner_agent_id', params.ownerAgentId)
+    .eq('subject_type', scopedType)
+    .eq('subject_id', subjectId)
+    .maybeSingle();
 
-  let liveValue: string | null = value;
+  if (assignmentError) throw new Error(`Failed to validate Vault assignment: ${assignmentError.message}`);
+  if (!assignment || assignment.status !== 'active') {
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: String(secret.workspace_id),
+      vaultId: String(secret.vault_id),
+      secretId: String(secret.id),
+      action: 'runtime_access_denied',
+      metadata: { name, subjectType: scopedType, subjectId },
+    });
+    throw new PermissionError('Secret is not assigned to this runtime subject');
+  }
+
   return {
     name,
+    vault,
+    secret: secret as Record<string, unknown>,
+    scopedType,
+    subjectId,
+  };
+}
+
+async function loadRuntimeGrant(params: {
+  ownerAgentId: string;
+  grantId: string;
+}): Promise<VaultRuntimeGrantRecord> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('vault_runtime_grants')
+      .select('*')
+      .eq('id', params.grantId)
+      .eq('owner_agent_id', params.ownerAgentId)
+      .maybeSingle();
+    if (error) throw new Error(`Failed to load runtime grant: ${error.message}`);
+    if (!data) throw new PermissionError('Runtime secret grant not found or not accessible');
+    return mapRuntimeGrant(data as Record<string, unknown>);
+  } catch (error) {
+    if (error instanceof PermissionError) throw error;
+  }
+
+  const state = await readLocalRuntimeState();
+  const grant = state.vaultRuntimeGrants.find(item => item.id === params.grantId && item.owner_agent_id === params.ownerAgentId);
+  if (!grant) throw new PermissionError('Runtime secret grant not found or not accessible');
+  return mapRuntimeGrant(grant as unknown as Record<string, unknown>);
+}
+
+export async function createRuntimeSecretGrant(params: {
+  ownerAgentId: string;
+  workspaceId?: string;
+  name: string;
+  subjectType?: string;
+  subjectId?: string;
+  appSlug?: string;
+  expiresInMs?: number;
+  metadata?: Record<string, unknown>;
+}): Promise<VaultRuntimeGrantRecord> {
+  const validated = await validateRuntimeSecretRequest(params);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + Math.max(30_000, Math.min(params.expiresInMs ?? 300_000, 900_000))).toISOString();
+  const payload = {
+    id: crypto.randomUUID(),
+    secret_id: String(validated.secret.id),
+    vault_id: String(validated.secret.vault_id),
+    workspace_id: String(validated.secret.workspace_id),
+    owner_agent_id: params.ownerAgentId,
+    name: validated.name,
+    subject_type: validated.scopedType ?? 'super_agentos',
+    subject_id: validated.subjectId ?? params.ownerAgentId,
+    metadata: redactSecretsDeep({
+      ...(params.metadata ?? {}),
+      appSlug: params.appSlug ?? null,
+    }) as Record<string, unknown>,
+    status: 'active' as const,
+    expires_at: expiresAt,
+    consumed_at: null,
+    cleaned_up_at: null,
+    created_at: now.toISOString(),
+  };
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('vault_runtime_grants')
+      .insert(payload)
+      .select('*')
+      .single();
+    if (error) throw new Error(`Failed to create runtime grant: ${error.message}`);
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: String(validated.secret.workspace_id),
+      vaultId: String(validated.secret.vault_id),
+      secretId: String(validated.secret.id),
+      action: 'runtime_grant_created',
+      metadata: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, expiresAt },
+    });
+    return mapRuntimeGrant(data as Record<string, unknown>);
+  } catch {
+    const grant = await updateLocalRuntimeState(state => {
+      state.vaultRuntimeGrants.unshift(payload);
+      return payload;
+    });
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: String(validated.secret.workspace_id),
+      vaultId: String(validated.secret.vault_id),
+      secretId: String(validated.secret.id),
+      action: 'runtime_grant_created',
+      metadata: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, expiresAt },
+    });
+    return mapRuntimeGrant(grant as unknown as Record<string, unknown>);
+  }
+}
+
+export async function consumeRuntimeSecretGrant(params: {
+  ownerAgentId: string;
+  grantId: string;
+}): Promise<{ grant: VaultRuntimeGrantRecord; name: string; value: string }> {
+  const grant = await loadRuntimeGrant(params);
+  const now = new Date().toISOString();
+  if (new Date(grant.expiresAt).getTime() <= Date.now()) {
+    await cleanupRuntimeSecretGrant({ ownerAgentId: params.ownerAgentId, grantId: grant.id, expired: true });
+    throw new PermissionError('Runtime secret grant has expired');
+  }
+  if (grant.status !== 'active') {
+    throw new PermissionError('Runtime secret grant is not active');
+  }
+
+  const appSlug = typeof grant.metadata.appSlug === 'string' ? grant.metadata.appSlug : undefined;
+  const validated = await validateRuntimeSecretRequest({
+    ownerAgentId: params.ownerAgentId,
+    workspaceId: grant.workspaceId,
+    name: grant.name,
+    subjectType: grant.subjectType,
+    subjectId: grant.subjectId,
+    appSlug,
+  });
+  const value = decryptVaultSecret(String(validated.secret.encrypted_value));
+
+  try {
+    const supabase = getSupabaseAdmin();
+    await supabase
+      .from('vault_secrets')
+      .update({ last_accessed_at: now })
+      .eq('id', validated.secret.id)
+      .eq('owner_agent_id', params.ownerAgentId);
+    const { data, error } = await supabase
+      .from('vault_runtime_grants')
+      .update({
+        status: 'consumed',
+        consumed_at: now,
+      })
+      .eq('id', grant.id)
+      .eq('owner_agent_id', params.ownerAgentId)
+      .select('*')
+      .single();
+    if (error) throw new Error(`Failed to consume runtime grant: ${error.message}`);
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: String(validated.secret.workspace_id),
+      vaultId: String(validated.secret.vault_id),
+      secretId: String(validated.secret.id),
+      action: 'runtime_access_granted',
+      metadata: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, grantId: grant.id },
+    });
+    return { grant: mapRuntimeGrant(data as Record<string, unknown>), name: validated.name, value };
+  } catch {
+    const nextGrant = await updateLocalRuntimeState(state => {
+      const target = state.vaultRuntimeGrants.find(item => item.id === grant.id && item.owner_agent_id === params.ownerAgentId);
+      if (!target) throw new PermissionError('Runtime secret grant not found or not accessible');
+      target.status = 'consumed';
+      target.consumed_at = now;
+      return target;
+    });
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: String(validated.secret.workspace_id),
+      vaultId: String(validated.secret.vault_id),
+      secretId: String(validated.secret.id),
+      action: 'runtime_access_granted',
+      metadata: { name: validated.name, subjectType: validated.scopedType, subjectId: validated.subjectId, grantId: grant.id },
+    });
+    return { grant: mapRuntimeGrant(nextGrant as unknown as Record<string, unknown>), name: validated.name, value };
+  }
+}
+
+export async function cleanupRuntimeSecretGrant(params: {
+  ownerAgentId: string;
+  grantId: string;
+  expired?: boolean;
+}): Promise<VaultRuntimeGrantRecord> {
+  const now = new Date().toISOString();
+  const current = await loadRuntimeGrant({ ownerAgentId: params.ownerAgentId, grantId: params.grantId });
+  const status = params.expired ? 'expired' : 'cleaned';
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('vault_runtime_grants')
+      .update({
+        status,
+        cleaned_up_at: now,
+      })
+      .eq('id', current.id)
+      .eq('owner_agent_id', params.ownerAgentId)
+      .select('*')
+      .single();
+    if (error) throw new Error(`Failed to clean runtime grant: ${error.message}`);
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: current.workspaceId,
+      vaultId: current.vaultId,
+      secretId: current.secretId,
+      action: params.expired ? 'runtime_grant_expired' : 'runtime_grant_cleaned',
+      metadata: { name: current.name, subjectType: current.subjectType, subjectId: current.subjectId, grantId: current.id },
+    });
+    return mapRuntimeGrant(data as Record<string, unknown>);
+  } catch {
+    const grant = await updateLocalRuntimeState(state => {
+      const target = state.vaultRuntimeGrants.find(item => item.id === current.id && item.owner_agent_id === params.ownerAgentId);
+      if (!target) throw new PermissionError('Runtime secret grant not found or not accessible');
+      target.status = status;
+      target.cleaned_up_at = now;
+      return target;
+    });
+    await auditVault({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: current.workspaceId,
+      vaultId: current.vaultId,
+      secretId: current.secretId,
+      action: params.expired ? 'runtime_grant_expired' : 'runtime_grant_cleaned',
+      metadata: { name: current.name, subjectType: current.subjectType, subjectId: current.subjectId, grantId: current.id },
+    });
+    return mapRuntimeGrant(grant as unknown as Record<string, unknown>);
+  }
+}
+
+export async function grantRuntimeSecretAccess(params: {
+  ownerAgentId: string;
+  workspaceId?: string;
+  name: string;
+  subjectType?: string;
+  subjectId?: string;
+  appSlug?: string;
+}): Promise<{ name: string; value: string; cleanup: () => void }> {
+  const grant = await createRuntimeSecretGrant({
+    ownerAgentId: params.ownerAgentId,
+    workspaceId: params.workspaceId,
+    name: params.name,
+    subjectType: params.subjectType,
+    subjectId: params.subjectId,
+    appSlug: params.appSlug,
+  });
+  const consumed = await consumeRuntimeSecretGrant({
+    ownerAgentId: params.ownerAgentId,
+    grantId: grant.id,
+  });
+
+  let liveValue: string | null = consumed.value;
+  return {
+    name: consumed.name,
     get value() {
       if (liveValue === null) throw new Error('Runtime secret has been cleaned up');
       return liveValue;
     },
     cleanup() {
       liveValue = null;
+      void cleanupRuntimeSecretGrant({ ownerAgentId: params.ownerAgentId, grantId: grant.id }).catch(() => {});
     },
   };
 }
@@ -765,6 +1086,7 @@ export async function grantRuntimeSecretsAccess(params: {
   names: string[];
   subjectType?: string;
   subjectId?: string;
+  appSlug?: string;
 }): Promise<{ secrets: Record<string, string>; cleanup: () => void }> {
   const names = [...new Set(params.names.map(name => name.trim().toUpperCase()).filter(Boolean))];
   const grants: Array<{ name: string; value: string; cleanup: () => void }> = [];
@@ -776,6 +1098,7 @@ export async function grantRuntimeSecretsAccess(params: {
         name,
         subjectType: params.subjectType,
         subjectId: params.subjectId,
+        appSlug: params.appSlug,
       }));
     }
 

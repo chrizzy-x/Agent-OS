@@ -20,6 +20,7 @@ import {
 } from './catalog.js';
 
 export type AgentAppSort = 'popular' | 'recent' | 'name';
+export type AgentAppOpenTarget = 'web' | 'android' | 'ios';
 
 export type AgentAppAccessOptions = {
   viewerAgentId?: string | null;
@@ -222,6 +223,10 @@ function titleCaseSlug(value: string): string {
     .join(' ');
 }
 
+function buildSdkFallbackDescription(product: string): string {
+  return `External SDK runtime for ${titleCaseSlug(product)}.`;
+}
+
 export function normalizeAgentAppSlug(value: string): string {
   return value
     .trim()
@@ -305,6 +310,23 @@ function normalizeDefaultConfig(value: unknown): Record<string, unknown> {
 
 function normalizePermissionName(permission: string): string {
   return permission.trim().toLowerCase().replace(/^access[_:-]?/, '');
+}
+
+function resolveTargetUrl(app: AgentAppListing, target: AgentAppOpenTarget): string | null {
+  if (target === 'android') return app.distribution.androidUrl;
+  if (target === 'ios') return app.distribution.iosUrl;
+  return app.distribution.webUrl ?? app.appUrl;
+}
+
+function resolveAvailableTargets(app: AgentAppListing): Array<{ target: AgentAppOpenTarget; url: string }> {
+  const targets: Array<{ target: AgentAppOpenTarget; url: string }> = [];
+  const webUrl = resolveTargetUrl(app, 'web');
+  const androidUrl = resolveTargetUrl(app, 'android');
+  const iosUrl = resolveTargetUrl(app, 'ios');
+  if (webUrl) targets.push({ target: 'web', url: webUrl });
+  if (androidUrl) targets.push({ target: 'android', url: androidUrl });
+  if (iosUrl) targets.push({ target: 'ios', url: iosUrl });
+  return targets;
 }
 
 function mapVersionRow(row: DbAgentAppVersionRow): AgentAppVersionEntry {
@@ -956,7 +978,9 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
     for (const row of registryRows) {
       const product = stringValue(row.product).trim();
       const publisherId = stringValue(row.agent_id).trim();
-      if (!product || !publisherId) continue;
+      const commandTopic = stringValue(row.command_topic).trim();
+      const statusTopic = stringValue(row.status_topic).trim();
+      if (!product || !publisherId || !commandTopic || !statusTopic) continue;
 
       const owner = owners.get(publisherId);
       if (!owner?.enterprise) continue;
@@ -984,46 +1008,43 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
       const statusPayload = isRecord((row as Record<string, unknown>).last_status_payload) ? (row as Record<string, unknown>).last_status_payload as Record<string, unknown> : {};
       const healthStatus = normalizeHealthStatus(row.health_status ?? row.status ?? 'unknown');
       const endpointStatus = normalizeEndpointStatus(row.endpoint_status ?? statusPayload.endpointStatus ?? (healthStatus === 'online' ? 'healthy' : 'unknown'));
-      if (!existingApp) {
-        continue;
-      }
 
       await saveAgentApp({
         workspaceId: nullableString(row.workspace_id),
         publisherId,
         publisherName: owner.name,
-        name: existingApp.name,
-        slug: existingApp.slug,
-        category: existingApp.category,
-        description: existingApp.description,
-        longDescription: existingApp.longDescription,
-        appUrl: existingApp.appUrl,
-        repositoryUrl: existingApp.repositoryUrl,
-        deviceTargets: existingApp.deviceTargets,
+        name: existingApp?.name ?? titleCaseSlug(product),
+        slug: existingApp?.slug ?? slug,
+        category: existingApp?.category ?? 'Operations',
+        description: existingApp?.description ?? buildSdkFallbackDescription(product),
+        longDescription: existingApp?.longDescription ?? buildSdkFallbackDescription(product),
+        appUrl: existingApp?.appUrl,
+        repositoryUrl: existingApp?.repositoryUrl,
+        deviceTargets: existingApp?.deviceTargets ?? ['AgentOS Cloud'],
         manifest: {
-          ...existingApp.manifest,
+          ...existingApp?.manifest,
           schemaVersion: 'agentos.app.v1',
-          version: stringValue(row.version, existingApp.manifest.version),
+          version: stringValue(row.version, existingApp?.manifest.version ?? '1.0.0'),
           runtime: 'external-app',
           entrypoint: `agentos://kernel/${product}`,
-          commands: commands.length > 0 ? commands : existingApp.manifest.commands,
+          commands: commands.length > 0 ? commands : existingApp?.manifest.commands ?? [],
         },
-        defaultConfig: existingApp.defaultConfig,
-        visibility: existingApp.visibility,
+        defaultConfig: existingApp?.defaultConfig,
+        visibility: existingApp?.visibility ?? 'public',
         source: 'external_sdk',
         runtimeType: 'external-app',
         kernelProduct: product,
-        kernelCommandTopic: stringValue(row.command_topic),
-        kernelStatusTopic: stringValue(row.status_topic),
+        kernelCommandTopic: commandTopic,
+        kernelStatusTopic: statusTopic,
         healthStatus,
         endpointStatus,
         lastHeartbeatAt: nullableString(row.last_heartbeat_at) ?? nullableString(row.registered_at),
         lastError: nullableString(row.last_error) ?? nullableString(statusPayload.lastError),
         disabled: row.disabled === true || row.status === 'disabled',
         heartbeatCount: Number(row.heartbeat_count ?? 0),
-        permissionsRequired: existingApp.permissionsRequired,
-        requiredSecrets: existingApp.requiredSecrets,
-        screenshots: existingApp.screenshots,
+        permissionsRequired: existingApp?.permissionsRequired,
+        requiredSecrets: existingApp?.requiredSecrets,
+        screenshots: existingApp?.screenshots,
       });
       changed = true;
     }
@@ -1125,21 +1146,13 @@ export async function upsertExternalSdkAgentApp(input: {
   const slug = normalizeAgentAppSlug(input.app?.slug?.trim() || product);
   const existing = await getAgentAppByKernelProduct(product)
     ?? await getAgentAppBySlug(slug, { canManageAll: true });
-  const defaultName = input.app?.name?.trim() || existing?.name || product;
-  const description = input.app?.description?.trim() ?? existing?.description ?? '';
+  const defaultName = input.app?.name?.trim() || existing?.name || titleCaseSlug(product);
+  const description = input.app?.description?.trim() ?? existing?.description ?? buildSdkFallbackDescription(product);
   const longDescription = input.app?.longDescription?.trim() || description;
   const commands = input.availableCommands.map(command => ({
     name: command.name,
     description: command.description?.trim() || `Run ${command.name}`,
   }));
-
-  if (!defaultName.trim()) {
-    throw new ValidationError('SDK app name is required');
-  }
-  if (!description) {
-    throw new ValidationError('SDK app description is required');
-  }
-
   return saveAgentApp({
     workspaceId: input.workspaceId,
     publisherId: input.publisherId,
@@ -1352,6 +1365,46 @@ export async function getAgentAppInstallReadiness(params: {
   };
 }
 
+export async function getAgentAppReadiness(params: {
+  agentId: string;
+  slug: string;
+  workspaceId?: string | null;
+  viewerWorkspaceIds?: string[];
+  canManageAll?: boolean;
+  permissionsApproved?: string[];
+}): Promise<{
+  app: AgentAppListing;
+  installation: AgentAppInstallation | null;
+  requiredPermissions: string[];
+  missingPermissions: string[];
+  missingSecrets: string[];
+  missingSkills: string[];
+  ready: boolean;
+  updateAvailable: boolean;
+  targets: Array<{ target: AgentAppOpenTarget; url: string }>;
+}> {
+  const installation = await getInstalledAgentApp(params.agentId, params.slug);
+  const readiness = await getAgentAppInstallReadiness({
+    ...params,
+    permissionsApproved: params.permissionsApproved ?? installation?.installation.permissionsApproved ?? [],
+  });
+  return {
+    app: readiness.app,
+    installation: installation?.installation ?? null,
+    requiredPermissions: readiness.requiredPermissions,
+    missingPermissions: readiness.missingPermissions,
+    missingSecrets: readiness.missingSecrets,
+    missingSkills: readiness.missingSkills,
+    ready: readiness.missingPermissions.length === 0
+      && readiness.missingSecrets.length === 0
+      && readiness.missingSkills.length === 0
+      && installation?.installation.status !== 'disabled'
+      && installation?.installation.status !== 'removed',
+    updateAvailable: installation?.installation.updateAvailable === true,
+    targets: resolveAvailableTargets(readiness.app),
+  };
+}
+
 export async function installAgentApp(params: {
   agentId: string;
   slug: string;
@@ -1514,7 +1567,7 @@ export async function listInstalledAgentApps(agentId: string): Promise<Array<{ a
       .filter(installation => installation.status !== 'removed');
   }
 
-  const apps = await loadStoredApps();
+  const apps = await reconcileLegacySdkApps(await loadStoredApps());
   const entries: Array<{ app: AgentAppListing | null; installation: AgentAppInstallation }> = installations
     .map(installation => {
       const app = apps.find(item => item.id === installation.appId) ?? null;
@@ -1636,7 +1689,9 @@ export async function updateAgentAppInstallation(params: {
 export async function recordAgentAppOpen(params: {
   agentId: string;
   slug: string;
-}): Promise<{ app: AgentAppListing; installation: AgentAppInstallation }> {
+  target?: AgentAppOpenTarget;
+}): Promise<{ app: AgentAppListing; installation: AgentAppInstallation; openUrl: string | null; target: AgentAppOpenTarget }> {
+  const target = params.target ?? 'web';
   const { app, installation } = await updateAgentAppInstallation({
     agentId: params.agentId,
     slug: params.slug,
@@ -1647,6 +1702,10 @@ export async function recordAgentAppOpen(params: {
   const missing = requiredPermissions.filter(permission => !approved.has(normalizePermissionName(permission)));
   if (missing.length > 0) {
     throw new ValidationError(`Missing permission approval: ${missing.join(', ')}`);
+  }
+  const openUrl = resolveTargetUrl(app, target);
+  if (!openUrl) {
+    throw new ValidationError(`No ${target} target is available for this app`);
   }
 
   const now = new Date().toISOString();
@@ -1665,7 +1724,9 @@ export async function recordAgentAppOpen(params: {
       .from('agent_apps')
       .update({
         open_count: app.openCount + 1,
-        web_open_count: app.webOpenCount + 1,
+        web_open_count: target === 'web' ? app.webOpenCount + 1 : app.webOpenCount,
+        android_download_count: target === 'android' ? app.androidDownloadCount + 1 : app.androidDownloadCount,
+        ios_download_count: target === 'ios' ? app.iosDownloadCount + 1 : app.iosDownloadCount,
         last_command_at: now,
         updated_at: now,
       })
@@ -1691,7 +1752,9 @@ export async function recordAgentAppOpen(params: {
       const entry = state.agentApps.catalog.find(item => item.id === app.id);
       if (entry) {
         entry.openCount += 1;
-        entry.webOpenCount += 1;
+        if (target === 'web') entry.webOpenCount += 1;
+        if (target === 'android') entry.androidDownloadCount += 1;
+        if (target === 'ios') entry.iosDownloadCount += 1;
         entry.lastCommandAt = now;
         entry.updatedAt = now;
       }
@@ -1705,7 +1768,12 @@ export async function recordAgentAppOpen(params: {
   }
 
   const [fresh] = await listInstalledAgentApps(params.agentId).then(entries => entries.filter(entry => entry.app.slug === params.slug));
-  return fresh ?? { app, installation: { ...installation, openCount: installation.openCount + 1, lastOpenedAt: now, updatedAt: now } };
+  return {
+    app: fresh?.app ?? app,
+    installation: fresh?.installation ?? { ...installation, openCount: installation.openCount + 1, lastOpenedAt: now, updatedAt: now },
+    openUrl,
+    target,
+  };
 }
 
 export function buildAgentAppPackage(app: AgentAppListing): AgentAppPackage {

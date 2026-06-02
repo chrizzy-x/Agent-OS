@@ -4,94 +4,111 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> Built by **riz** · v6 "Public Launch"
+> v6.1
 
-**OS-level primitives for AI agents — memory, files, databases, networking, events, and code execution over a single authenticated HTTP API.**
+AgentOS is a production runtime for agents, apps, and workflows. It ships Studio, a real Skill Store, a real App Store, Vault-backed secret assignment, SDK auto-discovery, FFP status and audit surfaces, and a single authenticated MCP API.
 
-🚀 **Live:** [agentos.services](https://agentos.services) · [Get started free →](https://www.agentos.services/signup)
-Official CA : GtpxyYeFGDA8WoxA5buhRXMcBKweMCpK9S2CShmCpump
+Live:
+- [agentos.services](https://agentos.services)
+- [Signup](https://www.agentos.services/signup)
 
-AgentOS is a production infrastructure layer that gives any agent or app a safe, isolated environment to persist data, run code, make HTTP requests, publish events, and coordinate with other agents — without touching the host system. Each client gets its own namespace, enforced quotas, rate limits, and a full audit trail.
+## V6.1 status
 
----
+V6.1 ships:
+- `/studio` as the primary workflow surface
+- `/appstore` with real app install, open, update, uninstall, and pin flows
+- `/appstore/[slug]` with readiness, permissions, secrets, skills, targets, health, and owner analytics
+- `/vault` with assignment-aware secret validation and runtime grants
+- `/ffp` with runtime status, chains, audit history, consensus history, related workflows, and related apps
+- SDK app auto-discovery and legacy `kernel_registry` recovery into factual public listings
+- global search across apps, skills, workflows, sessions, projects, subagents, and Vault secret names only
+- session branching with parent lineage and isolated branch messages and events
 
-## What's inside
+Rules enforced in shipped surfaces:
+- no fake marketplace data
+- no placeholder production apps
+- no secret values in frontend responses, workflow state, Studio messages, logs, or events
 
-### 6 Core Primitives
+## App lifecycle
 
-| Primitive | What it does | Backed by |
-|-----------|-------------|-----------|
-| **mem** | Key-value cache with TTL (set, get, list, increment, expire) | Redis |
-| **fs** | File read/write/list/delete/stat — isolated per agent | Supabase Storage |
-| **db** | Private SQL database — create tables, query, insert, update, delete | PostgreSQL |
-| **net** | Outbound HTTP + DNS resolution with SSRF protection | Node.js fetch |
-| **events** | Pub/sub messaging between agents via Redis topics | Redis |
-| **proc** | Sandboxed code execution (Python, JS, Bash) + cron scheduling | Sandboxed subprocess |
+Key routes:
+- `GET /api/apps`
+- `GET /api/apps/[slug]`
+- `GET /api/apps/[slug]/readiness`
+- `POST /api/apps/install`
+- `GET /api/apps/installed`
+- `POST /api/apps/[slug]/open`
+- `PATCH /api/apps/[slug]/installation`
+- `DELETE /api/apps/[slug]/installation`
+- `GET /api/apps/[slug]/download`
 
-### Marketplace
-The marketplace is split into two stores and both are real-data only:
+Readiness returns:
+- current installation
+- required permissions
+- missing permissions
+- missing secrets
+- missing skills
+- `ready`
+- `updateAvailable`
+- resolved targets for `web`, `android`, and `ios`
 
-- **Skill Store:** shows only real published skills. If nothing is published, it stays empty.
-- **App Store:** shows only validated SDK-discovered apps, real published AgentOS apps, and official system apps.
-- No demo apps, placeholder listings, fake install counts, fake ratings, or hardcoded marketplace records ship in production surfaces.
+Open flow rules:
+- `web` increments web opens
+- `android` increments Android opens
+- `ios` increments iOS opens
+- stale installs are blocked with typed errors
 
-### Universal MCP Router
-One endpoint routes to built-in primitives, installed skills, or any external MCP server (Gmail, Slack, GitHub, etc.).
+## Vault runtime injection
 
-| Source | Tool format | Example |
-|--------|-------------|---------|
-| Primitives | `agentos.{tool}` | `agentos.net_http_get` |
-| Skills | `agentos.skill.{slug}.{capability}` | `agentos.skill.pdf-reader.extract_text` |
-| External MCP | `mcp.{server}.{tool}` | `mcp.gmail.send_email` |
+Vault runtime access is grant-based.
 
-### FFP (Furge Fabric Protocol)
-FFP is a first-class AgentOS module with dashboard, activity, logs, related workflows, related apps, and status panels. Sensitive operations can require multi-party consensus before executing.
+Routes:
+- `POST /api/vault/access`
+- `POST /api/vault/runtime-grants/consume`
 
-### Studio v4 — Natural Language Workflows
-Describe what you want in plain English. Studio returns a step-by-step plan, you confirm, it executes and saves as a reusable workflow. Sessions support branching with lineage preserved from the source snapshot.
+Behavior:
+- validates secret status and assignment
+- validates app permission scope for app-backed runtime access
+- stores ephemeral runtime grants without storing plaintext secret values
+- supports consume and cleanup
+- audits granted and denied access
+- redacts secret-like values from Studio persistence and workflow state
 
+The runtime consume route is SDK-kernel only. Secret values are never returned to browser-facing routes.
+
+## FFP
+
+FFP is visible at `/ffp`.
+
+Behavior:
+- signed-in retail users see the module with a locked enterprise state
+- enterprise workspaces see status, chains, audit history, consensus history, related workflows, related apps, and logs
+- `/ffp/status` exposes runtime mode, chain id, node url, and consensus requirement
+- `/api/ffp/chains` exposes public chain discovery stats
+- `/api/agent/ffp/audit` and `/api/agent/ffp/consensus` are authenticated agent-scoped routes
+
+Environment:
+```env
+FFP_MODE=enabled
+FFP_CHAIN_ID=your-chain-id
+FFP_NODE_URL=https://your-ffp-node.example.com
+FFP_REQUIRE_CONSENSUS=false
 ```
-POST /api/studio/intent
-{ "instruction": "Fetch ETH price every minute and store in memory" }
-→ returns plan with steps + confirmToken
-→ POST with { "confirm": true, "confirmToken": "..." } to execute
-```
 
-### SDK Kernel Command Layer
-SDK products (Mezzy, Derek, deZypher) register a command topic and status topic. AgentOS routes commands through the Redis events bus.
+## Search
 
-```
-POST /api/kernel/register   # register your product
-POST /api/kernel/command    # dispatch a command
-GET  /api/kernel/status/:product  # heartbeat + available commands
-```
+`/search` is backed by real server data. It searches:
+- apps
+- skills
+- workflows
+- sessions
+- projects
+- subagents
+- Vault secret names
 
-### Billing status
-Capability gating is live, but self-serve plan checkout is disabled until real billing is implemented and verified. Public plan changes use request-access and contact-sales flows instead of fake checkout.
-
----
+It never returns Vault secret values.
 
 ## Quickstart
-
-### Option A: Hosted
-
-[Sign up at agentos.services/signup](https://www.agentos.services/signup) — get your bearer token in 30 seconds. Agent IDs stay private; browser screens and APIs use agent names or public action refs. No credit card required.
-
-```bash
-# Store a value
-curl -X POST https://www.agentos.services/mcp \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"tool":"agentos.mem_set","input":{"key":"hello","value":"world","ttl":3600}}'
-
-# Fetch live data
-curl -X POST https://www.agentos.services/mcp \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"tool":"agentos.net_http_get","input":{"url":"https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"}}'
-```
-
-### Option B: Self-host
 
 ```bash
 git clone https://github.com/chrizzy-x/Agent-OS.git
@@ -101,191 +118,70 @@ cp .env.example .env
 npm run dev
 ```
 
-Required env vars:
+Required environment:
 
 ```env
+NEXT_PUBLIC_APP_URL=https://agentos-app.vercel.app
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_ANON_KEY=
 REDIS_URL=
 JWT_SECRET=
-ENCRYPTION_KEY=
 ADMIN_TOKEN=
-ANTHROPIC_API_KEY=        # required for Studio NL mode
-NEXT_PUBLIC_APP_URL=
+ENCRYPTION_KEY=
+VAULT_ENCRYPTION_KEY=
+ANTHROPIC_API_KEY=
 ```
 
----
-
-## Dashboard Access for SDK Users
-
-SDK users access the full dashboard (FFP audit trail, consensus, workflows) using their API key:
-
-```js
-const res = await fetch('https://www.agentos.services/api/session/from-key', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ apiKey: process.env.AGENT_OS_KEY }),
-});
-const { loginUrl } = await res.json();
-// Open loginUrl in browser — full dashboard, expires in 5 minutes
-```
-
----
-
-## API Reference
-
-All tool calls:
-
-```
-POST /mcp
-Authorization: Bearer <api_key>
-{ "tool": "agentos.{tool_name}", "input": { ... } }
-```
-
-### mem
-| Tool | Input | Returns |
-|------|-------|---------|
-| `mem_set` | `key, value, ttl?` | `true` |
-| `mem_get` | `key` | value or null |
-| `mem_delete` | `key` | `true` |
-| `mem_list` | `prefix?` | string[] |
-| `mem_incr` | `key, by?` | new value |
-
-### fs
-| Tool | Input | Returns |
-|------|-------|---------|
-| `fs_write` | `path, data (base64)` | `true` |
-| `fs_read` | `path` | base64 data |
-| `fs_list` | `path?` | file list |
-| `fs_delete` | `path` | `true` |
-| `fs_mkdir` | `path` | `true` |
-
-### db
-| Tool | Input | Returns |
-|------|-------|---------|
-| `db_query` | `sql, params?` | rows[] |
-| `db_insert` | `table, data` | inserted row |
-| `db_update` | `table, data, where` | updated rows |
-| `db_delete` | `table, where` | deleted count |
-| `db_create_table` | `table, schema[]` | `true` |
-
-### net
-| Tool | Input | Returns |
-|------|-------|---------|
-| `net_http_get` | `url, headers?` | `{ status, body }` |
-| `net_http_post` | `url, body, headers?` | `{ status, body }` |
-| `net_http_put` | `url, body, headers?` | `{ status, body }` |
-| `net_http_delete` | `url, headers?` | `{ status, body }` |
-| `net_dns_resolve` | `hostname` | IP addresses |
-
-### events
-| Tool | Input | Returns |
-|------|-------|---------|
-| `events_publish` | `topic, payload` | `true` |
-| `events_subscribe` | `topic, limit?` | events[] |
-| `events_list_topics` | — | topic names |
-
-### proc
-| Tool | Input | Returns |
-|------|-------|---------|
-| `proc_execute` | `language, code, timeout?` | `{ stdout, stderr, exitCode }` |
-| `proc_schedule` | `cron, tool, input` | schedule ID |
-
----
-
-## Workflow Library API
-
-```
-GET    /api/agent/workflows           # list all saved workflows
-POST   /api/agent/workflows           # create manually
-PATCH  /api/agent/workflows/:id       # pause / resume / update schedule
-DELETE /api/agent/workflows/:id       # delete
-```
-
----
-
-## Architecture
-
-```
-Client (any language) → POST /mcp  { "tool": "...", "input": {} }
-                           │
-                           ├── JWT verification
-                           ├── Rate limit check (Redis)
-                           ├── Quota enforcement
-                           │
-                           ├── agentos.*        → 6 primitives
-                           ├── agentos.skill.*  -> skill store
-                           └── mcp.*            → external MCP servers
-                                    │
-                                    └── Audit log → Supabase (async)
-                                    └── FFP chain → optional consensus gate
-```
-
----
+Notes:
+- `VAULT_ENCRYPTION_KEY` falls back to `ENCRYPTION_KEY`
+- `FFP_*` values are optional unless FFP is enabled
 
 ## Development
 
 ```bash
-npm run dev           # Next.js on :3000
-npm run dev:api       # API server via tsx
-npm run build         # production build
-npm run lint          # TypeScript type check
-npm test              # run all tests
-npm run test:watch    # watch mode
-npm run test:coverage # coverage report
+npm run dev
+npm run dev:api
+npm run lint
+npm test
+npm run build
 ```
 
----
+## Deployment
 
-## Project structure
+Quality gate:
 
-```
-Agent-OS/
-├── app/                          # Next.js app router pages + API routes
-│   ├── api/
-│   │   ├── studio/intent/        # NL intent parser (v4 Hermes)
-│   │   ├── agent/workflows/      # Workflow library CRUD
-│   │   ├── agent/ffp/            # FFP audit + consensus (agent-scoped)
-│   │   ├── kernel/               # SDK kernel command layer
-│   │   ├── session/from-key/     # SDK → dashboard login link
-│   │   ├── payments/             # Crypto payments (Solana + Base USDC)
-│   │   ├── skills/               # Skill Store routes
-│   │   ├── apps/                 # App Store routes
-│   │   └── mcp/                  # Universal MCP router
-│   ├── studio/                   # Studio UI (NL + Advanced modes)
-│   ├── dashboard/                # Dashboard (Skills, FFP, Activity tabs)
-│   ├── marketplace/              # Skill Store
-│   ├── appstore/                 # App Store
-│   └── docs/                     # Documentation pages
-├── src/
-│   ├── auth/                     # JWT, session cookies, permissions
-│   ├── ffp/                      # Furge Fabric Protocol client
-│   ├── mcp/                      # Universal MCP router + registry
-│   ├── primitives/               # 6 core primitives
-│   ├── skills/                   # Skill execution engine
-│   ├── storage/                  # Redis + Supabase singletons
-│   └── utils/                    # Errors, validation, metrics
-└── tests/                        # Unit, integration, e2e tests
+```bash
+npm run lint
+npm test
+npm run build
 ```
 
----
+Production deploy:
 
-## Modes
+```bash
+vercel pull
+vercel deploy --prod
+```
 
-| Mode | Config | Description |
-|------|--------|-------------|
-| **Standalone** (default) | `FFP_MODE=disabled` | No external dependencies beyond Supabase + Redis |
-| **FFP Router** | `FFP_MODE=enabled` | Logs to FFP audit chains with optional consensus gates |
+Before deploying:
+- keep `main` fast-forwarded with `origin/main`
+- confirm `.vercel/project.json` points at the intended project
+- verify `/studio`, `/appstore`, `/appstore/[slug]`, `/marketplace`, `/vault`, `/ffp`, `/search`, `/developer`, `/sdk`, and `/signup`
 
----
+## Project layout
 
-## Author
-
-Built and maintained by **riz**.
+```text
+app/                  Next.js routes and pages
+components/           UI and page components
+src/appstore/         app catalog, lifecycle, SDK recovery
+src/vault/            vault assignment, grants, redaction
+src/studio/           sessions, snapshots, branching
+src/ffp/              FFP client and verification
+src/storage/          Supabase, Redis, local state, migrations
+tests/                unit, integration, and e2e coverage
+```
 
 ## License
 
 MIT
-
-
