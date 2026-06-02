@@ -59,18 +59,19 @@ describe('POST /api/plans/transition', () => {
     });
   });
 
-  it('rejects invalid plan transitions', async () => {
+  it('rejects self-serve plan transitions while billing is disabled', async () => {
     const response = await POST(request('retail_free', { newPlan: 'enterprise_max' }));
-    expect(response.status).toBe(400);
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.code).toBe('PLAN_REQUEST_REQUIRED');
   });
 
-  it('applies valid transitions and returns updated capabilities', async () => {
+  it('rejects valid transition targets until request-access billing is enabled', async () => {
     const response = await POST(request('retail_free', { newPlan: 'retail_pro' }));
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.transition.oldPlan).toBe('retail_free');
-    expect(body.transition.newPlan).toBe('retail_pro');
-    expect(body.transition.newCapabilities).toContain('use_bearer_token');
+    expect(response.status).toBe(409);
+    expect(body.code).toBe('PLAN_REQUEST_REQUIRED');
   });
 });
