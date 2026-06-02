@@ -4,7 +4,7 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> v6.1
+> v6.2
 
 AgentOS is a production runtime for agents, apps, and workflows. It ships Studio, a real Skill Store, a real App Store, Vault-backed secret assignment, SDK auto-discovery, FFP status and audit surfaces, and a single authenticated MCP API.
 
@@ -12,17 +12,19 @@ Live:
 - [agentos.services](https://agentos.services)
 - [Signup](https://www.agentos.services/signup)
 
-## V6.1 status
+## V6.2 status
 
-V6.1 ships:
+V6.2 ships:
 - `/studio` as the primary workflow surface
 - `/appstore` with real app install, open, update, uninstall, and pin flows
 - `/appstore/[slug]` with readiness, permissions, secrets, skills, targets, health, and owner analytics
 - `/vault` with assignment-aware secret validation and runtime grants
+- hardened Vault runtime injection with temporary secret access, runtime cleanup, access audit events, and shared output redaction
 - `/ffp` with runtime status, chains, audit history, consensus history, related workflows, and related apps
 - SDK app auto-discovery and legacy `kernel_registry` recovery into factual public listings
 - global search across apps, skills, workflows, sessions, projects, subagents, and Vault secret names only
 - session branching with parent lineage and isolated branch messages and events
+- enterprise-only SDK, developer, and publishing shells with signed-out and blocked states
 
 Rules enforced in shipped surfaces:
 - no fake marketplace data

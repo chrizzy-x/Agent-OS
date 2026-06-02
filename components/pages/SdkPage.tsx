@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Nav from '@/components/Nav';
+import { resolveBrowserAccessState } from '@/src/auth/browser-access';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
@@ -71,6 +72,7 @@ export default function SdkPage() {
   }, [load]);
 
   const enterprise = session?.capabilities?.includes('access_sdk') === true;
+  const accessState = resolveBrowserAccessState(session, loading, 'access_sdk');
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -80,33 +82,67 @@ export default function SdkPage() {
         sidebar={(
           <SidebarSection title="SDK">
             <SidebarNav
-              items={[
-                { href: '/studio', label: 'Studio' },
-                { href: '/sdk', label: 'SDK', active: true },
-                { href: '/developer', label: 'Developer' },
-                { href: '/appstore', label: 'Apps' },
-              ]}
+              items={accessState === 'allowed'
+                ? [
+                    { href: '/studio', label: 'Studio' },
+                    { href: '/sdk', label: 'SDK', active: true },
+                    { href: '/developer', label: 'Developer' },
+                    { href: '/appstore', label: 'Apps' },
+                  ]
+                : [
+                    { href: '/studio', label: 'Studio' },
+                    { href: '/sdk', label: 'SDK', active: true },
+                    { href: '/appstore', label: 'Apps' },
+                  ]}
             />
           </SidebarSection>
         )}
         aside={(
           <SidebarSection title="Summary">
             <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone={enterprise ? 'accent' : 'default'}>{enterprise ? 'Enterprise SDK enabled' : 'Retail access blocked'}</Badge>
+              <Badge tone={enterprise ? 'accent' : 'default'}>
+                {accessState === 'loading'
+                  ? 'Checking SDK access'
+                  : enterprise
+                    ? 'Enterprise SDK enabled'
+                    : accessState === 'signed_out'
+                      ? 'Sign in required'
+                      : 'Retail access blocked'}
+              </Badge>
               <div className="os-entity-copy">Credentials: {credentials.length}</div>
               <div className="os-entity-copy">Registered apps: {kernels.length}</div>
             </div>
           </SidebarSection>
         )}
       >
-        <PageHeader
-          eyebrow="SDK"
-          title="SDK access"
-          subtitle="Developer credentials, registered SDK apps, and kernel health."
-          actions={<Button href="/developer">Open Developer Console</Button>}
-        />
+        {accessState === 'allowed' ? (
+          <PageHeader
+            eyebrow="SDK"
+            title="SDK access"
+            subtitle="Developer credentials, registered SDK apps, and kernel health."
+            actions={<Button href="/developer">Open Developer Console</Button>}
+          />
+        ) : accessState === 'signed_out' ? (
+          <PageHeader
+            eyebrow="SDK Access"
+            title="Sign in required"
+            subtitle="SDK credentials and registrations are available only after sign-in."
+          />
+        ) : accessState === 'blocked' ? (
+          <PageHeader
+            eyebrow="SDK Access"
+            title="Enterprise access required"
+            subtitle="Retail workspaces cannot access SDK credentials, registrations, or publishing."
+          />
+        ) : (
+          <PageHeader
+            eyebrow="SDK Access"
+            title="Checking access"
+            subtitle="Validating SDK permissions for this workspace."
+          />
+        )}
 
-        {loading ? <LoadingState label="Loading SDK" /> : !session ? (
+        {loading ? <LoadingState label="Loading SDK access" /> : !session ? (
           <EmptyState title="Sign in required" body="Sign in to manage SDK credentials and app registrations." action={<Button href="/signin">Sign in</Button>} />
         ) : !enterprise ? (
           <EmptyState title="Enterprise access required" body="Retail workspaces cannot access SDK credentials, registrations, or publishing." action={<Button href="/studio">Open Studio</Button>} />

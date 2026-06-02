@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
+import { resolveBrowserAccessState } from '@/src/auth/browser-access';
+import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
   AppShell,
   Badge,
@@ -62,16 +64,32 @@ const DEFAULT_STATE: WizardState = {
 
 export default function PublishWizardPage({ initialSlug }: { initialSlug?: string | null }) {
   const slug = initialSlug ?? null;
+  const [session, setSession] = useState<BrowserSession | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [step, setStep] = useState('Manifest');
   const [loading, setLoading] = useState(Boolean(slug));
   const [state, setState] = useState<WizardState>(DEFAULT_STATE);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const canPublishApp = session?.capabilities?.includes('create_app') === true;
+  const accessState = resolveBrowserAccessState(session, sessionLoading, 'create_app');
+
+  useEffect(() => {
+    let active = true;
+    void fetchBrowserSession()
+      .then(current => { if (active) setSession(current); })
+      .catch(() => { if (active) setSession(null); })
+      .finally(() => { if (active) setSessionLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
     async function load() {
-      if (!slug) return;
+      if (!slug || !canPublishApp) {
+        if (active) setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const res = await fetch(`/api/apps/${slug}`, { cache: 'no-store' });
@@ -102,9 +120,11 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
         if (active) setLoading(false);
       }
     }
-    void load();
+    if (!sessionLoading) {
+      void load();
+    }
     return () => { active = false; };
-  }, [slug]);
+  }, [canPublishApp, sessionLoading, slug]);
 
   const manifestPreview = useMemo(() => {
     try {
@@ -184,7 +204,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
       <Nav activePath="/developer" />
       <AppShell
         activePath="/developer"
-        sidebar={(
+        sidebar={accessState === 'allowed' ? (
           <>
             <SidebarSection title="Publish">
               <Tabs tabs={STEPS.map(item => ({ key: item, label: item }))} active={step} onChange={setStep} />
@@ -199,8 +219,18 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
               />
             </SidebarSection>
           </>
+        ) : (
+          <SidebarSection title="Publishing Access">
+            <SidebarNav
+              items={[
+                { href: '/studio', label: 'Studio' },
+                { href: '/developer', label: 'Developer' },
+                { href: '/appstore', label: 'Appstore' },
+              ]}
+            />
+          </SidebarSection>
         )}
-        aside={(
+        aside={accessState === 'allowed' ? (
           <SidebarSection title="Preview">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Badge tone="accent">{state.runtime}</Badge>
@@ -209,16 +239,59 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
               <Badge tone={state.visibility === 'public' ? 'success' : state.visibility === 'unlisted' ? 'accent' : 'default'}>{state.visibility}</Badge>
             </div>
           </SidebarSection>
+        ) : (
+          <SidebarSection title="Access">
+            <div style={{ display: 'grid', gap: 10 }}>
+              <Badge tone={accessState === 'blocked' ? 'warning' : 'default'}>
+                {accessState === 'loading'
+                  ? 'Checking publish access'
+                  : accessState === 'signed_out'
+                    ? 'Sign in required'
+                    : 'Enterprise publishing required'}
+              </Badge>
+              <div className="os-entity-copy">
+                {accessState === 'signed_out'
+                  ? 'Sign in with an enterprise workspace to create or publish apps.'
+                  : accessState === 'blocked'
+                    ? 'App creation and publishing stay gated to Enterprise Plus and Enterprise Max.'
+                    : 'Validating publishing permissions.'}
+              </div>
+            </div>
+          </SidebarSection>
         )}
       >
-        <PageHeader
-          eyebrow="Publish app wizard"
-          title={slug ? 'Edit app metadata' : 'Publish App Wizard'}
-          subtitle="Turn internal apps and workflows into publishable listings, or refine metadata for SDK-backed apps."
-          actions={<Button onClick={() => void publish()}>{saving ? 'Saving...' : 'Publish'}</Button>}
-        />
+        {accessState === 'allowed' ? (
+          <PageHeader
+            eyebrow="Publish app wizard"
+            title={slug ? 'Edit app metadata' : 'Publish App Wizard'}
+            subtitle="Turn internal apps and workflows into publishable listings, or refine metadata for SDK-backed apps."
+            actions={<Button onClick={() => void publish()}>{saving ? 'Saving...' : 'Publish'}</Button>}
+          />
+        ) : accessState === 'signed_out' ? (
+          <PageHeader
+            eyebrow="Publishing Access"
+            title="Sign in required"
+            subtitle="App publishing is available only after sign-in and workspace validation."
+          />
+        ) : accessState === 'blocked' ? (
+          <PageHeader
+            eyebrow="Publishing Access"
+            title="Enterprise access required"
+            subtitle="Retail workspaces cannot create, publish, or manage app listings."
+          />
+        ) : (
+          <PageHeader
+            eyebrow="Publishing Access"
+            title="Checking access"
+            subtitle="Validating publishing permissions for this workspace."
+          />
+        )}
 
-        {loading ? <LoadingState label="Loading app metadata" /> : (
+        {sessionLoading || (accessState === 'allowed' && loading) ? <LoadingState label="Loading publishing access" /> : accessState === 'signed_out' ? (
+          <EmptyState title="Sign in required" body="Sign in to create or edit app listings." action={<Button href="/signin">Sign in</Button>} />
+        ) : !canPublishApp ? (
+          <EmptyState title="Enterprise access required" body="App creation and publishing stay gated to Enterprise Plus and Enterprise Max workspaces." action={<Button href="/studio">Open Studio</Button>} />
+        ) : (
           <>
             {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
 

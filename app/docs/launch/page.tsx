@@ -8,7 +8,7 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'v6.1 - real-data-only marketplace surfaces, FFP restoration, app readiness and lifecycle flows, Vault runtime grants, legacy SDK recovery, session branching, and request-access billing flows.',
+  'v6.2 - beta readiness hardening for Vault runtime injection, output redaction, disabled-app gating, developer access shells, and production lifecycle flows.',
   'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
   'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
   'Browser sessions now expose account name and expiry only. API callers continue to use bearer tokens; IDs stay inside signed tokens and server-side storage.',
@@ -45,7 +45,7 @@ const changelog = [
 ];
 
 const startLinks = [
-  { label: 'Create an agent', href: '/signup' },
+  { label: 'Create AgentOS account', href: '/signup' },
   { label: 'Sign in', href: '/signin' },
   { label: 'Open Studio', href: '/studio' },
   { label: 'Browse skills', href: '/marketplace' },
@@ -73,17 +73,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v6.1 <span style={{ color: 'var(--accent)' }}>&ldquo;Public Launch&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">Agent OS v6.2 <span style={{ color: 'var(--accent)' }}>&ldquo;Beta Readiness&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.1 ships the public launch privacy hardening plus real app lifecycle flows, Vault runtime grants, restored FFP visibility, and legacy SDK recovery. Agent IDs stay private, deployed-agent actions use public refs, and docs and API payloads stay launch-aligned. Live at <code>{APP_URL}</code>.
+            v6.2 ships hardened Vault runtime injection, shared output redaction, disabled-app lifecycle enforcement, safer developer gating, restored FFP visibility, and legacy SDK recovery. Agent IDs stay private, deployed-agent actions use public refs, and docs and API payloads stay launch-aligned. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.1</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.2</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS is a production infrastructure layer for autonomous agents. One bearer token gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, and a Natural Language Studio. In v6.1, private agent IDs stay server-side and users operate with agent names, bearer tokens, public action refs, readiness-checked apps, and Vault-backed runtime grants.
+              AgentOS is a production infrastructure layer for autonomous agents. One bearer token gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, and a Natural Language Studio. In v6.2, private agent IDs stay server-side, users operate with agent names and public action refs, readiness-checked apps stay enforced, and Vault-backed runtime access is granted ephemerally with redacted execution output.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

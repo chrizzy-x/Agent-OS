@@ -68,7 +68,7 @@ export const DOCS_CATALOG: DocsCatalogEntry[] = [
     href: '/docs/launch',
     title: 'Launch Notes',
     subtitle: 'Public launch notes for Studio, App Store, Skill Store, and FFP.',
-    keywords: ['launch', 'release', 'v6', 'v6.1'],
+    keywords: ['launch', 'release', 'v6', 'v6.2'],
   },
   {
     id: 'docs-features',

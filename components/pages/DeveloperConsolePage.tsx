@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
+import { resolveBrowserAccessState } from '@/src/auth/browser-access';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
@@ -78,6 +79,7 @@ export default function DeveloperConsolePage() {
   const [search, setSearch] = useState('');
 
   const canUseDeveloperConsole = session?.capabilities?.includes('access_developer_console') === true;
+  const accessState = resolveBrowserAccessState(session, loading, 'access_developer_console');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -136,7 +138,7 @@ export default function DeveloperConsolePage() {
       <Nav activePath="/developer" />
       <AppShell
         activePath="/developer"
-        sidebar={(
+        sidebar={accessState === 'allowed' ? (
           <SidebarSection title="Developer">
             <FilterChips items={SECTIONS} active={section} onChange={setSection} />
             <SidebarNav items={SECTIONS.map(item => ({
@@ -146,8 +148,18 @@ export default function DeveloperConsolePage() {
               onClick: item === 'Publishing' ? undefined : () => setSection(item),
             }))} />
           </SidebarSection>
+        ) : (
+          <SidebarSection title="Developer Access">
+            <SidebarNav
+              items={[
+                { href: '/studio', label: 'Studio' },
+                { href: '/sdk', label: 'SDK' },
+                { href: '/appstore', label: 'Appstore' },
+              ]}
+            />
+          </SidebarSection>
         )}
-        aside={(
+        aside={accessState === 'allowed' ? (
           <>
             <SidebarSection title="SDK health">
               <ActivityFeed
@@ -170,16 +182,49 @@ export default function DeveloperConsolePage() {
               />
             </SidebarSection>
           </>
+        ) : (
+          <SidebarSection title="Access">
+            <div style={{ display: 'grid', gap: 10 }}>
+              <StatusPill status={accessState === 'loading' ? 'pending' : accessState === 'signed_out' ? 'offline' : 'blocked'} />
+              <div className="os-entity-copy">
+                {accessState === 'signed_out'
+                  ? 'Sign in with an enterprise-capable workspace to open the Developer Console.'
+                  : accessState === 'blocked'
+                    ? 'Developer publishing, analytics, SDK keys, and billing stay hidden outside enterprise workspaces.'
+                    : 'Checking developer access.'}
+              </div>
+            </div>
+          </SidebarSection>
         )}
       >
-        <PageHeader
-          eyebrow="Developer Console"
-          title="Developer Console"
-          subtitle="SDK apps, internal apps, publishing, analytics, keys, and webhooks."
-          actions={<Button href="/developer/publish">Publish app</Button>}
-        />
+        {accessState === 'allowed' ? (
+          <PageHeader
+            eyebrow="Developer Console"
+            title="Developer Console"
+            subtitle="SDK apps, internal apps, publishing, analytics, keys, and webhooks."
+            actions={<Button href="/developer/publish">Publish app</Button>}
+          />
+        ) : accessState === 'signed_out' ? (
+          <PageHeader
+            eyebrow="Developer Access"
+            title="Sign in required"
+            subtitle="Developer Console is available only after sign-in and plan validation."
+          />
+        ) : accessState === 'blocked' ? (
+          <PageHeader
+            eyebrow="Developer Access"
+            title="Enterprise access required"
+            subtitle="Retail workspaces cannot open publishing, SDK, analytics, or billing controls."
+          />
+        ) : (
+          <PageHeader
+            eyebrow="Developer Access"
+            title="Checking access"
+            subtitle="Validating developer permissions for this workspace."
+          />
+        )}
 
-        {loading ? <LoadingState label="Loading developer console" /> : !session ? (
+        {loading ? <LoadingState label="Loading developer access" /> : !session ? (
           <EmptyState title="Sign in required" body="Sign in to manage apps, SDK credentials, and analytics." action={<Button href="/signin">Sign in</Button>} />
         ) : !canUseDeveloperConsole ? (
           <EmptyState title="Enterprise access required" body="Developer Console stays gated to enterprise-capable workspaces. Existing routes remain available, but SDK publishing and analytics are blocked on plan." action={<Button href="/studio">Open Studio</Button>} />

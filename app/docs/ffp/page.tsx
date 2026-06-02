@@ -51,7 +51,7 @@ export default function FFPPage() {
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-3">Fabric Flow Protocol</h1>
           <p className="text-lg text-gray-500">
-            AgentOS V6.1 exposes FFP as a visible module at <code className="bg-gray-100 px-1 rounded text-sm">/ffp</code>. Retail users see a locked enterprise state. Enterprise users see real runtime status, chain activity, audit history, consensus history, related workflows, related apps, and logs.
+            AgentOS V6.2 exposes FFP as a visible module at <code className="bg-gray-100 px-1 rounded text-sm">/ffp</code>. Retail users see a locked enterprise state. Enterprise users see real runtime status, chain activity, audit history, consensus history, related workflows, related apps, and logs.
           </p>
         </section>
 

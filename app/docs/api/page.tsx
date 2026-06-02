@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.1.0", "timestamp": "...", "tools": 32 }',
+    response: '{ "status": "ok", "version": "6.2.0", "timestamp": "...", "tools": 32 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -56,7 +56,7 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'POST', path: '/api/signup', auth: 'None',
-    desc: 'Create an agent account, start a secure browser session, and return a 90-day bearer token for external use.',
+    desc: 'Create an AgentOS account, start a secure browser session, and return a 90-day bearer token for external use.',
     body: [
       { field: 'email', type: 'string', required: true, desc: 'Valid email address' },
       { field: 'password', type: 'string', required: true, desc: 'At least 8 characters' },

@@ -90,7 +90,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
 function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     name: 'AgentOS',
-    version: '6.0.0',
+    version: '6.2.0',
     description: 'Universal MCP, primitives, Skill Store capabilities, App Store packages, and external agent connectivity over one endpoint.',
     status: 'ok',
     endpoints: {
@@ -109,7 +109,7 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     status: 'ok',
-    version: '6.0.0',
+    version: '6.2.0',
     timestamp: new Date().toISOString(),
     tools: Object.keys(TOOLS).length,
   });
