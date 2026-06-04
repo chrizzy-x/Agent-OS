@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import {
-  AppShell,
   Button,
   Card,
   EmptyState,
@@ -11,8 +11,6 @@ import {
   LoadingState,
   PageHeader,
   Select,
-  SidebarNav,
-  SidebarSection,
   Textarea,
 } from '@/components/os/ui';
 
@@ -100,24 +98,7 @@ export default function SettingsPage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/settings" />
-      <AppShell
-        activePath="/settings"
-        sidebar={(
-          <SidebarSection title="Settings">
-            <SidebarNav
-              items={[
-                { href: '/settings', label: 'Profile', active: true },
-                { href: '/settings', label: 'Workspace' },
-                { href: '/billing', label: 'Billing & Plan' },
-                { href: '/settings/team', label: 'Security' },
-                { href: '/developer', label: 'Integrations' },
-                { href: '/settings/team', label: 'Notifications' },
-                { href: '/settings/team', label: 'Advanced' },
-              ]}
-            />
-          </SidebarSection>
-        )}
-      >
+      <WorkspaceShell activePath="/settings">
         <PageHeader
           eyebrow="Settings"
           title="Account and workspace settings"
@@ -167,7 +148,7 @@ export default function SettingsPage() {
             {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

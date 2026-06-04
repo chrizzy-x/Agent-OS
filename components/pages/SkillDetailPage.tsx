@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
+import { summarizeSkillCapability } from '@/src/ui/presenters';
 import {
-  AppShell,
   Badge,
   Button,
   Card,
@@ -13,8 +14,6 @@ import {
   PageHeader,
   PermissionCard,
   SearchBar,
-  SidebarNav,
-  SidebarSection,
   Tabs,
 } from '@/components/os/ui';
 
@@ -96,22 +95,11 @@ export default function SkillDetailPage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/skills" />
-      <AppShell
+      <WorkspaceShell
         activePath="/skills"
-        sidebar={(
-          <SidebarSection title="Marketplace">
-            <SidebarNav
-              items={[
-                { href: '/skills', label: 'Back to marketplace' },
-                { href: `/skills/${slug}`, label: 'Skill details', active: true },
-                { href: '/vault', label: 'Vault' },
-                { href: '/developer', label: 'Developer' },
-              ]}
-            />
-          </SidebarSection>
-        )}
         aside={(
-          <SidebarSection title="Quick facts">
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Quick facts</div>
             {skill ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <Badge tone="accent">{skill.category}</Badge>
@@ -120,7 +108,7 @@ export default function SkillDetailPage() {
                 <div className="os-entity-copy">{skill.rating.toFixed(1)} rating</div>
               </div>
             ) : null}
-          </SidebarSection>
+          </Card>
         )}
       >
         {loading ? <LoadingState label="Loading skill" /> : !skill ? (
@@ -151,7 +139,8 @@ export default function SkillDetailPage() {
                       <Card key={capability.name}>
                         <div className="os-entity-title">{capability.name}</div>
                         <div className="os-entity-copy">{capability.description}</div>
-                        {capability.params ? <pre className="os-code-block">{JSON.stringify(capability.params, null, 2)}</pre> : null}
+                        <div className="os-entity-copy">{summarizeSkillCapability(capability.params, capability.returns)}</div>
+                        {capability.params ? <div className="os-entity-meta">{Object.keys(capability.params).join(', ') || 'No parameter names'}</div> : null}
                       </Card>
                     ))}
                   </div>
@@ -183,7 +172,7 @@ export default function SkillDetailPage() {
             {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
+import { summarizeValue } from '@/src/ui/presenters';
 import {
   ActivityFeed,
-  AppShell,
   Button,
   Card,
   DataTable,
@@ -14,8 +15,6 @@ import {
   MetricCard,
   PageHeader,
   Select,
-  SidebarNav,
-  SidebarSection,
   Tabs,
 } from '@/components/os/ui';
 
@@ -130,18 +129,13 @@ export default function TeamPage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/settings" />
-      <AppShell
-        sidebar={(
-          <SidebarSection title="Team">
-            <SidebarNav
-              items={[
-                { href: '/settings/team', label: 'Members', active: tab === 'Members', onClick: () => setTab('Members') },
-                { href: '/settings/team', label: 'Roles & Permissions', active: tab === 'Roles & Permissions', onClick: () => setTab('Roles & Permissions') },
-                { href: '/settings/team', label: 'Activity Log', active: tab === 'Activity Log', onClick: () => setTab('Activity Log') },
-                { href: '/settings/team', label: 'SSO & Security', active: tab === 'SSO & Security', onClick: () => setTab('SSO & Security') },
-              ]}
-            />
-          </SidebarSection>
+      <WorkspaceShell
+        activePath="/settings"
+        extraSidebar={(
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Team</div>
+            <Tabs tabs={TABS.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
+          </Card>
         )}
       >
         <PageHeader
@@ -218,7 +212,7 @@ export default function TeamPage() {
                   <ActivityFeed items={activity.map(item => ({
                     id: item.id,
                     title: item.action,
-                    subtitle: item.actorLabel || JSON.stringify(item.metadata).slice(0, 80),
+                    subtitle: item.actorLabel || summarizeValue(item.metadata, 80),
                     time: new Date(item.createdAt).toLocaleString(),
                   }))} />
                 </Card>
@@ -235,7 +229,7 @@ export default function TeamPage() {
             {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

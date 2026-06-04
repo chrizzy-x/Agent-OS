@@ -1,12 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import Nav from '@/components/Nav';
+import { useRouteDrawer } from '@/components/os/drawer-state';
+import { ConfirmModal, Drawer } from '@/components/os/overlays';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import type { AgentAppListing } from '@/src/appstore/catalog';
 import {
-  AppShell,
   AppCard,
   Badge,
   Button,
@@ -16,18 +17,18 @@ import {
   LoadingState,
   PageHeader,
   SearchBar,
-  SidebarNav,
-  SidebarSection,
-  StatusPill,
 } from '@/components/os/ui';
 
-const CATEGORY_CHIPS = ['All', 'Featured', 'Popular', 'New', 'External SDK', 'Internal Apps', 'Skills', 'Finance', 'Productivity', 'Dev Tools', 'Data', 'Research'];
-const RUNTIME_FILTERS = ['all', 'external-app', 'agentos-app', 'workspace-app'];
+const CATEGORY_CHIPS = ['All', 'Featured', 'External SDK', 'Internal Apps', 'Finance', 'Productivity', 'Dev Tools', 'Data', 'Research'];
+
+type AppOpenTarget = 'web' | 'android' | 'ios';
 
 type InstalledAppCard = AgentAppListing & {
   installation?: {
     favorite?: boolean;
+    permissionsApproved?: string[];
     installedVersion?: string | null;
+    updateAvailable?: boolean;
     status?: 'active' | 'disabled' | 'removed';
   };
   readiness?: {
@@ -38,22 +39,24 @@ type InstalledAppCard = AgentAppListing & {
     appUnavailableReason?: string | null;
     ready: boolean;
     updateAvailable: boolean;
-    targets: Array<{ target: 'web' | 'android' | 'ios'; url: string }>;
+    targets: Array<{ target: AppOpenTarget; url: string }>;
   };
 };
 
-function runtimeLabel(app: AgentAppListing): string {
+type AppDetails = InstalledAppCard & {
+  longDescription?: string;
+};
+
+function runtimeLabel(app: AgentAppListing | null): string {
+  if (!app) return 'App';
   if (app.source === 'external_sdk') return 'External SDK';
   if (app.runtimeType === 'workspace-app') return 'Workspace App';
-  if (app.runtimeType === 'external-app') return 'External SDK';
   return 'Internal App';
 }
 
 function matchCategory(app: AgentAppListing, category: string): boolean {
   if (category === 'All') return true;
   if (category === 'Featured') return app.verified;
-  if (category === 'Popular') return app.installCount > 0;
-  if (category === 'New') return true;
   if (category === 'External SDK') return app.source === 'external_sdk';
   if (category === 'Internal Apps') return app.source === 'internal';
   return `${app.category} ${app.description}`.toLowerCase().includes(category.toLowerCase());
@@ -73,22 +76,30 @@ function getInstalledState(app: InstalledAppCard | null | undefined): { label: s
   return { label: 'Ready', tone: 'success' };
 }
 
-function getInstalledSummary(app: InstalledAppCard): string {
-  const state = getInstalledState(app);
-  if (!state) return runtimeLabel(app);
-  return `${runtimeLabel(app)} - ${state.label.toLowerCase()}`;
+function platformBadges(app: AppDetails | null): string[] {
+  if (!app) return [];
+  const targets = new Set<string>();
+  if (app.distribution.webUrl || app.appUrl) targets.add('Web');
+  if (app.distribution.androidUrl) targets.add('Android');
+  if (app.distribution.iosUrl) targets.add('iOS');
+  return [...targets];
 }
 
 export default function AppstorePage() {
+  const drawer = useRouteDrawer<'app-preview' | 'app-install'>();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [apps, setApps] = useState<AgentAppListing[]>([]);
   const [installedApps, setInstalledApps] = useState<InstalledAppCard[]>([]);
+  const [detail, setDetail] = useState<AppDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [working, setWorking] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
-  const [runtimeType, setRuntimeType] = useState('all');
+  const [notice, setNotice] = useState('');
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadListings = useCallback(async () => {
     setLoading(true);
     try {
       const [publicRes, currentSession] = await Promise.all([
@@ -113,262 +124,395 @@ export default function AppstorePage() {
     }
   }, []);
 
+  const loadDetail = useCallback(async (slug: string) => {
+    setDetailLoading(true);
+    try {
+      const [appRes, readinessRes] = await Promise.all([
+        fetch(`/api/apps/${slug}`, { cache: 'no-store' }),
+        session ? fetch(`/api/apps/${slug}/readiness`, { cache: 'no-store' }).catch(() => null) : Promise.resolve(null),
+      ]);
+      const appData = await appRes.json().catch(() => ({}));
+      const readinessData = readinessRes ? await readinessRes.json().catch(() => ({})) : {};
+      const installedMatch = installedApps.find(item => item.slug === slug);
+      setDetail({
+        ...(appData.app ?? {}),
+        installation: readinessData.installation ?? installedMatch?.installation ?? null,
+        readiness: readinessData.ready === undefined ? installedMatch?.readiness : {
+          installation: readinessData.installation ?? null,
+          requiredPermissions: readinessData.requiredPermissions ?? [],
+          missingPermissions: readinessData.missingPermissions ?? [],
+          missingSecrets: readinessData.missingSecrets ?? [],
+          missingSkills: readinessData.missingSkills ?? [],
+          appUnavailableReason: typeof readinessData.appUnavailableReason === 'string' ? readinessData.appUnavailableReason : null,
+          ready: readinessData.ready === true,
+          updateAvailable: readinessData.updateAvailable === true,
+          targets: readinessData.targets ?? [],
+        },
+      });
+    } catch {
+      setDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [installedApps, session]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadListings();
+  }, [loadListings]);
+
+  useEffect(() => {
+    if (!drawer.current?.entityId) {
+      setDetail(null);
+      return;
+    }
+    void loadDetail(drawer.current.entityId);
+  }, [drawer.current?.entityId, loadDetail]);
 
   const filtered = useMemo(
     () => apps.filter(app => {
       const matchesSearch = !search || `${app.name} ${app.description} ${app.category}`.toLowerCase().includes(search.toLowerCase());
-      const matchesRuntime = runtimeType === 'all' || app.runtimeType === runtimeType;
-      return matchesSearch && matchesRuntime && matchCategory(app, category);
+      return matchesSearch && matchCategory(app, category);
     }),
-    [apps, category, runtimeType, search],
+    [apps, category, search],
   );
 
   const installedBySlug = useMemo(
     () => new Map(installedApps.map(app => [app.slug, app])),
     [installedApps],
   );
-  const featured = filtered.filter(app => app.verified || app.source === 'external_sdk').slice(0, 3);
-  const trending = filtered.slice(0, 5);
+
+  const requiredPermissions = detail?.readiness?.requiredPermissions.length
+    ? detail.readiness.requiredPermissions
+    : detail?.permissionsRequired ?? detail?.manifest.permissions ?? [];
+  const requiredSecrets = detail?.requiredSecrets.length
+    ? detail.requiredSecrets
+    : detail?.manifest.requiredSecrets ?? [];
+  const requiredSkills = detail?.manifest.requiredSkills?.length
+    ? detail.manifest.requiredSkills
+    : detail?.manifest.skills ?? [];
+  const state = getInstalledState(detail);
+
+  async function refreshCurrentDetail() {
+    await loadListings();
+    if (drawer.current?.entityId) {
+      await loadDetail(drawer.current.entityId);
+    }
+  }
+
+  async function installCurrent() {
+    if (!detail) return;
+    setWorking(true);
+    setNotice('');
+    try {
+      const response = await fetch('/api/apps/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug: detail.slug,
+          permissionsApproved: requiredPermissions,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(payload.error ?? payload.message ?? 'Install failed');
+        return;
+      }
+      setNotice(`Installed ${detail.name}.`);
+      await refreshCurrentDetail();
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function approvePermissions() {
+    if (!detail) return;
+    setWorking(true);
+    setNotice('');
+    try {
+      const response = await fetch(`/api/apps/${detail.slug}/installation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissionsApproved: requiredPermissions }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(payload.error ?? payload.message ?? 'Permission approval failed');
+        return;
+      }
+      setNotice('Permissions approved.');
+      await refreshCurrentDetail();
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function openTarget(target: AppOpenTarget) {
+    if (!detail) return;
+    setWorking(true);
+    setNotice('');
+    try {
+      const response = await fetch(`/api/apps/${detail.slug}/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(payload.error ?? payload.message ?? 'Open failed');
+        return;
+      }
+      if (typeof payload.openUrl === 'string') {
+        window.open(payload.openUrl, '_blank', 'noopener,noreferrer');
+      }
+      setNotice(`Opened ${detail.name}.`);
+      await refreshCurrentDetail();
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function toggleFavorite() {
+    if (!detail?.installation) return;
+    setWorking(true);
+    try {
+      const response = await fetch(`/api/apps/${detail.slug}/installation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ favorite: !(detail.installation.favorite === true) }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setNotice(response.ok ? (detail.installation.favorite ? 'Removed favorite.' : 'Added favorite.') : payload.error ?? 'Favorite update failed');
+      await refreshCurrentDetail();
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function removeCurrent() {
+    if (!detail) return;
+    setWorking(true);
+    try {
+      const response = await fetch(`/api/apps/${detail.slug}/installation`, { method: 'DELETE' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(payload.error ?? payload.message ?? 'Remove failed');
+        return;
+      }
+      setNotice(`Removed ${detail.name}.`);
+      setConfirmRemove(false);
+      await refreshCurrentDetail();
+    } finally {
+      setWorking(false);
+    }
+  }
 
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/appstore" />
-      <AppShell
+      <WorkspaceShell
         activePath="/appstore"
-        sidebar={(
-          <>
-            <SidebarSection title="Explore">
-              <SidebarNav
-                items={[
-                  { href: '/studio', label: 'Studio' },
-                  { href: '/appstore', label: 'Appstore', active: true },
-                  { href: '/ffp', label: 'FFP' },
-                  ...(session?.capabilities?.includes('access_developer_console') ? [{ href: '/developer', label: 'Developer' }] : []),
-                  { href: '/projects', label: 'Projects' },
-                  { href: '/workflows', label: 'Workflows' },
-                  { href: '/vault', label: 'Vault' },
-                  { href: '/skills', label: 'Skills' },
-                  { href: '/analytics', label: 'Analytics' },
-                  { href: '/settings', label: 'Settings' },
-                ]}
-              />
-            </SidebarSection>
-            <SidebarSection title="Categories">
-              <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
-            </SidebarSection>
-          </>
-        )}
         aside={(
-          <>
-            <SidebarSection title="Filters">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {RUNTIME_FILTERS.map(item => (
-                  <button key={item} type="button" className={`os-chip${runtimeType === item ? ' active' : ''}`} onClick={() => setRuntimeType(item)}>
-                    {item === 'all' ? 'All runtimes' : item === 'external-app' ? 'External SDK' : item === 'agentos-app' ? 'Internal App' : 'Workspace App'}
-                  </button>
-                ))}
-              </div>
-            </SidebarSection>
-            <SidebarSection title="Installed apps">
-              {installedApps.length === 0 ? (
-                <div className="os-empty-body">No installed apps yet.</div>
-              ) : (
-                <SidebarNav items={installedApps.slice(0, 6).map(app => ({
-                  href: `/appstore/${app.slug}`,
-                  label: app.name,
-                  subtitle: getInstalledSummary(app),
-                  badge: app.installation?.favorite ? 'Pinned' : undefined,
-                }))} />
-              )}
-            </SidebarSection>
-            <SidebarSection title="Trending this week">
-              <SidebarNav items={trending.map(app => ({
-                href: `/appstore/${app.slug}`,
-                label: app.name,
-                subtitle: `${app.installCount.toLocaleString()} installs`,
-              }))} />
-            </SidebarSection>
-          </>
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Installed</div>
+            <div className="os-drawer-stack">
+              <div className="os-entity-copy">{installedApps.length} installed</div>
+              {installedApps.slice(0, 5).map(app => (
+                <button
+                  key={app.id}
+                  type="button"
+                  className="os-sidebar-link"
+                  onClick={() => drawer.openDrawer('app-preview', app.slug)}
+                >
+                  <span className="os-sidebar-label">{app.name}</span>
+                  <span className="os-sidebar-subtitle">{getInstalledState(app)?.label ?? runtimeLabel(app)}</span>
+                </button>
+              ))}
+            </div>
+          </Card>
         )}
       >
         <PageHeader
-          eyebrow="AgentOS Appstore"
-          title="Appstore"
-          subtitle="Public listings come only from real SDK registrations, published AgentOS apps, and official system apps."
-          actions={session?.capabilities?.includes('create_app') ? <Button href="/publishing/new" variant="secondary">Publish app</Button> : undefined}
+          eyebrow="App Store"
+          title="Browse real apps"
+          subtitle="Search, filter, preview, and install only validated AgentOS and SDK apps."
+          actions={session?.capabilities?.includes('create_app') ? <Button href="/developer/publish" variant="secondary">Publish app</Button> : undefined}
         />
 
-        <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps, SDK tools, finance, research, data..." />
-        <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
+        <div className="os-drawer-stack">
+          <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps" />
+          <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
+        </div>
 
-        {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-            {[0, 1, 2].map(item => <LoadingState key={item} label="Loading app listings" />)}
-          </div>
-        ) : featured.length === 0 && filtered.length === 0 ? (
-          <EmptyState title="No public apps yet" body="Public listings appear here automatically for validated SDK apps and published AgentOS releases." />
+        {loading ? <LoadingState label="Loading App Store" /> : filtered.length === 0 ? (
+          <EmptyState title="No apps found" body="No public apps matched this search or category." />
         ) : (
-          <>
+          <div className="os-drawer-stack">
             {session ? (
               <Card>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-                  <div>
-                    <div className="os-entity-title">Installed apps</div>
-                    <div className="os-entity-copy">Readiness, pending approvals, missing secrets, and update state stay visible here.</div>
-                  </div>
-                  <Badge tone="accent">{installedApps.length} installed</Badge>
+                <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                  <div className="os-entity-title">Installed apps</div>
+                  <Badge tone="accent">{installedApps.length}</Badge>
                 </div>
                 {installedApps.length === 0 ? (
                   <div className="os-empty-body">No installed apps yet.</div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-                    {installedApps.slice(0, 6).map(app => {
-                      const state = getInstalledState(app);
-                      return (
-                        <AppCard
-                          key={app.id}
-                          href={`/appstore/${app.slug}`}
-                          title={app.name}
-                          description={app.description}
-                          runtime={runtimeLabel(app)}
-                          verified={app.verified}
-                          installs={app.installCount}
-                          badge={state ? <Badge tone={state.tone}>{state.label}</Badge> : undefined}
-                          footer={(
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                              <span className="os-entity-meta">
-                                {app.readiness?.appUnavailableReason
-                                  ? app.readiness.appUnavailableReason
-                                  : app.readiness?.missingSecrets.length
-                                  ? `${app.readiness.missingSecrets.length} secret issue${app.readiness.missingSecrets.length === 1 ? '' : 's'}`
-                                  : app.readiness?.missingSkills.length
-                                    ? `${app.readiness.missingSkills.length} skill issue${app.readiness.missingSkills.length === 1 ? '' : 's'}`
-                                    : app.readiness?.missingPermissions.length
-                                      ? `${app.readiness.missingPermissions.length} approval issue${app.readiness.missingPermissions.length === 1 ? '' : 's'}`
-                                      : app.readiness?.targets.map(item => item.target).join(' / ') || 'AgentOS Cloud'}
-                              </span>
-                              <Button href={`/appstore/${app.slug}`} variant="primary">
-                                {app.readiness?.appUnavailableReason ? 'Review' : app.readiness?.updateAvailable ? 'Update' : 'Open'}
-                              </Button>
-                            </div>
-                          )}
-                        />
-                      );
-                    })}
+                    {installedApps.slice(0, 4).map(app => (
+                      <AppCard
+                        key={app.id}
+                        title={app.name}
+                        description={app.description}
+                        runtime={runtimeLabel(app)}
+                        verified={app.verified}
+                        badge={getInstalledState(app) ? <Badge tone={getInstalledState(app)?.tone ?? 'default'}>{getInstalledState(app)?.label}</Badge> : undefined}
+                        footer={(
+                          <div className="os-inline-actions">
+                            <Button variant="secondary" onClick={() => drawer.openDrawer('app-preview', app.slug)}>Inspect</Button>
+                            <Button onClick={() => drawer.openDrawer('app-install', app.slug)}>Manage</Button>
+                          </div>
+                        )}
+                      />
+                    ))}
                   </div>
                 )}
               </Card>
             ) : null}
 
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-                <div>
-                  <div className="os-entity-title">Featured apps</div>
-                  <div className="os-entity-copy">Verified releases and SDK apps that completed registration and indexing.</div>
-                </div>
-                <Badge tone="accent">{filtered.length} public apps</Badge>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-                {featured.map(app => {
-                  const installed = installedBySlug.get(app.slug);
-                  const state = getInstalledState(installed);
-                  return (
-                    <AppCard
-                      key={app.id}
-                      href={`/appstore/${app.slug}`}
-                      title={app.name}
-                      description={app.description}
-                      runtime={runtimeLabel(app)}
-                      verified={app.verified}
-                      installs={app.installCount}
-                      badge={app.source === 'external_sdk'
-                        ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge>
-                        : state
-                          ? <Badge tone={state.tone}>{state.label}</Badge>
-                          : undefined}
-                      footer={(
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                          {installed ? <Badge tone={state?.tone ?? 'default'}>{state?.label ?? 'Installed'}</Badge> : <StatusPill status={app.visibility} />}
-                          <Button href={`/appstore/${app.slug}`} variant="primary">
-                            {installed?.readiness?.appUnavailableReason ? 'Review' : installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
-                          </Button>
-                        </div>
-                      )}
-                    />
-                  );
-                })}
-              </div>
-            </Card>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
               {filtered.map(app => {
                 const installed = installedBySlug.get(app.slug);
-                const state = getInstalledState(installed);
+                const installedState = getInstalledState(installed);
                 return (
                   <AppCard
                     key={app.id}
-                    href={`/appstore/${app.slug}`}
                     title={app.name}
                     description={app.description}
                     runtime={runtimeLabel(app)}
                     verified={app.verified}
-                    installs={app.installCount}
-                    badge={app.source === 'external_sdk'
-                      ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge>
-                      : state
-                        ? <Badge tone={state.tone}>{state.label}</Badge>
-                        : undefined}
+                    badge={installedState ? <Badge tone={installedState.tone}>{installedState.label}</Badge> : app.source === 'external_sdk' ? <Badge tone="accent">External SDK</Badge> : undefined}
                     footer={(
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <span className="os-entity-meta">
-                          {installed?.readiness?.appUnavailableReason
-                            ? installed.readiness.appUnavailableReason
-                            : installed?.readiness?.updateAvailable
-                            ? `Installed ${installed.installation?.installedVersion ?? 'older'} -> ${app.manifest.version}`
-                            : installed?.readiness && !installed.readiness.ready
-                              ? [
-                                installed.readiness.missingPermissions.length > 0 ? 'Needs approval' : null,
-                                installed.readiness.missingSecrets.length > 0 ? 'Missing secrets' : null,
-                                installed.readiness.missingSkills.length > 0 ? 'Missing skills' : null,
-                              ].filter(Boolean).join(' | ') || 'Not ready'
-                              : app.deviceTargets.slice(0, 2).join(' / ') || 'AgentOS Cloud'}
-                        </span>
-                        <Button href={`/appstore/${app.slug}`}>
-                          {installed?.readiness?.appUnavailableReason ? 'Review' : installed?.readiness?.updateAvailable ? 'Update' : installed ? 'Open' : 'Install'}
-                        </Button>
+                      <div className="os-inline-actions">
+                        <Button variant="secondary" onClick={() => drawer.openDrawer('app-preview', app.slug)}>Preview</Button>
+                        <Button onClick={() => drawer.openDrawer('app-install', app.slug)}>{installed ? 'Manage' : 'Install'}</Button>
                       </div>
                     )}
                   />
                 );
               })}
             </div>
+          </div>
+        )}
+      </WorkspaceShell>
+
+      <Drawer
+        open={drawer.current?.id === 'app-preview'}
+        onClose={drawer.closeDrawer}
+        title={detail?.name ?? 'App preview'}
+        description={detail?.description ?? 'Preview app details'}
+        routeSafe
+      >
+        {detailLoading ? <LoadingState label="Loading app preview" /> : !detail ? (
+          <EmptyState title="App unavailable" body="This app could not be loaded." />
+        ) : (
+          <>
+            <Card>
+              <div className="os-inline-actions">
+                <Badge tone="accent">{runtimeLabel(detail)}</Badge>
+                {state ? <Badge tone={state.tone}>{state.label}</Badge> : null}
+                {platformBadges(detail).map(item => <Badge key={item} tone="default">{item}</Badge>)}
+              </div>
+              <div className="os-drawer-stack" style={{ marginTop: 12 }}>
+                <div className="os-entity-copy">{detail.longDescription || detail.description}</div>
+                <Button href={`/appstore/${detail.slug}`} variant="secondary">Open full page</Button>
+              </div>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Requirements</div>
+              <div className="os-drawer-stack">
+                <div className="os-entity-copy">Permissions: {requiredPermissions.join(', ') || 'None'}</div>
+                <div className="os-entity-copy">Secrets: {requiredSecrets.join(', ') || 'None'}</div>
+                <div className="os-entity-copy">Skills: {requiredSkills.join(', ') || 'None'}</div>
+              </div>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Version and health</div>
+              <div className="os-drawer-stack">
+                <div className="os-entity-copy">Version {detail.manifest.version}</div>
+                <div className="os-entity-copy">Health: {detail.healthStatus}</div>
+                <div className="os-entity-copy">Last heartbeat: {detail.lastHeartbeatAt ? new Date(detail.lastHeartbeatAt).toLocaleString() : 'None'}</div>
+              </div>
+            </Card>
+            {detail.source === 'external_sdk' && detail.kernelProduct ? (
+              <Card>
+                <div className="os-entity-title" style={{ marginBottom: 12 }}>Runtime source</div>
+                <div className="os-entity-copy">Kernel product: {detail.kernelProduct}</div>
+              </Card>
+            ) : null}
           </>
         )}
+      </Drawer>
 
-        <nav
-          aria-label="Mobile navigation"
-          style={{
-            position: 'sticky',
-            bottom: 16,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: 8,
-            padding: 8,
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            background: 'rgba(17, 17, 22, 0.95)',
-          }}
-        >
-          <Link href="/studio" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>Studio</Link>
-          <Link href="/appstore" className="os-chip active" style={{ textDecoration: 'none', justifyContent: 'center' }}>Apps</Link>
-          <Link href="/ffp" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>FFP</Link>
-          <Link href="/subagents" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>Agents</Link>
-          <Link href="/settings" className="os-chip" style={{ textDecoration: 'none', justifyContent: 'center' }}>Settings</Link>
-        </nav>
-      </AppShell>
+      <Drawer
+        open={drawer.current?.id === 'app-install'}
+        onClose={drawer.closeDrawer}
+        title={detail?.installation ? `${detail.name} installed` : detail?.name ?? 'Install app'}
+        description="Review permissions, secrets, skills, and runtime readiness before changing install state."
+        routeSafe
+        footer={detail ? (
+          <div className="os-inline-actions">
+            {!detail.installation ? <Button onClick={() => void installCurrent()} disabled={working}>{working ? 'Working...' : 'Approve & Install'}</Button> : null}
+            {detail.installation && detail.readiness?.missingPermissions.length ? <Button onClick={() => void approvePermissions()} disabled={working}>{working ? 'Working...' : 'Approve permissions'}</Button> : null}
+            {detail.installation && detail.readiness?.ready && platformBadges(detail).includes('Web') ? <Button onClick={() => void openTarget('web')} disabled={working}>{working ? 'Working...' : 'Open App'}</Button> : null}
+            {detail.installation ? <Button variant="secondary" onClick={() => void toggleFavorite()} disabled={working}>{detail.installation.favorite ? 'Unfavorite' : 'Favorite'}</Button> : null}
+            {detail.installation ? <Button variant="danger" onClick={() => setConfirmRemove(true)} disabled={working}>Remove</Button> : null}
+            {detail.readiness?.missingSecrets.length ? <Button href="/vault" variant="secondary">Add secret</Button> : null}
+            {detail.readiness?.missingSkills.length ? <Button href="/marketplace" variant="secondary">Install required skill</Button> : null}
+          </div>
+        ) : undefined}
+      >
+        {detailLoading ? <LoadingState label="Loading install state" /> : !detail ? (
+          <EmptyState title="App unavailable" body="This install record could not be loaded." />
+        ) : (
+          <>
+            <Card>
+              <div className="os-inline-actions">
+                <Badge tone="accent">{runtimeLabel(detail)}</Badge>
+                {state ? <Badge tone={state.tone}>{state.label}</Badge> : null}
+                {platformBadges(detail).map(item => <Badge key={item} tone="default">{item}</Badge>)}
+              </div>
+              <div className="os-drawer-stack" style={{ marginTop: 12 }}>
+                <div className="os-entity-copy">Publisher: {detail.publisherName || 'Unknown'}</div>
+                <div className="os-entity-copy">Version: {detail.manifest.version}</div>
+              </div>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Install requirements</div>
+              <div className="os-drawer-stack">
+                <div className="os-entity-copy">Permissions requested: {requiredPermissions.join(', ') || 'None'}</div>
+                {detail.readiness?.missingPermissions.length ? <div className="os-entity-copy">Missing approvals: {detail.readiness.missingPermissions.join(', ')}</div> : null}
+                <div className="os-entity-copy">Required secrets: {requiredSecrets.join(', ') || 'None'}</div>
+                {detail.readiness?.missingSecrets.length ? <div className="os-entity-copy">Missing secrets: {detail.readiness.missingSecrets.join(', ')}</div> : null}
+                <div className="os-entity-copy">Required skills: {requiredSkills.join(', ') || 'None'}</div>
+                {detail.readiness?.missingSkills.length ? <div className="os-entity-copy">Missing skills: {detail.readiness.missingSkills.join(', ')}</div> : null}
+              </div>
+            </Card>
+            {notice ? <Card><div className="os-entity-copy">{notice}</div></Card> : null}
+          </>
+        )}
+      </Drawer>
+
+      {detail ? (
+        <ConfirmModal
+          open={confirmRemove}
+          onClose={() => setConfirmRemove(false)}
+          title={`Remove ${detail.name}?`}
+          body="This removes the current installation from the workspace."
+          confirmLabel="Remove"
+          tone="danger"
+          busy={working}
+          onConfirm={() => void removeCurrent()}
+        />
+      ) : null}
     </div>
   );
 }

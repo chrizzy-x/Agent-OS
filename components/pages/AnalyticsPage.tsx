@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import {
   ActivityFeed,
-  AppShell,
   Button,
   Card,
   EmptyState,
@@ -12,8 +12,6 @@ import {
   MetricCard,
   PageHeader,
   SearchBar,
-  SidebarNav,
-  SidebarSection,
 } from '@/components/os/ui';
 
 type AnalyticsPayload = {
@@ -93,21 +91,11 @@ export default function AnalyticsPage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/analytics" />
-      <AppShell
-        sidebar={(
-          <SidebarSection title="Analytics">
-            <SidebarNav
-              items={[
-                { href: '/analytics', label: 'Workspace analytics', active: true },
-                { href: '/appstore', label: 'Apps' },
-                { href: '/workflows', label: 'Workflows' },
-                { href: '/developer', label: 'Developer' },
-              ]}
-            />
-          </SidebarSection>
-        )}
+      <WorkspaceShell
+        activePath="/analytics"
         aside={(
-          <SidebarSection title="Realtime activity">
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Realtime activity</div>
             <ActivityFeed
               items={realtime.map(item => ({
                 id: item.id,
@@ -116,7 +104,7 @@ export default function AnalyticsPage() {
                 time: new Date(item.createdAt).toLocaleString(),
               }))}
             />
-          </SidebarSection>
+          </Card>
         )}
       >
         <PageHeader
@@ -190,7 +178,7 @@ export default function AnalyticsPage() {
             )}
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

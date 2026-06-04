@@ -3,16 +3,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import {
   AgentCard,
-  AppShell,
   Button,
   EmptyState,
   Input,
   LoadingState,
   PageHeader,
-  SidebarNav,
-  SidebarSection,
   Textarea,
 } from '@/components/os/ui';
 
@@ -25,7 +23,23 @@ type Subagent = {
   workspaceId: string;
 };
 
-export default function SubagentsPage() {
+type SubagentsPageProps = {
+  activePath?: string;
+  basePath?: string;
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  listLabel?: string;
+};
+
+export default function SubagentsPage({
+  activePath = '/agents',
+  basePath = '/agents',
+  eyebrow = 'Agents',
+  title = 'Agents',
+  subtitle = 'Create focused private agents for research, operations, testing, and vault-aware runtime work.',
+  listLabel = 'Agents',
+}: SubagentsPageProps) {
   const [loading, setLoading] = useState(true);
   const [subagents, setSubagents] = useState<Subagent[]>([]);
   const [draft, setDraft] = useState({ workspaceId: '', name: '', description: '', instructions: '' });
@@ -69,24 +83,12 @@ export default function SubagentsPage() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/subagents" />
-      <AppShell
-        sidebar={(
-          <SidebarSection title="Agents">
-            <SidebarNav
-              items={[
-                { href: '/studio', label: 'Studio' },
-                { href: '/subagents', label: 'Private agents', active: true },
-                { href: '/settings/team', label: 'Workspace' },
-              ]}
-            />
-          </SidebarSection>
-        )}
-      >
+      <Nav activePath={activePath} />
+      <WorkspaceShell activePath="/agents">
         <PageHeader
-          eyebrow="Private agents"
-          title="Subagents"
-          subtitle="Create Derek-like private agents for focused instructions, memory, skills, and tools."
+          eyebrow={eyebrow}
+          title={title}
+          subtitle={subtitle}
           actions={<Button onClick={() => void createSubagent()}>Create subagent</Button>}
         />
 
@@ -106,13 +108,13 @@ export default function SubagentsPage() {
                 title={subagent.name}
                 description={subagent.description ?? 'Private agent'}
                 status={subagent.status}
-                footer={<Link href={`/subagents/${subagent.id}`} className="btn-primary">Open</Link>}
+                footer={<Link href={`${basePath}/${subagent.id}`} className="btn-primary">Open</Link>}
               />
             ))}
           </div>
         )}
         {message ? <div className="os-entity-copy">{message}</div> : null}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

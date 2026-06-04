@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import {
   ActivityFeed,
-  AppShell,
   Button,
   Card,
   EmptyState,
@@ -15,8 +15,6 @@ import {
   PageHeader,
   ProjectCard,
   SearchBar,
-  SidebarNav,
-  SidebarSection,
 } from '@/components/os/ui';
 
 type ProjectItem = {
@@ -88,54 +86,32 @@ export default function ProjectsPage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/projects" />
-      <AppShell
+      <WorkspaceShell
         activePath="/projects"
-        sidebar={(
+        aside={(
           <>
-            <SidebarSection title="Workspace">
-              <SidebarNav
-                items={[
-                  { href: '/studio', label: 'Studio' },
-                  { href: '/projects', label: 'Projects', active: true },
-                  { href: '/appstore', label: 'Apps' },
-                  { href: '/workflows', label: 'Workflows' },
-                  { href: '/skills', label: 'Skills' },
-                  { href: '/vault', label: 'Vault' },
-                ]}
-              />
-            </SidebarSection>
-            <SidebarSection title="View">
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>View</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <button type="button" className={`os-chip${view === 'grid' ? ' active' : ''}`} onClick={() => setView('grid')}>Grid</button>
                 <button type="button" className={`os-chip${view === 'list' ? ' active' : ''}`} onClick={() => setView('list')}>List</button>
               </div>
-            </SidebarSection>
-          </>
-        )}
-        aside={(
-          <>
-            <SidebarSection title="Quick actions">
-              <SidebarNav
-                items={[
-                  { href: '/workflows', label: 'New Workflow' },
-                  { href: '/subagents', label: 'New Agent' },
-                  { href: '/publishing/new', label: 'New App' },
-                  { href: '/skills', label: 'New Skill' },
-                ]}
-              />
-            </SidebarSection>
-            <SidebarSection title="Favorites">
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Favorites</div>
               {payload?.favorites?.length ? (
-                <SidebarNav items={payload.favorites.map(item => ({
-                  href: item.href,
-                  label: item.name,
+                <ActivityFeed items={payload.favorites.map(item => ({
+                  id: item.id,
+                  title: item.name,
                   subtitle: item.kind,
+                  time: new Date(item.updatedAt).toLocaleDateString(),
                 }))} />
               ) : (
                 <div className="os-empty-body">No favorites yet.</div>
               )}
-            </SidebarSection>
-            <SidebarSection title="Activity">
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Activity</div>
               <ActivityFeed
                 items={(payload?.chart ?? []).slice(-5).map((item, index) => ({
                   id: `${item.label}-${index}`,
@@ -143,14 +119,14 @@ export default function ProjectsPage() {
                   subtitle: `${item.value} workflow updates`,
                 }))}
               />
-            </SidebarSection>
+            </Card>
           </>
         )}
       >
         <PageHeader
           eyebrow="Projects"
-          title="Projects — All Your Work"
-          subtitle="Apps, workflows, agents, and skills across your workspace."
+          title="Projects"
+          subtitle="A workspace collection view for apps, workflows, agents, and skills."
           actions={(
             <>
               <Button href="/onboarding" variant="secondary">Import</Button>
@@ -167,7 +143,7 @@ export default function ProjectsPage() {
           <MetricCard label="Total users" value={payload?.summary.totalUsers ?? '—'} />
         </div>
 
-        <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search projects, apps, workflows, agents..." />
+        <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search projects, apps, workflows, skills..." />
         <FilterChips items={TABS} active={tab} onChange={setTab} />
 
         {loading ? (
@@ -175,7 +151,7 @@ export default function ProjectsPage() {
             {[0, 1, 2].map(item => <LoadingState key={item} label="Loading projects" />)}
           </div>
         ) : items.length === 0 ? (
-          <EmptyState title="No projects yet" body="Create a workflow, app, skill, or private agent to populate this workspace." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState title="No projects yet" body="Create a workflow, app, or skill to populate this workspace." action={<Button href="/studio">Open Studio</Button>} />
         ) : view === 'grid' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
             {items.map(item => (
@@ -217,7 +193,7 @@ export default function ProjectsPage() {
             </div>
           </Card>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

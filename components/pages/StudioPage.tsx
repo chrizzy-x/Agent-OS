@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
+import { useRouteDrawer } from '@/components/os/drawer-state';
+import { Drawer } from '@/components/os/overlays';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { summarizeStudioEvent } from '@/src/ui/presenters';
 import {
   ActivityFeed,
-  AppShell,
   Badge,
   Button,
   Card,
@@ -15,8 +18,6 @@ import {
   PageHeader,
   SearchBar,
   SidebarNav,
-  SidebarSection,
-  Tabs,
   Textarea,
 } from '@/components/os/ui';
 
@@ -27,6 +28,7 @@ type StudioSession = {
   updatedAt: string;
   parentSessionId?: string | null;
   branchLabel?: string | null;
+  status?: string;
 };
 
 type StudioMessage = {
@@ -43,9 +45,18 @@ type StudioEvent = {
   payload: Record<string, unknown>;
 };
 
-type Workflow = { id: string; name: string; summary: string | null; status: string; schedule: string | null };
-type Subagent = { id: string; name: string; description: string | null };
-type VaultSecret = { id: string; name: string; maskedValue: string };
+type Workflow = {
+  id: string;
+  name: string;
+  summary: string | null;
+  status: string;
+  schedule: string | null;
+  graph_state?: Record<string, unknown>;
+  code_state?: string | null;
+  canonical_doc?: Record<string, unknown>;
+};
+
+type VaultSecret = { id: string; name: string; status?: string };
 type Workspace = { id: string; name: string };
 type SessionLineage = {
   parent: { id: string; title: string; updatedAt: string } | null;
@@ -58,12 +69,13 @@ type PendingPlan = {
   steps: Array<{ order: number; tool: string; description: string }>;
 };
 
-const MODE_TABS = ['Chat', 'Plan', 'Workflow', 'Files', 'Memory'];
-const CONTEXT_TABS = ['Context', 'Workflow', 'Memory', 'Logs', 'Settings'];
-const QUICK_ACTIONS = ['Build Workflow', 'Install App', 'Add Secret', 'Create Subagent', 'Analyze Data', 'Run Code', 'Generate Report'];
+type StudioDrawerId = 'session-history' | 'workflow-graph' | 'workflow-code' | 'installed-skills' | 'installed-apps' | 'secrets' | 'logs' | 'settings';
+
+const QUICK_ACTIONS = ['Build Workflow', 'Install App', 'Add Secret', 'Analyze Data', 'Run Code', 'Generate Report'];
 
 export default function StudioPage({ initialSessionId, initialPrompt }: { initialSessionId?: string | null; initialPrompt?: string | null }) {
   const router = useRouter();
+  const drawer = useRouteDrawer<StudioDrawerId>();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<StudioSession[]>([]);
@@ -71,22 +83,32 @@ export default function StudioPage({ initialSessionId, initialPrompt }: { initia
   const [events, setEvents] = useState<StudioEvent[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [subagents, setSubagents] = useState<Subagent[]>([]);
   const [vaultSecrets, setVaultSecrets] = useState<VaultSecret[]>([]);
-  const [skills, setSkills] = useState<Array<{ skill?: { name?: string; slug?: string } }>>([]);
-  const [activeMode, setActiveMode] = useState('Chat');
-  const [contextTab, setContextTab] = useState('Context');
+  const [skills, setSkills] = useState<Array<{ skill?: { name?: string; slug?: string; category?: string } }>>([]);
+  const [installedApps, setInstalledApps] = useState<Array<{ id: string; name: string; slug: string; description: string; healthStatus: string }>>([]);
   const [prompt, setPrompt] = useState('');
   const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [activeSessionId, setActiveSessionId] = useState(initialSessionId ?? '');
   const [lineage, setLineage] = useState<SessionLineage>({ parent: null, children: [] });
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState('');
+  const [historySearch, setHistorySearch] = useState('');
 
   const activeSession = useMemo(
     () => sessions.find(item => item.id === activeSessionId) ?? sessions[0] ?? null,
     [activeSessionId, sessions],
   );
+  const selectedWorkflow = useMemo(
+    () => workflows.find(item => item.id === selectedWorkflowId) ?? workflows[0] ?? null,
+    [selectedWorkflowId, workflows],
+  );
+  const filteredSessions = useMemo(
+    () => sessions.filter(item => !historySearch || `${item.title} ${item.branchLabel ?? ''}`.toLowerCase().includes(historySearch.toLowerCase())),
+    [historySearch, sessions],
+  );
+  const currentWorkspaceId = activeSession?.workspaceId ?? workspaces[0]?.id ?? null;
+  const latestEvent = events.at(-1) ?? null;
 
   useEffect(() => {
     if (!activeSessionId) return undefined;
@@ -107,9 +129,7 @@ export default function StudioPage({ initialSessionId, initialPrompt }: { initia
   }, [activeSessionId, events]);
 
   useEffect(() => {
-    if (initialPrompt?.trim()) {
-      setPrompt(initialPrompt);
-    }
+    if (initialPrompt?.trim()) setPrompt(initialPrompt);
   }, [initialPrompt]);
 
   const loadBundle = useCallback(async (sessionId: string) => {
@@ -130,27 +150,37 @@ export default function StudioPage({ initialSessionId, initialPrompt }: { initia
         return;
       }
       setSession(current);
-      const [sessionsRes, workspacesRes, workflowsRes, subagentsRes, vaultRes, skillsRes] = await Promise.all([
+      const [sessionsRes, workspacesRes, workflowsRes, vaultRes, skillsRes, appsRes] = await Promise.all([
         fetch('/api/studio/sessions', { cache: 'no-store' }),
         fetch('/api/workspaces', { cache: 'no-store' }),
         fetch('/api/agent/workflows', { cache: 'no-store' }),
-        fetch('/api/subagents', { cache: 'no-store' }),
         fetch('/api/vault', { cache: 'no-store' }),
         fetch('/api/skills/installed', { cache: 'no-store' }),
+        fetch('/api/apps/installed', { cache: 'no-store' }),
       ]);
       const sessionsData = await sessionsRes.json();
       const workspacesData = await workspacesRes.json();
       const workflowsData = await workflowsRes.json();
-      const subagentsData = await subagentsRes.json();
       const vaultData = await vaultRes.json();
       const skillsData = await skillsRes.json();
+      const appsData = await appsRes.json();
       const nextSessions = sessionsData.sessions ?? [];
+      const nextWorkflows = workflowsData.workflows ?? [];
       setSessions(nextSessions);
       setWorkspaces(workspacesData.workspaces ?? []);
-      setWorkflows(workflowsData.workflows ?? []);
-      setSubagents(subagentsData.subagents ?? []);
+      setWorkflows(nextWorkflows);
       setVaultSecrets(vaultData.secrets ?? []);
       setSkills(skillsData.installed_skills ?? []);
+      setInstalledApps((appsData.installedApps ?? []).map((item: Record<string, unknown>) => ({
+        id: String(item.id),
+        name: String(item.name ?? 'App'),
+        slug: String(item.slug ?? item.id),
+        description: String(item.description ?? 'Installed app'),
+        healthStatus: String(item.healthStatus ?? 'unknown'),
+      })));
+      if (!selectedWorkflowId && nextWorkflows[0]?.id) {
+        setSelectedWorkflowId(nextWorkflows[0].id);
+      }
 
       const nextSessionId = activeSessionId || initialSessionId || nextSessions[0]?.id || '';
       if (nextSessionId) {
@@ -169,20 +199,20 @@ export default function StudioPage({ initialSessionId, initialPrompt }: { initia
     } finally {
       setLoading(false);
     }
-  }, [activeSessionId, initialSessionId, loadBundle, router]);
+  }, [activeSessionId, initialSessionId, loadBundle, router, selectedWorkflowId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   async function createSession() {
-    if (!workspaces[0]) return;
+    if (!currentWorkspaceId) return;
     setBusy(true);
     try {
       const res = await fetch('/api/studio/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId: workspaces[0].id, title: 'New Session' }),
+        body: JSON.stringify({ workspaceId: currentWorkspaceId, title: 'New Session' }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -258,105 +288,51 @@ export default function StudioPage({ initialSessionId, initialPrompt }: { initia
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/studio" />
-      <AppShell
+      <WorkspaceShell
         activePath="/studio"
-        sidebar={(
-          <>
-            <SidebarSection title="AgentOS">
-              <Button onClick={() => void createSession()}>{busy ? 'Working...' : 'New Session'}</Button>
-              <SearchBar placeholder="Search sessions" />
-              <SidebarNav
-                items={[
-                  { href: '/studio', label: 'Studio', active: true },
-                  { href: '/projects', label: 'Projects' },
-                  { href: '/appstore', label: 'Apps' },
-                  { href: '/workflows', label: 'Workflows' },
-                  { href: '/vault', label: 'Vault' },
-                  { href: '/skills', label: 'Skills' },
-                ]}
-              />
-            </SidebarSection>
-            <SidebarSection title="Recent sessions">
-              <SidebarNav items={sessions.map(item => ({
-                href: `/studio?session=${item.id}`,
-                label: item.title,
-                subtitle: item.branchLabel || new Date(item.updatedAt).toLocaleString(),
-                active: activeSession?.id === item.id,
-              }))} />
-            </SidebarSection>
-          </>
-        )}
-        aside={(
-          <>
-            <SidebarSection title="Context">
-              <Tabs tabs={CONTEXT_TABS.map(item => ({ key: item, label: item }))} active={contextTab} onChange={setContextTab} />
-              {contextTab === 'Context' ? (
-                <div style={{ display: 'grid', gap: 10 }}>
-                  <div className="os-entity-copy">Attached apps: {workflows.slice(0, 2).map(item => item.name).join(' / ') || 'None'}</div>
-                  <div className="os-entity-copy">Installed skills: {skills.map(item => item.skill?.name || item.skill?.slug || 'Skill').join(' / ') || 'None'}</div>
-                  <div className="os-entity-copy">Secrets: {vaultSecrets.slice(0, 3).map(item => item.name).join(' / ') || 'None'}</div>
-                </div>
-              ) : null}
-              {contextTab === 'Workflow' ? (
-                <ActivityFeed items={workflows.slice(0, 4).map(item => ({
-                  id: item.id,
-                  title: item.name,
-                  subtitle: item.summary ?? 'Workflow',
-                  status: item.status,
-                }))} />
-              ) : null}
-              {contextTab === 'Memory' ? (
-                <div className="os-entity-copy">Session memory, user preferences, and project facts are available through Studio state and vault-backed context.</div>
-              ) : null}
-              {contextTab === 'Logs' ? (
-                <ActivityFeed items={events.slice(-8).map(item => ({
-                  id: item.id,
-                  title: item.type,
-                  subtitle: JSON.stringify(item.payload).slice(0, 80),
-                  time: new Date(item.createdAt).toLocaleString(),
-                }))} />
-              ) : null}
-              {contextTab === 'Settings' ? (
-                <div style={{ display: 'grid', gap: 10 }}>
-                  <div className="os-entity-copy">Workspace: {workspaces[0]?.name ?? '-'} | Mode tabs and context panels stay responsive on mobile.</div>
-                  <div className="os-entity-copy">Parent session: {lineage.parent?.title ?? 'None'}</div>
-                  <div className="os-entity-copy">Branches: {lineage.children.length}</div>
-                </div>
-              ) : null}
-            </SidebarSection>
-          </>
-        )}
+        session={session}
+        workspaces={workspaces}
+        sessions={sessions}
+        currentWorkspaceId={currentWorkspaceId}
+        currentSessionId={activeSession?.id ?? null}
+        mobileTitle={activeSession?.title ?? 'Studio'}
       >
         <PageHeader
           eyebrow="Studio"
           title={activeSession?.title || 'Super AgentOS'}
-          subtitle="Chat-first agent workspace with tools, workflows, apps, memory, and logs."
+          subtitle="Conversation first. Planning and execution stay in context and only move forward when approved."
           actions={(
             <>
-              {activeSession ? <Button variant="secondary" onClick={() => void branchSession()}>{busy ? 'Working...' : 'Branch session'}</Button> : null}
+              <Button variant="secondary" onClick={() => void createSession()}>{busy ? 'Working...' : 'New session'}</Button>
+              {activeSession ? <Button variant="secondary" onClick={() => void branchSession()}>{busy ? 'Working...' : 'Branch'}</Button> : null}
+              <Button variant="secondary" onClick={() => drawer.openDrawer('session-history')}>Sessions</Button>
+              <Button variant="secondary" onClick={() => drawer.openDrawer('logs')}>Logs</Button>
               <Badge tone="accent">{session?.planLabel ?? 'Retail Free'}</Badge>
             </>
           )}
         />
 
-        <Tabs tabs={MODE_TABS.map(item => ({ key: item, label: item }))} active={activeMode} onChange={setActiveMode} />
-
         {loading ? <LoadingState label="Loading Studio" /> : !activeSession ? (
-          <EmptyState title="No session selected" body="Create a new session to start using Studio." action={<Button onClick={() => void createSession()}>New Session</Button>} />
+          <EmptyState title="No session selected" body="Create a new session to start using Studio." action={<Button onClick={() => void createSession()}>New session</Button>} />
         ) : (
-          <>
+          <div className="os-drawer-stack">
             <Card>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                {QUICK_ACTIONS.map(item => (
-                  <button
-                    key={item}
-                    type="button"
-                    className="os-chip"
-                    onClick={() => setPrompt(current => current ? `${current}\n${item}` : item)}
-                  >
-                    {item}
-                  </button>
-                ))}
+              <div className="os-entity-head" style={{ marginBottom: 16 }}>
+                <div>
+                  <div className="os-entity-title">Conversation</div>
+                  <div className="os-entity-copy">
+                    Workspace {workspaces.find(item => item.id === activeSession.workspaceId)?.name ?? '-'} | {messages.length} messages | {lineage.children.length} branches
+                  </div>
+                  {latestEvent ? <div className="os-entity-meta" style={{ marginTop: 6 }}>Latest: {summarizeStudioEvent(latestEvent.type, latestEvent.payload)}</div> : null}
+                </div>
+                <div className="os-inline-actions">
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-graph')}>Workflow</Button>
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-code')}>Code</Button>
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('installed-apps')}>Apps</Button>
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('installed-skills')}>Skills</Button>
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('secrets')}>Vault</Button>
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('settings')}>Context</Button>
+                </div>
               </div>
               <div style={{ display: 'grid', gap: 12 }}>
                 {messages.map(message => (
@@ -375,51 +351,182 @@ export default function StudioPage({ initialSessionId, initialPrompt }: { initia
                     <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{message.content}</div>
                   </div>
                 ))}
+                {pendingPlan ? (
+                  <div
+                    style={{
+                      maxWidth: '82%',
+                      padding: '14px 16px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(139, 92, 246, 0.24)',
+                      background: 'rgba(139, 92, 246, 0.08)',
+                    }}
+                  >
+                    <div className="os-sidebar-title" style={{ marginBottom: 8 }}>Planning</div>
+                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{pendingPlan.summary}</div>
+                    <ActivityFeed items={pendingPlan.steps.map(step => ({
+                      id: `${step.order}-${step.tool}`,
+                      title: step.tool,
+                      subtitle: step.description,
+                    }))} />
+                    <div style={{ marginTop: 12 }}>
+                      <Button onClick={() => void sendPrompt(true)}>{busy ? 'Running...' : 'Approve and run'}</Button>
+                    </div>
+                  </div>
+                ) : null}
                 {messages.length === 0 ? <div className="os-entity-copy">Start a new conversation in Studio.</div> : null}
               </div>
             </Card>
 
-            {lineage.parent || lineage.children.length > 0 ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Session lineage</div>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <div className="os-entity-copy">Parent: {lineage.parent ? `${lineage.parent.title} (${new Date(lineage.parent.updatedAt).toLocaleString()})` : 'None'}</div>
-                  <ActivityFeed items={lineage.children.map(child => ({
-                    id: child.id,
-                    title: child.title,
-                    subtitle: 'Branch session',
-                    time: new Date(child.updatedAt).toLocaleString(),
-                  }))} />
-                </div>
-              </Card>
-            ) : null}
-
-            {pendingPlan ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Plan preview</div>
-                <div className="os-entity-copy" style={{ marginBottom: 12 }}>{pendingPlan.summary}</div>
-                <ActivityFeed items={pendingPlan.steps.map(step => ({
-                  id: `${step.order}-${step.tool}`,
-                  title: step.tool,
-                  subtitle: step.description,
-                }))} />
-                <div style={{ marginTop: 12 }}>
-                  <Button onClick={() => void sendPrompt(true)}>{busy ? 'Running...' : 'Run plan'}</Button>
-                </div>
-              </Card>
-            ) : null}
-
             <Card>
-              <Textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Ask AgentOS to build workflows, install apps, add secrets, or analyze data..." />
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <div className="os-entity-title">Composer</div>
+                  <div className="os-entity-copy">Use conversation for reasoning, planning, workflow changes, runtime installs, and workspace work.</div>
+                </div>
+                <div className="os-inline-actions">
+                  <Badge tone="default">{workflows.length} workflows</Badge>
+                  <Badge tone="default">{installedApps.length} apps</Badge>
+                  <Badge tone="default">{skills.length} skills</Badge>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {QUICK_ACTIONS.map(item => (
+                  <button
+                    key={item}
+                    type="button"
+                    className="os-chip"
+                    onClick={() => setPrompt(current => current ? `${current}\n${item}` : item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+              <Textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Ask Super AgentOS to build workflows, install apps, add secrets, or analyze data..." />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-                <div className="os-entity-copy">{subagents.length} agents | {workflows.length} workflows | {skills.length} skills</div>
+                <div className="os-entity-copy">{notice || 'Conversation stays in normal chat until approval is needed.'}</div>
                 <Button onClick={() => void sendPrompt()}>{busy ? 'Sending...' : 'Send'}</Button>
               </div>
-              {notice ? <div className="os-entity-copy" style={{ marginTop: 12 }}>{notice}</div> : null}
+              {notice && latestEvent ? <div className="os-entity-meta" style={{ marginTop: 12 }}>{summarizeStudioEvent(latestEvent.type, latestEvent.payload)}</div> : null}
             </Card>
-          </>
+          </div>
         )}
-      </AppShell>
+      </WorkspaceShell>
+
+      <Drawer
+        open={Boolean(drawer.current)}
+        onClose={drawer.closeDrawer}
+        title={
+          drawer.current?.id === 'session-history' ? 'Session history'
+            : drawer.current?.id === 'workflow-graph' ? 'Workflow graph'
+            : drawer.current?.id === 'workflow-code' ? 'Workflow code'
+            : drawer.current?.id === 'installed-skills' ? 'Installed skills'
+            : drawer.current?.id === 'installed-apps' ? 'Installed apps'
+            : drawer.current?.id === 'secrets' ? 'Required secrets'
+            : drawer.current?.id === 'logs' ? 'Event logs'
+            : 'Settings'
+        }
+        description="Studio secondary controls"
+      >
+        {drawer.current?.id === 'session-history' ? (
+          <>
+            <SearchBar value={historySearch} onChange={event => setHistorySearch(event.target.value)} placeholder="Search sessions" />
+            <SidebarNav items={filteredSessions.map(item => ({
+              label: item.title,
+              subtitle: item.branchLabel || item.status || new Date(item.updatedAt).toLocaleString(),
+              active: item.id === activeSessionId,
+              onClick: () => {
+                setActiveSessionId(item.id);
+                router.replace(`/studio?session=${item.id}`);
+                drawer.closeDrawer();
+                void loadBundle(item.id);
+              },
+            }))} />
+            {lineage.parent || lineage.children.length ? (
+              <Card>
+                <div className="os-entity-title" style={{ marginBottom: 12 }}>Lineage</div>
+                <div className="os-entity-copy">Parent: {lineage.parent ? lineage.parent.title : 'None'}</div>
+                <ActivityFeed items={lineage.children.map(child => ({
+                  id: child.id,
+                  title: child.title,
+                  subtitle: 'Branch',
+                  time: new Date(child.updatedAt).toLocaleString(),
+                }))} />
+              </Card>
+            ) : null}
+          </>
+        ) : null}
+
+        {drawer.current?.id === 'workflow-graph' || drawer.current?.id === 'workflow-code' ? (
+          <>
+            <SidebarNav items={workflows.map(workflow => ({
+              label: workflow.name,
+              subtitle: workflow.summary ?? workflow.status,
+              active: selectedWorkflow?.id === workflow.id,
+              onClick: () => setSelectedWorkflowId(workflow.id),
+            }))} />
+            {selectedWorkflow ? (
+              <Card>
+                <div className="os-entity-title" style={{ marginBottom: 12 }}>{selectedWorkflow.name}</div>
+                <div className="os-entity-copy" style={{ marginBottom: 12 }}>
+                  {selectedWorkflow.summary || 'Developer detail for the selected workflow.'}
+                </div>
+                <pre className="os-code-block">
+                  {drawer.current?.id === 'workflow-graph'
+                    ? JSON.stringify(selectedWorkflow.graph_state ?? selectedWorkflow.canonical_doc ?? { nodes: [], edges: [] }, null, 2)
+                    : selectedWorkflow.code_state || JSON.stringify(selectedWorkflow.canonical_doc ?? {}, null, 2)}
+                </pre>
+              </Card>
+            ) : <EmptyState title="No workflows" body="No workflow is available in this workspace yet." />}
+          </>
+        ) : null}
+
+        {drawer.current?.id === 'installed-skills' ? (
+          <ActivityFeed items={skills.map((item, index) => ({
+            id: `${item.skill?.slug ?? index}`,
+            title: item.skill?.name ?? item.skill?.slug ?? 'Skill',
+            subtitle: item.skill?.category ?? 'Installed skill',
+          }))} />
+        ) : null}
+
+        {drawer.current?.id === 'installed-apps' ? (
+          <ActivityFeed items={installedApps.map(item => ({
+            id: item.id,
+            title: item.name,
+            subtitle: item.description,
+            status: item.healthStatus,
+          }))} />
+        ) : null}
+
+        {drawer.current?.id === 'secrets' ? (
+          <ActivityFeed items={vaultSecrets.map(item => ({
+            id: item.id,
+            title: item.name,
+            subtitle: item.status ?? 'active',
+          }))} />
+        ) : null}
+
+        {drawer.current?.id === 'logs' ? (
+          <ActivityFeed items={events.slice().reverse().map(item => ({
+            id: item.id,
+            title: item.type,
+            subtitle: summarizeStudioEvent(item.type, item.payload),
+            time: new Date(item.createdAt).toLocaleString(),
+          }))} />
+        ) : null}
+
+        {drawer.current?.id === 'settings' ? (
+          <Card>
+            <div className="os-drawer-stack">
+              <div className="os-entity-copy">Workspace: {workspaces.find(item => item.id === activeSession?.workspaceId)?.name ?? '-'}</div>
+              <div className="os-entity-copy">Parent session: {lineage.parent?.title ?? 'None'}</div>
+              <div className="os-entity-copy">Branches: {lineage.children.length}</div>
+              <div className="os-inline-actions">
+                <Button href="/settings" variant="secondary">Open Settings</Button>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+      </Drawer>
     </div>
   );
 }

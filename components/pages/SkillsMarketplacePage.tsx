@@ -4,17 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import {
-  AppShell,
   Badge,
   Button,
+  Card,
   EmptyState,
   FilterChips,
   LoadingState,
   PageHeader,
   SearchBar,
-  SidebarNav,
-  SidebarSection,
   SkillCard,
 } from '@/components/os/ui';
 
@@ -80,51 +79,47 @@ export default function SkillsMarketplacePage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/skills" />
-      <AppShell
+      <WorkspaceShell
         activePath="/skills"
-        sidebar={(
-          <>
-            <SidebarSection title="Marketplace">
-              <SidebarNav
-                items={[
-                  { href: '/studio', label: 'Studio' },
-                  { href: '/skills', label: 'Skills', active: true },
-                  { href: '/appstore', label: 'Appstore' },
-                  ...(session?.capabilities?.includes('access_developer_console') ? [{ href: '/developer', label: 'Developer' }] : []),
-                  { href: '/settings', label: 'Settings' },
-                ]}
-              />
-            </SidebarSection>
-            <SidebarSection title="Categories">
-              <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
-            </SidebarSection>
-          </>
+        extraSidebar={(
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Categories</div>
+            <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
+          </Card>
         )}
         aside={(
-          <>
-            <SidebarSection title="Installed skills">
+          <div className="os-drawer-stack">
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Installed skills</div>
               {installed.length === 0 ? (
                 <div className="os-empty-body">No installed skills yet.</div>
               ) : (
-                <SidebarNav items={installed.slice(0, 6).map(entry => ({
-                  href: `/skills/${entry.skill.slug}`,
-                  label: entry.skill.name,
-                  subtitle: entry.skill.category,
-                }))} />
+                <div className="os-drawer-stack">
+                  {installed.slice(0, 6).map(entry => (
+                    <Link key={entry.skill.slug} href={`/skills/${entry.skill.slug}`} className="os-sidebar-link">
+                      <span className="os-sidebar-label">{entry.skill.name}</span>
+                      <span className="os-sidebar-subtitle">{entry.skill.category}</span>
+                    </Link>
+                  ))}
+                </div>
               )}
-            </SidebarSection>
-            <SidebarSection title="Published now">
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Published now</div>
               {skills.length === 0 ? (
                 <div className="os-empty-body">No published skills yet.</div>
               ) : (
-                <SidebarNav items={skills.slice(0, 5).map(skill => ({
-                  href: `/skills/${skill.slug}`,
-                  label: skill.name,
-                  subtitle: `${skill.total_installs.toLocaleString()} installs`,
-                }))} />
+                <div className="os-drawer-stack">
+                  {skills.slice(0, 5).map(skill => (
+                    <Link key={skill.slug} href={`/skills/${skill.slug}`} className="os-sidebar-link">
+                      <span className="os-sidebar-label">{skill.name}</span>
+                      <span className="os-sidebar-subtitle">{skill.total_installs.toLocaleString()} installs</span>
+                    </Link>
+                  ))}
+                </div>
               )}
-            </SidebarSection>
-          </>
+            </Card>
+          </div>
         )}
       >
         <PageHeader
@@ -173,7 +168,7 @@ export default function SkillsMarketplacePage() {
             })}
           </div>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

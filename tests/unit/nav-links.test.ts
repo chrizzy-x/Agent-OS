@@ -14,7 +14,7 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toEqual(['Studio', 'Projects', 'Workflows', 'Agents', 'Skills', 'Apps', 'FFP', 'Vault', 'Analytics', 'Settings']);
+    expect(links.map(item => item.label)).toEqual(['Studio', 'Apps', 'Skills', 'Workflows', 'Agents', 'Vault', 'Search']);
   });
 
   it('shows enterprise-only modules only for enterprise sessions', () => {
@@ -28,11 +28,11 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(enterpriseSession);
-    expect(links.map(item => item.label)).toEqual(['Studio', 'Projects', 'Workflows', 'Agents', 'Skills', 'Apps', 'FFP', 'Vault', 'SDK', 'Developer', 'Analytics', 'Settings']);
+    expect(links.map(item => item.label)).toEqual(['Studio', 'Apps', 'Skills', 'Workflows', 'Agents', 'Vault', 'Search', 'SDK', 'Developer Console', 'FFP Router', 'Universal MCP', 'Analytics', 'Audit']);
   });
 
   it('shows a minimal unauthenticated navigation', () => {
     const links = buildSessionNavLinks(null);
-    expect(links.map(item => item.label)).toEqual(['Home', 'Studio', 'Skills', 'Appstore', 'Signup']);
+    expect(links.map(item => item.label)).toEqual(['Home', 'Studio', 'Skills', 'Apps', 'Signup']);
   });
 });

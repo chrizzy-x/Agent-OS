@@ -5,10 +5,9 @@ import { requireAgentContextWithTier } from '@/src/auth/request';
 import { normalizePlan } from '@/src/auth/tiers';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { listStudioSessions } from '@/src/studio/persistence';
-import { listPrivateSubagents } from '@/src/subagents/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { listVaultSecrets } from '@/src/vault/service';
-import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
+import { assertWorkspaceMembership, listWorkspaces, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
 
@@ -37,18 +36,22 @@ async function loadEnterpriseKernelRows(agentId: string) {
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireAgentContextWithTier(request.headers);
+    const url = new URL(request.url);
+    const requestedWorkspaceId = url.searchParams.get('workspace');
     const plan = getPlanDescriptor(normalizePlan(ctx.tier));
     const enterprise = plan.enterprise;
-    const workspace = await resolveDefaultWorkspaceForAgent(ctx.agentId);
+    const defaultWorkspace = await resolveDefaultWorkspaceForAgent(ctx.agentId);
+    const workspace = requestedWorkspaceId
+      ? (await assertWorkspaceMembership(requestedWorkspaceId, ctx.agentId)).workspace
+      : defaultWorkspace;
 
-    const [workspaces, sessions, installedApps, subagents, workflowsResult, skillsResult, eventsResult, kernelsResult, ffpResult] = await Promise.all([
+    const [workspaces, sessions, installedApps, workflowsResult, skillsResult, eventsResult, kernelsResult, ffpResult, mcpServersResult, mcpCallsResult] = await Promise.all([
       listWorkspaces(ctx.agentId),
       listStudioSessions(ctx.agentId),
       listInstalledAgentApps(ctx.agentId).catch(() => []),
-      listPrivateSubagents(ctx.agentId),
       getSupabaseAdmin()
         .from('agent_workflows')
-        .select('id,name,summary,status,updated_at,created_at,last_run_at,last_error')
+        .select('id,workspace_id,name,summary,status,updated_at,created_at,last_run_at,last_error')
         .eq('agent_id', ctx.agentId)
         .order('updated_at', { ascending: false }),
       getSupabaseAdmin()
@@ -58,8 +61,9 @@ export async function GET(request: NextRequest) {
         .order('installed_at', { ascending: false }),
       getSupabaseAdmin()
         .from('nl_studio_events')
-        .select('id,session_id,type,payload,created_at')
+        .select('id,session_id,workspace_id,type,payload,created_at')
         .eq('owner_agent_id', ctx.agentId)
+        .eq('workspace_id', workspace?.id ?? '')
         .order('created_at', { ascending: false })
         .limit(12),
       enterprise
@@ -71,16 +75,29 @@ export async function GET(request: NextRequest) {
           .select('chain_id,status,executed_at')
           .order('executed_at', { ascending: false })
         : Promise.resolve({ data: [], error: null }),
+      getSupabaseAdmin()
+        .from('mcp_servers')
+        .select('name,category,active')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      getSupabaseAdmin()
+        .from('mcp_calls')
+        .select('mcp_server,success,error_message,timestamp')
+        .eq('agent_id', ctx.agentId)
+        .order('timestamp', { ascending: false })
+        .limit(24),
     ]);
 
-    const workflows = ((workflowsResult.data ?? []) as Array<Record<string, unknown>>).map(row => ({
-      id: String(row.id),
-      name: String(row.name ?? 'Workflow'),
-      summary: typeof row.summary === 'string' ? row.summary : 'Workflow',
-      status: typeof row.last_error === 'string' && row.last_error ? 'failed' : String(row.status ?? 'active'),
-      updatedAt: String(row.updated_at ?? row.created_at ?? ''),
-      lastRunAt: typeof row.last_run_at === 'string' ? row.last_run_at : null,
-    }));
+    const workflows = ((workflowsResult.data ?? []) as Array<Record<string, unknown>>)
+      .filter(row => !workspace?.id || String(row.workspace_id ?? '') === workspace.id)
+      .map(row => ({
+        id: String(row.id),
+        name: String(row.name ?? 'Workflow'),
+        summary: typeof row.summary === 'string' ? row.summary : 'Workflow',
+        status: typeof row.last_error === 'string' && row.last_error ? 'failed' : String(row.status ?? 'active'),
+        updatedAt: String(row.updated_at ?? row.created_at ?? ''),
+        lastRunAt: typeof row.last_run_at === 'string' ? row.last_run_at : null,
+      }));
 
     const installedSkills = ((skillsResult.data ?? []) as Array<Record<string, unknown>>).map(row => {
       const skill = row.skill as Record<string, unknown> | null;
@@ -148,6 +165,24 @@ export async function GET(request: NextRequest) {
       chainMap.set(chainId, current);
     }
 
+    const mcpServers = ((mcpServersResult.data ?? []) as Array<Record<string, unknown>>).map(row => ({
+      name: String(row.name ?? ''),
+      category: typeof row.category === 'string' ? row.category : 'Connector',
+    }));
+    const recentMcpCalls = ((mcpCallsResult.data ?? []) as Array<Record<string, unknown>>).map(row => ({
+      server: String(row.mcp_server ?? ''),
+      success: row.success === true,
+      timestamp: typeof row.timestamp === 'string' ? row.timestamp : null,
+    }));
+    const mcpActiveSet = new Set(
+      recentMcpCalls
+        .filter(call => call.success && call.timestamp && new Date(call.timestamp).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000)
+        .map(call => call.server),
+    );
+
+    const filteredSessions = sessions.filter(item => !workspace?.id || item.workspaceId === workspace.id);
+    const filteredInstalledApps = installedApps.filter(item => !workspace?.id || item.app.workspaceId === workspace.id);
+
     return NextResponse.json({
       workspace: workspace ? {
         id: workspace.id,
@@ -161,18 +196,18 @@ export async function GET(request: NextRequest) {
         enterprise,
       },
       summary: {
-        sessions: sessions.length,
+        sessions: filteredSessions.length,
         projects: workspaces.length,
-        installedApps: installedApps.length,
+        installedApps: filteredInstalledApps.length,
         installedSkills: installedSkills.length,
         workflows: workflows.length,
-        subagents: subagents.length,
         vaultSecrets: vaultSecrets.length,
         sdkApps: sdkApps.length,
         ffpChains: chainMap.size,
+        mcpConnectors: mcpServers.length,
         recentEvents: recentEvents.length,
       },
-      recentSessions: sessions.slice(0, 6).map(session => ({
+      recentSessions: filteredSessions.slice(0, 6).map(session => ({
         id: session.id,
         title: session.title,
         status: session.status,
@@ -185,7 +220,7 @@ export async function GET(request: NextRequest) {
         href: '/projects',
         createdAt: item.createdAt,
       })),
-      installedApps: installedApps.slice(0, 8).map(item => ({
+      installedApps: filteredInstalledApps.slice(0, 8).map(item => ({
         id: item.app.id,
         name: item.app.name,
         slug: item.app.slug,
@@ -197,17 +232,22 @@ export async function GET(request: NextRequest) {
       })),
       installedSkills: installedSkills.slice(0, 8),
       workflows: workflows.slice(0, 8),
-      subagents: subagents.slice(0, 8).map(item => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        status: item.status,
-        updatedAt: item.updatedAt,
-      })),
       vault: {
         total: vaultSecrets.length,
         active: vaultSecrets.filter(item => item.status === 'active').length,
-        names: vaultSecrets.slice(0, 5).map(item => item.name),
+        lastUsedAt: vaultSecrets
+          .map(item => item.updatedAt)
+          .sort((left, right) => right.localeCompare(left))[0] ?? null,
+      },
+      mcp: {
+        connectorCount: mcpServers.length,
+        activeConnectors: mcpActiveSet.size,
+        lastCallAt: recentMcpCalls.find(call => call.timestamp)?.timestamp ?? null,
+        connectors: mcpServers.slice(0, 6).map(server => ({
+          name: server.name,
+          category: server.category,
+          status: mcpActiveSet.has(server.name) ? 'active' : 'idle',
+        })),
       },
       sdkApps: enterprise ? sdkApps.slice(0, 8) : [],
       ffp: enterprise ? {

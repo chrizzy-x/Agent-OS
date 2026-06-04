@@ -8,6 +8,7 @@ export type ShellNavItem = {
   active?: boolean;
   onClick?: () => void;
   badge?: string;
+  locked?: boolean;
 };
 
 export function AppShell(props: {
@@ -15,9 +16,14 @@ export function AppShell(props: {
   sidebar?: ReactNode;
   aside?: ReactNode;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="os-app-shell">
+    <div
+      className={['os-app-shell', props.className ?? ''].filter(Boolean).join(' ')}
+      data-has-sidebar={props.sidebar ? 'true' : 'false'}
+      data-has-aside={props.aside ? 'true' : 'false'}
+    >
       {props.sidebar ? <aside className="os-shell-sidebar">{props.sidebar}</aside> : null}
       <main className="os-shell-main">{props.children}</main>
       {props.aside ? <aside className="os-shell-aside">{props.aside}</aside> : null}
@@ -46,6 +52,13 @@ export function SidebarNav(props: { items: ShellNavItem[] }) {
             {item.badge ? <span className="os-sidebar-badge">{item.badge}</span> : null}
           </>
         );
+        if (item.locked) {
+          return (
+            <span key={`${item.href ?? item.label}-locked`} className="os-sidebar-link locked" aria-disabled="true">
+              {content}
+            </span>
+          );
+        }
         if (item.href) {
           return (
             <Link key={`${item.href}-${item.label}`} href={item.href} className={`os-sidebar-link${item.active ? ' active' : ''}`}>

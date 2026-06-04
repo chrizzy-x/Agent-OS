@@ -1,5 +1,5 @@
 import SubagentDetailPage from '@/components/pages/SubagentDetailPage';
 
 export default function Page() {
-  return <SubagentDetailPage activePath="/agents" basePath="/subagents" listLabel="All subagents" />;
+  return <SubagentDetailPage />;
 }

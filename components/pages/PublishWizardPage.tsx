@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import { resolveBrowserAccessState } from '@/src/auth/browser-access';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
-  AppShell,
   Badge,
   Button,
   Card,
@@ -16,8 +16,6 @@ import {
   PageHeader,
   SearchBar,
   Select,
-  SidebarNav,
-  SidebarSection,
   Tabs,
   Textarea,
 } from '@/components/os/ui';
@@ -202,45 +200,27 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/developer" />
-      <AppShell
+      <WorkspaceShell
         activePath="/developer"
-        sidebar={accessState === 'allowed' ? (
-          <>
-            <SidebarSection title="Publish">
-              <Tabs tabs={STEPS.map(item => ({ key: item, label: item }))} active={step} onChange={setStep} />
-            </SidebarSection>
-            <SidebarSection title="Routes">
-              <SidebarNav
-                items={[
-                  { href: '/developer', label: 'Developer' },
-                  { href: '/publishing/new', label: 'New publish flow', active: !slug },
-                  { href: '/appstore', label: 'Appstore' },
-                ]}
-              />
-            </SidebarSection>
-          </>
-        ) : (
-          <SidebarSection title="Publishing Access">
-            <SidebarNav
-              items={[
-                { href: '/studio', label: 'Studio' },
-                { href: '/developer', label: 'Developer' },
-                { href: '/appstore', label: 'Appstore' },
-              ]}
-            />
-          </SidebarSection>
-        )}
+        extraSidebar={accessState === 'allowed' ? (
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Publish</div>
+            <Tabs tabs={STEPS.map(item => ({ key: item, label: item }))} active={step} onChange={setStep} />
+          </Card>
+        ) : undefined}
         aside={accessState === 'allowed' ? (
-          <SidebarSection title="Preview">
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Preview</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Badge tone="accent">{state.runtime}</Badge>
               <div className="os-entity-title">{state.name || 'Untitled app'}</div>
               <div className="os-entity-copy">{state.description || 'Short description preview'}</div>
               <Badge tone={state.visibility === 'public' ? 'success' : state.visibility === 'unlisted' ? 'accent' : 'default'}>{state.visibility}</Badge>
             </div>
-          </SidebarSection>
+          </Card>
         ) : (
-          <SidebarSection title="Access">
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Access</div>
             <div style={{ display: 'grid', gap: 10 }}>
               <Badge tone={accessState === 'blocked' ? 'warning' : 'default'}>
                 {accessState === 'loading'
@@ -257,7 +237,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
                     : 'Validating publishing permissions.'}
               </div>
             </div>
-          </SidebarSection>
+          </Card>
         )}
       >
         {accessState === 'allowed' ? (
@@ -375,7 +355,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
             ) : null}
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

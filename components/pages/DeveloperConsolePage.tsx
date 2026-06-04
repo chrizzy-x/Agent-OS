@@ -2,22 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
+import { Drawer } from '@/components/os/overlays';
+import { useRouteDrawer } from '@/components/os/drawer-state';
 import { resolveBrowserAccessState } from '@/src/auth/browser-access';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
-  AppShell,
+  Badge,
   Button,
   Card,
   DataTable,
   EmptyState,
-  FilterChips,
   LoadingState,
   MetricCard,
   PageHeader,
   SearchBar,
-  SidebarNav,
-  SidebarSection,
   StatusPill,
 } from '@/components/os/ui';
 
@@ -35,7 +35,6 @@ type DeveloperAnalytics = {
     heartbeats?: number;
     online?: number;
   };
-  usage_by_day?: Array<{ date: string; calls: number; errors: number; revenue: string }>;
 };
 
 type KernelEntry = {
@@ -67,15 +66,34 @@ type DeveloperApp = {
   lastHeartbeatAt?: string | null;
 };
 
-const SECTIONS = ['Overview', 'My Apps', 'SDK Keys', 'Publishing', 'Analytics', 'Webhooks', 'Billing', 'Settings', 'Docs'];
+type AppDetail = DeveloperApp & {
+  manifest?: {
+    version?: string;
+    runtime?: string;
+    permissions?: string[];
+    requiredSecrets?: string[];
+    skills?: string[];
+    requiredSkills?: string[];
+  };
+  versionHistory?: Array<{ id: string; version: string; changeSummary: string | null; createdAt: string }>;
+  lastError?: string | null;
+};
+
+type DrawerId = 'published-app' | 'registry-entry';
+
+function formatDate(value: string | null | undefined): string {
+  return value ? new Date(value).toLocaleString() : 'Not recorded';
+}
 
 export default function DeveloperConsolePage() {
+  const drawer = useRouteDrawer<DrawerId>();
   const [session, setSession] = useState<BrowserSession | null>(null);
-  const [section, setSection] = useState('Overview');
   const [analytics, setAnalytics] = useState<DeveloperAnalytics | null>(null);
   const [registry, setRegistry] = useState<KernelEntry[]>([]);
   const [apps, setApps] = useState<DeveloperApp[]>([]);
+  const [detail, setDetail] = useState<AppDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [search, setSearch] = useState('');
 
   const canUseDeveloperConsole = session?.capabilities?.includes('access_developer_console') === true;
@@ -86,7 +104,12 @@ export default function DeveloperConsolePage() {
     try {
       const current = await fetchBrowserSession().catch(() => null);
       setSession(current);
-      if (!current) return;
+      if (!current) {
+        setAnalytics(null);
+        setRegistry([]);
+        setApps([]);
+        return;
+      }
       const [appsRes, analyticsRes, registryRes] = await Promise.all([
         fetch('/api/apps?mine=1&sort=recent', { cache: 'no-store' }),
         fetch('/api/developer/analytics', { cache: 'no-store' }).catch(() => null),
@@ -128,171 +151,242 @@ export default function DeveloperConsolePage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (drawer.current?.id !== 'published-app' || !drawer.current.entityId) {
+      setDetail(null);
+      return;
+    }
+    let active = true;
+    setDetailLoading(true);
+    void fetch(`/api/apps/${encodeURIComponent(drawer.current.entityId)}`, { cache: 'no-store' })
+      .then(response => response.json())
+      .then(payload => {
+        if (active) setDetail(payload.app ?? null);
+      })
+      .catch(() => {
+        if (active) setDetail(null);
+      })
+      .finally(() => {
+        if (active) setDetailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [drawer.current?.entityId, drawer.current?.id]);
+
   const filteredApps = useMemo(
     () => apps.filter(app => !search || `${app.name} ${app.description} ${app.slug}`.toLowerCase().includes(search.toLowerCase())),
     [apps, search],
+  );
+  const recoveryEntries = useMemo(
+    () => registry.filter(item => item.discoveryStatus === 'metadata_required' || item.discoveryStatus === 'hidden'),
+    [registry],
+  );
+  const selectedRegistry = useMemo(
+    () => registry.find(item => item.product === drawer.current?.entityId) ?? null,
+    [drawer.current?.entityId, registry],
   );
 
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/developer" />
-      <AppShell
+      <WorkspaceShell
         activePath="/developer"
-        sidebar={accessState === 'allowed' ? (
-          <SidebarSection title="Developer">
-            <FilterChips items={SECTIONS} active={section} onChange={setSection} />
-            <SidebarNav items={SECTIONS.map(item => ({
-              href: item === 'Publishing' ? '/developer/publish' : undefined,
-              label: item,
-              active: item === section,
-              onClick: item === 'Publishing' ? undefined : () => setSection(item),
-            }))} />
-          </SidebarSection>
-        ) : (
-          <SidebarSection title="Developer Access">
-            <SidebarNav
-              items={[
-                { href: '/studio', label: 'Studio' },
-                { href: '/sdk', label: 'SDK' },
-                { href: '/appstore', label: 'Appstore' },
-              ]}
-            />
-          </SidebarSection>
-        )}
-        aside={accessState === 'allowed' ? (
-          <>
-            <SidebarSection title="SDK health">
-              <ActivityFeed
-                items={registry.slice(0, 5).map(item => ({
-                  id: item.product,
-                  title: item.product,
-                  subtitle: item.statusTopic,
-                  status: item.status,
-                  time: item.lastHeartbeatAt ? new Date(item.lastHeartbeatAt).toLocaleString() : 'No heartbeat yet',
-                }))}
-              />
-            </SidebarSection>
-            <SidebarSection title="Quick links">
-              <SidebarNav
-                items={[
-                  { href: '/developer/publish', label: 'Publish app' },
-                  { href: '/appstore', label: 'View public Appstore' },
-                  { href: '/settings/team', label: 'Workspace team' },
-                ]}
-              />
-            </SidebarSection>
-          </>
-        ) : (
-          <SidebarSection title="Access">
-            <div style={{ display: 'grid', gap: 10 }}>
-              <StatusPill status={accessState === 'loading' ? 'pending' : accessState === 'signed_out' ? 'offline' : 'blocked'} />
-              <div className="os-entity-copy">
-                {accessState === 'signed_out'
-                  ? 'Sign in with an enterprise-capable workspace to open the Developer Console.'
-                  : accessState === 'blocked'
-                    ? 'Developer publishing, analytics, SDK keys, and billing stay hidden outside enterprise workspaces.'
-                    : 'Checking developer access.'}
-              </div>
+        aside={(
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Summary</div>
+            <div className="os-drawer-stack">
+              <Badge tone={accessState === 'allowed' ? 'accent' : accessState === 'blocked' ? 'warning' : 'default'}>
+                {accessState === 'allowed' ? 'Enterprise developer access' : accessState === 'signed_out' ? 'Sign in required' : accessState === 'blocked' ? 'Retail access blocked' : 'Checking access'}
+              </Badge>
+              <div className="os-entity-copy">Published apps: {apps.length}</div>
+              <div className="os-entity-copy">SDK registrations: {registry.length}</div>
+              <div className="os-entity-copy">Recovery needed: {recoveryEntries.length}</div>
+              <Button href="/developer/publish" variant="secondary">Publish app</Button>
             </div>
-          </SidebarSection>
+          </Card>
         )}
       >
         {accessState === 'allowed' ? (
           <PageHeader
             eyebrow="Developer Console"
-            title="Developer Console"
-            subtitle="SDK apps, internal apps, publishing, analytics, keys, and webhooks."
-            actions={<Button href="/developer/publish">Publish app</Button>}
+            title="Published apps and SDK runtime"
+            subtitle="Inspect published apps, SDK registrations, health, installs, manifest coverage, errors, and recovery blockers in drawers."
+            actions={<Button href="/sdk">Open SDK</Button>}
           />
         ) : accessState === 'signed_out' ? (
-          <PageHeader
-            eyebrow="Developer Access"
-            title="Sign in required"
-            subtitle="Developer Console is available only after sign-in and plan validation."
-          />
+          <PageHeader eyebrow="Developer Access" title="Sign in required" subtitle="Developer Console is available only after sign-in and plan validation." />
         ) : accessState === 'blocked' ? (
-          <PageHeader
-            eyebrow="Developer Access"
-            title="Enterprise access required"
-            subtitle="Retail workspaces cannot open publishing, SDK, analytics, or billing controls."
-          />
+          <PageHeader eyebrow="Developer Access" title="Enterprise access required" subtitle="Retail workspaces cannot open publishing, SDK, analytics, or billing controls." />
         ) : (
-          <PageHeader
-            eyebrow="Developer Access"
-            title="Checking access"
-            subtitle="Validating developer permissions for this workspace."
-          />
+          <PageHeader eyebrow="Developer Access" title="Checking access" subtitle="Validating developer permissions for this workspace." />
         )}
 
-        {loading ? <LoadingState label="Loading developer access" /> : !session ? (
-          <EmptyState title="Sign in required" body="Sign in to manage apps, SDK credentials, and analytics." action={<Button href="/signin">Sign in</Button>} />
+        {loading ? <LoadingState label="Loading developer console" /> : !session ? (
+          <EmptyState title="Sign in required" body="Sign in to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in</Button>} />
         ) : !canUseDeveloperConsole ? (
-          <EmptyState title="Enterprise access required" body="Developer Console stays gated to enterprise-capable workspaces. Existing routes remain available, but SDK publishing and analytics are blocked on plan." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState title="Enterprise access required" body="Developer Console stays gated to enterprise-capable workspaces." action={<Button href="/studio">Open Studio</Button>} />
         ) : (
-          <>
+          <div className="os-drawer-stack">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-              <MetricCard label="Total apps" value={apps.length} />
+              <MetricCard label="Apps" value={apps.length} />
               <MetricCard label="Installs" value={analytics?.app_totals?.installs ?? apps.reduce((sum, app) => sum + app.installCount, 0)} />
               <MetricCard label="Active users" value={analytics?.totals?.active_users ?? analytics?.app_totals?.opens ?? 0} />
               <MetricCard label="Revenue" value={`$${analytics?.totals?.revenue_usd?.toFixed(2) ?? '0.00'}`} />
-              <MetricCard label="SDK health" value={`${analytics?.app_totals?.online ?? registry.filter(item => item.status === 'online').length}/${Math.max(apps.length, registry.length)}`} />
-              <MetricCard label="Heartbeats" value={analytics?.app_totals?.heartbeats ?? registry.filter(item => item.lastHeartbeatAt).length} />
-              <MetricCard label="API calls" value={analytics?.totals?.calls ?? 0} />
+              <MetricCard label="Healthy SDK apps" value={analytics?.app_totals?.online ?? registry.filter(item => item.status === 'online').length} />
               <MetricCard label="Error rate" value={`${analytics?.totals?.error_rate ?? '0.0'}%`} />
             </div>
 
-            <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps, registrations, slugs..." />
+            <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps and slugs" />
 
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Recent app registrations</div>
-              {registry.length === 0 ? (
-                <div className="os-empty-body">No SDK registrations yet.</div>
-              ) : (
-                <DataTable
-                  columns={['App', 'Type', 'Registered', 'Health', 'Discovery', 'Installs', 'Last heartbeat']}
-                  rows={registry.map(item => {
-                    const match = apps.find(app => app.slug === item.product || app.name === item.product);
-                    return [
-                      item.product,
-                      match?.source === 'external_sdk' ? 'External SDK' : 'Internal',
-                      new Date(item.registeredAt).toLocaleDateString(),
-                      <StatusPill key={`${item.product}-status`} status={item.status} />,
-                      item.discoveryStatus === 'metadata_required'
-                        ? (item.discoveryError ?? 'Metadata required')
-                        : item.appSlug
-                          ? `Indexed as ${item.appSlug}`
-                          : item.discoveryStatus ?? 'unknown',
-                      String(match?.installCount ?? 0),
-                      item.lastHeartbeatAt ? new Date(item.lastHeartbeatAt).toLocaleString() : 'n/a',
-                    ];
-                  })}
-                />
-              )}
-            </Card>
-
-            <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>My apps</div>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Published apps</div>
               {filteredApps.length === 0 ? (
-                <EmptyState title="No apps yet" body="SDK apps appear here automatically after registration. Internal apps appear after publishing." action={<Button href="/developer/publish">Publish app</Button>} />
+                <EmptyState title="No apps yet" body="Publish an app or register an SDK app to populate this surface." action={<Button href="/developer/publish">Publish app</Button>} />
               ) : (
                 <DataTable
-                  columns={['App', 'Runtime', 'Visibility', 'Installs', 'Opens', 'Heartbeat', 'Health', 'Open']}
+                  columns={['App', 'Runtime', 'Visibility', 'Installs', 'Opens', 'Health', 'Actions']}
                   rows={filteredApps.map(app => [
                     app.name,
                     app.runtimeType,
                     <StatusPill key={`${app.id}-visibility`} status={app.visibility} />,
                     String(app.installCount),
                     String(app.openCount ?? 0),
-                    app.lastHeartbeatAt ? new Date(app.lastHeartbeatAt).toLocaleString() : 'n/a',
                     <StatusPill key={`${app.id}-health`} status={app.healthStatus ?? 'unknown'} />,
-                    <a key={`${app.id}-open`} href={`/appstore/${app.slug}`} className="btn-outline">Manage</a>,
+                    <div key={`${app.id}-actions`} className="os-inline-actions">
+                      <Button variant="secondary" onClick={() => drawer.openDrawer('published-app', app.slug)}>Inspect</Button>
+                      <Button href={`/appstore/${app.slug}`}>Open page</Button>
+                    </div>,
                   ])}
                 />
               )}
             </Card>
-          </>
+
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>SDK registrations</div>
+              {registry.length === 0 ? (
+                <div className="os-empty-body">No SDK registrations yet.</div>
+              ) : (
+                <DataTable
+                  columns={['Product', 'Health', 'Discovery', 'Registered', 'Last heartbeat', 'Actions']}
+                  rows={registry.map(item => [
+                    item.product,
+                    <StatusPill key={`${item.product}-status`} status={item.status} />,
+                    item.discoveryStatus === 'metadata_required'
+                      ? (item.discoveryError ?? 'Metadata required')
+                      : item.appSlug
+                        ? `Indexed as ${item.appSlug}`
+                        : item.discoveryStatus ?? 'unknown',
+                    new Date(item.registeredAt).toLocaleDateString(),
+                    formatDate(item.lastHeartbeatAt),
+                    <Button key={`${item.product}-inspect`} variant="secondary" onClick={() => drawer.openDrawer('registry-entry', item.product)}>Inspect</Button>,
+                  ])}
+                />
+              )}
+            </Card>
+
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Legacy SDK recovery</div>
+              {recoveryEntries.length === 0 ? (
+                <div className="os-empty-body">No legacy SDK recovery blockers detected.</div>
+              ) : (
+                <ActivityFeed items={recoveryEntries.map(item => ({
+                  id: item.product,
+                  title: item.product,
+                  subtitle: item.discoveryError ?? 'Metadata registration is incomplete.',
+                  status: item.discoveryStatus ?? 'metadata_required',
+                  time: formatDate(item.lastHeartbeatAt ?? item.registeredAt),
+                }))} />
+              )}
+            </Card>
+          </div>
         )}
-      </AppShell>
+      </WorkspaceShell>
+
+      <Drawer
+        open={drawer.current?.id === 'published-app'}
+        onClose={drawer.closeDrawer}
+        title={detail?.name ?? 'App detail'}
+        description="App analytics, manifest coverage, versions, and runtime readiness."
+        routeSafe
+      >
+        {detailLoading ? <LoadingState label="Loading app details" /> : !detail ? (
+          <EmptyState title="App unavailable" body="This app detail record could not be loaded." />
+        ) : (
+          <div className="os-drawer-stack">
+            <Card>
+              <div className="os-inline-actions">
+                <Badge tone="accent">{detail.runtimeType}</Badge>
+                <StatusPill status={detail.healthStatus ?? 'unknown'} />
+                <StatusPill status={detail.visibility} />
+              </div>
+              <div className="os-drawer-stack" style={{ marginTop: 12 }}>
+                <div className="os-entity-copy">Version: {detail.manifest?.version ?? '1.0.0'}</div>
+                <div className="os-entity-copy">Installs: {detail.installCount}</div>
+                <div className="os-entity-copy">Opens: {detail.openCount ?? 0}</div>
+                <div className="os-entity-copy">Last heartbeat: {formatDate(detail.lastHeartbeatAt)}</div>
+                {detail.lastError ? <div className="os-entity-copy">Last error: {detail.lastError}</div> : null}
+              </div>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Manifest</div>
+              <div className="os-drawer-stack">
+                <div className="os-entity-copy">Runtime: {detail.manifest?.runtime ?? detail.runtimeType}</div>
+                <div className="os-entity-copy">Permissions: {detail.manifest?.permissions?.join(', ') || 'None'}</div>
+                <div className="os-entity-copy">Required secrets: {detail.manifest?.requiredSecrets?.join(', ') || 'None'}</div>
+                <div className="os-entity-copy">Required skills: {(detail.manifest?.requiredSkills ?? detail.manifest?.skills ?? []).join(', ') || 'None'}</div>
+              </div>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Versions</div>
+              {detail.versionHistory?.length ? (
+                <ActivityFeed items={detail.versionHistory.map(version => ({
+                  id: version.id,
+                  title: version.version,
+                  subtitle: version.changeSummary ?? 'No change summary recorded.',
+                  time: formatDate(version.createdAt),
+                }))} />
+              ) : (
+                <div className="os-empty-body">No version history recorded yet.</div>
+              )}
+            </Card>
+          </div>
+        )}
+      </Drawer>
+
+      <Drawer
+        open={drawer.current?.id === 'registry-entry'}
+        onClose={drawer.closeDrawer}
+        title={selectedRegistry?.product ?? 'SDK registration'}
+        description="Registration topics, discovery status, and legacy SDK recovery detail."
+        routeSafe
+      >
+        {!selectedRegistry ? <EmptyState title="Registration unavailable" body="This SDK registration could not be loaded." /> : (
+          <div className="os-drawer-stack">
+            <Card>
+              <div className="os-inline-actions">
+                <StatusPill status={selectedRegistry.status} />
+                <StatusPill status={selectedRegistry.discoveryStatus ?? 'unknown'} />
+              </div>
+              <div className="os-drawer-stack" style={{ marginTop: 12 }}>
+                <div className="os-entity-copy">Command topic: {selectedRegistry.commandTopic || 'Missing'}</div>
+                <div className="os-entity-copy">Status topic: {selectedRegistry.statusTopic || 'Missing'}</div>
+                <div className="os-entity-copy">Registered: {formatDate(selectedRegistry.registeredAt)}</div>
+                <div className="os-entity-copy">Last heartbeat: {formatDate(selectedRegistry.lastHeartbeatAt)}</div>
+                <div className="os-entity-copy">App slug: {selectedRegistry.appSlug ?? 'Not indexed'}</div>
+              </div>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Recovery</div>
+              <div className="os-entity-copy">{selectedRegistry.discoveryError ?? 'This SDK registration is indexed and healthy.'}</div>
+              <div className="os-inline-actions" style={{ marginTop: 12 }}>
+                <Button href="/developer/publish" variant="secondary">Open publishing</Button>
+                <Button href="/sdk">Open SDK keys</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 }

@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
+import { useRouteDrawer } from '@/components/os/drawer-state';
+import { Drawer } from '@/components/os/overlays';
+import WorkspaceShell from '@/components/os/workspace-shell';
+import { summarizeValue, summarizeWorkflowRun } from '@/src/ui/presenters';
 import {
   ActivityFeed,
-  AppShell,
   Button,
   Card,
   EmptyState,
@@ -13,9 +16,6 @@ import {
   PageHeader,
   SearchBar,
   SidebarNav,
-  SidebarSection,
-  Tabs,
-  Textarea,
   WorkflowCard,
 } from '@/components/os/ui';
 
@@ -34,14 +34,14 @@ type Workflow = {
   version?: number;
 };
 
-const TABS = ['Chat', 'Visual', 'Code', 'Runs', 'Settings'];
+type WorkflowDrawer = 'workflow-spec' | 'workflow-runtime';
 
 export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const router = useRouter();
+  const drawer = useRouteDrawer<WorkflowDrawer>();
   const [loading, setLoading] = useState(true);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [activeId, setActiveId] = useState(selectedId ?? '');
-  const [tab, setTab] = useState('Chat');
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const [working, setWorking] = useState(false);
@@ -144,46 +144,25 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/workflows" />
-      <AppShell
+      <WorkspaceShell
         activePath="/workflows"
-        sidebar={(
-          <>
-            <SidebarSection title="Workflows">
-              <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search workflows" />
-              <SidebarNav items={filtered.map(workflow => ({
-                href: `/workflows/${workflow.id}`,
-                label: workflow.name,
-                subtitle: workflow.schedule || workflow.status,
-                active: active?.id === workflow.id,
-              }))} />
-            </SidebarSection>
-            <SidebarSection title="Node library">
-              <SidebarNav items={[
-                { label: 'Trigger' },
-                { label: 'Action' },
-                { label: 'Condition' },
-                { label: 'Transform' },
-                { label: 'Delay' },
-                { label: 'Webhook' },
-                { label: 'Sub-workflow' },
-              ]} />
-            </SidebarSection>
-          </>
-        )}
         aside={(
           <>
-            <SidebarSection title="Inspector">
-              {active ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div className="os-entity-title">Selected workflow</div>
-                  <div className="os-entity-copy">{active.summary || 'No summary provided.'}</div>
-                  <div className="os-entity-copy">{active.steps.length} steps</div>
-                  <div className="os-entity-copy">{active.schedule || 'No schedule'}</div>
-                  <div className="os-entity-copy">Status: {active.last_error ? 'error' : active.status}</div>
-                </div>
-              ) : <div className="os-empty-body">Select a workflow.</div>}
-            </SidebarSection>
-            <SidebarSection title="Recent runs">
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Workflow list</div>
+              <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search workflows" />
+              <div style={{ marginTop: 12 }}>
+                <SidebarNav items={filtered.map(item => ({
+                  href: `/workflows/${item.id}`,
+                  label: item.name,
+                  subtitle: item.schedule || `${item.steps.length} steps`,
+                  active: item.id === active?.id,
+                  badge: item.last_error ? 'error' : item.status,
+                }))} />
+              </div>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Recent runs</div>
               <ActivityFeed
                 items={filtered.slice(0, 5).map(item => ({
                   id: item.id,
@@ -192,7 +171,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
                   status: item.last_error ? 'error' : item.status,
                 }))}
               />
-            </SidebarSection>
+            </Card>
           </>
         )}
       >
@@ -206,6 +185,8 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
               {active ? <Button variant="secondary" onClick={() => void toggleStatus()}>{working ? 'Working...' : active.status === 'paused' ? 'Resume' : 'Pause'}</Button> : null}
               <Button variant="ghost" onClick={validateWorkflow}>Validate</Button>
               <Button variant="ghost" onClick={sendToStudio}>AI Assist</Button>
+              <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-spec')}>Spec</Button>
+              <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime</Button>
               <Button href={`/publishing/new${active ? `?workflowId=${active.id}` : ''}`}>Publish</Button>
             </>
           )}
@@ -217,49 +198,71 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
           <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." />
         ) : (
           <>
+            <WorkflowCard
+              title={active.name}
+              description={active.summary || 'No summary provided.'}
+              status={active.last_error ? 'error' : active.status}
+              footer={<div className="os-entity-copy">{active.steps.length} steps | {active.schedule || 'Manual'} | Version {active.version ?? 1}</div>}
+            />
+
             <Card>
-              <Tabs tabs={TABS.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div className="os-entity-title">Flow</div>
+                <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-spec')}>Developer view</Button>
+              </div>
+              {(active.steps ?? []).length === 0 ? (
+                <div className="os-empty-body">No explicit steps stored for this workflow yet.</div>
+              ) : (
+                <ActivityFeed items={active.steps.map(step => ({
+                  id: `${step.order}-${step.tool}`,
+                  title: step.tool,
+                  subtitle: step.description || summarizeValue(step.input),
+                }))} />
+              )}
             </Card>
 
-            {tab === 'Chat' ? (
-              <WorkflowCard
-                title={active.name}
-                description={active.summary || 'No summary provided.'}
-                status={active.last_error ? 'error' : active.status}
-                footer={<div className="os-entity-copy">{active.steps.length} steps | {active.schedule || 'Manual'}</div>}
-              />
-            ) : null}
+            <Card>
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div className="os-entity-title">Latest run</div>
+                <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime details</Button>
+              </div>
+              <div className="os-entity-copy">{summarizeWorkflowRun(active.last_result ?? { status: active.status, error: active.last_error })}</div>
+              {active.last_error ? <div className="os-entity-copy" style={{ marginTop: 12 }}>Last error: {active.last_error}</div> : null}
+            </Card>
 
-            {tab === 'Visual' ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Graph</div>
-                <pre className="os-code-block">{JSON.stringify(active.graph_state ?? { nodes: [], edges: [] }, null, 2)}</pre>
-              </Card>
-            ) : null}
-
-            {tab === 'Code' ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Code</div>
-                <Textarea readOnly value={active.code_state || JSON.stringify(active.canonical_doc ?? active.steps, null, 2)} />
-              </Card>
-            ) : null}
-
-            {tab === 'Runs' ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Run history</div>
-                <pre className="os-code-block">{JSON.stringify(active.last_result ?? { status: active.status, error: active.last_error }, null, 2)}</pre>
-              </Card>
-            ) : null}
-
-            {tab === 'Settings' ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Workflow settings</div>
-                <div className="os-entity-copy">Version {active.version ?? 1} | {active.schedule || 'No schedule'} | Visibility is selected in the publish wizard.</div>
-              </Card>
-            ) : null}
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Settings</div>
+              <div className="os-entity-copy">Schedule: {active.schedule || 'Manual'}</div>
+              <div className="os-entity-copy">Visibility is managed during publishing.</div>
+            </Card>
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
+
+      <Drawer
+        open={Boolean(drawer.current)}
+        onClose={drawer.closeDrawer}
+        title={drawer.current?.id === 'workflow-spec' ? 'Workflow spec' : 'Workflow runtime'}
+        description="Advanced workflow details"
+      >
+        {!active ? <EmptyState title="Workflow unavailable" body="Select a workflow to inspect." /> : drawer.current?.id === 'workflow-spec' ? (
+          <div className="os-drawer-stack">
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Graph</div>
+              <pre className="os-code-block">{JSON.stringify(active.graph_state ?? { nodes: [], edges: [] }, null, 2)}</pre>
+            </Card>
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Code / canonical</div>
+              <pre className="os-code-block">{active.code_state || JSON.stringify(active.canonical_doc ?? active.steps, null, 2)}</pre>
+            </Card>
+          </div>
+        ) : (
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Latest run payload</div>
+            <pre className="os-code-block">{JSON.stringify(active.last_result ?? { status: active.status, error: active.last_error }, null, 2)}</pre>
+          </Card>
+        )}
+      </Drawer>
     </div>
   );
 }

@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
 import type { AgentAppListing } from '@/src/appstore/catalog';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
-  AppShell,
   Badge,
   Button,
   Card,
@@ -17,8 +17,6 @@ import {
   MetricCard,
   PageHeader,
   PermissionCard,
-  SidebarNav,
-  SidebarSection,
   Tabs,
 } from '@/components/os/ui';
 
@@ -353,24 +351,11 @@ export default function AppDetailPage() {
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/appstore" />
-      <AppShell
+      <WorkspaceShell
         activePath="/appstore"
-        sidebar={(
-          <SidebarSection title="Appstore">
-            <SidebarNav
-              items={[
-                { href: '/appstore', label: 'Back to Appstore' },
-                { href: `/appstore/${slug}`, label: 'Overview', active: true },
-                { href: '/ffp', label: 'FFP' },
-                ...(session?.capabilities?.includes('access_developer_console') ? [{ href: '/developer', label: 'Developer' }] : []),
-                { href: '/vault', label: 'Vault' },
-                { href: '/skills', label: 'Skills' },
-              ]}
-            />
-          </SidebarSection>
-        )}
         aside={(
-          <SidebarSection title="Details">
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Details</div>
             {app ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <Badge tone="accent">{runtimeLabel(app)}</Badge>
@@ -394,11 +379,11 @@ export default function AppDetailPage() {
                 ) : null}
               </div>
             ) : null}
-          </SidebarSection>
+          </Card>
         )}
       >
         {loading ? <LoadingState label="Loading app details" /> : !app ? (
-          <EmptyState title="App not found" body="This app is private, unavailable, or the slug does not exist." action={<Button href="/appstore">Back to Appstore</Button>} />
+          <EmptyState title="App not found" body="This app is private, unavailable, or the slug does not exist." action={<Button href="/appstore">Back to Apps</Button>} />
         ) : (
           <>
             <PageHeader
@@ -536,7 +521,7 @@ export default function AppDetailPage() {
               commands.length === 0 ? <EmptyState title="No commands declared" body="This app has not exposed callable commands yet." /> : (
                 <div style={{ display: 'grid', gap: 12 }}>
                   {commands.map(command => (
-                    <CommandCard key={command.name} name={command.name} description={command.description} payload={JSON.stringify(command, null, 2)} />
+                    <CommandCard key={command.name} name={command.name} description={command.description} />
                   ))}
                 </div>
               )
@@ -636,7 +621,7 @@ export default function AppDetailPage() {
             ) : null}
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

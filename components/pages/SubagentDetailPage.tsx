@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Nav from '@/components/Nav';
+import WorkspaceShell from '@/components/os/workspace-shell';
+import { summarizeAgentResult } from '@/src/ui/presenters';
 import {
   ActivityFeed,
-  AppShell,
   Badge,
   Button,
   Card,
@@ -14,8 +15,6 @@ import {
   PageHeader,
   PermissionCard,
   SearchBar,
-  SidebarNav,
-  SidebarSection,
   Tabs,
   Textarea,
 } from '@/components/os/ui';
@@ -42,7 +41,17 @@ type SubagentPayload = {
 
 const TABS = ['Configure', 'Instructions', 'Memory', 'Skills', 'Tools', 'Permissions', 'Activity'];
 
-export default function SubagentDetailPage() {
+type SubagentDetailPageProps = {
+  activePath?: string;
+  basePath?: string;
+  listLabel?: string;
+};
+
+export default function SubagentDetailPage({
+  activePath = '/agents',
+  basePath = '/agents',
+  listLabel = 'All agents',
+}: SubagentDetailPageProps) {
   const params = useParams<{ id: string }>();
   const id = params?.id ?? '';
   const [loading, setLoading] = useState(true);
@@ -95,30 +104,23 @@ export default function SubagentDetailPage() {
       body: JSON.stringify({ command }),
     });
     const data = await res.json();
-    setResult(JSON.stringify(data.result ?? data, null, 2));
+    setResult(summarizeAgentResult(data.result ?? data));
   }
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/subagents" />
-      <AppShell
-        sidebar={(
-          <SidebarSection title="Agents">
-            <SidebarNav
-              items={[
-                { href: '/subagents', label: 'All subagents' },
-                { href: `/subagents/${id}`, label: 'Agent details', active: true },
-                { href: '/vault', label: 'Vault' },
-              ]}
-            />
-          </SidebarSection>
-        )}
+      <Nav activePath={activePath} />
+      <WorkspaceShell
+        activePath="/agents"
         aside={(
-          <SidebarSection title="Run test">
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Run test</div>
             <SearchBar value={command} onChange={event => setCommand(event.target.value)} placeholder="Test instruction" />
-            <Button onClick={() => void testRun()}>Run</Button>
-            {result ? <pre className="os-code-block">{result}</pre> : null}
-          </SidebarSection>
+            <div style={{ marginTop: 12 }}>
+              <Button onClick={() => void testRun()}>Run</Button>
+            </div>
+            {result ? <div className="os-entity-copy" style={{ marginTop: 12 }}>{result}</div> : null}
+          </Card>
         )}
       >
         {loading ? <LoadingState label="Loading agent" /> : !payload || !subagent ? (
@@ -198,7 +200,7 @@ export default function SubagentDetailPage() {
             ) : null}
           </>
         )}
-      </AppShell>
+      </WorkspaceShell>
     </div>
   );
 }

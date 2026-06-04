@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { Drawer } from '@/components/os/overlays';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
 interface NavProps {
@@ -16,7 +17,7 @@ export function buildSessionNavLinks(session: BrowserSession | null): Array<{ hr
       { href: '/', label: 'Home' },
       { href: '/studio', label: 'Studio' },
       { href: '/marketplace', label: 'Skills' },
-      { href: '/appstore', label: 'Appstore' },
+      { href: '/appstore', label: 'Apps' },
       { href: '/signup', label: 'Signup' },
     ];
   }
@@ -24,21 +25,23 @@ export function buildSessionNavLinks(session: BrowserSession | null): Array<{ hr
   const enterprise = session.accountType === 'enterprise' || session.capabilities?.includes('access_sdk') === true;
   const links: Array<{ href: string; label: string }> = [
     { href: '/studio', label: 'Studio' },
-    { href: '/projects', label: 'Projects' },
-    { href: '/workflows', label: 'Workflows' },
-    { href: '/subagents', label: 'Agents' },
-    { href: '/skills', label: 'Skills' },
     { href: '/appstore', label: 'Apps' },
+    { href: '/skills', label: 'Skills' },
+    { href: '/workflows', label: 'Workflows' },
+    { href: '/agents', label: 'Agents' },
     { href: '/vault', label: 'Vault' },
-    { href: '/analytics', label: 'Analytics' },
-    { href: '/settings', label: 'Settings' },
+    { href: '/search', label: 'Search' },
   ];
 
-  links.splice(6, 0, { href: '/ffp', label: 'FFP' });
-
   if (enterprise) {
-    links.splice(8, 0, { href: '/sdk', label: 'SDK' });
-    links.splice(9, 0, { href: '/developer', label: 'Developer' });
+    links.push(
+      { href: '/sdk', label: 'SDK' },
+      { href: '/developer', label: 'Developer Console' },
+      { href: '/ffp', label: 'FFP Router' },
+      { href: '/mcp', label: 'Universal MCP' },
+      { href: '/analytics', label: 'Analytics' },
+      { href: '/audit', label: 'Audit' },
+    );
   }
 
   return links;
@@ -131,7 +134,6 @@ export default function Nav({ activePath }: NavProps) {
           </nav>
 
           <div className="nav-desktop-ctas" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Link href="/search" className="btn-ghost">Search</Link>
             {ready && session ? (
               <>
                 <span style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -165,57 +167,47 @@ export default function Nav({ activePath }: NavProps) {
             {menuOpen ? 'X' : 'Menu'}
           </button>
         </div>
-
-        {menuOpen ? (
-          <div className="container" style={{ paddingBottom: 16 }}>
-            <div className="card" style={{ padding: 10 }}>
-              <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {links.map(link => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={() => setMenuOpen(false)}
-                    style={{
-                      minHeight: 44,
-                      padding: '10px 12px',
-                      borderRadius: 8,
-                      textDecoration: 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: activePath === link.href ? '#ddd6fe' : 'var(--text-secondary)',
-                      background: activePath === link.href ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
-                    }}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-                <Link
-                  href="/search"
-                  onClick={() => setMenuOpen(false)}
-                  style={{
-                    minHeight: 44,
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    color: activePath === '/search' ? '#ddd6fe' : 'var(--text-secondary)',
-                    background: activePath === '/search' ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
-                  }}
-                >
-                  Search
-                </Link>
-                {!session ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
-                    <Link href="/signin" className="btn-ghost" onClick={() => setMenuOpen(false)}>Sign in</Link>
-                    <Link href="/signup" className="btn-primary" onClick={() => setMenuOpen(false)}>Create AgentOS account</Link>
-                  </div>
-                ) : null}
-              </nav>
-            </div>
-          </div>
-        ) : null}
       </header>
+
+      <Drawer
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title="Navigation"
+        description={session ? session.agentName ?? 'AgentOS' : 'AgentOS'}
+        placement="right"
+        mobilePlacement="bottom"
+        size="sm"
+      >
+        <nav style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {links.map(link => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setMenuOpen(false)}
+              style={{
+                minHeight: 44,
+                padding: '10px 12px',
+                borderRadius: 8,
+                textDecoration: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                color: activePath === link.href ? '#ddd6fe' : 'var(--text-secondary)',
+                background: activePath === link.href ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+              }}
+            >
+              {link.label}
+            </Link>
+          ))}
+          {session ? (
+            <Link href="/studio" className="btn-primary" onClick={() => setMenuOpen(false)}>Open Studio</Link>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
+              <Link href="/signin" className="btn-ghost" onClick={() => setMenuOpen(false)}>Sign in</Link>
+              <Link href="/signup" className="btn-primary" onClick={() => setMenuOpen(false)}>Create AgentOS account</Link>
+            </div>
+          )}
+        </nav>
+      </Drawer>
 
       <style>{`
         @media (max-width: 860px) {
