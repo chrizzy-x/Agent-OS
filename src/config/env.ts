@@ -3,11 +3,22 @@
 const DEFAULT_APP_URL = 'https://agentos-app.vercel.app';
 const DEFAULT_X_OAUTH_SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access'];
 
+function sanitizeEnvValue(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith('\'') && trimmed.endsWith('\''))) {
+    const unquoted = trimmed.slice(1, -1).trim();
+    return unquoted || undefined;
+  }
+  return trimmed;
+}
+
 function getEnv(...keys: string[]): string | undefined {
   for (const key of keys) {
-    const value = process.env[key];
-    if (value && value.trim()) {
-      return value.trim();
+    const value = sanitizeEnvValue(process.env[key]);
+    if (value) {
+      return value;
     }
   }
   return undefined;
@@ -23,6 +34,10 @@ function requireEnv(label: string, ...keys: string[]): string {
 
 export function getPublicAppUrl(): string {
   return getEnv('NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_API_URL') ?? DEFAULT_APP_URL;
+}
+
+export function getAgentOSRuntimeUrl(): string | null {
+  return getEnv('AGENTOS_RUNTIME_URL') ?? null;
 }
 
 export function getSupabaseUrl(): string {

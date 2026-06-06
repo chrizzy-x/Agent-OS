@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createServer } from 'http';
 import { createAgentToken, extractBearerToken, verifyAgentToken } from './auth/agent-identity.js';
+import type { AgentContext } from './auth/permissions.js';
 import { getFFPClient } from './ffp/client.js';
 import { assertExternalAgentToolAccess, trackExternalAgentCall } from './external-agents/service.js';
 import { executeUniversalToolCall, listUniversalMcpTools } from './mcp/registry.js';
@@ -13,6 +14,13 @@ import {
 import { handleAgentMe } from './routes/agent-me.js';
 import { readJsonBody, sendJson } from './routes/http.js';
 import { handleRegister } from './routes/register.js';
+import {
+  closeStudioTerminal,
+  createStudioTerminal,
+  getStudioTerminal,
+  listStudioTerminalEvents,
+  sendStudioTerminalInput,
+} from './runtime/studio-terminal.js';
 import { TOOLS } from './tools.js';
 import { toErrorResponse } from './utils/errors.js';
 import { sanitizeErrorMessage, sanitizeOutput } from './utils/output-sanitizer.js';
@@ -87,11 +95,162 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   }
 }
 
+function encodeSseEvent(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+async function requireRuntimeAgentContext(req: IncomingMessage, res: ServerResponse): Promise<AgentContext | null> {
+  const token = extractBearerToken(req.headers.authorization);
+  if (!token) {
+    sendJson(res, 401, {
+      error: { code: 'UNAUTHORIZED', message: 'Authorization: Bearer <token> header required' },
+      message: 'Authorization: Bearer <token> header required',
+    });
+    return null;
+  }
+
+  try {
+    return verifyAgentToken(token);
+  } catch (error) {
+    const err = toErrorResponse(error);
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
+    return null;
+  }
+}
+
+async function handleStudioTerminalCreate(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const agentContext = await requireRuntimeAgentContext(req, res);
+  if (!agentContext) return;
+
+  try {
+    const body = await readJsonBody(req);
+    const session = await createStudioTerminal({
+      ownerAgentId: agentContext.agentId,
+      projectId: typeof body.projectId === 'string' ? body.projectId : '',
+      advancedMode: body.advancedMode === true,
+    });
+    sendJson(res, 201, { session });
+  } catch (error) {
+    const err = toErrorResponse(error);
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
+  }
+}
+
+async function handleStudioTerminalGet(req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
+  const agentContext = await requireRuntimeAgentContext(req, res);
+  if (!agentContext) return;
+
+  try {
+    const session = await getStudioTerminal({
+      ownerAgentId: agentContext.agentId,
+      sessionId,
+    });
+    sendJson(res, 200, { session });
+  } catch (error) {
+    const err = toErrorResponse(error);
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
+  }
+}
+
+async function handleStudioTerminalInput(req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
+  const agentContext = await requireRuntimeAgentContext(req, res);
+  if (!agentContext) return;
+
+  try {
+    const body = await readJsonBody(req);
+    const result = await sendStudioTerminalInput({
+      ownerAgentId: agentContext.agentId,
+      sessionId,
+      input: typeof body.input === 'string' ? body.input : '',
+      advancedMode: body.advancedMode === true,
+    });
+    sendJson(res, 200, result);
+  } catch (error) {
+    const err = toErrorResponse(error);
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
+  }
+}
+
+async function handleStudioTerminalDelete(req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
+  const agentContext = await requireRuntimeAgentContext(req, res);
+  if (!agentContext) return;
+
+  try {
+    const result = await closeStudioTerminal({
+      ownerAgentId: agentContext.agentId,
+      sessionId,
+    });
+    sendJson(res, 200, result);
+  } catch (error) {
+    const err = toErrorResponse(error);
+    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
+  }
+}
+
+async function handleStudioTerminalStream(req: IncomingMessage, res: ServerResponse, sessionId: string): Promise<void> {
+  const agentContext = await requireRuntimeAgentContext(req, res);
+  if (!agentContext) return;
+
+  const urlObj = new URL(req.url ?? '/', 'http://localhost');
+  let cursor = urlObj.searchParams.get('cursor') ?? '0';
+  let closed = false;
+  let polling = false;
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    clearInterval(timer);
+    res.end();
+  };
+
+  const push = (event: string, data: unknown) => {
+    if (closed) return;
+    res.write(encodeSseEvent(event, data));
+  };
+
+  const poll = async () => {
+    if (closed || polling) return;
+    polling = true;
+    try {
+      const events = await listStudioTerminalEvents({
+        ownerAgentId: agentContext.agentId,
+        sessionId,
+        cursor,
+      });
+      for (const event of events) {
+        cursor = event.id;
+        push('terminal_event', event);
+      }
+    } catch (error) {
+      const err = toErrorResponse(error);
+      push('error', { code: err.code, error: err.message, message: err.message });
+      close();
+    } finally {
+      polling = false;
+    }
+  };
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  });
+
+  push('connected', { sessionId, cursor });
+  void poll();
+  const timer = setInterval(() => {
+    void poll();
+  }, 1000);
+
+  req.on('close', close);
+  req.on('aborted', close);
+}
+
 function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     name: 'AgentOS',
-    version: '6.2.0',
-    description: 'Universal MCP, primitives, Skill Store capabilities, App Store packages, and external agent connectivity over one endpoint.',
+    version: '6.3.0',
+    description: 'AgentOS runtime for tools, sessions, files, and Code Studio terminal execution.',
     status: 'ok',
     endpoints: {
       'GET  /': 'API info (this response)',
@@ -102,6 +261,11 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
       'GET  /agent/me': 'Inspect the current external agent registration',
       'POST /admin/agents': 'Create a new bearer token (Admin token required)',
       'GET  /ffp/status': 'FFP mode and config summary',
+      'POST /studio/terminals': 'Create a persistent Code Studio terminal',
+      'GET  /studio/terminals/:id': 'Read a Code Studio terminal session',
+      'POST /studio/terminals/:id/input': 'Send terminal input',
+      'GET  /studio/terminals/:id/stream': 'Stream terminal output as SSE',
+      'DELETE /studio/terminals/:id': 'Close a Code Studio terminal',
     },
   });
 }
@@ -109,7 +273,7 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     status: 'ok',
-    version: '6.2.0',
+    version: '6.3.0',
     timestamp: new Date().toISOString(),
     tools: Object.keys(TOOLS).length,
   });
@@ -212,6 +376,9 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const method = req.method ?? 'GET';
   const ffpAuditMatch = pathname.match(/^\/ffp\/audit\/([^/?]+)/);
   const ffpConsensusMatch = pathname.match(/^\/ffp\/consensus\/([^/?]+)/);
+  const studioTerminalMatch = pathname.match(/^\/studio\/terminals\/([^/?]+)$/);
+  const studioTerminalInputMatch = pathname.match(/^\/studio\/terminals\/([^/?]+)\/input$/);
+  const studioTerminalStreamMatch = pathname.match(/^\/studio\/terminals\/([^/?]+)\/stream$/);
 
   try {
     if ((pathname === '/' || pathname === '') && method === 'GET') {
@@ -246,6 +413,31 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
 
     if (pathname === '/tools' && method === 'GET') {
       await handleTools(req, res);
+      return;
+    }
+
+    if (pathname === '/studio/terminals' && method === 'POST') {
+      await handleStudioTerminalCreate(req, res);
+      return;
+    }
+
+    if (studioTerminalMatch && method === 'GET') {
+      await handleStudioTerminalGet(req, res, decodeURIComponent(studioTerminalMatch[1]));
+      return;
+    }
+
+    if (studioTerminalMatch && method === 'DELETE') {
+      await handleStudioTerminalDelete(req, res, decodeURIComponent(studioTerminalMatch[1]));
+      return;
+    }
+
+    if (studioTerminalInputMatch && method === 'POST') {
+      await handleStudioTerminalInput(req, res, decodeURIComponent(studioTerminalInputMatch[1]));
+      return;
+    }
+
+    if (studioTerminalStreamMatch && method === 'GET') {
+      await handleStudioTerminalStream(req, res, decodeURIComponent(studioTerminalStreamMatch[1]));
       return;
     }
 

@@ -14,8 +14,8 @@ import {
 } from '@/components/os/ui';
 
 const STEPS = ['Account', 'Workspace', 'Team', 'Integrations', 'Complete'];
-const USE_CASES = ['Build AI agents', 'Automate workflows', 'Data analysis', 'Developer SDK', 'Other'];
-const STARTERS = ['Blank Studio', 'Research Agent', 'Workflow Builder', 'App Publisher'];
+const USE_CASES = ['Build AI apps', 'Automate workflows', 'Data analysis', 'Developer SDK', 'Other'];
+const STARTERS = ['Blank Studio', 'Research Workspace', 'Workflow Builder', 'App Publisher'];
 
 export default function OnboardingPage() {
   const router = useRouter();

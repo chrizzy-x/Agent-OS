@@ -248,18 +248,20 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         {!active ? <EmptyState title="Workflow unavailable" body="Select a workflow to inspect." /> : drawer.current?.id === 'workflow-spec' ? (
           <div className="os-drawer-stack">
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Graph</div>
-              <pre className="os-code-block">{JSON.stringify(active.graph_state ?? { nodes: [], edges: [] }, null, 2)}</pre>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Workflow structure</div>
+              <div className="os-entity-copy">Nodes: {Array.isArray(active.graph_state?.nodes) ? active.graph_state?.nodes.length : active.steps.length}</div>
+              <div className="os-entity-copy">Edges: {Array.isArray(active.graph_state?.edges) ? active.graph_state?.edges.length : 0}</div>
             </Card>
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Code / canonical</div>
-              <pre className="os-code-block">{active.code_state || JSON.stringify(active.canonical_doc ?? active.steps, null, 2)}</pre>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Workflow summary</div>
+              <div className="os-entity-copy">{active.summary || 'No workflow summary was saved yet.'}</div>
+              <div className="os-entity-copy" style={{ marginTop: 12 }}>Developer payloads are available through runtime logs only.</div>
             </Card>
           </div>
         ) : (
           <Card>
-            <div className="os-entity-title" style={{ marginBottom: 12 }}>Latest run payload</div>
-            <pre className="os-code-block">{JSON.stringify(active.last_result ?? { status: active.status, error: active.last_error }, null, 2)}</pre>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Latest run summary</div>
+            <div className="os-entity-copy">{summarizeWorkflowRun(active.last_result ?? { status: active.status, error: active.last_error })}</div>
           </Card>
         )}
       </Drawer>

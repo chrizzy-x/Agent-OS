@@ -8,6 +8,10 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
+  'v6.3 - AgentOS now ships as one AI operating system centered on Super AgentOS.',
+  'v6.3 - Studio is now one workspace with NL and Code modes that share the same session, project, and memory.',
+  'v6.3 - Super AgentOS is surfaced as the user-owned operating agent for sessions, memory, installed skills, connected apps, private workflows, and recent actions.',
+  'v6.3 - Home, apps, and skills were simplified so retail users see outcomes first.',
   'v6.2 - beta readiness hardening for Vault runtime injection, output redaction, disabled-app gating, developer access shells, and production lifecycle flows.',
   'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
   'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
@@ -21,13 +25,17 @@ const releaseHighlights = [
 ];
 
 const changelog = [
+  'Repositioned homepage, docs, marketplace, and launch surfaces around AgentOS as the operating system for the agent economy.',
+  'Added workspace-first Super AgentOS visibility for sessions, instructions, installed assets, workflows, and recent actions.',
+  'Added Studio session rename, archive, project scoping, per-session instructions, and structured intent result states.',
+  'Added browser-session refresh handling and deterministic loading, signed-out, expired-session, empty, success, and error states across protected routes.',
   'Removed fake App Store ratings, placeholder marketplace cards, seeded user-facing skill records, and fabricated fallback analytics from launch-facing surfaces.',
   'Recovered valid legacy SDK registry rows into factual external SDK App Store listings, including pre-metadata and pre-019 rows.',
   'Restored FFP as a first-class module with visible navigation, runtime status, related workflows, related apps, activity, and logs.',
   'Added app readiness resolution, target-aware open flows, install and update revalidation, and owner analytics on app profiles.',
   'Added persisted Vault runtime grants, consume and cleanup flows, assignment and permission checks, and secret redaction in Studio persistence.',
   'Added Studio session branching, lineage tracking, chosen and latest snapshot inheritance, and isolated branch messages and events.',
-  'Replaced self-serve billing transitions in the public UI with request-access and contact-sales flows until real billing is shipped.',
+  'Enabled free-beta self-serve plan transitions in /billing and POST /api/plans/transition across Retail Free, Retail Pro, Enterprise Plus, and Enterprise Max.',
   'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
   'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
   'Changed /api/session to return only authenticated session display fields; no private agent ID leaves the browser session endpoint.',
@@ -48,7 +56,7 @@ const startLinks = [
   { label: 'Create AgentOS account', href: '/signup' },
   { label: 'Sign in', href: '/signin' },
   { label: 'Open Studio', href: '/studio' },
-  { label: 'Browse skills', href: '/marketplace' },
+  { label: 'Browse skills', href: '/skills' },
   { label: 'Browse apps', href: '/appstore' },
   { label: 'Quick Start', href: '/docs/sdk' },
   { label: 'API reference', href: '/docs/api' },
@@ -73,17 +81,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v6.2 <span style={{ color: 'var(--accent)' }}>&ldquo;Beta Readiness&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">Agent OS v6.3 <span style={{ color: 'var(--accent)' }}>&ldquo;Operating System for the Agent Economy&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.2 ships hardened Vault runtime injection, shared output redaction, disabled-app lifecycle enforcement, safer developer gating, restored FFP visibility, and legacy SDK recovery. Agent IDs stay private, deployed-agent actions use public refs, and docs and API payloads stay launch-aligned. Live at <code>{APP_URL}</code>.
+            v6.3 ships Super AgentOS Home, one Studio with NL and Code modes, simpler stores, shared project context, and hardened session persistence. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.2</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.3</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS is a production infrastructure layer for autonomous agents. One bearer token gives you 6 primitives (mem, fs, db, net, events, proc), a Skill Store for capabilities, an App Store for downloadable agentic apps, universal MCP routing to external services, FFP audit + consensus, and a Natural Language Studio. In v6.2, private agent IDs stay server-side, users operate with agent names and public action refs, readiness-checked apps stay enforced, and Vault-backed runtime access is granted ephemerally with redacted execution output.
+              AgentOS is now organized around one idea: every user gets a Super AgentOS. In v6.3, Home, Studio, apps, skills, workflows, memory, Vault, and activity all reinforce that shared system instead of feeling like separate products.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.
@@ -103,11 +111,11 @@ export default function LaunchNotesPage() {
           <div className="card p-6">
             <h2 className="text-xl font-bold mb-4">What you can do today</h2>
             <ul className="space-y-2 text-sm" style={{ color: 'var(--text-muted)' }}>
-              <li>Provision an agent account and stay signed in with a secure browser session.</li>
+              <li>Provision a workspace with Super AgentOS and stay signed in with a secure browser session.</li>
+              <li>Use Studio as a chat-first operating surface for sessions, projects, workflows, skills, apps, memory, and run logs.</li>
+              <li>Open the marketplace discovery layer, inspect Skill Store capabilities, and install App Store packages with real readiness checks.</li>
+              <li>Register external apps and agents through the SDK so they become discoverable in the same product layer as native assets.</li>
               <li>Generate a fresh bearer token only when you need CLI, SDK, or external API access.</li>
-              <li>Use Studio to run guided commands and preview mutating operations before they execute.</li>
-              <li>Install from official verified skill packs, publish your own extensions, or download full agentic apps from the App Store.</li>
-              <li>Register any external agent once, receive a scoped token, and use the same MCP endpoint for primitives, skills, and external connectors.</li>
             </ul>
           </div>
         </section>

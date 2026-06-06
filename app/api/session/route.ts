@@ -1,56 +1,103 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractBearerToken, verifyAgentTokenClaims } from '@/src/auth/agent-identity';
-import { requireAgentContextWithTier } from '@/src/auth/request';
-import { clearAgentSessionCookie, extractSessionTokenFromCookie } from '@/src/auth/session-cookie';
-import { findAccountById } from '@/src/auth/agent-store';
+import { extractBearerToken, verifyAgentTokenClaims, verifyAgentTokenWithTier } from '@/src/auth/agent-identity';
 import { getPlanDescriptor } from '@/src/auth/capabilities';
+import { findRefreshSessionByToken, revokeRefreshSession } from '@/src/auth/browser-sessions';
+import { rotateBrowserSession } from '@/src/auth/browser-auth';
+import {
+  clearAgentSessionCookies,
+  extractAccessTokenFromCookie,
+  extractRefreshTokenFromCookie,
+} from '@/src/auth/session-cookie';
+import { findAccountById } from '@/src/auth/agent-store';
 import { reconcileAgentOSProvisioning } from '@/src/agentos/provisioning';
 
 export const runtime = 'nodejs';
 
-function readSessionToken(headers: Headers | globalThis.Headers): string | undefined {
+function readAccessToken(headers: Headers | globalThis.Headers): string | undefined {
   const authHeader = headers.get('authorization') ?? headers.get('Authorization') ?? undefined;
   const cookieHeader = headers.get('cookie') ?? headers.get('Cookie') ?? undefined;
-  return extractBearerToken(authHeader) ?? extractSessionTokenFromCookie(cookieHeader);
+  return extractBearerToken(authHeader) ?? extractAccessTokenFromCookie(cookieHeader);
+}
+
+function readRefreshToken(headers: Headers | globalThis.Headers): string | undefined {
+  const cookieHeader = headers.get('cookie') ?? headers.get('Cookie') ?? undefined;
+  return extractRefreshTokenFromCookie(cookieHeader);
+}
+
+async function buildSessionPayload(agentId: string, token: string) {
+  try {
+    await reconcileAgentOSProvisioning(agentId);
+  } catch {
+    // Session checks should continue even if reconciliation fails.
+  }
+  const claims = verifyAgentTokenClaims(token);
+  const agent = await findAccountById(agentId);
+  const plan = getPlanDescriptor(agent?.metadata.plan);
+  return {
+    authenticated: true,
+    session: {
+      agentName: agent?.name ?? null,
+      plan: plan.plan,
+      planLabel: plan.label,
+      accountType: plan.enterprise ? 'enterprise' : 'retail',
+      capabilities: plan.capabilities,
+      expiresAt: claims.exp ? new Date(claims.exp * 1000).toISOString() : null,
+    },
+  };
 }
 
 export async function GET(request: NextRequest) {
   const optional = new URL(request.url).searchParams.get('optional') === '1';
-  try {
-    const context = await requireAgentContextWithTier(request.headers);
-    try {
-      await reconcileAgentOSProvisioning(context.agentId);
-    } catch {
-      // Session checks should continue even if reconciliation fails.
-    }
-    const token = readSessionToken(request.headers);
-    const claims = token ? verifyAgentTokenClaims(token) : null;
-    const agent = await findAccountById(context.agentId);
-    const plan = getPlanDescriptor(agent?.metadata.plan ?? context.tier);
 
-    return NextResponse.json({
-      authenticated: true,
-      session: {
-        agentName: agent?.name ?? null,
-        plan: plan.plan,
-        planLabel: plan.label,
-        accountType: plan.enterprise ? 'enterprise' : 'retail',
-        capabilities: plan.capabilities,
-        expiresAt: claims?.exp ? new Date(claims.exp * 1000).toISOString() : null,
-      },
-    });
-  } catch {
-    const response = NextResponse.json(
-      { authenticated: false, error: 'unauthorized', message: 'Not signed in' },
-      { status: optional ? 200 : 401 },
-    );
-    clearAgentSessionCookie(response);
-    return response;
+  const accessToken = readAccessToken(request.headers);
+  if (accessToken) {
+    try {
+      const context = await verifyAgentTokenWithTier(accessToken);
+      return NextResponse.json(await buildSessionPayload(context.agentId, accessToken));
+    } catch {
+      // Continue to refresh session fallback.
+    }
   }
+
+  const refreshToken = readRefreshToken(request.headers);
+  if (refreshToken) {
+    try {
+      const response = NextResponse.json({ authenticated: true });
+      const rotated = await rotateBrowserSession(response, {
+        rawRefreshToken: refreshToken,
+        request,
+      });
+      const payload = await buildSessionPayload(rotated.agentId, rotated.accessToken);
+      return NextResponse.json(payload, {
+        headers: response.headers,
+      });
+    } catch {
+      // Fall through to unauthorized response.
+    }
+  }
+
+  const response = NextResponse.json(
+    { authenticated: false, error: 'unauthorized', message: 'Not signed in' },
+    { status: optional ? 200 : 401 },
+  );
+  clearAgentSessionCookies(response);
+  return response;
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  const refreshToken = readRefreshToken(request.headers);
+  if (refreshToken) {
+    try {
+      const session = await findRefreshSessionByToken(refreshToken);
+      if (session) {
+        await revokeRefreshSession({ agentId: session.agentId, sessionId: session.id });
+      }
+    } catch {
+      // Continue clearing cookies even if revocation fails.
+    }
+  }
+
   const response = NextResponse.json({ success: true });
-  clearAgentSessionCookie(response);
+  clearAgentSessionCookies(response);
   return response;
 }

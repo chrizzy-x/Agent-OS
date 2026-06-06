@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { getPlanDescriptor } from './capabilities.js';
-import { isValidPlan, normalizePlan, PLAN_ACCOUNT_TYPE, type AgentPlan } from './tiers.js';
+import { isValidPlan, normalizePersistedPlan, normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AgentPlan } from './tiers.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 
 export type PlanTransitionResult = {
@@ -35,7 +35,7 @@ export async function transitionPlan(params: {
   if (!agent) throw new PermissionError('Account not found');
 
   const metadata = (agent.metadata as Record<string, unknown> | null | undefined) ?? {};
-  const oldPlan = normalizePlan(metadata.plan ?? agent.tier);
+  const oldPlan = isValidPlan(metadata.plan) ? normalizePlan(metadata.plan) : normalizePersistedPlan(agent.tier);
   const newPlan = params.newPlan as AgentPlan;
   const now = new Date().toISOString();
 
@@ -50,7 +50,7 @@ export async function transitionPlan(params: {
   const { error: updateError } = await supabase
     .from('agents')
     .update({
-      tier: newPlan,
+      tier: toPersistedTier(newPlan),
       metadata: nextMetadata,
     })
     .eq('id', params.agentId);

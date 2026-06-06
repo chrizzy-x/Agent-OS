@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
-import { setAgentSessionCookie } from '@/src/auth/session-cookie';
+import { issueBrowserSession } from '@/src/auth/browser-auth';
 import { hashPassword } from '@/src/auth/password';
 import { createAgentAccount, findAccountsByEmail } from '@/src/auth/agent-store';
 import { parsePlanSelection, PLAN_LABELS, type AccountType, type AgentPlan } from '@/src/auth/tiers';
@@ -140,6 +140,9 @@ export async function POST(req: NextRequest) {
     },
     { status: 201 },
   );
-  setAgentSessionCookie(response, bearerToken);
+  await issueBrowserSession(response, {
+    agentId,
+    request: req,
+  });
   return response;
 }

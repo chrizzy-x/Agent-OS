@@ -6,7 +6,7 @@ import WorkspaceShell from '@/components/os/workspace-shell';
 import { ConfirmModal, Drawer } from '@/components/os/overlays';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { resolveBrowserAccessState } from '@/src/auth/browser-access';
-import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { fetchBrowserSessionState, type BrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
   Badge,
@@ -60,13 +60,15 @@ export default function SdkPage() {
   const [newScopes, setNewScopes] = useState('kernel.read');
   const [createdToken, setCreatedToken] = useState('');
   const [message, setMessage] = useState('');
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const current = await fetchBrowserSession().catch(() => null);
-      setSession(current);
-      if (!current) {
+      const current = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+      setSession(current.session);
+      setAuthState(current.state);
+      if (!current.session) {
         setCredentials([]);
         setKernels([]);
         return;
@@ -97,7 +99,7 @@ export default function SdkPage() {
   }, [load]);
 
   const enterprise = session?.capabilities?.includes('access_sdk') === true;
-  const accessState = resolveBrowserAccessState(session, loading, 'access_sdk');
+  const accessState = resolveBrowserAccessState(session, loading, 'access_sdk', authState);
   const selectedCredential = useMemo(
     () => credentials.find(item => item.id === drawer.current?.entityId) ?? null,
     [credentials, drawer.current?.entityId],
@@ -170,7 +172,9 @@ export default function SdkPage() {
                     ? 'Enterprise SDK enabled'
                     : accessState === 'signed_out'
                       ? 'Sign in required'
-                      : 'Retail access blocked'}
+                      : accessState === 'expired'
+                        ? 'Session expired'
+                        : 'Enterprise access required'}
               </Badge>
               <div className="os-entity-copy">Credentials: {credentials.length}</div>
               <div className="os-entity-copy">Registered apps: {kernels.length}</div>
@@ -188,14 +192,16 @@ export default function SdkPage() {
           />
         ) : accessState === 'signed_out' ? (
           <PageHeader eyebrow="SDK Access" title="Sign in required" subtitle="SDK credentials and registrations are available only after sign-in." />
-        ) : accessState === 'blocked' ? (
+        ) : accessState === 'forbidden' ? (
           <PageHeader eyebrow="SDK Access" title="Enterprise access required" subtitle="Retail workspaces cannot access SDK credentials, registrations, or publishing." />
         ) : (
           <PageHeader eyebrow="SDK Access" title="Checking access" subtitle="Validating SDK permissions for this workspace." />
         )}
 
         {loading ? <LoadingState label="Loading SDK access" /> : !session ? (
-          <EmptyState title="Sign in required" body="Sign in to manage SDK credentials and app registrations." action={<Button href="/signin">Sign in</Button>} />
+          authState === 'expired'
+            ? <EmptyState title="Session expired" body="Sign in again to manage SDK credentials and app registrations." action={<Button href="/signin">Sign in again</Button>} />
+            : <EmptyState title="Sign in required" body="Sign in to manage SDK credentials and app registrations." action={<Button href="/signin">Sign in</Button>} />
         ) : !enterprise ? (
           <EmptyState title="Enterprise access required" body="Retail workspaces cannot access SDK credentials, registrations, or publishing." action={<Button href="/studio">Open Studio</Button>} />
         ) : (

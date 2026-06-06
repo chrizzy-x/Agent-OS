@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import Nav from '@/components/Nav';
-import WorkspaceShell from '@/components/os/workspace-shell';
+import SurfaceShell from '@/components/os/surface-shell';
 import type { AgentAppListing } from '@/src/appstore/catalog';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
@@ -15,7 +14,6 @@ import {
   EmptyState,
   LoadingState,
   MetricCard,
-  PageHeader,
   PermissionCard,
   Tabs,
 } from '@/components/os/ui';
@@ -23,6 +21,7 @@ import {
 type AppDetails = AgentAppListing & {
   longDescription?: string;
 };
+export type AppDetailRecord = AppDetails;
 
 type Installation = {
   favorite?: boolean;
@@ -80,15 +79,21 @@ function getReadinessBadge(readiness: AppReadiness | null, installation: Install
   return { label: 'Ready', tone: 'success' };
 }
 
-export default function AppDetailPage() {
+export default function AppDetailPage({
+  initialApp = null,
+  initialViewerOwnsApp = false,
+}: {
+  initialApp?: AppDetailRecord | null;
+  initialViewerOwnsApp?: boolean;
+}) {
   const params = useParams<{ slug: string }>();
   const slug = params?.slug ?? '';
   const [tab, setTab] = useState('Overview');
   const [session, setSession] = useState<BrowserSession | null>(null);
-  const [app, setApp] = useState<AppDetails | null>(null);
+  const [app, setApp] = useState<AppDetails | null>(initialApp);
   const [readiness, setReadiness] = useState<AppReadiness | null>(null);
-  const [viewerOwnsApp, setViewerOwnsApp] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [viewerOwnsApp, setViewerOwnsApp] = useState(initialViewerOwnsApp);
+  const [loading, setLoading] = useState(initialApp === null);
   const [installing, setInstalling] = useState(false);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState('');
@@ -133,11 +138,21 @@ export default function AppDetailPage() {
     async function run() {
       const currentSession = await fetchBrowserSession().catch(() => null);
       if (!active) return;
+      if (initialApp && initialApp.slug === slug) {
+        setSession(currentSession);
+        setApp(initialApp);
+        setViewerOwnsApp(initialViewerOwnsApp);
+        setLoading(false);
+        if (currentSession) {
+          await load(currentSession, false);
+        }
+        return;
+      }
       await load(currentSession, true);
     }
     void run();
     return () => { active = false; };
-  }, [load]);
+  }, [initialApp, initialViewerOwnsApp, load, slug]);
 
   const installation = readiness?.installation ?? null;
   const commands = useMemo(() => app?.manifest.commands ?? [], [app]);
@@ -349,65 +364,23 @@ export default function AppDetailPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/appstore" />
-      <WorkspaceShell
+    <SurfaceShell
         activePath="/appstore"
-        aside={(
-          <Card>
-            <div className="os-entity-title" style={{ marginBottom: 12 }}>Details</div>
-            {app ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <Badge tone="accent">{runtimeLabel(app)}</Badge>
-                {app.source === 'external_sdk' ? <Badge tone="accent">Auto-discovered via AgentOS SDK</Badge> : null}
-                <Badge tone="default">{app.healthStatus}</Badge>
-                {readinessBadge ? <Badge tone={readinessBadge.tone}>{readinessBadge.label}</Badge> : null}
-                <div className="os-entity-copy">{app.category}</div>
-                <div className="os-entity-copy">Publisher: {app.publisherName || 'Unknown publisher'}</div>
-                <div className="os-entity-copy">Version: {currentVersion}</div>
-                <div className="os-entity-copy">Targets: {formatTargets(app.deviceTargets)}</div>
-                <div className="os-entity-copy">Web: {app.distribution.webUrl ? <a href={app.distribution.webUrl} target="_blank" rel="noreferrer">{app.distribution.webUrl}</a> : 'Not published'}</div>
-                <div className="os-entity-copy">Android: {app.distribution.androidUrl ? <a href={app.distribution.androidUrl} target="_blank" rel="noreferrer">{app.distribution.androidUrl}</a> : 'Not published'}</div>
-                <div className="os-entity-copy">iOS: {app.distribution.iosUrl ? <a href={app.distribution.iosUrl} target="_blank" rel="noreferrer">{app.distribution.iosUrl}</a> : 'Not published'}</div>
-                <Button href={`/api/apps/${app.slug}/download`} variant="secondary">Download package</Button>
-                {installation ? (
-                  <>
-                    {availableTargets.includes('web') ? <Button variant="secondary" onClick={() => void openApp('web')} disabled={working || !readiness?.ready || appUnavailable}>Open web</Button> : null}
-                    {availableTargets.includes('android') ? <Button variant="secondary" onClick={() => void openApp('android')} disabled={working || !readiness?.ready || appUnavailable}>Open Android</Button> : null}
-                    {availableTargets.includes('ios') ? <Button variant="secondary" onClick={() => void openApp('ios')} disabled={working || !readiness?.ready || appUnavailable}>Open iOS</Button> : null}
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-          </Card>
-        )}
+        title={app?.name ?? 'App'}
+        subtitle={app ? (app.longDescription || app.description) : undefined}
+        actions={app ? (
+          <>
+            <Badge tone="accent">{runtimeLabel(app)}</Badge>
+            {app.verified ? <Badge tone="success">Verified</Badge> : null}
+            {readinessBadge ? <Badge tone={readinessBadge.tone}>{readinessBadge.label}</Badge> : null}
+            {installation ? <Button onClick={() => void openApp('web')} disabled={working || !availableTargets.includes('web') || !readiness?.ready || appUnavailable}>{working ? 'Opening...' : 'Open'}</Button> : <Button onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Installing...' : installCta}</Button>}
+          </>
+        ) : undefined}
       >
         {loading ? <LoadingState label="Loading app details" /> : !app ? (
           <EmptyState title="App not found" body="This app is private, unavailable, or the slug does not exist." action={<Button href="/appstore">Back to Apps</Button>} />
         ) : (
           <>
-            <PageHeader
-              eyebrow="App details"
-              title={app.name}
-              subtitle={app.longDescription || app.description}
-              actions={(
-                <>
-                  <Badge tone="accent">{runtimeLabel(app)}</Badge>
-                  {app.verified ? <Badge tone="success">Verified</Badge> : null}
-                  {readinessBadge ? <Badge tone={readinessBadge.tone}>{readinessBadge.label}</Badge> : null}
-                  {installation ? <Button onClick={() => void openApp('web')} disabled={working || !availableTargets.includes('web') || !readiness?.ready || appUnavailable}>{working ? 'Opening...' : 'Open'}</Button> : <Button onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Installing...' : installCta}</Button>}
-                  {updateAvailable ? <Button variant="secondary" onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Updating...' : 'Update'}</Button> : null}
-                  {installation ? (
-                    <Button variant="secondary" onClick={() => void setInstallStatus(installation.status === 'disabled' ? 'active' : 'disabled')} disabled={working}>
-                      {working ? 'Working...' : installation.status === 'disabled' ? 'Enable' : 'Disable'}
-                    </Button>
-                  ) : null}
-                  {installation ? <Button variant="secondary" onClick={() => void uninstallApp()} disabled={working}>{working ? 'Working...' : 'Uninstall'}</Button> : null}
-                  {installation ? <Button variant="secondary" onClick={() => void toggleFavorite()} disabled={working}>{installation.favorite === true ? 'Unpin' : 'Pin'}</Button> : null}
-                </>
-              )}
-            />
-
             <Card>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                   <Badge tone="default">{app.installCount.toLocaleString()} installs</Badge>
@@ -417,6 +390,17 @@ export default function AppDetailPage() {
                   {appUnavailable ? <Badge tone="danger">{readiness?.appUnavailableReason ?? 'App disabled'}</Badge> : null}
                   {installation ? <Badge tone="accent">Installed {installation.installedVersion || currentVersion}</Badge> : null}
                 </div>
+              <div className="os-inline-actions" style={{ marginBottom: 12 }}>
+                {updateAvailable ? <Button variant="secondary" onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Updating...' : 'Update'}</Button> : null}
+                {installation ? (
+                  <Button variant="secondary" onClick={() => void setInstallStatus(installation.status === 'disabled' ? 'active' : 'disabled')} disabled={working}>
+                    {working ? 'Working...' : installation.status === 'disabled' ? 'Enable' : 'Disable'}
+                  </Button>
+                ) : null}
+                {installation ? <Button variant="secondary" onClick={() => void uninstallApp()} disabled={working}>{working ? 'Working...' : 'Remove'}</Button> : null}
+                {installation ? <Button variant="secondary" onClick={() => void toggleFavorite()} disabled={working}>{installation.favorite === true ? 'Unpin' : 'Pin'}</Button> : null}
+                <Button href={`/api/apps/${app.slug}/download`} variant="secondary">Download</Button>
+              </div>
               {notice ? <div className="os-entity-copy" style={{ marginBottom: 12 }}>{notice}</div> : null}
               <Tabs tabs={tabs.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
             </Card>
@@ -432,7 +416,7 @@ export default function AppDetailPage() {
                 </div>
 
                 <Card>
-                  <div className="os-entity-title" style={{ marginBottom: 12 }}>Readiness</div>
+                  <div className="os-entity-title" style={{ marginBottom: 12 }}>Details</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                     <Card>
                       <div className="os-sidebar-title">Publisher</div>
@@ -463,7 +447,7 @@ export default function AppDetailPage() {
 
                 {missingPermissionApprovals.length > 0 ? (
                   <Card>
-                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Permission approval required</div>
+                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Approval needed</div>
                     <div className="os-entity-copy" style={{ marginBottom: 12 }}>
                       Approve: {missingPermissionApprovals.join(', ')}
                     </div>
@@ -475,7 +459,7 @@ export default function AppDetailPage() {
 
                 {missingSecrets.length > 0 ? (
                   <Card>
-                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Vault secrets missing</div>
+                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Secrets missing</div>
                     <div className="os-entity-copy" style={{ marginBottom: 12 }}>
                       Missing: {missingSecrets.join(', ')}
                     </div>
@@ -535,7 +519,7 @@ export default function AppDetailPage() {
                     title={permission}
                     description={missingPermissionApprovals.includes(permission)
                       ? 'Approval is still required before this app can run.'
-                      : 'Visible before install so workspace owners can review the access scope.'}
+                      : 'Review this access before the app runs.'}
                     required={permission !== 'No special permissions declared'}
                   />
                 ))}
@@ -549,8 +533,8 @@ export default function AppDetailPage() {
                     key={secret}
                     title={secret}
                     description={missingSecrets.includes(secret)
-                      ? 'Assign this secret in Vault before the app can run.'
-                      : 'Assigned or not required for the current installation.'}
+                      ? 'Add this secret in Vault before the app can run.'
+                      : 'Ready for this installation.'}
                     required={secret !== 'No required secrets'}
                   />
                 ))}
@@ -621,7 +605,6 @@ export default function AppDetailPage() {
             ) : null}
           </>
         )}
-      </WorkspaceShell>
-    </div>
+    </SurfaceShell>
   );
 }

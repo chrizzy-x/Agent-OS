@@ -338,7 +338,7 @@ export default function TemplatesPage() {
           <div className="flex items-center gap-5 text-sm" style={{ color: 'var(--text-muted)' }}>
             <Link href="/docs/guide" className="hover:text-white transition-colors">Guide</Link>
             <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
-            <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get API Key →</Link>
+            <Link href="/signup" className="btn-primary text-xs px-4 py-2">Create workspace →</Link>
           </div>
         </div>
       </nav>
@@ -375,10 +375,10 @@ export default function TemplatesPage() {
               0
             </div>
             <div>
-              <div className="font-bold mb-1">Before you start — get your API key</div>
+              <div className="font-bold mb-1">Before you start — create your workspace and get your API key</div>
               <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>
-                Go to <Link href="/signup" style={{ color: 'var(--accent)' }}>/signup</Link>, enter your email and agent name.
-                Copy the API key you receive — you&apos;ll paste it into every template below.
+                Go to <Link href="/signup" style={{ color: 'var(--accent)' }}>/signup</Link>, provision your workspace and Super AgentOS, then copy the API key you receive.
+                You&apos;ll paste it into every template below.
               </p>
               <Link href="/signup" className="btn-primary text-sm px-4 py-2 inline-block">Create free account →</Link>
             </div>
@@ -497,7 +497,7 @@ export default function TemplatesPage() {
           </p>
           <div className="flex justify-center gap-3 flex-wrap">
             <Link href="/docs/guide" className="btn-primary px-5 py-2.5 text-sm">Read the full guide</Link>
-            <Link href="/marketplace" className="btn-outline px-5 py-2.5 text-sm">Browse skill templates</Link>
+            <Link href="/skills" className="btn-outline px-5 py-2.5 text-sm">Open Skill Store</Link>
           </div>
         </div>
       </div>

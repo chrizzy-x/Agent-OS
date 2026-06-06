@@ -16,7 +16,7 @@ export default function SkillsDocsPage() {
           <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <Link href="/docs" className="text-blue-600">Docs</Link>
-            <Link href="/marketplace" className="hover:text-gray-900">Skill Store</Link>
+            <Link href="/skills" className="hover:text-gray-900">Skill Store</Link>
             <Link href="/developer" className="hover:text-gray-900">Developer</Link>
           </div>
         </div>
@@ -25,7 +25,7 @@ export default function SkillsDocsPage() {
       <div className="max-w-5xl mx-auto px-4 py-12">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Skills</h1>
         <p className="text-lg text-gray-500 mb-10">
-          Extend Agent OS with reusable capabilities. The Skill Store includes {OFFICIAL_COUNT} maintained free verified skills across official packs, plus community-published extensions.
+          Install reusable capabilities for your Super AgentOS. The Skill Store includes {OFFICIAL_COUNT} maintained verified skills across official packs, plus community-published extensions.
         </p>
 
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-10">
@@ -43,7 +43,7 @@ export default function SkillsDocsPage() {
 
         <Section id="what-is-a-skill" title="What is a skill?">
           <p>
-            A <strong>skill</strong> is a reusable JavaScript module that exposes named capabilities to agents. Skills run in the Agent OS hardened skill runtime and can be installed, versioned, tracked, and executed through the same platform APIs as the built-in primitives.
+            A <strong>skill</strong> is an installable capability your Super AgentOS can use. Skills can be installed, versioned, tracked, and executed through the same platform APIs as built-in tools.
           </p>
           <p className="mt-3">
             Use skills when you want to add focused domain logic without creating a full new agent. Good examples are CSV processing, prompt evaluation, ticket prioritization, release-note generation, or PII redaction.
@@ -52,16 +52,16 @@ export default function SkillsDocsPage() {
 
         <Section id="auth-model" title="Browser session vs bearer token">
           <p>
-            The web app now uses a secure browser session cookie by default. That means installs, store actions, Studio commands, and dashboard flows work after you sign in once without pasting a token into the UI.
+            The web app uses a secure browser session by default. That means installs, store actions, and Studio commands work after you sign in once without pasting a token into the UI.
           </p>
           <p className="mt-3">
-            Generate a bearer token only when you need to call Agent OS from an SDK, another machine, automation, or a third-party integration. The dashboard can issue a fresh token on demand.
+            Generate a bearer token only when you need to call AgentOS from an SDK, another machine, automation, or a third-party integration.
           </p>
         </Section>
 
         <Section id="official-packs" title="Official verified skill packs">
           <p>
-            Agent OS maintains official free verified skills in packs so developers can install a coherent set of tools quickly. Each skill in the list below already has a Skill Store detail page and can be installed directly.
+            AgentOS maintains official verified skills in packs so you can install a coherent set of tools quickly. Each skill below has a detail page and can be installed directly.
           </p>
 
           <div className="mt-6 space-y-5">
@@ -85,7 +85,7 @@ export default function SkillsDocsPage() {
                   </div>
                   <div className="grid md:grid-cols-2 gap-3">
                     {skills.map(skill => (
-                      <Link key={skill.slug} href={`/marketplace/${skill.slug}`} className="block rounded-lg border border-gray-200 p-3 hover:border-blue-400 transition-colors">
+                      <Link key={skill.slug} href={`/skills/${skill.slug}`} className="block rounded-lg border border-gray-200 p-3 hover:border-blue-400 transition-colors">
                         <div className="font-semibold text-gray-900">{skill.name}</div>
                         <div className="text-xs text-blue-600 mt-0.5">{skill.category}</div>
                         <p className="text-sm text-gray-500 mt-2">{skill.summary}</p>
@@ -100,7 +100,7 @@ export default function SkillsDocsPage() {
 
         <Section id="installing" title="Installing skills">
           <p>
-            In the web app, open the <Link href="/marketplace" className="text-blue-600 hover:underline">Skill Store</Link> and install directly while signed in. For external clients, call the install endpoint with a bearer token.
+            In the web app, open the <Link href="/skills" className="text-blue-600 hover:underline">Skill Store</Link> and install directly while signed in. For external clients, call the install endpoint with a bearer token.
           </p>
           <CodeBlock>{`POST /api/skills/install
 Authorization: Bearer <your-bearer-token>
@@ -167,7 +167,7 @@ Content-Type: application/json
   "source_code": "class Skill { run(params) { return String(params.input || '') } }"
 }`}</CodeBlock>
           <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-            Keep slugs unique, lowercase, and stable. Other agents install your skill by slug and by Skill Store record.
+            Keep slugs unique, lowercase, and stable.
           </div>
         </Section>
       </div>

@@ -99,7 +99,7 @@ export default function SkillsPage() {
             <div className="os-drawer-stack">
               <div className="os-entity-copy">Installed skills: {installed.length}</div>
               <div className="os-entity-copy">Published by you: {published.length}</div>
-              <Button href="/marketplace" variant="secondary">Browse Marketplace</Button>
+              <Button href="/skills" variant="secondary">Browse Skills</Button>
             </div>
           </Card>
         )}
@@ -107,7 +107,7 @@ export default function SkillsPage() {
         <PageHeader
           eyebrow="Skills"
           title="Installed and owned skills"
-          subtitle="Manage the skills already in your workspace, then use Marketplace for discovery and installation."
+          subtitle="Manage the skills already in your workspace, then use the Skill Store for discovery and installation."
           actions={session?.capabilities?.includes('create_skill') ? <Button href="/developer" variant="secondary">Open Developer Console</Button> : undefined}
         />
 
@@ -123,7 +123,7 @@ export default function SkillsPage() {
                 <Badge tone="accent">{filteredInstalled.length}</Badge>
               </div>
               {filteredInstalled.length === 0 ? (
-                <EmptyState title="No installed skills" body="Use Marketplace to install focused capabilities into this workspace." action={<Button href="/marketplace">Open Marketplace</Button>} />
+                <EmptyState title="No installed skills" body="Use the Skill Store to install focused capabilities into this workspace." action={<Button href="/skills">Open Skill Store</Button>} />
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
                   {filteredInstalled.map(entry => entry.skill ? (

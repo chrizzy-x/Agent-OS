@@ -1,5 +1,6 @@
 import { PermissionError } from '../utils/errors.js';
 import {
+  isValidPlan,
   normalizePlan,
   isEnterprisePlan,
   PLAN_LABELS,
@@ -117,7 +118,8 @@ export function getPlanDescriptor(planOrTier: unknown): PlanDescriptor {
 }
 
 export function hasCapability(planOrTier: unknown, capability: Capability): boolean {
-  return CAPABILITY_MATRIX[normalizePlan(planOrTier)].has(capability);
+  if (!isValidPlan(planOrTier)) return false;
+  return CAPABILITY_MATRIX[planOrTier].has(capability);
 }
 
 export function assertCapability(planOrTier: unknown, capability: Capability): void {

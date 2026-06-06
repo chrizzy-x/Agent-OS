@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedisClient } from '@/src/storage/redis';
-import { setAgentSessionCookie } from '@/src/auth/session-cookie';
+import { issueBrowserSession } from '@/src/auth/browser-auth';
 import { APP_URL } from '@/lib/config';
 
 export const runtime = 'nodejs';
@@ -27,11 +27,13 @@ export async function GET(req: NextRequest) {
     // Single-use — delete immediately
     await redis.del(key);
 
-    const { apiKey } = JSON.parse(raw) as { agentId: string; apiKey: string };
+    const { agentId } = JSON.parse(raw) as { agentId: string; apiKey: string };
 
-    // Set the session cookie (API key IS the session JWT in this system)
     const response = NextResponse.redirect(`${APP_URL}/studio`);
-    setAgentSessionCookie(response, apiKey);
+    await issueBrowserSession(response, {
+      agentId,
+      request: req,
+    });
 
     return response;
   } catch {

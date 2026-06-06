@@ -105,7 +105,7 @@ async function executeAgentPlan(params: {
     agentId: params.agentId,
     allowedDomains: params.allowedDomains,
     quotas: DEFAULT_QUOTAS,
-    tier: 'free',
+    tier: 'retail_free',
   };
 
   const results: unknown[] = [];

@@ -2,7 +2,7 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from 'vites
 import { createServer, Server } from 'http';
 import { mockRedis, mockSupabase } from '../setup.js';
 
-let server: Server;
+let server: Server | null = null;
 let baseUrl: string;
 let defaultAgentToken: string;
 let registrations = new Map<string, {
@@ -45,11 +45,12 @@ beforeAll(async () => {
   await new Promise<void>(resolve => server.listen(0, resolve));
   const addr = server.address() as { port: number };
   baseUrl = `http://127.0.0.1:${addr.port}`;
-});
+}, 30_000);
 
 afterAll(async () => {
-  await new Promise<void>((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
-});
+  if (!server) return;
+  await new Promise<void>((resolve, reject) => server?.close(err => err ? reject(err) : resolve()));
+}, 30_000);
 
 beforeEach(() => {
   registrations = new Map();

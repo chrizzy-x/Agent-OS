@@ -10,6 +10,12 @@ import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitiz
 
 export const runtime = 'nodejs';
 
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     // 1. Auth — the caller must be a registered agent with a valid bearer token
@@ -20,6 +26,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       tool?: unknown;
       input?: unknown;
       proof?: unknown;
+      fallback?: unknown;
+      invokedBy?: unknown;
+      routeDecision?: unknown;
     };
 
     const { tool, input, proof } = body;
@@ -50,6 +59,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       input !== null && input !== undefined && typeof input === 'object'
         ? (input as Record<string, unknown>)
         : {};
+    const fallback = asObject(body.fallback);
+    const invokedBy = asObject(body.invokedBy);
+    const routeDecision = asObject(body.routeDecision);
 
     let result: unknown;
     let status: 'success' | 'failed' = 'success';
@@ -87,6 +99,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         consensus_threshold: typedProof.threshold,
         validator_count: typedProof.signatures.length,
         input_hash: hashInput(input ?? {}),
+        fallback_used: fallback.used === true,
+        fallback_reason: typeof fallback.reason === 'string' ? fallback.reason : null,
+        invoked_by_type: typeof invokedBy.type === 'string' ? invokedBy.type : null,
+        invoked_by_id: typeof invokedBy.id === 'string' ? invokedBy.id : null,
+        route_decision: sanitizeOutput({
+          ...routeDecision,
+          selectedTool: typeof routeDecision.selectedTool === 'string' ? routeDecision.selectedTool : tool,
+          selectedPrimitive: typeof routeDecision.selectedPrimitive === 'string'
+            ? routeDecision.selectedPrimitive
+            : String(tool).replace(/^agentos\./, '').replace(/^mcp\./, '').split(/[._]/)[0] || 'runtime',
+          status,
+        }),
       })
       .select('id')
       .single();

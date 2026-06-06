@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { createAgentToken } from '../../src/auth/agent-identity.js';
 import * as mcpRegistry from '../../src/mcp/registry.js';
 import { mockRedis, mockSupabase } from '../setup.js';
-import { POST } from '../../app/mcp/route.js';
+import { POST } from '../../app/api/mcp/execute/route.js';
 
 function maybeSingleBuilder(data: unknown, error: unknown = null) {
   return {
@@ -13,7 +13,7 @@ function maybeSingleBuilder(data: unknown, error: unknown = null) {
   };
 }
 
-describe('POST /mcp', () => {
+describe('POST /api/mcp/execute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRedis.get.mockResolvedValue(null);

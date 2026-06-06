@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
-import { setAgentSessionCookie } from '@/src/auth/session-cookie';
+import { issueBrowserSession } from '@/src/auth/browser-auth';
 import { verifyPassword } from '@/src/auth/password';
 import { findAccountsByEmail } from '@/src/auth/agent-store';
 import { hasCapability } from '@/src/auth/capabilities';
@@ -81,6 +81,9 @@ export async function POST(req: NextRequest) {
       expiresIn: '90 days',
     },
   });
-  setAgentSessionCookie(response, bearerToken);
+  await issueBrowserSession(response, {
+    agentId: account.id,
+    request: req,
+  });
   return response;
 }

@@ -28,12 +28,12 @@ const sections = [
   {
     title: 'API Reference',
     href: '/docs/api',
-    desc: 'Live route contracts for signup, signin, Studio, MCP, skills, workflows, kernel, and ops.',
+    desc: 'Live route contracts for signup, signin, Studio, Super AgentOS, MCP, skills, workflows, projects, and ops.',
     badge: null,
   },
   {
     title: 'Connect Your Agent',
-    href: '/connect',
+    href: '/connectors',
     desc: 'Register any external agent, capture its bearer token once, and test the universal MCP endpoint live.',
     badge: null,
   },
@@ -46,7 +46,7 @@ const sections = [
   {
     title: 'Skills',
     href: '/docs/skills',
-    desc: 'Install Skill Store capabilities, publish your own, and meter usage.',
+    desc: 'Install skills, publish apps, and work from one Studio.',
     badge: null,
   },
   {
@@ -58,7 +58,7 @@ const sections = [
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'v6 Public Launch — private agent IDs, public action refs, App Store, Skill Store, Studio, and FFP.',
+    desc: 'v6.3 launch notes for Super AgentOS Home, Studio, apps, skills, and workflows.',
     badge: 'v6',
   },
 ];
@@ -165,7 +165,7 @@ export default function DocsPage() {
                     fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
                     fontSize: '15px',
                     color: 'var(--text-secondary)',
-                  }}>Platform docs, SDK routes, workflows, apps, and FFP.</div>
+                  }}>Home, Studio, developer, and install docs.</div>
                 </div>
               </div>
               <Badge variant="accent" style={{ marginBottom: '16px' }}>Reference</Badge>
@@ -184,7 +184,7 @@ export default function DocsPage() {
                 color: 'var(--text-secondary)',
                 maxWidth: '560px',
               }}>
-                Live developer docs for building, operating, and extending autonomous agents on AgentOS.
+                Live docs for the operating system for the agent economy: Studio, Super AgentOS, stores, SDK registration, workflows, apps, skills, and MCP runtime surfaces.
               </p>
             </div>
 

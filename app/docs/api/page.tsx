@@ -56,13 +56,16 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'POST', path: '/api/signup', auth: 'None',
-    desc: 'Create an AgentOS account, start a secure browser session, and return a 90-day bearer token for external use.',
+    desc: 'Create an AgentOS account, provision the default workspace surfaces, start a secure browser session, and return a 90-day bearer token only on plans with bearer access.',
     body: [
       { field: 'email', type: 'string', required: true, desc: 'Valid email address' },
       { field: 'password', type: 'string', required: true, desc: 'At least 8 characters' },
       { field: 'agentName', type: 'string', required: false, desc: 'Optional display name for the new agent' },
+      { field: 'accountType', type: 'retail | enterprise', required: true, desc: 'Retail or enterprise signup surface' },
+      { field: 'selectedPlan', type: 'retail_free | retail_pro | enterprise_plus | enterprise_max', required: true, desc: 'Beta plan selected during signup' },
+      { field: 'planSelectionSkipped', type: 'boolean', required: false, desc: 'Internal onboarding fallback. Defaults to false.' },
     ],
-    response: '{ "success": true, "credentials": { "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
+    response: '{ "success": true, "redirectTo": "/studio", "credentials": { "bearerToken": "eyJ..." | null, "apiKey": "eyJ..." | null, "plan": "retail_pro", "planLabel": "Retail Pro", "capabilities": ["use_nl_studio", "use_bearer_token"], "expiresIn": "90 days" } }',
   },
   {
     method: 'POST', path: '/api/signin', auth: 'None',
@@ -85,8 +88,17 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'POST', path: '/api/session/token', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Mint a fresh bearer token for external API, SDK, or CLI use while keeping the browser session active.',
+    desc: 'Mint a fresh bearer token for external API, SDK, or CLI use while keeping the browser session active. Requires a plan with bearer-token capability.',
     response: '{ "success": true, "credentials": { "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
+  },
+  {
+    method: 'POST', path: '/api/plans/transition', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Transition the authenticated account and its primary workspace to another public beta plan. Free beta mode records the transition and applies no charge.',
+    body: [
+      { field: 'newPlan', type: 'retail_free | retail_pro | enterprise_plus | enterprise_max', required: true, desc: 'Target beta plan' },
+      { field: 'reason', type: 'string', required: false, desc: 'Optional audit reason. Defaults to beta_self_serve_upgrade.' },
+    ],
+    response: '{ "transitioned": true, "noChange": false, "transition": { "oldPlan": "retail_free", "newPlan": "retail_pro", "newCapabilities": ["use_bearer_token"] }, "billing": { "mode": "free_beta", "charged": false } }',
   },
   {
     method: 'GET', path: '/api/social/platforms', auth: 'Browser Session or Bearer (Agent)',
@@ -153,6 +165,16 @@ const endpoints: Endpoint[] = [
       { field: 'server', type: 'string', required: false, desc: 'Optional MCP server hint for legacy clients' },
     ],
     response: '{ "success": true, "result": <tool-specific result> }',
+  },
+  {
+    method: 'GET', path: '/api/connectors', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List universal MCP connectors with real tool counts, health, permission scope, last audit outcome, and related apps, workflows, and skills.',
+    response: '{ "connectors": [{ "slug": "github", "toolCount": 12, "healthStatus": "active", "permissionScope": { "apps": ["issue-triage"] }, "lastAuditOutcome": { "success": true, "tool": "mcp.github.create_issue" }, "usedBy": { "apps": [...], "workflows": [...], "skills": [...] } }] }',
+  },
+  {
+    method: 'GET', path: '/api/ffp/routes', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List recorded FFP runtime executions with route decisions, fallback lineage, invoker lineage, and related apps, workflows, and skills.',
+    response: '{ "routes": [{ "tool": "mcp.github.create_issue", "primitive": "github", "fallbackUsed": false, "invokedByType": "workflow", "routeDecision": { "source": "external_mcp" }, "related": { "apps": [...], "workflows": [...], "skills": [...] } }], "primitives": [{ "primitive": "github", "executions": 4, "fallbackCount": 1 }] }',
   },
   {
     method: 'POST', path: '/api/studio/command', auth: 'Browser Session or Bearer (Agent)',
@@ -341,7 +363,7 @@ export default function ApiReferencePage() {
             <Link href="/docs" className="text-blue-600">Docs</Link>
             <Link href="/docs/launch" className="hover:text-gray-900">Launch Notes</Link>
             <Link href="/docs/audit" className="hover:text-gray-900">Audit</Link>
-            <Link href="/connect" className="hover:text-gray-900">Connect</Link>
+            <Link href="/connectors" className="hover:text-gray-900">Connectors</Link>
             <Link href="/studio" className="hover:text-gray-900">Studio</Link>
           </div>
         </div>
@@ -354,7 +376,7 @@ export default function ApiReferencePage() {
         </p>
 
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-10 text-sm text-amber-800">
-          <strong>Authentication:</strong> the web app uses a secure browser session cookie after <code className="font-mono bg-amber-100 px-1 rounded">/api/signup</code> or <code className="font-mono bg-amber-100 px-1 rounded">/api/signin</code>. External callers should use the returned <code className="font-mono bg-amber-100 px-1 rounded">bearerToken</code>. The legacy <code className="font-mono bg-amber-100 px-1 rounded">apiKey</code> field remains as an alias for compatibility.
+          <strong>Authentication:</strong> the web app uses a secure browser session cookie after <code className="font-mono bg-amber-100 px-1 rounded">/api/signup</code> or <code className="font-mono bg-amber-100 px-1 rounded">/api/signin</code>. External callers should use the returned <code className="font-mono bg-amber-100 px-1 rounded">bearerToken</code> when the active plan includes bearer access. The legacy <code className="font-mono bg-amber-100 px-1 rounded">apiKey</code> field remains as an alias for compatibility.
         </div>
 
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-10 text-sm text-blue-800">

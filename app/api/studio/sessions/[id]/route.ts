@@ -37,3 +37,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const ctx = await requireRouteCapability(request.headers, 'studio.sessions.update');
+    const { id } = await params;
+    const session = await updateStudioSession({
+      ownerAgentId: ctx.agentId,
+      sessionId: id,
+      status: 'archived',
+    });
+    return NextResponse.json({ session, archived: true });
+  } catch (error: unknown) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
+  }
+}

@@ -130,7 +130,7 @@ export async function adjustMemoryUsage(agentId: string, delta: number): Promise
 // Check whether this agent's tier grants access to a given capability/primitive.
 // Throws PermissionError if the primitive is not in the tier's capability list.
 export function checkCapability(ctx: AgentContext, primitive: string): void {
-  const allowed = TIER_CAPABILITIES[ctx.tier] ?? TIER_CAPABILITIES.free;
+  const allowed = TIER_CAPABILITIES[ctx.tier] ?? TIER_CAPABILITIES.retail_free;
   if (!allowed.includes(primitive)) {
     throw new PermissionError(
       `Your ${ctx.tier} plan does not include access to "${primitive}". Upgrade to unlock this capability.`,

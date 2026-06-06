@@ -16,6 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       snapshotId: typeof body.snapshotId === 'string' ? body.snapshotId : null,
       title: typeof body.title === 'string' ? body.title : undefined,
       branchLabel: typeof body.branchLabel === 'string' ? body.branchLabel : undefined,
+      projectId: typeof body.projectId === 'string' ? body.projectId : null,
     });
     return NextResponse.json({ session }, { status: 201 });
   } catch (error: unknown) {

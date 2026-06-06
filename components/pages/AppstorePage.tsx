@@ -1,10 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Nav from '@/components/Nav';
+import SurfaceShell from '@/components/os/surface-shell';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { ConfirmModal, Drawer } from '@/components/os/overlays';
-import WorkspaceShell from '@/components/os/workspace-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import type { AgentAppListing } from '@/src/appstore/catalog';
 import {
@@ -15,7 +14,6 @@ import {
   EmptyState,
   FilterChips,
   LoadingState,
-  PageHeader,
   SearchBar,
 } from '@/components/os/ui';
 
@@ -307,38 +305,28 @@ export default function AppstorePage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/appstore" />
-      <WorkspaceShell
+    <>
+      <SurfaceShell
         activePath="/appstore"
-        aside={(
-          <Card>
-            <div className="os-entity-title" style={{ marginBottom: 12 }}>Installed</div>
-            <div className="os-drawer-stack">
-              <div className="os-entity-copy">{installedApps.length} installed</div>
-              {installedApps.slice(0, 5).map(app => (
-                <button
-                  key={app.id}
-                  type="button"
-                  className="os-sidebar-link"
-                  onClick={() => drawer.openDrawer('app-preview', app.slug)}
-                >
-                  <span className="os-sidebar-label">{app.name}</span>
-                  <span className="os-sidebar-subtitle">{getInstalledState(app)?.label ?? runtimeLabel(app)}</span>
-                </button>
-              ))}
-            </div>
-          </Card>
-        )}
+        title="Apps"
+        subtitle="Install products your Super AgentOS can open and use."
+        actions={session?.capabilities?.includes('create_app') ? <Button href="/developer/publish" variant="secondary">Publish app</Button> : undefined}
       >
-        <PageHeader
-          eyebrow="App Store"
-          title="Browse real apps"
-          subtitle="Search, filter, preview, and install only validated AgentOS and SDK apps."
-          actions={session?.capabilities?.includes('create_app') ? <Button href="/developer/publish" variant="secondary">Publish app</Button> : undefined}
-        />
-
         <div className="os-drawer-stack">
+          {session ? (
+            <Card>
+              <div className="os-inline-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div className="os-entity-copy">{installedApps.length} installed</div>
+                <div className="os-inline-actions">
+                  {installedApps.slice(0, 4).map(app => (
+                    <Button key={app.id} variant="secondary" onClick={() => drawer.openDrawer('app-preview', app.slug)}>
+                      {app.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          ) : null}
           <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps" />
           <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
         </div>
@@ -389,7 +377,7 @@ export default function AppstorePage() {
                     description={app.description}
                     runtime={runtimeLabel(app)}
                     verified={app.verified}
-                    badge={installedState ? <Badge tone={installedState.tone}>{installedState.label}</Badge> : app.source === 'external_sdk' ? <Badge tone="accent">External SDK</Badge> : undefined}
+                    badge={installedState ? <Badge tone={installedState.tone}>{installedState.label}</Badge> : undefined}
                     footer={(
                       <div className="os-inline-actions">
                         <Button variant="secondary" onClick={() => drawer.openDrawer('app-preview', app.slug)}>Preview</Button>
@@ -402,7 +390,7 @@ export default function AppstorePage() {
             </div>
           </div>
         )}
-      </WorkspaceShell>
+      </SurfaceShell>
 
       <Drawer
         open={drawer.current?.id === 'app-preview'}
@@ -427,7 +415,7 @@ export default function AppstorePage() {
               </div>
             </Card>
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Requirements</div>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Needs</div>
               <div className="os-drawer-stack">
                 <div className="os-entity-copy">Permissions: {requiredPermissions.join(', ') || 'None'}</div>
                 <div className="os-entity-copy">Secrets: {requiredSecrets.join(', ') || 'None'}</div>
@@ -435,7 +423,7 @@ export default function AppstorePage() {
               </div>
             </Card>
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Version and health</div>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Version</div>
               <div className="os-drawer-stack">
                 <div className="os-entity-copy">Version {detail.manifest.version}</div>
                 <div className="os-entity-copy">Health: {detail.healthStatus}</div>
@@ -444,8 +432,8 @@ export default function AppstorePage() {
             </Card>
             {detail.source === 'external_sdk' && detail.kernelProduct ? (
               <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Runtime source</div>
-                <div className="os-entity-copy">Kernel product: {detail.kernelProduct}</div>
+                <div className="os-entity-title" style={{ marginBottom: 12 }}>Developer</div>
+                <div className="os-entity-copy">{detail.kernelProduct}</div>
               </Card>
             ) : null}
           </>
@@ -456,7 +444,7 @@ export default function AppstorePage() {
         open={drawer.current?.id === 'app-install'}
         onClose={drawer.closeDrawer}
         title={detail?.installation ? `${detail.name} installed` : detail?.name ?? 'Install app'}
-        description="Review permissions, secrets, skills, and runtime readiness before changing install state."
+        description="Review what this app needs before you install or open it."
         routeSafe
         footer={detail ? (
           <div className="os-inline-actions">
@@ -466,7 +454,7 @@ export default function AppstorePage() {
             {detail.installation ? <Button variant="secondary" onClick={() => void toggleFavorite()} disabled={working}>{detail.installation.favorite ? 'Unfavorite' : 'Favorite'}</Button> : null}
             {detail.installation ? <Button variant="danger" onClick={() => setConfirmRemove(true)} disabled={working}>Remove</Button> : null}
             {detail.readiness?.missingSecrets.length ? <Button href="/vault" variant="secondary">Add secret</Button> : null}
-            {detail.readiness?.missingSkills.length ? <Button href="/marketplace" variant="secondary">Install required skill</Button> : null}
+            {detail.readiness?.missingSkills.length ? <Button href="/skills" variant="secondary">Install required skill</Button> : null}
           </div>
         ) : undefined}
       >
@@ -486,7 +474,7 @@ export default function AppstorePage() {
               </div>
             </Card>
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Install requirements</div>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Install details</div>
               <div className="os-drawer-stack">
                 <div className="os-entity-copy">Permissions requested: {requiredPermissions.join(', ') || 'None'}</div>
                 {detail.readiness?.missingPermissions.length ? <div className="os-entity-copy">Missing approvals: {detail.readiness.missingPermissions.join(', ')}</div> : null}
@@ -506,13 +494,13 @@ export default function AppstorePage() {
           open={confirmRemove}
           onClose={() => setConfirmRemove(false)}
           title={`Remove ${detail.name}?`}
-          body="This removes the current installation from the workspace."
+          body="This removes the current installation."
           confirmLabel="Remove"
           tone="danger"
           busy={working}
           onConfirm={() => void removeCurrent()}
         />
       ) : null}
-    </div>
+    </>
   );
 }

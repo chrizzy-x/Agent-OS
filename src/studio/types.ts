@@ -1,3 +1,65 @@
+export type StudioMode = 'nl' | 'code';
+
+export type StudioContextSection =
+  | 'apps'
+  | 'skills'
+  | 'workflows'
+  | 'memory'
+  | 'vault'
+  | 'logs';
+
+export type StudioFileNode = {
+  id: string;
+  name: string;
+  path: string;
+  kind: 'directory' | 'file';
+  contentType?: string | null;
+  sizeBytes?: number;
+  updatedAt?: string | null;
+  children?: StudioFileNode[];
+};
+
+export type StudioEditorTab = {
+  id: string;
+  path: string;
+  name: string;
+  content: string;
+  encoding: 'utf8' | 'base64';
+  contentType: string;
+  dirty: boolean;
+  readonly?: boolean;
+};
+
+export type StudioTerminalEventType =
+  | 'session'
+  | 'stdout'
+  | 'stderr'
+  | 'status'
+  | 'sync'
+  | 'error'
+  | 'exit';
+
+export type StudioTerminalEvent = {
+  id: string;
+  type: StudioTerminalEventType;
+  createdAt: string;
+  message?: string;
+  chunk?: string;
+  status?: 'idle' | 'starting' | 'running' | 'exited' | 'closed' | 'error';
+  exitCode?: number | null;
+};
+
+export type StudioTerminalSession = {
+  id: string;
+  projectId: string;
+  shell: string;
+  cwd: string;
+  status: 'idle' | 'starting' | 'running' | 'exited' | 'closed' | 'error';
+  createdAt: string;
+  updatedAt: string;
+  events: StudioTerminalEvent[];
+};
+
 export type StudioResponseKind = 'help' | 'preview' | 'result' | 'error';
 
 export type StudioCommandRequest = {

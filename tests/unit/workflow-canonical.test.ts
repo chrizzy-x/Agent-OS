@@ -62,6 +62,19 @@ describe('workflow canonical sync', () => {
     expect(hydrated.codeState).toContain('"version"');
   });
 
+  it('preserves external MCP and skill tool identifiers without agentos prefixing', () => {
+    const synced = syncWorkflowDocument({
+      mode: 'conversation',
+      steps: [
+        { order: 1, tool: 'mcp.gmail.send_email', description: 'Send mail', input: { to: 'ops@example.com' } },
+        { order: 2, tool: 'skill.research_notes.run', description: 'Summarize', input: { topic: 'beta' } },
+      ],
+    });
+
+    expect(synced.steps[0].tool).toBe('mcp.gmail.send_email');
+    expect(synced.steps[1].tool).toBe('skill.research_notes.run');
+  });
+
   it('rejects invalid code payloads', () => {
     expect(() => syncWorkflowDocument({ mode: 'code', code: '{bad json' })).toThrow('valid JSON');
   });

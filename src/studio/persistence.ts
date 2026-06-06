@@ -39,6 +39,7 @@ export type StudioRole = 'user' | 'assistant' | 'system';
 export type StudioSessionRecord = {
   id: string;
   workspaceId: string;
+  projectId: string | null;
   ownerAgentId: string;
   superAgentId: string | null;
   parentSessionId: string | null;
@@ -90,6 +91,7 @@ function mapSession(row: Record<string, unknown>): StudioSessionRecord {
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
+    projectId: typeof row.project_id === 'string' ? row.project_id : null,
     ownerAgentId: String(row.owner_agent_id),
     superAgentId: typeof row.super_agent_id === 'string' ? row.super_agent_id : null,
     parentSessionId: typeof row.parent_session_id === 'string' ? row.parent_session_id : null,
@@ -150,13 +152,24 @@ async function assertSessionOwner(sessionId: string, ownerAgentId: string): Prom
   return data as Record<string, unknown>;
 }
 
-export async function listStudioSessions(ownerAgentId: string): Promise<StudioSessionRecord[]> {
+export async function listStudioSessions(
+  ownerAgentId: string,
+  options: { status?: string | 'all' } = {},
+): Promise<StudioSessionRecord[]> {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  let query = supabase
     .from('nl_studio_sessions')
     .select('*')
     .eq('owner_agent_id', ownerAgentId)
     .order('updated_at', { ascending: false });
+
+  if (options.status && options.status !== 'all') {
+    query = query.eq('status', options.status);
+  } else if (!options.status) {
+    query = query.eq('status', 'active');
+  }
+
+  const { data, error } = await query;
 
   if (error) throw new Error(`Failed to list Studio sessions: ${error.message}`);
   return ((data ?? []) as Record<string, unknown>[]).map(mapSession);
@@ -165,6 +178,7 @@ export async function listStudioSessions(ownerAgentId: string): Promise<StudioSe
 export async function createStudioSession(params: {
   ownerAgentId: string;
   workspaceId: string;
+  projectId?: string | null;
   superAgentId?: string | null;
   title?: string;
   parentSessionId?: string | null;
@@ -180,6 +194,7 @@ export async function createStudioSession(params: {
     .insert({
       id: crypto.randomUUID(),
       workspace_id: params.workspaceId,
+      project_id: params.projectId ?? null,
       owner_agent_id: params.ownerAgentId,
       super_agent_id: params.superAgentId ?? null,
       parent_session_id: params.parentSessionId ?? null,
@@ -188,6 +203,7 @@ export async function createStudioSession(params: {
       title: params.title?.trim() || 'New Studio Session',
       status: 'active',
       state: redactSecretsDeep(params.initialState ?? {
+        mode: 'NORMAL_CHAT',
         workflowGraph: { nodes: [], edges: [] },
         workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
         artifacts: [],
@@ -468,6 +484,7 @@ export async function createStudioSessionBranch(params: {
   snapshotId?: string | null;
   title?: string;
   branchLabel?: string;
+  projectId?: string | null;
 }): Promise<StudioSessionRecord> {
   const session = mapSession(await assertSessionOwner(params.sessionId, params.ownerAgentId));
   const snapshots = await listStudioSnapshots({
@@ -481,6 +498,7 @@ export async function createStudioSessionBranch(params: {
   return createStudioSession({
     ownerAgentId: params.ownerAgentId,
     workspaceId: session.workspaceId,
+    projectId: params.projectId ?? session.projectId,
     superAgentId: session.superAgentId,
     title: params.title?.trim() || `${session.title} Branch`,
     parentSessionId: session.id,

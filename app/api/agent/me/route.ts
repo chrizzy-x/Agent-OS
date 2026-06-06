@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContextWithTier } from '@/src/auth/request';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '@/src/storage/local-state';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { isValidTier, normalizePlan, TIER_QUOTAS } from '@/src/auth/tiers';
+import { isValidPlan, normalizePersistedPlan, normalizePlan, TIER_QUOTAS } from '@/src/auth/tiers';
 import { getPlanDescriptor } from '@/src/auth/capabilities';
 import { toErrorResponse } from '@/src/utils/errors';
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (error) throw new Error(`Failed to load agent: ${error.message}`);
 
     const metadata = (data?.metadata as Record<string, unknown> | null | undefined) ?? {};
-    const tier = isValidTier(metadata.plan) ? normalizePlan(metadata.plan) : normalizePlan(data?.tier ?? ctx.tier);
+    const tier = isValidPlan(metadata.plan) ? normalizePlan(metadata.plan) : normalizePersistedPlan(data?.tier ?? ctx.tier);
     const quotas = TIER_QUOTAS[tier];
     const plan = getPlanDescriptor(tier);
 

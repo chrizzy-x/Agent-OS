@@ -6,6 +6,7 @@ import Nav from '@/components/Nav';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { Drawer } from '@/components/os/overlays';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import { summarizeStudioEvent } from '@/src/ui/presenters';
 import {
   ActivityFeed,
@@ -17,6 +18,7 @@ import {
   MetricCard,
   PageHeader,
   SidebarNav,
+  Textarea,
 } from '@/components/os/ui';
 
 type DashboardPayload = {
@@ -84,6 +86,25 @@ type ProjectItem = {
   updatedAt: string;
 };
 
+type SuperAgentPayload = {
+  superAgent: {
+    id: string;
+    workspaceId: string;
+    name: string;
+    status: string;
+    instructions: string;
+    instructionVersion: number;
+    updatedAt: string;
+  } | null;
+  summary: {
+    activeSessions: number;
+    installedSkills: number;
+    connectedApps: number;
+    privateWorkflows: number;
+    recentActions: Array<{ id: string; type: string; summary: string; createdAt: string; sessionId: string | null }>;
+  };
+};
+
 type WorkspaceDrawer =
   | 'workspace-projects'
   | 'workspace-sessions'
@@ -101,25 +122,53 @@ export default function WorkspacePage() {
   const drawer = useRouteDrawer<WorkspaceDrawer>();
   const requestedWorkspaceId = searchParams.get('workspace') ?? '';
   const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [payload, setPayload] = useState<DashboardPayload | null>(null);
   const [workspaceDetail, setWorkspaceDetail] = useState<WorkspaceDetail | null>(null);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [audit, setAudit] = useState<WorkspaceAudit[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [superAgent, setSuperAgent] = useState<SuperAgentPayload | null>(null);
+  const [superAgentInstructions, setSuperAgentInstructions] = useState('');
+  const [settingsBusy, setSettingsBusy] = useState(false);
+
+  const requestWithSession = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const result = await fetchWithBrowserSession(input, init);
+    setAuthState(result.authState);
+    return result.response;
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const dashboardRes = await fetch(`/api/dashboard${requestedWorkspaceId ? `?workspace=${encodeURIComponent(requestedWorkspaceId)}` : ''}`, { cache: 'no-store' });
+      const sessionState = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+      setAuthState(sessionState.state);
+      if (!sessionState.session) {
+        setPayload(null);
+        setWorkspaceDetail(null);
+        setMembers([]);
+        setAudit([]);
+        setProjects([]);
+        return;
+      }
+      const dashboardRes = await requestWithSession(`/api/dashboard${requestedWorkspaceId ? `?workspace=${encodeURIComponent(requestedWorkspaceId)}` : ''}`, { cache: 'no-store' });
+      if (!dashboardRes.ok) {
+        setPayload(null);
+        setWorkspaceDetail(null);
+        setMembers([]);
+        setAudit([]);
+        setProjects([]);
+        return;
+      }
       const dashboardData = await dashboardRes.json();
       setPayload(dashboardData);
 
       const workspaceId = dashboardData.workspace?.id ?? requestedWorkspaceId;
       const [detailRes, membersRes, auditRes, projectsRes] = await Promise.all([
-        workspaceId ? fetch(`/api/workspaces/${workspaceId}`, { cache: 'no-store' }) : Promise.resolve(null),
-        workspaceId ? fetch(`/api/workspaces/${workspaceId}/members`, { cache: 'no-store' }) : Promise.resolve(null),
-        workspaceId ? fetch(`/api/workspaces/${workspaceId}/audit`, { cache: 'no-store' }) : Promise.resolve(null),
-        fetch('/api/projects', { cache: 'no-store' }),
+        workspaceId ? requestWithSession(`/api/workspaces/${workspaceId}`, { cache: 'no-store' }) : Promise.resolve(null),
+        workspaceId ? requestWithSession(`/api/workspaces/${workspaceId}/members`, { cache: 'no-store' }) : Promise.resolve(null),
+        workspaceId ? requestWithSession(`/api/workspaces/${workspaceId}/audit`, { cache: 'no-store' }) : Promise.resolve(null),
+        requestWithSession('/api/projects', { cache: 'no-store' }),
       ]);
 
       setWorkspaceDetail(detailRes?.ok ? await detailRes.json() : null);
@@ -137,16 +186,65 @@ export default function WorkspacePage() {
     } finally {
       setLoading(false);
     }
-  }, [requestedWorkspaceId]);
+  }, [requestWithSession, requestedWorkspaceId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const workspaceId = payload?.workspace?.id ?? requestedWorkspaceId;
+    if (!workspaceId) {
+      setSuperAgent(null);
+      setSuperAgentInstructions('');
+      return;
+    }
+    let active = true;
+    void requestWithSession(`/api/super-agent?workspaceId=${encodeURIComponent(workspaceId)}`, { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then((data: SuperAgentPayload) => {
+        if (!active) return;
+        if (!data) {
+          setSuperAgent(null);
+          setSuperAgentInstructions('');
+          return;
+        }
+        setSuperAgent(data);
+        setSuperAgentInstructions(data.superAgent?.instructions ?? '');
+      })
+      .catch(() => {
+        if (!active) return;
+        setSuperAgent(null);
+        setSuperAgentInstructions('');
+      });
+    return () => {
+      active = false;
+    };
+  }, [payload?.workspace?.id, requestWithSession, requestedWorkspaceId]);
+
   const agentProjects = useMemo(
     () => projects.filter(item => item.kind === 'agent'),
     [projects],
   );
+
+  async function saveSuperAgentInstructions() {
+    const workspaceId = payload?.workspace?.id ?? requestedWorkspaceId;
+    if (!workspaceId) return;
+    setSettingsBusy(true);
+    try {
+      const res = await requestWithSession('/api/super-agent', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId, instructions: superAgentInstructions }),
+      });
+      const data = await res.json();
+      if (!res.ok) return;
+      setSuperAgent(current => current ? { ...current, superAgent: data.superAgent ?? null } : { superAgent: data.superAgent ?? null, summary: { activeSessions: 0, installedSkills: 0, connectedApps: 0, privateWorkflows: 0, recentActions: [] } });
+      setSuperAgentInstructions(data.superAgent?.instructions ?? '');
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -166,7 +264,9 @@ export default function WorkspacePage() {
         />
 
         {loading ? <LoadingState label="Loading workspace" /> : !payload?.workspace ? (
-          <EmptyState title="Workspace unavailable" body="No accessible workspace was returned for this session." />
+          authState === 'expired'
+            ? <EmptyState title="Session expired" body="Sign in again to load workspace data." action={<Button href="/signin">Sign in again</Button>} />
+            : <EmptyState title="Sign in required" body="Sign in to load workspace data." action={<Button href="/signin">Sign in</Button>} />
         ) : (
           <div className="os-drawer-stack">
             <Card>
@@ -188,6 +288,40 @@ export default function WorkspacePage() {
                 <MetricCard label="Workflows" value={payload.summary.workflows} hint={<button type="button" className="os-chip" onClick={() => drawer.openDrawer('workspace-workflows')}>Inspect</button>} />
                 <MetricCard label="Vault" value={`${payload.vault.active}/${payload.vault.total}`} hint={<button type="button" className="os-chip" onClick={() => drawer.openDrawer('workspace-settings')}>Inspect</button>} />
               </div>
+            </Card>
+
+            <Card>
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <div className="os-entity-title">Super AgentOS</div>
+                  <div className="os-entity-copy">Your personal operating agent owns workspace sessions, memory, installed skills, connected apps, workflows, and routing decisions.</div>
+                </div>
+                <div className="os-inline-actions">
+                  <Badge tone="accent">{superAgent?.superAgent?.status ?? 'active'}</Badge>
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('workspace-settings')}>Memory</Button>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
+                <MetricCard label="Active sessions" value={superAgent?.summary.activeSessions ?? payload.summary.sessions} />
+                <MetricCard label="Installed skills" value={superAgent?.summary.installedSkills ?? payload.summary.installedSkills} />
+                <MetricCard label="Connected apps" value={superAgent?.summary.connectedApps ?? payload.summary.installedApps} />
+                <MetricCard label="Private workflows" value={superAgent?.summary.privateWorkflows ?? payload.summary.workflows} />
+              </div>
+              {superAgent?.superAgent?.instructions ? (
+                <div className="os-entity-copy" style={{ marginBottom: 16 }}>{superAgent.superAgent.instructions}</div>
+              ) : (
+                <div className="os-entity-copy" style={{ marginBottom: 16 }}>No Super AgentOS instructions saved yet.</div>
+              )}
+              {(superAgent?.summary.recentActions ?? []).length > 0 ? (
+                <ActivityFeed items={(superAgent?.summary.recentActions ?? []).map(item => ({
+                  id: item.id,
+                  title: item.type,
+                  subtitle: item.summary,
+                  time: item.createdAt ? new Date(item.createdAt).toLocaleString() : undefined,
+                }))} />
+              ) : (
+                <div className="os-empty-body">No recent Super AgentOS actions yet.</div>
+              )}
             </Card>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
@@ -414,17 +548,30 @@ export default function WorkspacePage() {
         ) : null}
 
         {drawer.current?.id === 'workspace-settings' ? (
-          <Card>
-            <div className="os-drawer-stack">
-              <div className="os-entity-copy">Plan: {workspaceDetail?.workspace.plan ?? payload?.workspace?.plan ?? '-'}</div>
-              <div className="os-entity-copy">Role: {workspaceDetail?.workspace.role ?? '-'}</div>
-              <div className="os-entity-copy">Slug: {workspaceDetail?.workspace.slug ?? payload?.workspace?.slug ?? '-'}</div>
-              <div className="os-inline-actions">
-                <Button href="/settings" variant="secondary">Open Settings</Button>
-                <Button href="/settings/team" variant="secondary">Open Team</Button>
+          <div className="os-drawer-stack">
+            <Card>
+              <div className="os-drawer-stack">
+                <div className="os-entity-copy">Plan: {workspaceDetail?.workspace.plan ?? payload?.workspace?.plan ?? '-'}</div>
+                <div className="os-entity-copy">Role: {workspaceDetail?.workspace.role ?? '-'}</div>
+                <div className="os-entity-copy">Slug: {workspaceDetail?.workspace.slug ?? payload?.workspace?.slug ?? '-'}</div>
+                <div className="os-inline-actions">
+                  <Button href="/settings" variant="secondary">Open Settings</Button>
+                  <Button href="/settings/team" variant="secondary">Open Team</Button>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+            <Card>
+              <div className="os-drawer-stack">
+                <div className="os-entity-title">Super AgentOS memory and instructions</div>
+                <div className="os-entity-copy">Instruction version: v{superAgent?.superAgent?.instructionVersion ?? 1}</div>
+                <Textarea value={superAgentInstructions} onChange={event => setSuperAgentInstructions(event.target.value)} placeholder="Super AgentOS instructions" />
+                <div className="os-inline-actions">
+                  <Button variant="secondary" onClick={() => void saveSuperAgentInstructions()} disabled={settingsBusy}>{settingsBusy ? 'Saving...' : 'Save Super AgentOS instructions'}</Button>
+                  <Badge tone="accent">{superAgent?.superAgent?.name ?? 'Super AgentOS'}</Badge>
+                </div>
+              </div>
+            </Card>
+          </div>
         ) : null}
       </Drawer>
     </div>

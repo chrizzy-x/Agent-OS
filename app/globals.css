@@ -5,23 +5,23 @@
 :root {
   --font-sans: 'IBM Plex Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  --bg-primary: #09090c;
-  --bg-secondary: #111116;
-  --bg-tertiary: #181821;
-  --bg-quaternary: #1f1f2b;
+  --bg-primary: #071119;
+  --bg-secondary: #0d1720;
+  --bg-tertiary: #132130;
+  --bg-quaternary: #183041;
   --surface: var(--bg-secondary);
   --surface-2: var(--bg-tertiary);
   --bg: var(--bg-primary);
-  --border: #242433;
-  --border-active: #38384d;
-  --border-bright: #4c4c68;
-  --accent: #8b5cf6;
-  --accent-2: #a78bfa;
-  --accent-dim: #7c3aed;
-  --accent-glow: rgba(139, 92, 246, 0.16);
-  --text-primary: #f5f5fb;
-  --text-secondary: #b3b3c6;
-  --text-tertiary: #77778f;
+  --border: #20313f;
+  --border-active: #32536c;
+  --border-bright: #4b7997;
+  --accent: #14b8a6;
+  --accent-2: #67e8f9;
+  --accent-dim: #0f766e;
+  --accent-glow: rgba(20, 184, 166, 0.16);
+  --text-primary: #ecfeff;
+  --text-secondary: #b7c8d6;
+  --text-tertiary: #6e8798;
   --text: var(--text-primary);
   --text-muted: var(--text-secondary);
   --text-dim: var(--text-tertiary);
@@ -46,7 +46,7 @@ html {
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top, rgba(139, 92, 246, 0.09), transparent 24%), var(--bg-primary);
+  background: radial-gradient(circle at top, rgba(20, 184, 166, 0.11), transparent 22%), var(--bg-primary);
   color: var(--text-primary);
   font-family: var(--font-sans), 'IBM Plex Sans', sans-serif;
   overflow-x: hidden;
@@ -124,7 +124,7 @@ textarea {
 .btn-primary {
   background: var(--accent);
   color: white;
-  border-color: rgba(167, 139, 250, 0.3);
+  border-color: rgba(103, 232, 249, 0.22);
 }
 
 .btn-primary:hover {
@@ -132,13 +132,13 @@ textarea {
 }
 
 .btn-outline {
-  background: rgba(139, 92, 246, 0.08);
+  background: rgba(20, 184, 166, 0.08);
   color: var(--accent-2);
-  border-color: rgba(139, 92, 246, 0.24);
+  border-color: rgba(20, 184, 166, 0.24);
 }
 
 .btn-outline:hover {
-  background: rgba(139, 92, 246, 0.14);
+  background: rgba(20, 184, 166, 0.14);
 }
 
 .btn-ghost {
@@ -186,8 +186,8 @@ textarea {
 .os-input:focus,
 .os-select:focus,
 .os-textarea:focus {
-  border-color: rgba(167, 139, 250, 0.5);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.16);
+  border-color: rgba(103, 232, 249, 0.42);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
   background: rgba(255, 255, 255, 0.05);
 }
 
@@ -214,9 +214,9 @@ textarea {
 
 .badge-accent,
 .os-badge.accent {
-  background: rgba(139, 92, 246, 0.12);
-  color: #c4b5fd;
-  border-color: rgba(139, 92, 246, 0.26);
+  background: rgba(20, 184, 166, 0.12);
+  color: #a5f3fc;
+  border-color: rgba(20, 184, 166, 0.26);
 }
 
 .badge-dim,

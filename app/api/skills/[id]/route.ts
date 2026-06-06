@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { requireAgentContext, requireRouteCapability } from '@/src/auth/request';
+import { readLocalRuntimeState } from '@/src/storage/local-state';
+import { requireRouteCapability } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -11,27 +12,46 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
-  const supabase = getSupabaseAdmin();
+  try {
+    const { id } = await params;
+    const isUuid = /^[0-9a-f-]{36}$/i.test(id);
 
-  // Try by UUID first, then by slug
-  const isUuid = /^[0-9a-f-]{36}$/i.test(id);
-  const query = supabase
-    .from('skills')
-    .select(`
-      *,
-      reviews:skill_reviews(rating, review_title, review_text, created_at, agent_id)
-    `);
+    try {
+      const supabase = getSupabaseAdmin();
+      const query = supabase
+        .from('skills')
+        .select(`
+          *,
+          reviews:skill_reviews(rating, review_title, review_text, created_at, agent_id)
+        `);
 
-  const { data, error } = isUuid
-    ? await query.eq('id', id).single()
-    : await query.eq('slug', id).single();
+      const { data, error } = isUuid
+        ? await query.eq('id', id).single()
+        : await query.eq('slug', id).single();
 
-  if (error || !data) {
-    return NextResponse.json({ error: 'Skill not found' }, { status: 404 });
+      if (!error && data) {
+        return NextResponse.json({ skill: omitAgentIdentifierFields(data) });
+      }
+    } catch {
+      // Fall back to local runtime state below.
+    }
+
+    const state = await readLocalRuntimeState();
+    const skill = state.skills.catalog.find(item => isUuid ? item.id === id : item.slug === id);
+    if (!skill || !skill.published) {
+      return NextResponse.json({ code: 'NOT_FOUND', error: 'Skill not found', message: 'Skill not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      skill: omitAgentIdentifierFields({
+        ...skill,
+        reviews: [],
+      }),
+    });
+  } catch (error: unknown) {
+    const err = toErrorResponse(error);
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
-
-  return NextResponse.json({ skill: omitAgentIdentifierFields(data) });
 }
 
 // PUT /api/skills/:id - Update skill (author only)

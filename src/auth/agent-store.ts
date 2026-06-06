@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord } from '../storage/local-state.js';
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
-import { isValidTier, normalizePlan, PLAN_ACCOUNT_TYPE, PLAN_LEGACY_TIER, type AccountType, type AgentPlan, type AgentTier } from './tiers.js';
+import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
 export type AgentAccount = {
   id: string;
@@ -16,7 +16,7 @@ export type CreateAgentAccountInput = {
   name: string;
   email: string;
   passwordHash: string;
-  tier?: AgentTier;
+  tier?: AgentPlan;
   plan?: AgentPlan;
   accountType?: AccountType | null;
   planSelectionSkipped?: boolean;
@@ -107,8 +107,6 @@ export async function findAccountById(agentId: string): Promise<AgentAccount | n
 
 export async function createAgentAccount(input: CreateAgentAccountInput): Promise<CreateAgentAccountResult> {
   const plan = input.plan ?? normalizePlan(input.tier);
-  const tier = input.tier && isValidTier(input.tier) ? input.tier : plan;
-  const legacyTier = PLAN_LEGACY_TIER[plan];
   const accountType = input.accountType ?? PLAN_ACCOUNT_TYPE[plan];
   const name = cleanAgentDisplayName(input.name);
   try {
@@ -116,7 +114,7 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
     const payload = {
       id: input.id,
       name,
-      tier,
+      tier: toPersistedTier(plan),
       quotas: {},
       metadata: {
         email: input.email,
@@ -132,16 +130,6 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
 
     if (!error) {
       return { duplicate: false };
-    }
-
-    if (error.message?.toLowerCase().includes('agents_tier_check') || error.message?.toLowerCase().includes('violates check constraint')) {
-      const retry = await supabase.from('agents').insert({ ...payload, tier: legacyTier });
-      if (!retry.error) {
-        return { duplicate: false };
-      }
-      if (retry.error.code === '23505') {
-        return { duplicate: true, conflictField: inferDuplicateField(retry.error) };
-      }
     }
 
     if (error.code === '23505') {

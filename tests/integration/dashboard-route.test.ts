@@ -219,7 +219,10 @@ describe('GET /api/dashboard', () => {
 
     expect(response.status).toBe(200);
     expect(body.summary.installedApps).toBe(1);
+    expect(body.summary.mcpConnectors).toBe(0);
     expect(body.sdkApps).toEqual([]);
     expect(body.ffp).toBeNull();
+    expect(body.subagents).toBeUndefined();
+    expect(body.vault.names).toBeUndefined();
   });
 });

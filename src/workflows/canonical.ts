@@ -75,7 +75,14 @@ function asNumber(value: unknown): number | null {
 function normalizeToolName(tool: string): string {
   const trimmed = tool.trim();
   if (!trimmed) throw new ValidationError('Workflow step tool is required');
-  return trimmed.startsWith('agentos.') ? trimmed : `agentos.${trimmed}`;
+  if (
+    trimmed.startsWith('agentos.')
+    || trimmed.startsWith('mcp.')
+    || trimmed.startsWith('skill.')
+  ) {
+    return trimmed;
+  }
+  return `agentos.${trimmed}`;
 }
 
 function normalizeStep(raw: unknown, fallbackOrder: number): WorkflowStep {

@@ -1,9 +1,10 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
-import { normalizePlan, PLAN_LABELS, type AccountType, type AgentPlan } from '../auth/tiers.js';
+import { isValidPlan, normalizePersistedPlan, normalizePlan, PLAN_LABELS, type AccountType, type AgentPlan } from '../auth/tiers.js';
 
 export type AgentOSProvisioningResult = {
   workspaceId: string;
+  projectId: string;
   superAgentId: string;
   instructionProfileId: string;
   studioSessionId: string;
@@ -65,6 +66,7 @@ export async function provisionAgentOSAccount(params: {
 }): Promise<AgentOSProvisioningResult> {
   const now = new Date().toISOString();
   const workspaceId = await resolveProvisionedWorkspaceId(params.agentId);
+  const projectId = `project_${workspaceId.replace(/[^a-zA-Z0-9_-]/g, '_')}_default`;
   const superAgentId = stableId('super_agentos', params.agentId);
   const instructionProfileId = stableId('instructions', params.agentId, '_default');
   const studioSessionId = stableId('studio_session', params.agentId, '_default');
@@ -99,6 +101,22 @@ export async function provisionAgentOSAccount(params: {
     added_at: now,
   }, 'workspace_id,agent_id');
 
+  await upsert('projects', {
+    id: projectId,
+    workspace_id: workspaceId,
+    owner_agent_id: params.agentId,
+    name: 'Default Project',
+    slug: 'default',
+    description: 'Default project for this workspace',
+    status: 'active',
+    metadata: {
+      system: true,
+      provisioned_after_signup: true,
+    },
+    created_at: now,
+    updated_at: now,
+  });
+
   await upsert('instruction_profiles', {
     id: instructionProfileId,
     workspace_id: workspaceId,
@@ -130,6 +148,7 @@ export async function provisionAgentOSAccount(params: {
   await upsert('nl_studio_sessions', {
     id: studioSessionId,
     workspace_id: workspaceId,
+    project_id: projectId,
     owner_agent_id: params.agentId,
     super_agent_id: superAgentId,
     title: 'AgentOS Studio',
@@ -168,7 +187,7 @@ export async function provisionAgentOSAccount(params: {
     created_at: now,
   });
 
-  return { workspaceId, superAgentId, instructionProfileId, studioSessionId, vaultId };
+  return { workspaceId, projectId, superAgentId, instructionProfileId, studioSessionId, vaultId };
 }
 
 export async function reconcileAgentOSProvisioning(agentId: string): Promise<AgentOSProvisioningResult | null> {
@@ -184,7 +203,7 @@ export async function reconcileAgentOSProvisioning(agentId: string): Promise<Age
 
   const metadata = (agent.metadata as Record<string, unknown> | null | undefined) ?? {};
   const accountType: AccountType = metadata.account_type === 'enterprise' ? 'enterprise' : 'retail';
-  const plan = normalizePlan(metadata.plan ?? agent.tier);
+  const plan = isValidPlan(metadata.plan) ? normalizePlan(metadata.plan) : normalizePersistedPlan(agent.tier);
   const email = typeof metadata.email === 'string' && metadata.email.trim()
     ? metadata.email
     : `${agentId}@local.agentos`;

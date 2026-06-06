@@ -16,33 +16,20 @@ export function buildSessionNavLinks(session: BrowserSession | null): Array<{ hr
     return [
       { href: '/', label: 'Home' },
       { href: '/studio', label: 'Studio' },
-      { href: '/marketplace', label: 'Skills' },
       { href: '/appstore', label: 'Apps' },
-      { href: '/signup', label: 'Signup' },
+      { href: '/skills', label: 'Skills' },
+      { href: '/docs', label: 'Docs' },
     ];
   }
 
-  const enterprise = session.accountType === 'enterprise' || session.capabilities?.includes('access_sdk') === true;
   const links: Array<{ href: string; label: string }> = [
+    { href: '/', label: 'Home' },
     { href: '/studio', label: 'Studio' },
     { href: '/appstore', label: 'Apps' },
     { href: '/skills', label: 'Skills' },
+    { href: '/projects', label: 'Projects' },
     { href: '/workflows', label: 'Workflows' },
-    { href: '/agents', label: 'Agents' },
-    { href: '/vault', label: 'Vault' },
-    { href: '/search', label: 'Search' },
   ];
-
-  if (enterprise) {
-    links.push(
-      { href: '/sdk', label: 'SDK' },
-      { href: '/developer', label: 'Developer Console' },
-      { href: '/ffp', label: 'FFP Router' },
-      { href: '/mcp', label: 'Universal MCP' },
-      { href: '/analytics', label: 'Analytics' },
-      { href: '/audit', label: 'Audit' },
-    );
-  }
 
   return links;
 }
@@ -90,7 +77,7 @@ export default function Nav({ activePath }: NavProps) {
         }}
       >
         <div className="container" style={{ height: 72, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <Link href={session ? '/studio' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
+          <Link href={session ? '/' : '/'} style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
             <Image
               src="/logo.png"
               alt="AgentOS logo"
@@ -105,7 +92,7 @@ export default function Nav({ activePath }: NavProps) {
               }}
             />
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-              <span style={{ fontWeight: 700 }}>AgentOS</span>
+              <span style={{ fontWeight: 700 }}>Super AgentOS</span>
               <span style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>AI operating system</span>
             </div>
           </Link>
@@ -121,9 +108,9 @@ export default function Nav({ activePath }: NavProps) {
                   alignItems: 'center',
                   padding: '0 12px',
                   borderRadius: 8,
-                  border: `1px solid ${activePath === link.href ? 'rgba(139, 92, 246, 0.26)' : 'transparent'}`,
-                  background: activePath === link.href ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
-                  color: activePath === link.href ? '#ddd6fe' : 'var(--text-secondary)',
+                  border: `1px solid ${activePath === link.href ? 'rgba(103, 232, 249, 0.26)' : 'transparent'}`,
+                  background: activePath === link.href ? 'var(--accent-glow)' : 'transparent',
+                  color: activePath === link.href ? 'var(--accent-2)' : 'var(--text-secondary)',
                   textDecoration: 'none',
                   fontWeight: 600,
                 }}
@@ -144,7 +131,7 @@ export default function Nav({ activePath }: NavProps) {
             ) : (
               <>
                 <Link href="/signin" className="btn-ghost">Sign in</Link>
-                <Link href="/signup" className="btn-primary">Create AgentOS account</Link>
+                <Link href="/signup" className="btn-primary">Get AgentOS</Link>
               </>
             )}
           </div>
@@ -191,8 +178,8 @@ export default function Nav({ activePath }: NavProps) {
                 textDecoration: 'none',
                 display: 'flex',
                 alignItems: 'center',
-                color: activePath === link.href ? '#ddd6fe' : 'var(--text-secondary)',
-                background: activePath === link.href ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+                color: activePath === link.href ? 'var(--accent-2)' : 'var(--text-secondary)',
+                background: activePath === link.href ? 'var(--accent-glow)' : 'transparent',
               }}
             >
               {link.label}

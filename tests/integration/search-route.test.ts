@@ -81,6 +81,18 @@ describe('GET /api/search', () => {
         return chain([]);
       }
 
+      if (table === 'mcp_servers') {
+        return chain([{
+          id: 'connector-1',
+          name: 'gmail',
+          description: 'Mail connector',
+          category: 'Communication',
+          tools: [{ name: 'send_email' }],
+          active: true,
+          created_at: '2026-06-01T10:00:00Z',
+        }]);
+      }
+
       if (table === 'workspace_members') {
         return chain([{
           workspaces: {
@@ -98,6 +110,7 @@ describe('GET /api/search', () => {
         return chain([{
           id: 'session-1',
           workspace_id: 'workspace-1',
+          project_id: 'project-1',
           owner_agent_id: 'agent-enterprise',
           super_agent_id: 'super-1',
           title: 'Research session',
@@ -112,6 +125,7 @@ describe('GET /api/search', () => {
         return chain([{
           id: 'subagent-1',
           workspace_id: 'workspace-1',
+          project_id: 'project-1',
           owner_agent_id: 'agent-enterprise',
           name: 'Research helper',
           description: 'Finds sources',
@@ -129,8 +143,35 @@ describe('GET /api/search', () => {
           summary: 'Runs the research pipeline',
           status: 'active',
           workspace_id: 'workspace-1',
+          project_id: 'project-1',
           created_at: '2026-06-01T09:00:00Z',
           updated_at: '2026-06-01T10:00:00Z',
+        }]);
+      }
+
+      if (table === 'projects') {
+        return chain([{
+          id: 'project-1',
+          workspace_id: 'workspace-1',
+          owner_agent_id: 'agent-enterprise',
+          name: 'Research Workspace',
+          slug: 'research-workspace',
+          description: 'Workspace research project',
+          status: 'active',
+          metadata: {},
+          created_at: '2026-06-01T09:00:00Z',
+          updated_at: '2026-06-01T10:00:00Z',
+        }]);
+      }
+
+      if (table === 'ffp_chain_executions') {
+        return chain([{
+          id: 'route-1',
+          chain_id: 'chain-agentos',
+          tool: 'agentos.mem_get',
+          status: 'success',
+          error_message: null,
+          executed_at: '2026-06-01T10:00:00Z',
         }]);
       }
 
@@ -177,13 +218,19 @@ describe('GET /api/search', () => {
 
   it('returns grouped workspace results and only vault secret names', async () => {
     const token = createAgentToken('agent-enterprise', { expiresIn: '1h' });
-    const response = await GET(new NextRequest('http://localhost/api/search?q=openai', {
+    const response = await GET(new NextRequest('http://localhost/api/search?q=', {
       headers: { Authorization: `Bearer ${token}` },
     }));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.groups.vault[0].title).toBe('OPENAI_API_KEY');
+    expect(body.groups.subagent).toBeUndefined();
+    expect(body.groups.project[0].href).toBe('/studio?mode=code&project=project-1');
+    expect(body.groups.project[0].actionLabel).toBe('Open Project');
+    expect(body.groups.connector).toEqual([]);
+    expect(body.groups.ffp_route).toEqual([]);
+    expect(body.groups.ffp_primitive).toEqual([]);
     expect(JSON.stringify(body)).not.toContain('sk-live-should-not-leak');
   });
 });

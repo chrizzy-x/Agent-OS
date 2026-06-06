@@ -134,7 +134,7 @@ export default function WorkspaceShell(props: WorkspaceShellProps) {
   const rail = (
     <div className="os-workspace-rail">
       <SidebarSection
-        title="Workspace"
+        title="Super AgentOS"
         footer={(
           <div className="os-inline-actions">
             <Button variant="secondary" onClick={() => setCollapsed(current => !current)}>
@@ -180,35 +180,35 @@ export default function WorkspaceShell(props: WorkspaceShellProps) {
         <SidebarNav
           items={[
             { href: '/studio', label: 'Studio', subtitle: 'Conversation', active: props.activePath === '/studio' },
-            { href: '/workspace', label: 'Workspace', subtitle: 'Hub', active: props.activePath === '/workspace' || props.activePath === '/workspaces' || props.activePath === '/dashboard' },
+            { href: '/', label: 'Home', subtitle: 'Your system', active: props.activePath === '/' || props.activePath === '/workspace' || props.activePath === '/workspaces' || props.activePath === '/dashboard' },
             { href: '/projects', label: 'Projects', subtitle: 'Collection', active: props.activePath === '/projects' },
-            { href: '/search', label: 'Search', subtitle: 'Command center', active: props.activePath === '/search' },
+            { href: '/search', label: 'Search', subtitle: 'Find anything', active: props.activePath === '/search' },
           ]}
         />
       </SidebarSection>
 
-      <SidebarSection title="Runtime">
+      <SidebarSection title="Install">
         <SidebarNav
           items={[
             { href: '/appstore', label: 'Apps', subtitle: 'Install and open', active: props.activePath === '/appstore' },
-            { href: '/skills', label: 'Skills', subtitle: 'Installed and marketplace', active: props.activePath === '/skills' },
-            { href: '/workflows', label: 'Workflows', subtitle: 'Automations', active: props.activePath === '/workflows' },
+            { href: '/skills', label: 'Skills', subtitle: 'Install capability', active: props.activePath === '/skills' },
+            { href: '/workflows', label: 'Workflows', subtitle: 'Run workflow', active: props.activePath === '/workflows' },
             { href: '/agents', label: 'Agents', subtitle: 'Subagents', active: props.activePath === '/agents' },
             { href: '/vault', label: 'Vault', subtitle: 'Secrets', active: props.activePath === '/vault' },
           ]}
         />
       </SidebarSection>
 
-      <SidebarSection title="Enterprise">
+      <SidebarSection title="System">
         <SidebarNav
           items={[
-            { href: '/sdk', label: 'SDK', subtitle: 'Credentials and apps', active: props.activePath === '/sdk', locked: !enterprise },
-            { href: '/developer', label: 'Developer Console', subtitle: 'Publish and monitor', active: props.activePath === '/developer', locked: !enterprise },
-            { href: '/connectors', label: 'Universal MCP', subtitle: 'Connectors', active: props.activePath === '/connectors' || props.activePath === '/mcp', locked: !enterprise },
-            { href: '/ffp', label: 'FFP Router', subtitle: 'Routing and fallback', active: props.activePath === '/ffp', locked: !enterprise },
-            { href: '/analytics', label: 'Analytics', subtitle: 'Usage and health', active: props.activePath === '/analytics', locked: !enterprise },
-            { href: '/audit', label: 'Audit', subtitle: 'Runtime history', active: props.activePath === '/audit', locked: !enterprise },
             { href: '/settings', label: 'Settings', subtitle: 'Profile and workspace', active: props.activePath === '/settings' },
+            { href: '/developer', label: 'Developer', subtitle: 'Publish and diagnostics', active: props.activePath === '/developer', locked: !enterprise },
+            { href: '/sdk', label: 'SDK', subtitle: 'Apps and credentials', active: props.activePath === '/sdk', locked: !enterprise },
+            { href: '/connectors', label: 'Connectors', subtitle: 'Tool connections', active: props.activePath === '/connectors' || props.activePath === '/mcp', locked: !enterprise },
+            { href: '/analytics', label: 'Analytics', subtitle: 'Usage', active: props.activePath === '/analytics', locked: !enterprise },
+            { href: '/audit', label: 'Audit', subtitle: 'History', active: props.activePath === '/audit', locked: !enterprise },
+            { href: '/ffp', label: 'FFP', subtitle: 'Advanced routing', active: props.activePath === '/ffp', locked: !enterprise },
           ]}
         />
       </SidebarSection>

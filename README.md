@@ -4,26 +4,38 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> v6.2
+> v6.3
 
-AgentOS is a production runtime for agents, apps, and workflows. It ships Studio, a real Skill Store, a real App Store, Vault-backed secret assignment, SDK auto-discovery, FFP status and audit surfaces, and a single authenticated MCP API.
+AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, and activity.
 
 Live:
 - [agentos.services](https://agentos.services)
 - [Signup](https://www.agentos.services/signup)
 
-## V6.2 status
+Supporting message:
+- talk to it, build with it, and install what it needs
 
-V6.2 ships:
-- `/studio` as the primary workflow surface
+## V6.3 status
+
+V6.3 ships:
+- `/` as Super AgentOS Home with recent chats, installed apps, installed skills, workflows, activity, and quick actions
+- `/studio` as one workspace with shared NL Studio and Code Studio modes
+- `/marketplace` as a lightweight discovery layer
 - `/appstore` with real app install, open, update, uninstall, and pin flows
+- `/skills` as the public Skill Store for installable capabilities
 - `/appstore/[slug]` with readiness, permissions, secrets, skills, targets, health, and owner analytics
+- `/agents` as the canonical private-agent runtime surface
 - `/vault` with assignment-aware secret validation and runtime grants
 - hardened Vault runtime injection with temporary secret access, runtime cleanup, access audit events, and shared output redaction
+- `/mcp` with advanced tool discovery, connector diagnostics, and runtime execution visibility
 - `/ffp` with runtime status, chains, audit history, consensus history, related workflows, and related apps
+- `/billing` with free-beta self-serve plan transitions across Retail Free, Retail Pro, Enterprise Plus, and Enterprise Max
 - SDK app auto-discovery and legacy `kernel_registry` recovery into factual public listings
-- global search across apps, skills, workflows, sessions, projects, subagents, and Vault secret names only
+- global search across apps, skills, workflows, sessions, projects, agents, and Vault secret names only
 - session branching with parent lineage and isolated branch messages and events
+- session rename, archive, and persistence with server-backed ownership enforcement
+- structured Studio intent outcomes for chat replies, previews, approvals, forbidden states, unsupported actions, and completed actions
+- browser session refresh and expired-session handling across protected routes
 - enterprise-only SDK, developer, and publishing shells with signed-out and blocked states
 
 Rules enforced in shipped surfaces:
@@ -77,6 +89,18 @@ Behavior:
 - redacts secret-like values from Studio persistence and workflow state
 
 The runtime consume route is SDK-kernel only. Secret values are never returned to browser-facing routes.
+
+## Plans
+
+Public beta plans:
+- `retail_free`
+- `retail_pro`
+- `enterprise_plus`
+- `enterprise_max`
+
+Self-serve plan transitions are live in free beta mode:
+- `POST /api/plans/transition`
+- `/billing`
 
 ## FFP
 
@@ -169,7 +193,7 @@ vercel deploy --prod
 Before deploying:
 - keep `main` fast-forwarded with `origin/main`
 - confirm `.vercel/project.json` points at the intended project
-- verify `/studio`, `/appstore`, `/appstore/[slug]`, `/marketplace`, `/vault`, `/ffp`, `/search`, `/developer`, `/sdk`, and `/signup`
+- verify `/`, `/studio`, `/appstore`, `/appstore/[slug]`, `/skills`, `/skills/[slug]`, `/marketplace`, `/workflows`, `/agents`, `/vault`, `/search`, `/ffp`, `/mcp`, `/developer`, `/sdk`, and redirect aliases for `/workspace`, `/workspaces`, and `/dashboard`
 
 ## Project layout
 

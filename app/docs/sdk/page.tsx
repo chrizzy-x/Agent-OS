@@ -5,9 +5,11 @@ import DocsFooter from '@/components/DocsFooter';
 import { APP_URL } from '@/lib/config';
 import { verifyAgentTokenWithTier } from '@/src/auth/agent-identity';
 import { hasCapability } from '@/src/auth/capabilities';
+import { AGENT_ACCESS_COOKIE, AGENT_LEGACY_SESSION_COOKIE } from '@/src/auth/session-cookie';
 
 export default async function SdkPage() {
-  const token = (await cookies()).get('agent_session')?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AGENT_ACCESS_COOKIE)?.value ?? cookieStore.get(AGENT_LEGACY_SESSION_COOKIE)?.value;
   if (token) {
     try {
       const ctx = await verifyAgentTokenWithTier(token);
@@ -45,20 +47,22 @@ export default async function SdkPage() {
         {/* Step 1 */}
         <Step n={1} title="Create your agent">
           <p className="text-gray-600 mb-4">
-            Go to <Link href="/signup" className="text-blue-600 hover:underline">/signup</Link> and enter your email.
-            You will receive a <strong>bearer token</strong>.
-            Save it because it is shown only once. Agent IDs are private internal identifiers and are not displayed.
+            Go to <Link href="/signup" className="text-blue-600 hover:underline">/signup</Link>, choose a beta plan, and create your account with email and password.
+            <strong> Retail Pro</strong>, <strong>Enterprise Plus</strong>, and <strong>Enterprise Max</strong> return a bearer token immediately.
+            <strong> Retail Free</strong> stays browser-session only until you upgrade at <Link href="/billing" className="text-blue-600 hover:underline">/billing</Link>.
           </p>
           <p className="text-sm text-gray-500">
             Or use the API directly:
           </p>
           <Code>{`curl -s -X POST ${APP_URL}/api/signup \\
   -H "Content-Type: application/json" \\
-  -d '{"email":"you@example.com","agentName":"My Agent"}' | jq`}</Code>
+  -d '{"email":"you@example.com","password":"strongpass123","agentName":"My Agent","accountType":"retail","selectedPlan":"retail_pro"}' | jq`}</Code>
           <Result>{`{
   "success": true,
   "credentials": {
+    "bearerToken": "eyJhbGciOiJIUzI1NiJ9...",
     "apiKey": "eyJhbGciOiJIUzI1NiJ9...",
+    "plan": "retail_pro",
     "expiresIn": "90 days"
   }
 }`}</Result>
@@ -205,7 +209,7 @@ await mcp('db_insert', { table: 'logs', data: { msg: 'started' } });`}</Code>
 
         {/* Dashboard access */}
         <div className="mt-10 bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-1">Access your dashboard from the SDK</h3>
+          <h3 className="text-base font-semibold text-gray-900 mb-1">Open AgentOS from the SDK</h3>
           <p className="text-sm text-gray-500 mb-4">
             Use your API key to generate a one-time login link. Open it in a browser to get full dashboard access —
             including FFP audit trail, consensus controls, workflows, and agent metrics.
@@ -222,7 +226,7 @@ const { loginUrl } = await res.json();
 
 // Open loginUrl in a browser — you're logged in.
 // Works in Node.js, Bun, Deno, any runtime.
-console.log('Dashboard:', loginUrl);`}</Code>
+console.log('AgentOS:', loginUrl);`}</Code>
           <Result>{`{
   "loginUrl": "${APP_URL}/api/session/from-key/callback?st=a3f9...",
   "expiresIn": 300
@@ -235,7 +239,7 @@ console.log('Dashboard:', loginUrl);`}</Code>
           <div className="grid sm:grid-cols-3 gap-4">
             {[
               { href: '/docs/primitives', icon: '⚡', title: 'All 30 tools', desc: 'Complete reference for every primitive and its parameters' },
-              { href: '/marketplace', icon: '📦', title: 'Browse Skills', desc: 'Install community skills to extend your agent instantly' },
+              { href: '/skills', icon: '📦', title: 'Browse Skills', desc: 'Install community skills to extend your agent instantly' },
               { href: '/docs/skills', icon: '🛠️', title: 'Build a Skill', desc: 'Publish your own skill and earn 70% revenue share' },
             ].map(c => (
               <Link key={c.href} href={c.href}

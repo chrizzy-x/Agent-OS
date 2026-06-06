@@ -141,5 +141,17 @@ describe('storage migrations', () => {
     expect(sql).toContain('ALTER TABLE vault_runtime_grants ENABLE ROW LEVEL SECURITY');
     expect(sql).toContain('deny_all_vault_runtime_grants');
   });
+
+  it('formalizes FFP execution logs and removes legacy persisted plan identifiers', () => {
+    const sql = readFileSync(join(migrationsDir, '023_ffp_audit_and_plan_cleanup.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS ffp_chain_executions');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS fallback_used');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS route_decision JSONB');
+    expect(sql).toContain("UPDATE agents\nSET tier = CASE tier");
+    expect(sql).toContain("CHECK (tier IN ('retail_free', 'retail_pro', 'enterprise_plus', 'enterprise_max'))");
+    expect(sql).toContain('ALTER TABLE workspaces');
+    expect(sql).toContain('plan_transitions_old_plan_check');
+  });
 });
 

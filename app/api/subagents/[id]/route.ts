@@ -76,6 +76,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       name: typeof body.name === 'string' ? body.name : undefined,
       description: typeof body.description === 'string' ? body.description : undefined,
       instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
+      projectId: typeof body.projectId === 'string' ? body.projectId : undefined,
       status: body.status === 'archived' || body.status === 'active' ? body.status : undefined,
     });
     return NextResponse.json({ subagent });

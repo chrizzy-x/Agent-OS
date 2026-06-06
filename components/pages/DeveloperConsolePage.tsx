@@ -6,7 +6,7 @@ import WorkspaceShell from '@/components/os/workspace-shell';
 import { Drawer } from '@/components/os/overlays';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { resolveBrowserAccessState } from '@/src/auth/browser-access';
-import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { fetchBrowserSessionState, type BrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
   Badge,
@@ -93,18 +93,20 @@ export default function DeveloperConsolePage() {
   const [apps, setApps] = useState<DeveloperApp[]>([]);
   const [detail, setDetail] = useState<AppDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [detailLoading, setDetailLoading] = useState(false);
   const [search, setSearch] = useState('');
 
   const canUseDeveloperConsole = session?.capabilities?.includes('access_developer_console') === true;
-  const accessState = resolveBrowserAccessState(session, loading, 'access_developer_console');
+  const accessState = resolveBrowserAccessState(session, loading, 'access_developer_console', authState);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const current = await fetchBrowserSession().catch(() => null);
-      setSession(current);
-      if (!current) {
+      const current = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+      setSession(current.session);
+      setAuthState(current.state);
+      if (!current.session) {
         setAnalytics(null);
         setRegistry([]);
         setApps([]);
@@ -196,8 +198,8 @@ export default function DeveloperConsolePage() {
           <Card>
             <div className="os-entity-title" style={{ marginBottom: 12 }}>Summary</div>
             <div className="os-drawer-stack">
-              <Badge tone={accessState === 'allowed' ? 'accent' : accessState === 'blocked' ? 'warning' : 'default'}>
-                {accessState === 'allowed' ? 'Enterprise developer access' : accessState === 'signed_out' ? 'Sign in required' : accessState === 'blocked' ? 'Retail access blocked' : 'Checking access'}
+              <Badge tone={accessState === 'forbidden' ? 'warning' : accessState === 'allowed' ? 'accent' : 'default'}>
+                {accessState === 'allowed' ? 'Enterprise developer access' : accessState === 'signed_out' ? 'Sign in required' : accessState === 'expired' ? 'Session expired' : accessState === 'forbidden' ? 'Enterprise access required' : 'Checking access'}
               </Badge>
               <div className="os-entity-copy">Published apps: {apps.length}</div>
               <div className="os-entity-copy">SDK registrations: {registry.length}</div>
@@ -216,14 +218,16 @@ export default function DeveloperConsolePage() {
           />
         ) : accessState === 'signed_out' ? (
           <PageHeader eyebrow="Developer Access" title="Sign in required" subtitle="Developer Console is available only after sign-in and plan validation." />
-        ) : accessState === 'blocked' ? (
+        ) : accessState === 'forbidden' ? (
           <PageHeader eyebrow="Developer Access" title="Enterprise access required" subtitle="Retail workspaces cannot open publishing, SDK, analytics, or billing controls." />
         ) : (
           <PageHeader eyebrow="Developer Access" title="Checking access" subtitle="Validating developer permissions for this workspace." />
         )}
 
         {loading ? <LoadingState label="Loading developer console" /> : !session ? (
-          <EmptyState title="Sign in required" body="Sign in to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in</Button>} />
+          authState === 'expired'
+            ? <EmptyState title="Session expired" body="Sign in again to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in again</Button>} />
+            : <EmptyState title="Sign in required" body="Sign in to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in</Button>} />
         ) : !canUseDeveloperConsole ? (
           <EmptyState title="Enterprise access required" body="Developer Console stays gated to enterprise-capable workspaces." action={<Button href="/studio">Open Studio</Button>} />
         ) : (

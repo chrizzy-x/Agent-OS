@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import Nav from '@/components/Nav';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
-import WorkspaceShell from '@/components/os/workspace-shell';
+import SurfaceShell from '@/components/os/surface-shell';
 import {
   Badge,
   Button,
@@ -12,7 +11,6 @@ import {
   EmptyState,
   FilterChips,
   LoadingState,
-  PageHeader,
   SearchBar,
   SkillCard,
 } from '@/components/os/ui';
@@ -77,98 +75,67 @@ export default function SkillsMarketplacePage() {
   );
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/skills" />
-      <WorkspaceShell
-        activePath="/skills"
-        extraSidebar={(
-          <Card>
-            <div className="os-entity-title" style={{ marginBottom: 12 }}>Categories</div>
-            <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
-          </Card>
-        )}
-        aside={(
-          <div className="os-drawer-stack">
-            <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Installed skills</div>
-              {installed.length === 0 ? (
-                <div className="os-empty-body">No installed skills yet.</div>
-              ) : (
-                <div className="os-drawer-stack">
-                  {installed.slice(0, 6).map(entry => (
-                    <Link key={entry.skill.slug} href={`/skills/${entry.skill.slug}`} className="os-sidebar-link">
-                      <span className="os-sidebar-label">{entry.skill.name}</span>
-                      <span className="os-sidebar-subtitle">{entry.skill.category}</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </Card>
-            <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Published now</div>
-              {skills.length === 0 ? (
-                <div className="os-empty-body">No published skills yet.</div>
-              ) : (
-                <div className="os-drawer-stack">
-                  {skills.slice(0, 5).map(skill => (
-                    <Link key={skill.slug} href={`/skills/${skill.slug}`} className="os-sidebar-link">
-                      <span className="os-sidebar-label">{skill.name}</span>
-                      <span className="os-sidebar-subtitle">{skill.total_installs.toLocaleString()} installs</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </Card>
+    <SurfaceShell
+      activePath="/skills"
+      title="Skills"
+      subtitle="Install capabilities your Super AgentOS can use."
+      actions={session?.capabilities?.includes('create_skill') ? <Button href="/developer" variant="secondary">Publish skill</Button> : undefined}
+    >
+      {session ? (
+        <Card style={{ marginBottom: 16 }}>
+          <div className="os-inline-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div className="os-entity-copy">{installed.length} installed</div>
+            <div className="os-inline-actions">
+              {installed.slice(0, 4).map(entry => (
+                <Button key={entry.skill.slug} href={`/skills/${entry.skill.slug}`} variant="secondary">
+                  {entry.skill.name}
+                </Button>
+              ))}
+              <Button href="/skills/installed" variant="secondary">Manage</Button>
+            </div>
           </div>
-        )}
-      >
-        <PageHeader
-          eyebrow="Skill marketplace"
-          title="Skill Marketplace"
-          subtitle="Only real published skills appear here. Install focused capabilities for search, analysis, browser automation, code execution, and research."
-          actions={session?.capabilities?.includes('create_skill') ? <Button href="/developer" variant="secondary">Publish skill</Button> : undefined}
+        </Card>
+      ) : null}
+
+      <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search skills, categories, permissions..." />
+      <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
+
+      {loading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+          {[0, 1, 2].map(item => <LoadingState key={item} label="Loading skills" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          title={skills.length === 0 ? 'No published skills yet' : 'No skills found'}
+          body={skills.length === 0 ? 'This store stays empty until a real skill is published.' : 'Try another search or category.'}
         />
-
-        <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search skills, categories, permissions..." />
-        <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
-
-        {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-            {[0, 1, 2].map(item => <LoadingState key={item} label="Loading skills" />)}
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            title={skills.length === 0 ? 'No published skills yet' : 'No skills found'}
-            body={skills.length === 0 ? 'This marketplace stays empty until a real skill is published.' : 'Try another search or category.'}
-          />
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-            {filtered.map(skill => {
-              const installedMatch = installed.some(entry => entry.skill.slug === skill.slug);
-              return (
-                <SkillCard
-                  key={skill.id}
-                  href={`/skills/${skill.slug}`}
-                  title={skill.name}
-                  description={skill.description}
-                  category={skill.category}
-                  installs={skill.total_installs}
-                  rating={skill.rating > 0 ? skill.rating : undefined}
-                  footer={(
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        {skill.verified ? <Badge tone="success">Verified</Badge> : null}
-                        <Badge tone="default">{installedMatch ? 'Installed' : 'Available'}</Badge>
-                      </div>
-                      <Link href={`/skills/${skill.slug}`} className="btn-primary">{installedMatch ? 'Open' : 'Install'}</Link>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
+          {filtered.map(skill => {
+            const installedMatch = installed.some(entry => entry.skill.slug === skill.slug);
+            return (
+              <SkillCard
+                key={skill.id}
+                href={`/skills/${skill.slug}`}
+                title={skill.name}
+                description={skill.description}
+                category={skill.category}
+                installs={skill.total_installs}
+                rating={skill.rating > 0 ? skill.rating : undefined}
+                footer={(
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {skill.verified ? <Badge tone="success">Verified</Badge> : null}
+                      <Badge tone="default">{installedMatch ? 'Installed' : 'Available'}</Badge>
                     </div>
-                  )}
-                />
-              );
-            })}
-          </div>
-        )}
-      </WorkspaceShell>
-    </div>
+                    <Link href={`/skills/${skill.slug}`} className="btn-primary">{installedMatch ? 'Open' : 'Install'}</Link>
+                  </div>
+                )}
+              />
+            );
+          })}
+        </div>
+      )}
+    </SurfaceShell>
   );
 }

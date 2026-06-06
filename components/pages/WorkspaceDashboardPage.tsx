@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Nav from '@/components/Nav';
 import { Drawer } from '@/components/os/overlays';
 import WorkspaceShell from '@/components/os/workspace-shell';
-import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
   Badge,
@@ -45,6 +45,7 @@ type DrawerSection = 'sessions' | 'apps' | 'workflows' | 'vault' | 'events' | 'r
 
 export default function WorkspaceDashboardPage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [payload, setPayload] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [drawer, setDrawer] = useState<DrawerSection>(null);
@@ -52,12 +53,16 @@ export default function WorkspaceDashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [current, response] = await Promise.all([
-        fetchBrowserSession().catch(() => null),
-        fetch('/api/dashboard', { cache: 'no-store' }).catch(() => null),
-      ]);
-      setSession(current);
-      if (!response?.ok) {
+      const current = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+      setSession(current.session);
+      setAuthState(current.state);
+      if (!current.session) {
+        setPayload(null);
+        return;
+      }
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession('/api/dashboard', { cache: 'no-store' });
+      setAuthState(nextAuthState);
+      if (!response.ok) {
         setPayload(null);
         return;
       }
@@ -99,7 +104,9 @@ export default function WorkspaceDashboardPage() {
         />
 
         {loading ? <LoadingState label="Loading dashboard" /> : !session ? (
-          <EmptyState title="Sign in required" body="Sign in to view dashboard activity." action={<Button href="/signin">Sign in</Button>} />
+          authState === 'expired'
+            ? <EmptyState title="Session expired" body="Sign in again to view dashboard activity." action={<Button href="/signin">Sign in again</Button>} />
+            : <EmptyState title="Sign in required" body="Sign in to view dashboard activity." action={<Button href="/signin">Sign in</Button>} />
         ) : !payload ? (
           <EmptyState title="Dashboard unavailable" body="The dashboard route did not return workspace data." />
         ) : (

@@ -1,6 +1,7 @@
 node_modules
 .npm-cache
 .next
+.next-build
 .next.stale*
 .next-dev*.log
 next-dev*.log
@@ -9,3 +10,12 @@ tsconfig.tsbuildinfo
 agentos-artifacts
 agentos-v3-demo-60s.mp4
 .vercel/output
+.agentos-runtime-state.json
+.chrome-*
+.dev-*.log
+.prod*.log
+agentos-ui.log
+agentos-ui.err
+debug.log
+process-test.log
+.playwright-mcp

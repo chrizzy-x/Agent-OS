@@ -66,7 +66,8 @@ describe('session routes', () => {
   });
 
   it('clears the cookie on sign out', async () => {
-    const response = await DELETE();
+    const request = new NextRequest('http://localhost/api/session', { method: 'DELETE' });
+    const response = await DELETE(request);
     const body = await response.json();
 
     expect(response.status).toBe(200);

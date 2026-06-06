@@ -36,7 +36,7 @@ const findings: AuditFinding[] = [
 const verifiedRoutes = [
   `${APP_URL}/health -> 200`,
   `${APP_URL}/studio -> 200`,
-  `${APP_URL}/ops -> 200`,
+  `${APP_URL}/developer -> 200`,
   `${APP_URL}/docs/features -> 200`,
   `${APP_URL}/api/ops/metrics -> 200`,
 ];
@@ -49,7 +49,7 @@ export default function AuditPage() {
           <Link href="/docs" className="font-mono font-bold text-sm">Agent OS Docs</Link>
           <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <Link href="/docs/launch" className="hover:text-white">Launch Notes</Link>
-            <Link href="/ops" className="hover:text-white">Ops</Link>
+            <Link href="/developer" className="hover:text-white">Developer</Link>
           </div>
         </div>
       </nav>

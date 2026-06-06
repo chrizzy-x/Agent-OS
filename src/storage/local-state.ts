@@ -154,6 +154,19 @@ export type LocalAppInstallationRecord = {
   installed_version?: string | null;
 };
 
+export type LocalProjectRecord = {
+  id: string;
+  workspaceId: string;
+  ownerAgentId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: 'active' | 'archived';
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type LocalVaultRuntimeGrantRecord = {
   id: string;
   secret_id: string;
@@ -169,6 +182,42 @@ export type LocalVaultRuntimeGrantRecord = {
   consumed_at: string | null;
   cleaned_up_at: string | null;
   created_at: string;
+};
+
+export type LocalTrustedDeviceRecord = {
+  id: string;
+  agentId: string;
+  fingerprint: string;
+  label: string;
+  userAgent: string | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+export type LocalAuthRefreshSessionRecord = {
+  id: string;
+  agentId: string;
+  deviceId: string | null;
+  sessionSelector: string;
+  tokenHash: string;
+  userAgent: string | null;
+  deviceLabel: string | null;
+  createdAt: string;
+  lastSeenAt: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  replacedById: string | null;
+};
+
+export type LocalSessionAuditLogRecord = {
+  id: string;
+  agentId: string;
+  sessionId: string | null;
+  deviceId: string | null;
+  action: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
 };
 
 export type LocalRuntimeState = {
@@ -191,6 +240,10 @@ export type LocalRuntimeState = {
     catalog: LocalAgentAppRecord[];
     installations: Record<string, LocalAppInstallationRecord[]>;
   };
+  projects: Record<string, LocalProjectRecord[]>;
+  trustedDevices: Record<string, LocalTrustedDeviceRecord[]>;
+  authRefreshSessions: Record<string, LocalAuthRefreshSessionRecord[]>;
+  sessionAuditLogs: Record<string, LocalSessionAuditLogRecord[]>;
   vaultRuntimeGrants: LocalVaultRuntimeGrantRecord[];
 };
 
@@ -230,6 +283,10 @@ function createDefaultState(): LocalRuntimeState {
       catalog: [],
       installations: {},
     },
+    projects: {},
+    trustedDevices: {},
+    authRefreshSessions: {},
+    sessionAuditLogs: {},
     vaultRuntimeGrants: [],
   };
 }
@@ -262,6 +319,10 @@ function normalizeState(value: unknown): LocalRuntimeState {
       catalog: state.agentApps?.catalog ?? defaults.agentApps.catalog,
       installations: state.agentApps?.installations ?? defaults.agentApps.installations,
     },
+    projects: state.projects ?? defaults.projects,
+    trustedDevices: state.trustedDevices ?? defaults.trustedDevices,
+    authRefreshSessions: state.authRefreshSessions ?? defaults.authRefreshSessions,
+    sessionAuditLogs: state.sessionAuditLogs ?? defaults.sessionAuditLogs,
     vaultRuntimeGrants: state.vaultRuntimeGrants ?? defaults.vaultRuntimeGrants,
   };
 }

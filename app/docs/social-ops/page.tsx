@@ -169,8 +169,8 @@ export default function SocialOpsDocsPage() {
           <div className="flex items-center gap-5 text-sm">
             <Link href="/docs" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Docs</Link>
             <Link href="/docs/api" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>API</Link>
-            <Link href="/dashboard/social" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Dashboard</Link>
-            <Link href="/dashboard/x" className="btn-primary text-xs px-4 py-2">Open X Ops</Link>
+            <Link href="/" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Home</Link>
+            <Link href="/studio" className="btn-primary text-xs px-4 py-2">Open Studio</Link>
           </div>
         </div>
       </nav>
@@ -184,7 +184,7 @@ export default function SocialOpsDocsPage() {
               This social automation surface is an optional example module built on top of Agent OS primitives, auth, MCP routing, and operator workflows. It is not part of the core infrastructure story, but it remains useful as a reference for teams building domain-specific agent products on top of Agent OS.
             </p>
             <div className="flex flex-wrap gap-3 mt-6">
-              <Link href="/dashboard/social" className="btn-primary px-5 py-2.5 text-sm">Open Example Dashboard</Link>
+              <Link href="/studio" className="btn-primary px-5 py-2.5 text-sm">Open Studio</Link>
               <Link href="/docs/api" className="btn-outline px-5 py-2.5 text-sm">Read API Reference</Link>
             </div>
           </div>
@@ -313,4 +313,3 @@ export default function SocialOpsDocsPage() {
     </div>
   );
 }
-

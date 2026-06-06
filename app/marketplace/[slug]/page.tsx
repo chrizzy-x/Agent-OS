@@ -1,5 +1,6 @@
-import SkillDetailPage from '@/components/pages/SkillDetailPage';
+import { redirect } from 'next/navigation';
 
-export default function Page() {
-  return <SkillDetailPage />;
+export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  redirect(`/skills/${slug}`);
 }

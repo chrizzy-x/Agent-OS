@@ -59,7 +59,7 @@ function SuccessContent() {
             style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>A</div>
           <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
         </Link>
-        <Link href="/marketplace" className="text-sm" style={{ color: 'var(--text-muted)' }}>Skill Store</Link>
+        <Link href="/skills" className="text-sm" style={{ color: 'var(--text-muted)' }}>Skill Store</Link>
       </div>
 
       <div className="w-full max-w-md text-center">
@@ -79,8 +79,8 @@ function SuccessContent() {
             <h1 className="text-2xl font-black mb-2">Skill activated</h1>
             <p className="mb-8" style={{ color: 'var(--text-muted)' }}>Ready to use. Go to your dashboard to start calling it.</p>
             <div className="flex flex-col gap-3">
-              <Link href="/dashboard" className="btn-primary px-8 py-3 text-sm font-semibold">Go to Dashboard →</Link>
-              {skillSlug && <Link href={`/marketplace/${skillSlug}`} className="btn-outline px-8 py-3 text-sm">Back to skill</Link>}
+              <Link href="/" className="btn-primary px-8 py-3 text-sm font-semibold">Go to Home →</Link>
+              {skillSlug && <Link href={`/skills/${skillSlug}`} className="btn-outline px-8 py-3 text-sm">Back to skill</Link>}
             </div>
           </div>
         )}
@@ -92,10 +92,10 @@ function SuccessContent() {
             <h1 className="text-2xl font-black mb-2">Something went wrong</h1>
             <p className="mb-6 text-sm" style={{ color: '#fca5a5' }}>{errorMsg}</p>
             <div className="flex flex-col gap-3">
-              <Link href="/dashboard" className="btn-primary px-8 py-3 text-sm">
+              <Link href="/" className="btn-primary px-8 py-3 text-sm">
                 Dashboard
               </Link>
-              <Link href="/marketplace" className="btn-outline px-8 py-3 text-sm">
+              <Link href="/skills" className="btn-outline px-8 py-3 text-sm">
                 Skill Store
               </Link>
             </div>

@@ -6,7 +6,7 @@ export async function GET() {
   return NextResponse.json({
     name: 'AgentOS',
     version: '6.0.0',
-    description: 'Universal MCP, core primitives, Skill Store capabilities, App Store packages, and consensus-aware agent infrastructure.',
+    description: 'Studio, apps, skills, workflows, memory, Vault, and advanced runtime endpoints.',
     status: 'ok',
     endpoints: {
       'GET  /': 'Landing page',

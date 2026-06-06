@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
         agentId: task.agent_id as string,
         allowedDomains: ['*'],
         quotas: DEFAULT_QUOTAS,
-        tier: 'free',
+        tier: 'retail_free',
       };
 
       try {

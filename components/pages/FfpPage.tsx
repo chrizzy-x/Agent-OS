@@ -6,6 +6,7 @@ import { Drawer } from '@/components/os/overlays';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { summarizeValue } from '@/src/ui/presenters';
 import {
   ActivityFeed,
   Badge,
@@ -70,12 +71,7 @@ function isEnterpriseSession(session: BrowserSession | null): boolean {
 }
 
 function stringifyPreview(value: unknown): string {
-  try {
-    const preview = JSON.stringify(value);
-    return preview.length > 180 ? `${preview.slice(0, 177)}...` : preview;
-  } catch {
-    return 'Unavailable';
-  }
+  return summarizeValue(value, 180);
 }
 
 function formatDate(value: string | null | undefined): string {

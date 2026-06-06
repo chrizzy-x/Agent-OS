@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Nav from '@/components/Nav';
+import SurfaceShell from '@/components/os/surface-shell';
 import { Drawer } from '@/components/os/overlays';
-import WorkspaceShell from '@/components/os/workspace-shell';
-import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   Badge,
   Button,
@@ -13,7 +12,6 @@ import {
   EmptyState,
   FilterChips,
   LoadingState,
-  PageHeader,
   SearchBar,
   StatusPill,
 } from '@/components/os/ui';
@@ -41,10 +39,8 @@ const FILTERS: Array<'all' | SearchKind> = [
   'skill',
   'workflow',
   'session',
+  'project',
   'vault',
-  'connector',
-  'ffp_route',
-  'ffp_primitive',
   'doc',
 ];
 
@@ -68,6 +64,7 @@ export default function SearchPage() {
   const initialType = (searchParams.get('type') ?? 'all') as 'all' | SearchKind;
 
   const [session, setSession] = useState<BrowserSession | null>(null);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState(initialQuery);
@@ -82,11 +79,12 @@ export default function SearchPage() {
 
   useEffect(() => {
     let active = true;
-    void fetchBrowserSession()
-      .catch(() => null)
+    void fetchBrowserSessionState()
+      .catch(() => ({ state: 'signed_out' as const, session: null }))
       .then(current => {
         if (!active) return;
-        setSession(current);
+        setSession(current.session);
+        setAuthState(current.state);
         setReady(true);
       });
     return () => {
@@ -98,8 +96,11 @@ export default function SearchPage() {
     if (!ready || !session) return;
     let active = true;
     setLoading(true);
-    void fetch(`/api/search?q=${encodeURIComponent(initialQuery)}&type=${encodeURIComponent(initialType)}&limit=50`, { cache: 'no-store' })
-      .then(response => response.json())
+    void fetchWithBrowserSession(`/api/search?q=${encodeURIComponent(initialQuery)}&type=${encodeURIComponent(initialType)}&limit=50`, { cache: 'no-store' })
+      .then(async ({ response, authState: nextAuthState }) => {
+        if (active) setAuthState(nextAuthState);
+        return response.json();
+      })
       .then(data => {
         if (active) setPayload(data);
       })
@@ -130,36 +131,30 @@ export default function SearchPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/search" />
-      <WorkspaceShell
+    <>
+      <SurfaceShell
         activePath="/search"
-        aside={(
+        title="Search"
+        subtitle="Find chats, projects, apps, skills, workflows, Vault items, and docs."
+      >
+        <div className="os-drawer-stack">
           <Card>
-            <div className="os-entity-title" style={{ marginBottom: 12 }}>Quick actions</div>
-            <div className="os-drawer-stack">
-              <Button href="/studio">Open Studio</Button>
-              <Button href="/appstore" variant="secondary">Browse Apps</Button>
-              <Button href="/marketplace" variant="secondary">Browse Marketplace</Button>
+            <div className="os-inline-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
               <div className="os-entity-copy">Shortcut: Ctrl/Cmd + K</div>
+              <div className="os-inline-actions">
+                <Button href="/studio">Open Studio</Button>
+                <Button href="/appstore" variant="secondary">Browse Apps</Button>
+                <Button href="/skills" variant="secondary">Browse Skills</Button>
+              </div>
             </div>
           </Card>
-        )}
-      >
-        <PageHeader
-          eyebrow="Global Search"
-          title="Command center"
-          subtitle="Apps, skills, workflows, sessions, Vault secret names, connectors, and FFP runtime routes."
-        />
-
-        <div className="os-drawer-stack">
           <SearchBar
             value={query}
             onChange={event => setQuery(event.target.value)}
             onKeyDown={event => {
               if (event.key === 'Enter') commit(query, type);
             }}
-            placeholder="Search runtime, tools, sessions, and secret names"
+            placeholder="Search chats, projects, apps, skills, workflows, Vault items, or docs"
           />
           <FilterChips
             items={FILTERS.map(item => item === 'all' ? 'All' : LABELS[item])}
@@ -188,8 +183,10 @@ export default function SearchPage() {
         </div>
 
         {!ready ? <LoadingState label="Loading search" /> : !session ? (
-          <EmptyState title="Sign in required" body="Sign in to search runtime entities and workspace data." action={<Button href="/signin">Sign in</Button>} />
-        ) : loading ? <LoadingState label="Searching workspace" /> : !payload ? (
+          authState === 'expired'
+            ? <EmptyState title="Session expired" body="Sign in again to search your AgentOS." action={<Button href="/signin">Sign in again</Button>} />
+            : <EmptyState title="Sign in required" body="Sign in to search your AgentOS." action={<Button href="/signin">Sign in</Button>} />
+        ) : loading ? <LoadingState label="Searching" /> : !payload ? (
           <EmptyState title="Search unavailable" body="The search service did not return results." />
         ) : groupedResults.length === 0 ? (
           <EmptyState title="No results" body={initialQuery ? 'Try another search term or category.' : 'Enter a search term to start.'} />
@@ -222,7 +219,7 @@ export default function SearchPage() {
             ))}
           </div>
         )}
-      </WorkspaceShell>
+      </SurfaceShell>
 
       <Drawer
         open={Boolean(selected)}
@@ -249,6 +246,6 @@ export default function SearchPage() {
           </>
         ) : null}
       </Drawer>
-    </div>
+    </>
   );
 }

@@ -1,7 +1,7 @@
 {
     "name": "agent-os",
-    "version": "6.2.0",
-    "description": "AgentOS - OS-level primitives for apps and services: memory, files, databases, networking, events and code execution",
+    "version": "6.3.0",
+    "description": "AgentOS - the operating system for the agent economy: chat, route, install, publish, and operate agents, apps, skills, workflows, and MCP tools",
     "author": "riz",
     "homepage": "https://www.agentos.services",
     "scripts": {

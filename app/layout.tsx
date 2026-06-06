@@ -1,33 +1,18 @@
 import type { Metadata, Viewport } from 'next';
-import { JetBrains_Mono, IBM_Plex_Sans } from 'next/font/google';
 import './globals.css';
 import { APP_URL } from '@/lib/config';
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-mono',
-  display: 'swap',
-});
-
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-sans',
-  display: 'swap',
-});
-
 export const metadata: Metadata = {
-  title: 'AgentOS by PRIME',
+  title: 'AgentOS',
   description:
-    'Agent OS combines primitives, universal MCP routing, consensus controls, a Skill Store, an App Store, and an autonomous operations crew for production AI agents.',
-  keywords: 'AI agents, MCP, autonomous agents, skill store, agentic app store, agent infrastructure, consensus',
+    'AgentOS is your AI operating system for Studio, projects, apps, skills, memory, and Vault.',
+  keywords: 'AI operating system, AgentOS, Studio, projects, apps, skills, memory, Vault',
   metadataBase: new URL(APP_URL),
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'AgentOS by PRIME',
+    title: 'AgentOS',
   },
   icons: {
     icon: '/logo.png',
@@ -35,16 +20,16 @@ export const metadata: Metadata = {
     apple: '/apple-touch-icon.png',
   },
   openGraph: {
-    title: 'AgentOS by PRIME',
-    description: 'Universal MCP, skills, agentic apps, consensus, and production infrastructure for AI agents.',
+    title: 'AgentOS',
+    description: 'The AI operating system for Studio, projects, apps, skills, memory, and Vault.',
     url: APP_URL,
     type: 'website',
-    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'AgentOS by PRIME' }],
+    images: [{ url: '/logo.png', width: 512, height: 512, alt: 'AgentOS' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'AgentOS by PRIME',
-    description: 'Universal MCP, skills, agentic apps, consensus, and production infrastructure for AI agents.',
+    title: 'AgentOS',
+    description: 'The AI operating system for Studio, projects, apps, skills, memory, and Vault.',
     images: ['/logo.png'],
   },
 };
@@ -57,7 +42,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${jetbrainsMono.variable} ${ibmPlexSans.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth">
       <body className="font-sans antialiased">{children}</body>
     </html>
   );

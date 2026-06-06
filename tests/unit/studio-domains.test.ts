@@ -11,7 +11,7 @@ describe('withStudioDefaultAllowedDomains', () => {
         memoryQuotaBytes: 1,
         rateLimitPerMin: 1,
       },
-      tier: 'free',
+      tier: 'retail_free',
     });
 
     expect(context.allowedDomains).toEqual([

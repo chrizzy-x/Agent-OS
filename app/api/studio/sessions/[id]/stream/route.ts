@@ -24,7 +24,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         let timer: ReturnType<typeof setInterval> | null = null;
 
         const push = (event: string, data: unknown) => {
-          controller.enqueue(encoder.encode(encodeEvent(event, data)));
+          if (closed) return false;
+          try {
+            controller.enqueue(encoder.encode(encodeEvent(event, data)));
+            return true;
+          } catch {
+            close();
+            return false;
+          }
         };
 
         const close = () => {
@@ -50,7 +57,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
             });
             for (const event of events) {
               cursor = event.createdAt;
-              push('studio_event', event);
+              if (!push('studio_event', event)) break;
             }
           } catch (error) {
             const err = toErrorResponse(error);

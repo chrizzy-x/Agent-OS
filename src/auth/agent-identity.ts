@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { AgentContext, AgentQuotas, DEFAULT_QUOTAS } from './permissions.js';
-import { isValidTier, normalizePlan, TIER_QUOTAS } from './tiers.js';
+import { isValidPlan, normalizePersistedPlan, normalizePlan, TIER_QUOTAS } from './tiers.js';
 import { AuthError } from '../utils/errors.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 
@@ -75,10 +75,10 @@ export async function verifyAgentTokenWithTier(token: string): Promise<AgentCont
       .maybeSingle();
     if (data) {
       const metadata = (data.metadata as Record<string, unknown> | null | undefined) ?? {};
-      if (isValidTier(metadata.plan)) {
+      if (isValidPlan(metadata.plan)) {
         tier = normalizePlan(metadata.plan);
-      } else if (isValidTier(data.tier)) {
-        tier = normalizePlan(data.tier);
+      } else {
+        tier = normalizePersistedPlan(data.tier);
       }
     }
   } catch {

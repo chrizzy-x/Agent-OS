@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
   Button,
@@ -57,6 +58,7 @@ function tabToKind(tab: string): string {
 
 export default function ProjectsPage() {
   const [payload, setPayload] = useState<ProjectsPayload | null>(null);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('All');
@@ -65,11 +67,19 @@ export default function ProjectsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const sessionState = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+      setAuthState(sessionState.state);
+      if (!sessionState.session) {
+        setPayload(null);
+        return;
+      }
       const kind = tabToKind(tab);
       const url = `/api/projects?type=${kind}&search=${encodeURIComponent(search)}`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession(url, { cache: 'no-store' });
+      setAuthState(nextAuthState);
+      const res = response;
       const data = await res.json();
-      setPayload(data);
+      setPayload(res.ok ? data : null);
     } catch {
       setPayload(null);
     } finally {
@@ -150,6 +160,10 @@ export default function ProjectsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
             {[0, 1, 2].map(item => <LoadingState key={item} label="Loading projects" />)}
           </div>
+        ) : !payload ? (
+          authState === 'expired'
+            ? <EmptyState title="Session expired" body="Sign in again to inspect workspace projects." action={<Button href="/signin">Sign in again</Button>} />
+            : <EmptyState title="Sign in required" body="Sign in to inspect workspace projects." action={<Button href="/signin">Sign in</Button>} />
         ) : items.length === 0 ? (
           <EmptyState title="No projects yet" body="Create a workflow, app, or skill to populate this workspace." action={<Button href="/studio">Open Studio</Button>} />
         ) : view === 'grid' ? (

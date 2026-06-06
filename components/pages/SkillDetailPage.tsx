@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Nav from '@/components/Nav';
-import WorkspaceShell from '@/components/os/workspace-shell';
+import { useParams } from 'next/navigation';
+import SurfaceShell from '@/components/os/surface-shell';
 import { summarizeSkillCapability } from '@/src/ui/presenters';
 import {
   Badge,
@@ -11,13 +10,12 @@ import {
   Card,
   EmptyState,
   LoadingState,
-  PageHeader,
   PermissionCard,
   SearchBar,
   Tabs,
 } from '@/components/os/ui';
 
-type Skill = {
+export type SkillDetailRecord = {
   id: string;
   name: string;
   slug: string;
@@ -36,13 +34,12 @@ type Skill = {
 
 const TABS = ['Overview', 'Permissions', 'Examples', 'Changelog'];
 
-export default function SkillDetailPage() {
+export default function SkillDetailPage({ initialSkill = null }: { initialSkill?: SkillDetailRecord | null }) {
   const params = useParams<{ slug: string }>();
-  const router = useRouter();
   const slug = params?.slug ?? '';
   const [tab, setTab] = useState('Overview');
-  const [skill, setSkill] = useState<Skill | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [skill, setSkill] = useState<SkillDetailRecord | null>(initialSkill);
+  const [loading, setLoading] = useState(initialSkill === null);
   const [installing, setInstalling] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -60,9 +57,19 @@ export default function SkillDetailPage() {
         if (active) setLoading(false);
       }
     }
-    if (slug) void load();
+    if (!slug) {
+      setSkill(null);
+      setLoading(false);
+      return () => { active = false; };
+    }
+    if (initialSkill && initialSkill.slug === slug) {
+      setSkill(initialSkill);
+      setLoading(false);
+      return () => { active = false; };
+    }
+    void load();
     return () => { active = false; };
-  }, [slug]);
+  }, [initialSkill, slug]);
 
   const examples = useMemo(
     () => skill?.capabilities.map(capability => `Use ${skill.name} to ${capability.description.toLowerCase()}.`).slice(0, 3) ?? [],
@@ -93,40 +100,27 @@ export default function SkillDetailPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/skills" />
-      <WorkspaceShell
+    <SurfaceShell
         activePath="/skills"
-        aside={(
-          <Card>
-            <div className="os-entity-title" style={{ marginBottom: 12 }}>Quick facts</div>
-            {skill ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <Badge tone="accent">{skill.category}</Badge>
-                {skill.verified ? <Badge tone="success">Verified</Badge> : null}
-                <div className="os-entity-copy">{skill.total_installs.toLocaleString()} installs</div>
-                <div className="os-entity-copy">{skill.rating.toFixed(1)} rating</div>
-              </div>
-            ) : null}
-          </Card>
-        )}
+        title={skill?.name ?? 'Skill'}
+        subtitle={skill ? (skill.long_description || skill.description) : undefined}
+        actions={skill ? (
+          <>
+            <Badge tone="accent">{skill.category}</Badge>
+            {skill.verified ? <Badge tone="success">Verified</Badge> : null}
+            <Button onClick={() => void install()}>{installing ? 'Installing...' : 'Install'}</Button>
+          </>
+        ) : undefined}
       >
         {loading ? <LoadingState label="Loading skill" /> : !skill ? (
           <EmptyState title="Skill not found" body="This skill may be unpublished or unavailable." action={<Button href="/skills">Back to marketplace</Button>} />
         ) : (
           <>
-            <PageHeader
-              eyebrow="Skill details"
-              title={skill.name}
-              subtitle={skill.long_description || skill.description}
-              actions={(
-                <>
-                  <Badge tone="accent">{skill.category}</Badge>
-                  <Button onClick={() => void install()}>{installing ? 'Installing...' : 'Install'}</Button>
-                </>
-              )}
-            />
             <Card>
+              <div className="os-inline-actions" style={{ marginBottom: 12 }}>
+                <Badge tone="default">{skill.total_installs.toLocaleString()} installs</Badge>
+                <Badge tone="default">{skill.rating.toFixed(1)} rating</Badge>
+              </div>
               <Tabs tabs={TABS.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
             </Card>
 
@@ -151,10 +145,10 @@ export default function SkillDetailPage() {
             {tab === 'Permissions' ? (
               <div style={{ display: 'grid', gap: 12 }}>
                 {(skill.permissions_required && skill.permissions_required.length > 0 ? skill.permissions_required : ['No special permissions']).map(permission => (
-                  <PermissionCard key={permission} title={permission} description="Review access scope before installing this skill." required={permission !== 'No special permissions'} />
+                  <PermissionCard key={permission} title={permission} description="Review this access before you install the skill." required={permission !== 'No special permissions'} />
                 ))}
                 {(skill.required_secrets && skill.required_secrets.length > 0 ? skill.required_secrets : []).map(secret => (
-                  <PermissionCard key={secret} title={secret} description="Assign from Vault before the skill runs." required />
+                  <PermissionCard key={secret} title={secret} description="Add this secret in Vault before the skill runs." required />
                 ))}
               </div>
             ) : null}
@@ -168,11 +162,10 @@ export default function SkillDetailPage() {
               </Card>
             ) : null}
 
-            {tab === 'Changelog' ? <EmptyState title="No changelog yet" body="Install, permissions, and capability metadata are available now. Version notes have not been published yet." /> : null}
+            {tab === 'Changelog' ? <EmptyState title="No changelog yet" body="Version notes have not been published yet." /> : null}
             {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
           </>
         )}
-      </WorkspaceShell>
-    </div>
+    </SurfaceShell>
   );
 }

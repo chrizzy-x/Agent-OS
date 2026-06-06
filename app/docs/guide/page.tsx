@@ -27,11 +27,11 @@ export default function GuidePage() {
 
         <TOC items={[
           { id: 'what-is', label: 'What is AgentOS?' },
-          { id: 'create-account', label: 'Step 1 — Create your account & get your API key' },
+          { id: 'create-account', label: 'Step 1 — Create your account, workspace, and Super AgentOS' },
           { id: 'what-next', label: 'Step 2 — What can you actually do?' },
           { id: 'use-cases', label: 'Step 3 — Real-life use cases' },
-          { id: 'marketplace', label: 'Step 4 - Skill Store and App Store' },
-          { id: 'studio', label: 'Step 5 — Studio console (test without writing code)' },
+          { id: 'marketplace', label: 'Step 4 - Marketplace discovery, Skill Store, and App Store' },
+          { id: 'studio', label: 'Step 5 — Studio workspace (chat, route, and operate)' },
           { id: 'publish', label: 'Step 6 - Publish your own skill or app' },
           { id: 'ops', label: 'Step 7 — Multi-agent ops & infrastructure crew' },
           { id: 'ffp', label: 'Step 8 — FFP / consensus mode' },
@@ -40,7 +40,7 @@ export default function GuidePage() {
         {/* SECTION 1 */}
         <Section id="what-is" title="What is AgentOS?">
           <p>
-            AgentOS is a <strong>backend platform for AI agents</strong>. Think of it as a cloud operating system that gives any AI agent — whether it lives inside Claude, GPT, a custom bot, or your own code — a real set of tools it can use:
+            AgentOS is the <strong>operating system for the agent economy</strong>. It is the router between humans and AI systems, the workspace where you chat and operate, and the runtime layer that lets agents, apps, skills, workflows, and MCP tools work together:
           </p>
           <ul className="list-disc ml-6 mt-3 space-y-2" style={{ color: 'var(--text-secondary)' }}>
             <li><strong>Memory</strong> — store and recall data between conversations</li>
@@ -51,7 +51,7 @@ export default function GuidePage() {
             <li><strong>Events</strong> — publish and subscribe to real-time messages between agents</li>
           </ul>
           <p className="mt-4">
-            You connect to AgentOS with a single API key. Every tool call goes through one endpoint: <code className="tag text-sm">/mcp</code>. No separate SDKs, no complicated setup.
+            Inside the product, your browser session opens Studio and your workspace immediately. Outside the product, your API key and SDK registration connect external agents and apps to the same runtime through <code className="tag text-sm">/mcp</code>.
           </p>
           <Callout emoji="💡">
             The name &quot;MCP&quot; stands for <strong>Model Context Protocol</strong> — the open standard that lets AI models call external tools. AgentOS implements MCP so your agent can use all 30+ tools with zero integration overhead.
@@ -59,11 +59,13 @@ export default function GuidePage() {
         </Section>
 
         {/* SECTION 2 */}
-        <Section id="create-account" title="Step 1 — Create your account & get your API key">
-          <p>Go to <Link href="/signup" style={{ color: 'var(--accent)' }}>/signup</Link>. Enter your email address and a name for your agent. That&apos;s it.</p>
+        <Section id="create-account" title="Step 1 — Create your account, workspace, and Super AgentOS">
+          <p>Go to <Link href="/signup" style={{ color: 'var(--accent)' }}>/signup</Link>. Choose a beta plan, enter your email address, set a password, and optionally name your operating agent.</p>
           <p className="mt-3">You&apos;ll get back:</p>
           <ul className="list-disc ml-6 mt-2 space-y-1" style={{ color: 'var(--text-secondary)' }}>
-            <li><strong>API Key</strong> — a JWT bearer token. <span style={{ color: 'var(--danger)', fontWeight: 600 }}>Save this — it is shown only once.</span></li>
+            <li><strong>Browser session</strong> — always, so Studio and your workspace open immediately.</li>
+            <li><strong>Bearer token</strong> — immediately on Retail Pro, Enterprise Plus, and Enterprise Max. Retail Free upgrades later at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>.</li>
+            <li><strong>Super AgentOS</strong> — your default workspace owner for sessions, memory, installed skills, connected apps, private workflows, and private agents.</li>
           </ul>
           <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Agent IDs are private internal identifiers. Use your agent name in the UI and your bearer token for API calls.</p>
           <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Lost your key? Sign in at <Link href="/signin" style={{ color: 'var(--accent)' }}>/signin</Link> to generate a new bearer token from your browser session.</p>
@@ -71,10 +73,13 @@ export default function GuidePage() {
           <h3 className="text-base font-semibold mt-6 mb-2">Or create via API (curl):</h3>
           <Code>{`curl -s -X POST ${APP_URL}/api/signup \\
   -H "Content-Type: application/json" \\
-  -d '{"email":"you@example.com","agentName":"My Agent"}' | jq`}</Code>
+  -d '{"email":"you@example.com","password":"strongpass123","agentName":"My Agent","accountType":"retail","selectedPlan":"retail_pro"}' | jq`}</Code>
           <Result>{`{
+  "success": true,
   "credentials": {
+    "bearerToken": "eyJhbGciOiJIUzI1NiJ9...",
     "apiKey":    "eyJhbGciOiJIUzI1NiJ9...",
+    "plan":      "retail_pro",
     "expiresIn": "90 days"
   }
 }`}</Result>
@@ -100,7 +105,7 @@ async function mcp(tool, input) {
   if (!res.ok) throw new Error(data.error || 'Agent OS error');
   return data.result;
 }`}</Code>
-          <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>All examples below use this <code className="tag text-xs">mcp()</code> helper.</p>
+          <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>All examples below use this <code className="tag text-xs">mcp()</code> helper. In the browser product, the same runtime is available through Studio without writing code.</p>
         </Section>
 
         {/* SECTION 3 */}
@@ -438,12 +443,12 @@ console.log('History:', history);`}</Code>
         </Section>
 
         {/* SECTION 5 */}
-        <Section id="marketplace" title="Step 4 - Skill Store and App Store">
+        <Section id="marketplace" title="Step 4 - Marketplace discovery, Skill Store, and App Store">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            The marketplace has two stores. The <Link href="/marketplace" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps built on AgentOS.
+            <Link href="/marketplace" style={{ color: 'var(--accent)' }}>Marketplace</Link> is the discovery layer. It explains how the two stores fit together and how apps built inside or outside AgentOS become discoverable through SDK registration.
           </p>
           <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
-            Skills are free or usage-based. Apps package workflows, manifests, device targets, and default configuration into an AgentOS app package.
+            The <Link href="/skills" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent or workflow. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps. Skills, workflows, and apps are monetization-ready assets inside the same workspace and routing layer.
           </p>
 
           <h3 className="text-base font-semibold mb-2">Install a skill:</h3>
@@ -487,9 +492,9 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         </Section>
 
         {/* SECTION 6 */}
-        <Section id="studio" title="Step 5 — Studio console (test without writing code)">
+        <Section id="studio" title="Step 5 — Studio workspace (chat, route, and operate)">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            The <Link href="/studio" style={{ color: 'var(--accent)' }}>Studio</Link> is a browser-based terminal. Sign in at <Link href="/signin" style={{ color: 'var(--accent)' }}>/signin</Link> and you can run any tool directly in your browser — no code required.
+            The <Link href="/studio" style={{ color: 'var(--accent)' }}>Studio</Link> is the chat-first operating workspace. Sign in at <Link href="/signin" style={{ color: 'var(--accent)' }}>/signin</Link> and you can chat, create sessions, branch work, inspect tools, edit instructions, install skills, inspect apps, save results, and route tasks through workflows from one screen.
           </p>
 
           <div className="terminal mb-6">
@@ -497,22 +502,20 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
               <div className="terminal-dot" style={{ background: '#ff5f57' }} />
               <div className="terminal-dot" style={{ background: '#ffbd2e' }} />
               <div className="terminal-dot" style={{ background: '#28c840' }} />
-              <span className="text-xs ml-2" style={{ color: 'var(--text-tertiary)' }}>Studio — /studio</span>
+              <span className="text-xs ml-2" style={{ color: 'var(--text-tertiary)' }}>Studio workspace — /studio</span>
             </div>
             <div className="p-4 font-mono text-xs space-y-1" style={{ color: 'var(--text-secondary)' }}>
-              <div><span style={{ color: 'var(--accent)' }}>$</span> tools list</div>
-              <div className="pl-4" style={{ color: 'var(--text-tertiary)' }}>→ mem_set, mem_get, fs_write, fs_read, db_query, net_http_get, proc_execute ...</div>
-              <div className="mt-2"><span style={{ color: 'var(--accent)' }}>$</span> mem set greeting &quot;Hello world&quot;</div>
-              <div className="pl-4" style={{ color: 'var(--accent)' }}>→ true</div>
-              <div className="mt-2"><span style={{ color: 'var(--accent)' }}>$</span> mem get greeting</div>
-              <div className="pl-4" style={{ color: 'var(--accent)' }}>→ &quot;Hello world&quot;</div>
-              <div className="mt-2"><span style={{ color: 'var(--accent)' }}>$</span> net get https://api.coincap.io/v2/assets/bitcoin</div>
-              <div className="pl-4" style={{ color: 'var(--accent)' }}>→ {'{ "data": { "priceUsd": "67432.18", ... } }'}</div>
+              <div><span style={{ color: 'var(--accent)' }}>$</span> Create a workflow that researches three competitors and save the result</div>
+              <div className="pl-4" style={{ color: 'var(--text-tertiary)' }}>→ action preview: workflow draft, project target, result save path</div>
+              <div className="mt-2"><span style={{ color: 'var(--accent)' }}>$</span> Install the JSON transformer skill</div>
+              <div className="pl-4" style={{ color: 'var(--accent)' }}>→ completed: skill installed in Super AgentOS workspace</div>
+              <div className="mt-2"><span style={{ color: 'var(--accent)' }}>$</span> Open the App Store</div>
+              <div className="pl-4" style={{ color: 'var(--accent)' }}>→ navigate: /appstore</div>
             </div>
           </div>
 
           <Callout emoji="🔐">
-            The Studio uses your browser session — no API key needed in the browser. Need to call the API from code or another machine? Click &quot;Generate bearer token&quot; in your <Link href="/dashboard" style={{ color: 'var(--accent)' }}>Dashboard</Link>.
+            The Studio uses your browser session — no API key needed in the browser. Need to call the API from code or another machine? Use a Pro or Enterprise plan, then generate a bearer token from <Link href="/" style={{ color: 'var(--accent)' }}>Home</Link> or upgrade at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>. Super AgentOS keeps your instructions, sessions, and installed assets scoped to your workspace.
           </Callout>
         </Section>
 
@@ -527,7 +530,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
             <li>Click <strong>&quot;+ Publish Skill&quot;</strong>. Fill in the name, description, category, and pricing (free or per-call).</li>
             <li>Write your skill as a JavaScript class named <code className="tag text-xs">Skill</code>. Each method corresponds to a capability.</li>
             <li>Add your payout settings (PayPal email or USDC wallet address) so you can receive earnings.</li>
-            <li>Click <strong>Publish</strong> — your skill goes live on the marketplace instantly.</li>
+            <li>Click <strong>Publish</strong> — your skill goes live in the Skill Store and becomes discoverable through the marketplace discovery layer.</li>
           </ol>
 
           <h3 className="text-base font-semibold mb-2">Example skill source code:</h3>
@@ -582,7 +585,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         {/* SECTION 8 */}
         <Section id="ops" title="Step 7 — Multi-agent ops & infrastructure crew">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            The <Link href="/ops" style={{ color: 'var(--accent)' }}>Ops console</Link> is for platform administrators. It shows the <strong>autonomous crew</strong> — a set of AI agents that maintain continuous coverage of every feature and function on the platform.
+            The <Link href="/developer" style={{ color: 'var(--accent)' }}>Developer dashboard</Link> is for advanced platform operators. It shows diagnostics, publishing flows, and the automation surfaces behind AgentOS.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
             Every platform capability has an <strong>active agent</strong> and a <strong>standby agent</strong>. If the active agent degrades or fails, the standby automatically takes over (failover).
@@ -635,7 +638,7 @@ console.log(v); // 'world'`}</Code>
           <div className="flex gap-3 mt-6 flex-wrap">
             <Link href="/signup" className="btn-primary text-sm">Create account →</Link>
             <Link href="/docs/primitives" className="btn-ghost text-sm">All 30 tools</Link>
-            <Link href="/marketplace" className="btn-ghost text-sm">Browse skills</Link>
+            <Link href="/skills" className="btn-ghost text-sm">Browse skills</Link>
             <Link href="/appstore" className="btn-ghost text-sm">Browse apps</Link>
           </div>
         </div>

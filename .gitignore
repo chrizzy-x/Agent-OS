@@ -1,5 +1,6 @@
 .vercel
 .next/
+.next-build/
 node_modules/
 dist/
 *.env
@@ -7,3 +8,19 @@ dist/
 *.tsbuildinfo
 .npm-cache/
 .env.skill-verify
+.agentos-runtime-state.json
+.chrome-*/
+.dev-*.log
+.prod*.log
+.prod-server.log
+.dev-server.log
+agentos-ui.log
+agentos-ui.err
+debug.log
+process-test.log
+.e2e-signup.html
+.playwright-mcp/
+.child-process-*.txt
+.node-child-test*.log
+.qa-*.log
+scripts/live-qa.mjs

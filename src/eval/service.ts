@@ -457,7 +457,7 @@ export async function executeEvalRun(params: {
       const actualOutput = await executeUniversalToolCall({
         agentContext: {
           agentId: params.suite.agentId,
-          tier: 'free',
+          tier: 'retail_free',
           allowedDomains: [],
           quotas: {
             storageQuotaBytes: 1024 * 1024 * 1024,
@@ -518,7 +518,6 @@ export async function executeEvalRun(params: {
     throw error;
   }
 }
-
 
 
 

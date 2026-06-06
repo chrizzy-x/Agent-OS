@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { getPlanDescriptor } from '../auth/capabilities.js';
-import { normalizePlan } from '../auth/tiers.js';
+import { isValidPlan, normalizePersistedPlan, normalizePlan } from '../auth/tiers.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { AppUnavailableError, PermissionError, ValidationError } from '../utils/errors.js';
 import { validateRequiredSecrets } from '../vault/service.js';
@@ -977,7 +977,7 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
     const owners = new Map<string, { name: string; enterprise: boolean }>();
     for (const row of (ownerRows ?? []) as Array<Record<string, unknown>>) {
       const metadata = isRecord(row.metadata) ? row.metadata : {};
-      const tier = normalizePlan(String(metadata.plan ?? row.tier ?? 'retail_free'));
+      const tier = isValidPlan(metadata.plan) ? normalizePlan(metadata.plan) : normalizePersistedPlan(row.tier);
       owners.set(String(row.id), {
         name: stringValue(row.name, String(row.id)),
         enterprise: getPlanDescriptor(tier).enterprise,

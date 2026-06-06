@@ -59,19 +59,39 @@ describe('POST /api/plans/transition', () => {
     });
   });
 
-  it('rejects self-serve plan transitions while billing is disabled', async () => {
+  it('transitions plans through the free beta upgrade flow', async () => {
     const response = await POST(request('retail_free', { newPlan: 'enterprise_max' }));
     const body = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(body.code).toBe('PLAN_REQUEST_REQUIRED');
+    expect(response.status).toBe(200);
+    expect(body.transitioned).toBe(true);
+    expect(body.transition.newPlan).toBe('enterprise_max');
+    expect(body.billing).toEqual({ mode: 'free_beta', charged: false });
   });
 
-  it('rejects valid transition targets until request-access billing is enabled', async () => {
+  it('returns noChange when the requested plan already matches the current plan', async () => {
+    const response = await POST(request('retail_free', { newPlan: 'retail_free' }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.transitioned).toBe(false);
+    expect(body.noChange).toBe(true);
+  });
+
+  it('rejects invalid target plans', async () => {
+    const response = await POST(request('retail_free', { newPlan: 'free' }));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('supports retail to pro upgrades without sales gating', async () => {
     const response = await POST(request('retail_free', { newPlan: 'retail_pro' }));
     const body = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(body.code).toBe('PLAN_REQUEST_REQUIRED');
+    expect(response.status).toBe(200);
+    expect(body.transitioned).toBe(true);
+    expect(body.transition.newPlan).toBe('retail_pro');
   });
 });

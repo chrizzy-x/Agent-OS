@@ -1,5 +1,5 @@
-import SkillsMarketplacePage from '@/components/pages/SkillsMarketplacePage';
+import MarketplacePage from '@/components/pages/MarketplacePage';
 
 export default function Page() {
-  return <SkillsMarketplacePage />;
+  return <MarketplacePage />;
 }

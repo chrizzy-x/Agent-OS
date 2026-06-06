@@ -19,7 +19,7 @@ type AccountType = 'retail' | 'enterprise';
 type PlanKey = 'retail_free' | 'retail_pro' | 'enterprise_plus' | 'enterprise_max';
 
 const RETAIL_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
-  { key: 'retail_free', name: 'Retail Free', detail: 'Studio, Super AgentOS, private workflows, subagents, vault. Free for now.' },
+  { key: 'retail_free', name: 'Retail Free', detail: 'Studio, Super AgentOS, workflows, apps, skills, vault. Free for now.' },
   { key: 'retail_pro', name: 'Retail Pro', detail: 'Higher limits and bearer token access. Free for now.' },
 ];
 
@@ -199,9 +199,9 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
         {[
           { href: '/studio', label: 'Open Studio', primary: true },
-          { href: '/dashboard', label: 'Workspace', primary: false },
+          { href: '/', label: 'Home', primary: false },
           { href: '/docs', label: 'Docs', primary: false },
-          { href: '/marketplace', label: 'Skills', primary: false },
+          { href: '/skills', label: 'Skills', primary: false },
           { href: '/appstore', label: 'Apps', primary: false },
         ].map(btn => (
           <Link
@@ -339,11 +339,11 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
 
         <div>
           <label htmlFor="agentName" style={labelStyle}>
-            Agent name <span style={{ color: 'var(--text-tertiary)' }}>(optional)</span>
+            Workspace name <span style={{ color: 'var(--text-tertiary)' }}>(optional)</span>
           </label>
           <input id="agentName" type="text" autoComplete="nickname"
             value={agentName} onChange={e => setAgentName(e.target.value)}
-            placeholder="My Trading Bot" className="input-dark" />
+            placeholder="My Workspace" className="input-dark" />
         </div>
 
         <div>

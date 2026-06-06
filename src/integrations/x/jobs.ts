@@ -7,7 +7,7 @@ function buildSystemContext(agentId: string): AgentContext {
     agentId,
     allowedDomains: [],
     quotas: DEFAULT_QUOTAS,
-    tier: 'free',
+    tier: 'retail_free',
   };
 }
 

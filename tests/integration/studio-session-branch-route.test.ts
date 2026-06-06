@@ -47,6 +47,7 @@ describe('POST /api/studio/sessions/:id/branch', () => {
       snapshotId: 'snapshot-1',
       title: 'Research Session Branch',
       branchLabel: 'Research Session',
+      projectId: null,
     });
     expect(body.session.id).toBe('branch-1');
   });

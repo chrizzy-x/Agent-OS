@@ -7,6 +7,7 @@ import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { listStudioSessions } from '@/src/studio/persistence';
 import { toErrorResponse } from '@/src/utils/errors';
 import { listVaultSecrets } from '@/src/vault/service';
+import { listProjects } from '@/src/projects/service';
 import { assertWorkspaceMembership, listWorkspaces, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
@@ -45,9 +46,10 @@ export async function GET(request: NextRequest) {
       ? (await assertWorkspaceMembership(requestedWorkspaceId, ctx.agentId)).workspace
       : defaultWorkspace;
 
-    const [workspaces, sessions, installedApps, workflowsResult, skillsResult, eventsResult, kernelsResult, ffpResult, mcpServersResult, mcpCallsResult] = await Promise.all([
+    const [workspaces, sessions, projects, installedApps, workflowsResult, skillsResult, eventsResult, kernelsResult, ffpResult, mcpServersResult, mcpCallsResult] = await Promise.all([
       listWorkspaces(ctx.agentId),
       listStudioSessions(ctx.agentId),
+      listProjects({ ownerAgentId: ctx.agentId, workspaceId: workspace?.id, status: 'active' }),
       listInstalledAgentApps(ctx.agentId).catch(() => []),
       getSupabaseAdmin()
         .from('agent_workflows')
@@ -197,7 +199,7 @@ export async function GET(request: NextRequest) {
       },
       summary: {
         sessions: filteredSessions.length,
-        projects: workspaces.length,
+        projects: projects.length,
         installedApps: filteredInstalledApps.length,
         installedSkills: installedSkills.length,
         workflows: workflows.length,
@@ -213,11 +215,11 @@ export async function GET(request: NextRequest) {
         status: session.status,
         updatedAt: session.updatedAt,
       })),
-      activeProjects: workspaces.slice(0, 6).map(item => ({
+      activeProjects: projects.slice(0, 6).map(item => ({
         id: item.id,
         name: item.name,
-        plan: item.plan,
-        href: '/projects',
+        plan: workspace?.plan ?? 'workspace',
+        href: `/studio?mode=code&project=${encodeURIComponent(item.id)}`,
         createdAt: item.createdAt,
       })),
       installedApps: filteredInstalledApps.slice(0, 8).map(item => ({
@@ -262,6 +264,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

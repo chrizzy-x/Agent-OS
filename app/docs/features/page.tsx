@@ -29,7 +29,7 @@ export default function FeatureCatalogPage() {
             <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
           </Link>
           <div className="flex items-center gap-5 text-sm">
-            <Link href="/ops" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Ops</Link>
+            <Link href="/developer" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Developer</Link>
             <Link href="/docs" className="transition-colors hover:text-white" style={{ color: 'var(--text-muted)' }}>Docs</Link>
             <Link href="/signup" className="btn-primary text-xs px-4 py-2">Get Started</Link>
           </div>

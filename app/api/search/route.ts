@@ -4,14 +4,14 @@ import { requireAgentContext } from '@/src/auth/request';
 import { DOCS_CATALOG } from '@/src/docs/catalog';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { listStudioSessions } from '@/src/studio/persistence';
-import { listPrivateSubagents } from '@/src/subagents/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { listVaultSecrets } from '@/src/vault/service';
+import { listProjects } from '@/src/projects/service';
 import { listWorkspaces } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
 
-type SearchKind = 'app' | 'skill' | 'workflow' | 'subagent' | 'session' | 'project' | 'vault' | 'doc';
+type SearchKind = 'app' | 'skill' | 'workflow' | 'session' | 'project' | 'vault' | 'doc' | 'connector' | 'ffp_route' | 'ffp_primitive';
 
 type SearchResult = {
   id: string;
@@ -39,6 +39,22 @@ function limitResults<T>(items: T[], limit: number): T[] {
   return items.slice(0, Math.max(1, limit));
 }
 
+function summarizeConnectorTools(raw: unknown): string {
+  if (!Array.isArray(raw) || raw.length === 0) return 'No registered tools';
+  return raw
+    .map(item => item && typeof item === 'object' && typeof (item as Record<string, unknown>).name === 'string'
+      ? String((item as Record<string, unknown>).name)
+      : null)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 3)
+    .join(', ') || 'No registered tools';
+}
+
+function deriveFfpPrimitive(tool: string): string {
+  const normalized = tool.replace(/^agentos\./, '').replace(/^mcp\./, '');
+  return normalized.split(/[._]/)[0] || 'runtime';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = requireAgentContext(request.headers);
@@ -47,8 +63,9 @@ export async function GET(request: NextRequest) {
     const type = (url.searchParams.get('type')?.trim().toLowerCase() ?? 'all') as SearchKind | 'all';
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
     const workspacePromise = listWorkspaces(ctx.agentId);
+    const projectsPromise = listProjects({ ownerAgentId: ctx.agentId, status: 'active' });
 
-    const [apps, installedApps, sessions, workspaces, subagents, workflowsResult, publishedSkillsResult, ownSkillsResult] = await Promise.all([
+    const [apps, installedApps, sessions, workspaces, projects, workflowsResult, publishedSkillsResult, ownSkillsResult, connectorsResult, ffpRoutesResult] = await Promise.all([
       listAgentApps({
         viewerAgentId: ctx.agentId,
         viewerWorkspaceIds: (await workspacePromise).map(workspace => workspace.id),
@@ -59,7 +76,7 @@ export async function GET(request: NextRequest) {
       listInstalledAgentApps(ctx.agentId).catch(() => []),
       listStudioSessions(ctx.agentId),
       workspacePromise,
-      listPrivateSubagents(ctx.agentId),
+      projectsPromise,
       getSupabaseAdmin()
         .from('agent_workflows')
         .select('id,name,summary,status,workspace_id,updated_at,created_at')
@@ -75,6 +92,15 @@ export async function GET(request: NextRequest) {
         .select('id,name,slug,category,description,published,updated_at,created_at')
         .eq('author_id', ctx.agentId)
         .order('updated_at', { ascending: false }),
+      getSupabaseAdmin()
+        .from('mcp_servers')
+        .select('id,name,description,category,tools,requires_consensus,active,icon,created_at')
+        .eq('active', true)
+        .order('name', { ascending: true }),
+      getSupabaseAdmin()
+        .from('ffp_chain_executions')
+        .select('id,chain_id,tool,status,error_message,executed_at')
+        .order('executed_at', { ascending: false }),
     ]);
 
     const installedSlugSet = new Set(installedApps.map(item => item.app.slug));
@@ -144,18 +170,6 @@ export async function GET(request: NextRequest) {
           actionLabel: 'Open Workflow',
           updatedAt: String(row.updated_at ?? row.created_at ?? ''),
         })),
-      subagent: subagents
-        .filter(item => matchesSearch(search, item.name, item.description ?? '', item.status))
-        .filter(() => type === 'all' || type === 'subagent')
-        .map(item => ({
-          id: item.id,
-          kind: 'subagent',
-          title: item.name,
-          subtitle: item.description ?? 'Private subagent',
-          href: `/subagents/${item.id}`,
-          actionLabel: 'Open Agent',
-          updatedAt: item.updatedAt,
-        })),
       session: sessions
         .filter(item => matchesSearch(search, item.title, item.status))
         .filter(() => type === 'all' || type === 'session')
@@ -168,19 +182,76 @@ export async function GET(request: NextRequest) {
           actionLabel: 'Open Session',
           updatedAt: item.updatedAt,
         })),
-      project: workspaces
-        .filter(item => matchesSearch(search, item.name, item.slug, item.plan))
+      project: projects
+        .filter(item => matchesSearch(search, item.name, item.slug, item.description ?? '', item.status))
         .filter(() => type === 'all' || type === 'project')
         .map(item => ({
           id: item.id,
           kind: 'project',
           title: item.name,
-          subtitle: `${item.plan} workspace`,
-          href: '/projects',
-          actionLabel: 'Open Projects',
-          updatedAt: item.createdAt,
+          subtitle: item.description ?? `${workspaces.find(workspace => workspace.id === item.workspaceId)?.name ?? 'Workspace'} project`,
+          href: `/studio?mode=code&project=${encodeURIComponent(item.id)}`,
+          actionLabel: 'Open Project',
+          updatedAt: item.updatedAt,
         })),
       vault: vaultResults.filter(() => type === 'all' || type === 'vault'),
+      connector: ((connectorsResult.data ?? []) as Array<Record<string, unknown>>)
+        .filter(row => matchesSearch(
+          search,
+          String(row.name ?? ''),
+          String(row.description ?? ''),
+          String(row.category ?? ''),
+          summarizeConnectorTools(row.tools),
+        ))
+        .filter(() => type === 'connector')
+        .map(row => ({
+          id: String(row.id ?? row.name),
+          kind: 'connector',
+          title: String(row.name ?? 'Connector'),
+          subtitle: `${String(row.category ?? 'Connector')} - ${summarizeConnectorTools(row.tools)}`,
+          href: `/connectors?drawer=connector-detail&item=${encodeURIComponent(String(row.name ?? ''))}`,
+          actionLabel: 'Inspect Connector',
+          updatedAt: typeof row.created_at === 'string' ? row.created_at : null,
+        })),
+      ffp_route: ((ffpRoutesResult.data ?? []) as Array<Record<string, unknown>>)
+        .filter(row => matchesSearch(
+          search,
+          String(row.chain_id ?? ''),
+          String(row.tool ?? ''),
+          String(row.status ?? ''),
+          String(row.error_message ?? ''),
+        ))
+        .filter(() => type === 'ffp_route')
+        .map(row => ({
+          id: String(row.id),
+          kind: 'ffp_route',
+          title: `${String(row.chain_id ?? 'chain')} -> ${String(row.tool ?? 'tool')}`,
+          subtitle: String(row.status ?? 'recorded'),
+          href: `/ffp?drawer=route-detail&item=${encodeURIComponent(String(row.id))}`,
+          actionLabel: 'Inspect Route',
+          updatedAt: typeof row.executed_at === 'string' ? row.executed_at : null,
+        })),
+      ffp_primitive: Object.values(
+        ((ffpRoutesResult.data ?? []) as Array<Record<string, unknown>>)
+          .filter(row => matchesSearch(search, deriveFfpPrimitive(String(row.tool ?? '')), String(row.tool ?? '')))
+          .reduce<Record<string, SearchResult>>((acc, row) => {
+            const primitive = deriveFfpPrimitive(String(row.tool ?? ''));
+            if (type !== 'ffp_primitive') return acc;
+            const existing = acc[primitive];
+            if (!existing) {
+              acc[primitive] = {
+                id: primitive,
+                kind: 'ffp_primitive',
+                title: primitive.toUpperCase(),
+                subtitle: `FFP primitive from ${String(row.tool ?? 'tool')}`,
+                href: `/ffp?drawer=primitive-detail&item=${encodeURIComponent(primitive)}`,
+                actionLabel: 'Inspect Primitive',
+                updatedAt: typeof row.executed_at === 'string' ? row.executed_at : null,
+              };
+            }
+            return acc;
+          }, {}),
+      ),
       doc: DOCS_CATALOG
         .filter(item => matchesSearch(search, item.title, item.subtitle, ...(item.keywords ?? [])))
         .filter(() => type === 'all' || type === 'doc')
@@ -207,6 +278,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }
 }

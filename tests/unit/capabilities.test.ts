@@ -27,6 +27,11 @@ describe('AgentOS capability matrix', () => {
     expect(hasCapability('retail_pro', 'use_bearer_token')).toBe(true);
   });
 
+  it('does not accept legacy public plan identifiers for capability checks', () => {
+    expect(hasCapability('free', 'use_nl_studio')).toBe(false);
+    expect(hasCapability('hyper', 'access_sdk')).toBe(false);
+  });
+
   it('allows Enterprise Plus and Max developer capabilities', () => {
     for (const plan of ['enterprise_plus', 'enterprise_max'] as const) {
       expect(hasCapability(plan, 'create_skill')).toBe(true);
