@@ -10,7 +10,21 @@ type HomePayload = {
   sessions: Array<{ id: string; title: string; updatedAt: string }>;
   apps: Array<{ id: string; name: string; slug: string; description: string }>;
   skills: Array<{ id: string; name: string; slug: string; description: string }>;
-  workflows: Array<{ id: string; name: string; summary: string | null; status: string }>;
+  workflows: Array<{ id: string; name: string; summary: string | null; status: string; visibility?: string }>;
+  subagents: Array<{ id: string; name: string; description: string | null; visibility: string; updatedAt: string }>;
+  memoryEntries: Array<{ id: string; key: string; visibility: string; namespaceType: string; updatedAt: string }>;
+  files: Array<{ id: string; path: string; visibility: string; metadata: Record<string, unknown> }>;
+  summary: {
+    activeSessions: number;
+    subagents: number;
+    memoryEntries: number;
+    files: number;
+    installedSkills: number;
+    connectedApps: number;
+    privateWorkflows: number;
+    visibility: Record<string, Record<string, number>>;
+    recentActions: Array<{ id: string; type: string; summary: string; createdAt: string }>;
+  };
 };
 
 const QUICK_ACTIONS = [
@@ -57,6 +71,12 @@ function Grid(props: { children: ReactNode }) {
   );
 }
 
+function ToneForVisibility(value: string): 'accent' | 'default' | 'success' {
+  if (value === 'public') return 'success';
+  if (value === 'workspace') return 'accent';
+  return 'default';
+}
+
 function HomeSection(props: {
   title: string;
   actionHref?: string;
@@ -82,81 +102,54 @@ function PublicLanding() {
   return (
     <SurfaceShell activePath="/">
       <section style={{ display: 'grid', gap: 28, padding: '52px 0 72px' }}>
-        <Badge tone="accent">AgentOS v6.3</Badge>
+        <Badge tone="accent">AgentOS v6.4</Badge>
         <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(42px, 7vw, 76px)', lineHeight: 0.95, letterSpacing: '-0.05em' }}>
-            AgentOS is the operating system for the agent economy.
+            Your AI operating system.
           </h1>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 18, lineHeight: 1.8 }}>
-            Chat, build, install, route, publish, and operate agents, apps, skills, workflows, and MCP tools from one workspace.
+            Talk to it. Build with it. Install what it needs.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Link href="/signup" className="btn-primary">Get AgentOS</Link>
+          <Link href="/signup" className="btn-primary">Get started</Link>
           <Link href="/studio" className="btn-outline">Open Studio</Link>
-          <Link href="/marketplace" className="btn-outline">Open Marketplace</Link>
+          <Link href="/appstore" className="btn-outline">Browse apps</Link>
         </div>
-        <Card style={{ padding: 24, display: 'grid', gap: 12 }}>
-          <Badge tone="accent">Router</Badge>
-          <strong style={{ fontSize: 20 }}>Human -&gt; AgentOS Router -&gt; Agents / Apps / Skills / Workflows / MCP Tools</strong>
-          <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            AgentOS is the router between humans and AI systems, the workspace where they operate, and the discovery layer where apps and skills become installable assets.
-          </span>
-        </Card>
         <Grid>
           <Card style={{ padding: 22 }}>
             <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Positioning</Badge>
-              <strong>Not another chatbot.</strong>
+              <Badge tone="accent">Chat</Badge>
+              <strong>Start with a conversation.</strong>
               <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                AgentOS is not a wrapper around one assistant. It routes work across sessions, agents, apps, skills, workflows, and MCP tools.
+                Ask your Super AgentOS to research, analyze, create, or plan without setting up a workflow first.
               </span>
             </div>
           </Card>
           <Card style={{ padding: 22 }}>
             <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Runtime</Badge>
-              <strong>Not another agent builder.</strong>
+              <Badge tone="accent">Build</Badge>
+              <strong>Switch into Code Studio when you need it.</strong>
               <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                AgentOS is the operating layer where agents, workflows, skills, apps, and memory run inside one workspace instead of one builder surface.
+                The same session, project, memory, apps, skills, and Vault stay with you in both Studio modes.
               </span>
             </div>
           </Card>
           <Card style={{ padding: 22 }}>
             <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Distribution</Badge>
-              <strong>One runtime for the agent economy.</strong>
+              <Badge tone="accent">Install</Badge>
+              <strong>Give your Super AgentOS new capabilities.</strong>
               <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                Build once. Discover everywhere. Apps built inside or outside AgentOS can register through the SDK and appear in the marketplace beside monetizable skills and workflows.
-              </span>
-            </div>
-          </Card>
-        </Grid>
-        <Grid>
-          <Card style={{ padding: 22 }}>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Marketplace</Badge>
-              <strong>Build once. Discover everywhere.</strong>
-              <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                The App Store and Skill Store are first-class discovery layers. Install public assets, keep private assets scoped to your workspace, then publish when eligible.
-              </span>
-            </div>
-          </Card>
-          <Card style={{ padding: 22 }}>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Super AgentOS</Badge>
-              <strong>Your personal Super AgentOS controls sessions, memory, tools, apps, and workflows.</strong>
-              <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                It owns your instructions, installed skills, connected apps, private workflows, and recent actions across every conversation and project.
+                Install apps for product surfaces and skills for new abilities, then use them from one workspace.
               </span>
             </div>
           </Card>
         </Grid>
         <Card style={{ padding: 24, display: 'grid', gap: 12 }}>
-          <Badge tone="accent">Economy Layer</Badge>
-          <strong>Skills and apps are monetizable assets.</strong>
+          <Badge tone="accent">One system</Badge>
+          <strong>Everything belongs to your Super AgentOS.</strong>
           <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            AgentOS treats apps, skills, and workflows as installable, publishable assets that can move from private workspace use into broader discovery and monetization paths.
+            Home, Studio, projects, memory, Vault, workflows, apps, skills, and activity all work as one operating system.
           </span>
         </Card>
       </section>
@@ -172,6 +165,20 @@ export default function HomePage() {
     apps: [],
     skills: [],
     workflows: [],
+    subagents: [],
+    memoryEntries: [],
+    files: [],
+    summary: {
+      activeSessions: 0,
+      subagents: 0,
+      memoryEntries: 0,
+      files: 0,
+      installedSkills: 0,
+      connectedApps: 0,
+      privateWorkflows: 0,
+      visibility: {},
+      recentActions: [],
+    },
   });
 
   useEffect(() => {
@@ -187,20 +194,28 @@ export default function HomePage() {
         return;
       }
 
-      const [sessionsRes, appsRes, skillsRes, workflowsRes] = await Promise.all([
+      const [sessionsRes, appsRes, skillsRes, workflowsRes, superAgentRes, subagentsRes, memoryRes, filesRes] = await Promise.all([
         fetchWithBrowserSession('/api/studio/sessions?status=active', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/apps/installed', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/skills/installed', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/agent/workflows', { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/super-agent', { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/subagents', { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/memory?limit=4', { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/files?limit=4', { cache: 'no-store' }),
       ]);
 
       if (!active) return;
 
-      const [sessionsBody, appsBody, skillsBody, workflowsBody] = await Promise.all([
+      const [sessionsBody, appsBody, skillsBody, workflowsBody, superAgentBody, subagentsBody, memoryBody, filesBody] = await Promise.all([
         sessionsRes.response.ok ? sessionsRes.response.json() : Promise.resolve({}),
         appsRes.response.ok ? appsRes.response.json() : Promise.resolve({}),
         skillsRes.response.ok ? skillsRes.response.json() : Promise.resolve({}),
         workflowsRes.response.ok ? workflowsRes.response.json() : Promise.resolve({}),
+        superAgentRes.response.ok ? superAgentRes.response.json() : Promise.resolve({}),
+        subagentsRes.response.ok ? subagentsRes.response.json() : Promise.resolve({}),
+        memoryRes.response.ok ? memoryRes.response.json() : Promise.resolve({}),
+        filesRes.response.ok ? filesRes.response.json() : Promise.resolve({}),
       ]);
 
       setPayload({
@@ -215,6 +230,20 @@ export default function HomePage() {
           }))
           .slice(0, 4),
         workflows: (workflowsBody.workflows ?? []).slice(0, 4),
+        subagents: (subagentsBody.subagents ?? []).slice(0, 4),
+        memoryEntries: (memoryBody.entries ?? []).slice(0, 4),
+        files: (filesBody.entries ?? []).slice(0, 4),
+        summary: {
+          activeSessions: Number(superAgentBody.summary?.activeSessions ?? 0),
+          subagents: Number(superAgentBody.summary?.subagents ?? 0),
+          memoryEntries: Number(superAgentBody.summary?.memoryEntries ?? 0),
+          files: Number(superAgentBody.summary?.files ?? 0),
+          installedSkills: Number(superAgentBody.summary?.installedSkills ?? 0),
+          connectedApps: Number(superAgentBody.summary?.connectedApps ?? 0),
+          privateWorkflows: Number(superAgentBody.summary?.privateWorkflows ?? 0),
+          visibility: superAgentBody.summary?.visibility ?? {},
+          recentActions: superAgentBody.summary?.recentActions ?? [],
+        },
       });
       setLoading(false);
     }
@@ -278,6 +307,42 @@ export default function HomePage() {
           </Grid>
         </HomeSection>
 
+        <HomeSection title="System Summary">
+          <Grid>
+            {[
+              { title: 'Active chats', value: payload.summary.activeSessions, href: '/studio' },
+              { title: 'Subagents', value: payload.summary.subagents, href: '/agents' },
+              { title: 'Memory entries', value: payload.summary.memoryEntries, href: '/memory' },
+              { title: 'Files', value: payload.summary.files, href: '/memory' },
+            ].map(item => (
+              <Card key={item.title} style={{ padding: 18 }}>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <strong>{item.title}</strong>
+                  <span style={{ fontSize: 28 }}>{item.value}</span>
+                  <Link href={item.href} style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Open</Link>
+                </div>
+              </Card>
+            ))}
+          </Grid>
+        </HomeSection>
+
+        <HomeSection title="Privacy">
+          <Grid>
+            {Object.entries(payload.summary.visibility).map(([resource, counts]) => (
+              <Card key={resource} style={{ padding: 18 }}>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <strong style={{ textTransform: 'capitalize' }}>{resource}</strong>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {Object.entries(counts).map(([visibility, count]) => (
+                      <Badge key={`${resource}-${visibility}`} tone={ToneForVisibility(visibility)}>{visibility}: {count}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </Grid>
+        </HomeSection>
+
         <HomeSection title="Recent Chats" actionHref="/studio" actionLabel="Open Studio">
           {payload.sessions.length > 0 ? (
             <Grid>
@@ -293,6 +358,59 @@ export default function HomePage() {
           ) : (
             <EmptyState title="No chats yet" body="Start in Studio and your recent sessions will show up here." action={<Button href="/studio">Open Studio</Button>} />
           )}
+        </HomeSection>
+
+        <HomeSection title="Subagents" actionHref="/agents" actionLabel="Open Agents">
+          {payload.subagents.length > 0 ? (
+            <Grid>
+              {payload.subagents.map(item => (
+                <Card key={item.id} style={{ padding: 18 }}>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <strong>{item.name}</strong>
+                      <Badge tone={ToneForVisibility(item.visibility)}>{item.visibility}</Badge>
+                    </div>
+                    <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>{item.description ?? 'Private specialist'}</span>
+                  </div>
+                </Card>
+              ))}
+            </Grid>
+          ) : (
+            <EmptyState title="No subagents yet" body="Create focused subagents for research, runtime work, and workflow tasks." action={<Button href="/agents">Open agents</Button>} />
+          )}
+        </HomeSection>
+
+        <HomeSection title="Memory and Files" actionHref="/memory" actionLabel="Open Memory">
+          <Grid>
+            <Card style={{ padding: 18 }}>
+              <div style={{ display: 'grid', gap: 10 }}>
+                <strong>Memory</strong>
+                {payload.memoryEntries.length > 0 ? payload.memoryEntries.map(item => (
+                  <div key={item.id} style={{ display: 'grid', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <span>{item.key}</span>
+                      <Badge tone={ToneForVisibility(item.visibility)}>{item.visibility}</Badge>
+                    </div>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{item.namespaceType}</span>
+                  </div>
+                )) : <span style={{ color: 'var(--text-secondary)' }}>No governed memory yet.</span>}
+              </div>
+            </Card>
+            <Card style={{ padding: 18 }}>
+              <div style={{ display: 'grid', gap: 10 }}>
+                <strong>Files</strong>
+                {payload.files.length > 0 ? payload.files.map(item => (
+                  <div key={item.id} style={{ display: 'grid', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <span style={{ wordBreak: 'break-word' }}>{item.path}</span>
+                      <Badge tone={ToneForVisibility(item.visibility)}>{item.visibility}</Badge>
+                    </div>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{String(item.metadata.kind ?? 'file')}</span>
+                  </div>
+                )) : <span style={{ color: 'var(--text-secondary)' }}>No governed files yet.</span>}
+              </div>
+            </Card>
+          </Grid>
         </HomeSection>
 
         <HomeSection title="Installed Apps" actionHref="/appstore" actionLabel="Open App Store">
@@ -348,7 +466,15 @@ export default function HomePage() {
 
         <HomeSection title="Activity">
           <Grid>
-            {[
+            {payload.summary.recentActions.length > 0 ? payload.summary.recentActions.map(item => (
+              <Card key={item.id} style={{ padding: 18 }}>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <strong>{item.type}</strong>
+                  <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>{item.summary}</span>
+                  <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{formatDate(item.createdAt)}</span>
+                </div>
+              </Card>
+            )) : [
               { title: 'Studio', copy: payload.sessions[0] ? `Last active ${formatDate(payload.sessions[0].updatedAt)}` : 'Open Studio to begin.' },
               { title: 'Apps', copy: payload.apps.length > 0 ? `${payload.apps.length} installed` : 'Nothing installed yet.' },
               { title: 'Skills', copy: payload.skills.length > 0 ? `${payload.skills.length} installed` : 'No skills installed yet.' },

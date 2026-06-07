@@ -1,9 +1,11 @@
 import { getSuperAgentProfile } from '../agentos/super-agent.js';
 import { reconcileAgentOSProvisioning } from '../agentos/provisioning.js';
 import { listInstalledAgentApps } from '../appstore/service.js';
+import { listAccessibleMemoryEntries } from '../memory/service.js';
 import { resolveProjectForWorkspace, listProjects } from '../projects/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { listStudioSessions, createStudioSession, getStudioSessionBundle } from './persistence.js';
+import { listAccessibleSubagents } from '../subagents/service.js';
 import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
 import { listVaultSecrets } from '../vault/service.js';
 import { listProjectFiles } from './files.js';
@@ -65,7 +67,7 @@ export async function buildStudioBootstrap(params: {
     ? projects.find(project => project.id === activeProjectId) ?? null
     : null;
 
-  const [bundle, workflowsResult, skillsResult, installedApps, vault, superAgent, fileTree] = await Promise.all([
+  const [bundle, workflowsResult, skillsResult, installedApps, vault, superAgent, fileTree, subagents, memoryEntries] = await Promise.all([
     session ? getStudioSessionBundle(params.ownerAgentId, session.id) : Promise.resolve(null),
     getSupabaseAdmin()
       .from('agent_workflows')
@@ -87,6 +89,17 @@ export async function buildStudioBootstrap(params: {
     activeProjectId
       ? listProjectFiles({ ownerAgentId: params.ownerAgentId, projectId: activeProjectId }).catch(() => [])
       : Promise.resolve([]),
+    listAccessibleSubagents({
+      viewerAgentId: params.ownerAgentId,
+      workspaceIds: activeWorkspaceId ? [activeWorkspaceId] : undefined,
+      workspaceId: activeWorkspaceId,
+      projectId: activeProjectId,
+    }).catch(() => []),
+    listAccessibleMemoryEntries({
+      viewerAgentId: params.ownerAgentId,
+      workspaceId: activeWorkspaceId ?? undefined,
+      limit: 24,
+    }).catch(() => []),
   ]);
 
   const workflows = ((workflowsResult.data ?? []) as Array<Record<string, unknown>>)
@@ -125,5 +138,7 @@ export async function buildStudioBootstrap(params: {
     })),
     superAgent,
     fileTree,
+    subagents,
+    memoryEntries,
   };
 }

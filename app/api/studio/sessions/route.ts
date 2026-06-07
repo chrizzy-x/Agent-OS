@@ -43,6 +43,16 @@ export async function POST(request: NextRequest) {
       workspaceId,
       projectId: project.id,
       superAgentId: typeof body.superAgentId === 'string' ? body.superAgentId : null,
+      visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : 'private',
+      linkedSubagentId: typeof body.linkedSubagentId === 'string' ? body.linkedSubagentId : null,
+      linkedWorkflowId: typeof body.linkedWorkflowId === 'string' ? body.linkedWorkflowId : null,
+      linkedAppId: typeof body.linkedAppId === 'string' ? body.linkedAppId : null,
+      linkedFilePaths: Array.isArray(body.linkedFilePaths)
+        ? body.linkedFilePaths.filter((item): item is string => typeof item === 'string')
+        : undefined,
+      linkedMemoryRefs: Array.isArray(body.linkedMemoryRefs)
+        ? body.linkedMemoryRefs.filter((item): item is string => typeof item === 'string')
+        : undefined,
       title: typeof body.title === 'string' ? body.title : undefined,
     });
     return NextResponse.json({ session }, { status: 201 });

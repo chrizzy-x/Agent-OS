@@ -27,6 +27,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       sessionId: id,
       title: typeof body.title === 'string' ? body.title : undefined,
       status: typeof body.status === 'string' ? body.status : undefined,
+      visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : body.visibility === 'private' ? 'private' : undefined,
+      linkedSubagentId: typeof body.linkedSubagentId === 'string' ? body.linkedSubagentId : body.linkedSubagentId === null ? null : undefined,
+      linkedWorkflowId: typeof body.linkedWorkflowId === 'string' ? body.linkedWorkflowId : body.linkedWorkflowId === null ? null : undefined,
+      linkedAppId: typeof body.linkedAppId === 'string' ? body.linkedAppId : body.linkedAppId === null ? null : undefined,
+      linkedFilePaths: Array.isArray(body.linkedFilePaths)
+        ? body.linkedFilePaths.filter((item): item is string => typeof item === 'string')
+        : undefined,
+      linkedMemoryRefs: Array.isArray(body.linkedMemoryRefs)
+        ? body.linkedMemoryRefs.filter((item): item is string => typeof item === 'string')
+        : undefined,
       statePatch: body.statePatch && typeof body.statePatch === 'object' && !Array.isArray(body.statePatch)
         ? body.statePatch as Record<string, unknown>
         : undefined,

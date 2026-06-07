@@ -25,6 +25,7 @@ export function buildSessionNavLinks(session: BrowserSession | null): Array<{ hr
   const links: Array<{ href: string; label: string }> = [
     { href: '/', label: 'Home' },
     { href: '/studio', label: 'Studio' },
+    { href: '/memory', label: 'Memory' },
     { href: '/appstore', label: 'Apps' },
     { href: '/skills', label: 'Skills' },
     { href: '/projects', label: 'Projects' },

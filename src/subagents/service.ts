@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { filterAccessibleResources } from '../access/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { resolveProjectForWorkspace } from '../projects/service.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
@@ -12,6 +13,8 @@ export type PrivateSubagent = {
   name: string;
   description: string | null;
   instructions: string;
+  visibility: 'private' | 'workspace' | 'public';
+  exposedCapabilities: string[];
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -26,6 +29,10 @@ function mapSubagent(row: Record<string, unknown>): PrivateSubagent {
     name: String(row.name),
     description: typeof row.description === 'string' ? row.description : null,
     instructions: typeof row.instructions === 'string' ? row.instructions : '',
+    visibility: row.visibility === 'workspace' || row.visibility === 'public' ? row.visibility : 'private',
+    exposedCapabilities: Array.isArray(row.exposed_capabilities)
+      ? row.exposed_capabilities.filter((item): item is string => typeof item === 'string')
+      : [],
     status: typeof row.status === 'string' ? row.status : 'active',
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
@@ -51,17 +58,49 @@ export async function listPrivateSubagents(params: {
   return ((data ?? []) as Record<string, unknown>[]).map(mapSubagent);
 }
 
-export async function getPrivateSubagent(ownerAgentId: string, subagentId: string): Promise<PrivateSubagent> {
+export async function listAccessibleSubagents(params: {
+  viewerAgentId: string;
+  workspaceIds?: string[];
+  workspaceId?: string | null;
+  projectId?: string | null;
+}): Promise<PrivateSubagent[]> {
+  const { data, error } = await getSupabaseAdmin()
+    .from('private_subagents')
+    .select('*')
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false });
+
+  if (error) throw new Error(`Failed to list private subagents: ${error.message}`);
+  const all = ((data ?? []) as Record<string, unknown>[]).map(mapSubagent);
+  const filtered = all
+    .filter(item => !params.workspaceId || item.workspaceId === params.workspaceId)
+    .filter(item => !params.projectId || item.projectId === params.projectId);
+  return filterAccessibleResources({
+    viewer: { agentId: params.viewerAgentId, workspaceIds: params.workspaceIds },
+    resources: filtered,
+    sourceType: 'subagent',
+    permission: 'agent:invoke',
+  });
+}
+
+export async function getPrivateSubagent(viewerAgentId: string, subagentId: string): Promise<PrivateSubagent> {
   const { data, error } = await getSupabaseAdmin()
     .from('private_subagents')
     .select('*')
     .eq('id', subagentId)
-    .eq('owner_agent_id', ownerAgentId)
     .maybeSingle();
 
   if (error) throw new Error(`Failed to load private subagent: ${error.message}`);
   if (!data) throw new PermissionError('Private subagent not found or not accessible');
-  return mapSubagent(data as Record<string, unknown>);
+  const subagent = mapSubagent(data as Record<string, unknown>);
+  const accessible = await filterAccessibleResources({
+    viewer: { agentId: viewerAgentId },
+    resources: [subagent],
+    sourceType: 'subagent',
+    permission: 'agent:invoke',
+  });
+  if (accessible.length === 0) throw new PermissionError('Private subagent not found or not accessible');
+  return subagent;
 }
 
 export async function createPrivateSubagent(params: {
@@ -71,6 +110,8 @@ export async function createPrivateSubagent(params: {
   name: string;
   description?: string | null;
   instructions?: string;
+  visibility?: 'private' | 'workspace' | 'public';
+  exposedCapabilities?: string[];
 }): Promise<PrivateSubagent> {
   const name = params.name.trim();
   if (!name) throw new ValidationError('Subagent name is required');
@@ -92,6 +133,8 @@ export async function createPrivateSubagent(params: {
       name: name.slice(0, 120),
       description: params.description?.trim() || null,
       instructions: params.instructions?.trim() || 'Use AgentOS tools only when explicitly needed. Keep outputs concise, safe, and scoped to the user workspace.',
+      visibility: params.visibility ?? 'private',
+      exposed_capabilities: params.exposedCapabilities ?? [],
       status: 'active',
       created_at: now,
       updated_at: now,
@@ -110,6 +153,8 @@ export async function updatePrivateSubagent(params: {
   description?: string | null;
   instructions?: string;
   projectId?: string | null;
+  visibility?: 'private' | 'workspace' | 'public';
+  exposedCapabilities?: string[];
   status?: 'active' | 'archived';
 }): Promise<PrivateSubagent> {
   const current = await getPrivateSubagent(params.ownerAgentId, params.subagentId);
@@ -125,6 +170,8 @@ export async function updatePrivateSubagent(params: {
     });
     patch.project_id = project.id;
   }
+  if (params.visibility !== undefined) patch.visibility = params.visibility;
+  if (params.exposedCapabilities !== undefined) patch.exposed_capabilities = params.exposedCapabilities;
   if (params.status !== undefined) patch.status = params.status;
 
   const { data, error } = await getSupabaseAdmin()

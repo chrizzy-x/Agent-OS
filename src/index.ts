@@ -249,7 +249,7 @@ async function handleStudioTerminalStream(req: IncomingMessage, res: ServerRespo
 function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     name: 'AgentOS',
-    version: '6.3.0',
+    version: '6.4.0',
     description: 'AgentOS runtime for tools, sessions, files, and Code Studio terminal execution.',
     status: 'ok',
     endpoints: {
@@ -273,7 +273,7 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     status: 'ok',
-    version: '6.3.0',
+    version: '6.4.0',
     timestamp: new Date().toISOString(),
     tools: Object.keys(TOOLS).length,
   });

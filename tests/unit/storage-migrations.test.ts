@@ -153,5 +153,20 @@ describe('storage migrations', () => {
     expect(sql).toContain('ALTER TABLE workspaces');
     expect(sql).toContain('plan_transitions_old_plan_check');
   });
+
+  it('adds V6.4 visibility, permission grants, session search, and governed memory/files', () => {
+    const sql = readFileSync(join(migrationsDir, '025_v64_visibility_permissions_search.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS permission_grants');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_memory_store');
+    expect(sql).toContain("CHECK (visibility IN ('private', 'workspace', 'public'))");
+    expect(sql).toContain("ALTER TABLE nl_studio_messages\n  ADD COLUMN IF NOT EXISTS search_text TEXT NOT NULL DEFAULT ''");
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS studio_messages_search_text_idx');
+    expect(sql).toContain('ALTER TABLE agent_files');
+    expect(sql).toContain('ALTER TABLE private_subagents');
+    expect(sql).toContain('ALTER TABLE agent_workflows');
+    expect(sql).toContain('ALTER TABLE skills');
+    expect(sql).toContain("CHECK (visibility IN ('public', 'private', 'workspace', 'unlisted'))");
+  });
 });
 

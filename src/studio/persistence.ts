@@ -42,9 +42,15 @@ export type StudioSessionRecord = {
   projectId: string | null;
   ownerAgentId: string;
   superAgentId: string | null;
+  visibility: 'private' | 'workspace' | 'public';
   parentSessionId: string | null;
   parentSnapshotId: string | null;
   branchLabel: string | null;
+  linkedSubagentId: string | null;
+  linkedWorkflowId: string | null;
+  linkedAppId: string | null;
+  linkedFilePaths: string[];
+  linkedMemoryRefs: string[];
   title: string;
   status: string;
   state: Record<string, unknown>;
@@ -94,9 +100,19 @@ function mapSession(row: Record<string, unknown>): StudioSessionRecord {
     projectId: typeof row.project_id === 'string' ? row.project_id : null,
     ownerAgentId: String(row.owner_agent_id),
     superAgentId: typeof row.super_agent_id === 'string' ? row.super_agent_id : null,
+    visibility: row.visibility === 'workspace' || row.visibility === 'public' ? row.visibility : 'private',
     parentSessionId: typeof row.parent_session_id === 'string' ? row.parent_session_id : null,
     parentSnapshotId: typeof row.parent_snapshot_id === 'string' ? row.parent_snapshot_id : null,
     branchLabel: typeof row.branch_label === 'string' ? row.branch_label : null,
+    linkedSubagentId: typeof row.linked_subagent_id === 'string' ? row.linked_subagent_id : null,
+    linkedWorkflowId: typeof row.linked_workflow_id === 'string' ? row.linked_workflow_id : null,
+    linkedAppId: typeof row.linked_app_id === 'string' ? row.linked_app_id : null,
+    linkedFilePaths: Array.isArray(row.linked_file_paths)
+      ? row.linked_file_paths.filter((item): item is string => typeof item === 'string')
+      : [],
+    linkedMemoryRefs: Array.isArray(row.linked_memory_refs)
+      ? row.linked_memory_refs.filter((item): item is string => typeof item === 'string')
+      : [],
     title: typeof row.title === 'string' ? row.title : 'AgentOS Studio',
     status: typeof row.status === 'string' ? row.status : 'active',
     state: asRecord(row.state),
@@ -180,6 +196,12 @@ export async function createStudioSession(params: {
   workspaceId: string;
   projectId?: string | null;
   superAgentId?: string | null;
+  visibility?: 'private' | 'workspace' | 'public';
+  linkedSubagentId?: string | null;
+  linkedWorkflowId?: string | null;
+  linkedAppId?: string | null;
+  linkedFilePaths?: string[];
+  linkedMemoryRefs?: string[];
   title?: string;
   parentSessionId?: string | null;
   parentSnapshotId?: string | null;
@@ -197,9 +219,15 @@ export async function createStudioSession(params: {
       project_id: params.projectId ?? null,
       owner_agent_id: params.ownerAgentId,
       super_agent_id: params.superAgentId ?? null,
+      visibility: params.visibility ?? 'private',
       parent_session_id: params.parentSessionId ?? null,
       parent_snapshot_id: params.parentSnapshotId ?? null,
       branch_label: params.branchLabel?.trim() || null,
+      linked_subagent_id: params.linkedSubagentId ?? null,
+      linked_workflow_id: params.linkedWorkflowId ?? null,
+      linked_app_id: params.linkedAppId ?? null,
+      linked_file_paths: params.linkedFilePaths ?? [],
+      linked_memory_refs: params.linkedMemoryRefs ?? [],
       title: params.title?.trim() || 'New Studio Session',
       status: 'active',
       state: redactSecretsDeep(params.initialState ?? {
@@ -309,6 +337,7 @@ export async function appendStudioMessage(params: {
       owner_agent_id: params.ownerAgentId,
       role: params.role,
       content: redactSecretsInString(params.content),
+      search_text: redactSecretsInString(params.content).toLowerCase().trim(),
       created_at: now,
     })
     .select()
@@ -398,6 +427,12 @@ export async function updateStudioSession(params: {
   title?: string;
   statePatch?: Record<string, unknown>;
   status?: string;
+  visibility?: 'private' | 'workspace' | 'public';
+  linkedSubagentId?: string | null;
+  linkedWorkflowId?: string | null;
+  linkedAppId?: string | null;
+  linkedFilePaths?: string[];
+  linkedMemoryRefs?: string[];
 }): Promise<StudioSessionRecord> {
   const current = await assertSessionOwner(params.sessionId, params.ownerAgentId);
   const nextState = params.statePatch
@@ -418,6 +453,15 @@ export async function updateStudioSession(params: {
     if (!params.status.trim()) throw new ValidationError('session status is required');
     patch.status = params.status.trim().slice(0, 80);
   }
+
+  if (params.visibility !== undefined) {
+    patch.visibility = params.visibility;
+  }
+  if (params.linkedSubagentId !== undefined) patch.linked_subagent_id = params.linkedSubagentId;
+  if (params.linkedWorkflowId !== undefined) patch.linked_workflow_id = params.linkedWorkflowId;
+  if (params.linkedAppId !== undefined) patch.linked_app_id = params.linkedAppId;
+  if (params.linkedFilePaths !== undefined) patch.linked_file_paths = params.linkedFilePaths;
+  if (params.linkedMemoryRefs !== undefined) patch.linked_memory_refs = params.linkedMemoryRefs;
 
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase

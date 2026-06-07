@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { filterAccessibleResources, normalizeVisibility, resolveViewerWorkspaceIds } from '@/src/access/service';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
@@ -31,6 +32,7 @@ function mapWorkflow(row: Record<string, unknown>): Record<string, unknown> {
     });
     return {
       ...row,
+      visibility: normalizeVisibility(row.visibility, row.published === true ? 'public' : 'private'),
       canonical_doc: hydrated.canonical,
       steps: hydrated.steps,
       graph_state: hydrated.graphState,
@@ -50,11 +52,29 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from('agent_workflows')
       .select('*')
-      .eq('agent_id', ctx.agentId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return NextResponse.json({ workflows: omitAgentIdentifierFields(((data ?? []) as Record<string, unknown>[]).map(mapWorkflow)) });
+    const workflows = ((data ?? []) as Record<string, unknown>[]).map(mapWorkflow) as Array<Record<string, unknown> & {
+      id: string;
+      agent_id: string;
+      workspace_id?: string | null;
+      visibility?: string | null;
+    }>;
+    const accessible = await filterAccessibleResources({
+      viewer: {
+        agentId: ctx.agentId,
+        workspaceIds: await resolveViewerWorkspaceIds(ctx.agentId),
+      },
+      resources: workflows.map(workflow => ({
+        ...workflow,
+        ownerAgentId: String(workflow.agent_id),
+        workspaceId: typeof workflow.workspace_id === 'string' ? workflow.workspace_id : null,
+      })),
+      sourceType: 'workflow',
+      permission: 'workflow:execute',
+    });
+    return NextResponse.json({ workflows: omitAgentIdentifierFields(accessible) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
@@ -106,6 +126,7 @@ export async function POST(req: NextRequest) {
         code_state: synced.codeState,
         canonical_doc: synced.canonical,
         schedule,
+        visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : 'private',
         status: 'active',
         version: 1,
       })

@@ -25,11 +25,14 @@ export default function StudioContextDrawer() {
     openContext,
     installedApps,
     installedSkills,
+    subagents,
     workflows,
+    memoryEntries,
+    fileEntries,
     vaultSecrets,
     terminalEvents,
     events,
-    superAgent,
+    lineage,
   } = useStudio();
 
   const title = contextSection.charAt(0).toUpperCase() + contextSection.slice(1);
@@ -45,7 +48,7 @@ export default function StudioContextDrawer() {
       size="md"
     >
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-        {(['apps', 'skills', 'workflows', 'memory', 'vault', 'logs'] as const).map(section => (
+        {(['apps', 'skills', 'subagents', 'workflows', 'memory', 'files', 'vault', 'logs'] as const).map(section => (
           <button
             key={section}
             type="button"
@@ -67,17 +70,29 @@ export default function StudioContextDrawer() {
 
       {contextSection === 'apps' ? <SectionList title="Installed Apps" items={installedApps.map(item => ({ id: item.id, title: item.name, body: item.description }))} /> : null}
       {contextSection === 'skills' ? <SectionList title="Installed Skills" items={installedSkills.map(item => ({ id: item.id, title: item.name, body: item.description }))} /> : null}
+      {contextSection === 'subagents' ? <SectionList title="Subagents" items={subagents.map(item => ({
+        id: item.id,
+        title: item.name,
+        body: `${item.visibility} access${item.exposedCapabilities.length > 0 ? ` • ${item.exposedCapabilities.join(', ')}` : ''}${item.description ? ` • ${item.description}` : ''}`,
+      }))} /> : null}
       {contextSection === 'workflows' ? <SectionList title="Workflows" items={workflows.map(item => ({ id: item.id, title: item.name, body: item.summary ?? item.status }))} /> : null}
       {contextSection === 'vault' ? <SectionList title="Vault" items={vaultSecrets.map(item => ({ id: item.id, title: item.name, body: item.status }))} /> : null}
+      {contextSection === 'files' ? <SectionList title="Files and Artifacts" items={fileEntries.map(item => ({
+        id: item.id,
+        title: item.path,
+        body: `${String(item.metadata.kind ?? 'file')} • ${item.visibility}`,
+      }))} /> : null}
       {contextSection === 'logs' ? <SectionList title="Logs" items={[
+        ...(lineage.parent ? [{ id: `parent-${lineage.parent.id}`, title: 'Parent session', body: lineage.parent.title }] : []),
+        ...lineage.children.map(item => ({ id: `child-${item.id}`, title: 'Branch session', body: item.title })),
         ...events.slice(-8).map(item => ({ id: `studio-${item.id}`, title: item.type, body: JSON.stringify(item.payload) })),
         ...terminalEvents.slice(-8).map(item => ({ id: `terminal-${item.id}`, title: item.type, body: item.chunk ?? item.message ?? '' })),
       ]} /> : null}
-      {contextSection === 'memory' ? <SectionList title="Memory" items={superAgent ? [{
-        id: superAgent.id,
-        title: superAgent.name,
-        body: superAgent.instructions || 'This project shares one Super AgentOS context across both Studio modes.',
-      }] : []} /> : null}
+      {contextSection === 'memory' ? <SectionList title="Memory" items={memoryEntries.map(item => ({
+        id: item.id,
+        title: item.key,
+        body: `${item.namespaceType}${item.namespaceId ? `:${item.namespaceId}` : ''} • ${item.visibility} • ${item.content}`,
+      }))} /> : null}
     </Drawer>
   );
 }

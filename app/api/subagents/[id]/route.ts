@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { listPermissionGrants } from '@/src/access/service';
 import { requireAgentContextWithTier, requireRouteCapability } from '@/src/auth/request';
+import { listAccessibleMemoryEntries } from '@/src/memory/service';
 import { getAgentActivity } from '@/src/activity/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { getPrivateSubagent, updatePrivateSubagent } from '@/src/subagents/service';
@@ -13,7 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const subagent = await getPrivateSubagent(ctx.agentId, id);
 
-    const [skillsResult, assignmentsResult, activity] = await Promise.all([
+    const [skillsResult, assignmentsResult, activity, memory, grants, fileStats] = await Promise.all([
       getSupabaseAdmin()
         .from('skill_installations')
         .select(`
@@ -31,6 +33,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .eq('subject_id', id)
         .order('created_at', { ascending: false }),
       getAgentActivity(ctx.agentId, 20),
+      listAccessibleMemoryEntries({
+        viewerAgentId: ctx.agentId,
+        namespaceType: 'subagent',
+        namespaceId: id,
+        limit: 20,
+      }),
+      listPermissionGrants({
+        actorAgentId: ctx.agentId,
+        sourceType: 'subagent',
+        sourceId: id,
+        includeRevoked: true,
+      }).catch(() => []),
+      getSupabaseAdmin()
+        .from('agent_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('subagent_id', id),
     ]);
 
     return NextResponse.json({
@@ -57,6 +75,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
       installedSkills: skillsResult.data ?? [],
       vaultAssignments: assignmentsResult.data ?? [],
+      memory,
+      grants,
+      fileCount: fileStats.count ?? 0,
       activity,
     });
   } catch (error: unknown) {
@@ -77,6 +98,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       description: typeof body.description === 'string' ? body.description : undefined,
       instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
       projectId: typeof body.projectId === 'string' ? body.projectId : undefined,
+      visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : body.visibility === 'private' ? 'private' : undefined,
+      exposedCapabilities: Array.isArray(body.exposedCapabilities)
+        ? body.exposedCapabilities.filter((item): item is string => typeof item === 'string')
+        : undefined,
       status: body.status === 'archived' || body.status === 'active' ? body.status : undefined,
     });
     return NextResponse.json({ subagent });

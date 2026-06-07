@@ -31,6 +31,12 @@ type StudioSessionRecord = {
   workspaceId: string;
   projectId: string | null;
   title: string;
+  visibility: 'private' | 'workspace' | 'public';
+  linkedSubagentId?: string | null;
+  linkedWorkflowId?: string | null;
+  linkedAppId?: string | null;
+  linkedFilePaths?: string[];
+  linkedMemoryRefs?: string[];
   updatedAt: string;
 };
 
@@ -61,11 +67,17 @@ type ProjectRecord = {
   status: string;
 };
 
+type StudioLineage = {
+  parent: { id: string; title: string; updatedAt: string } | null;
+  children: Array<{ id: string; title: string; updatedAt: string }>;
+};
+
 type WorkflowRecord = {
   id: string;
   name: string;
   summary: string | null;
   status: string;
+  visibility?: 'private' | 'workspace' | 'public';
 };
 
 type VaultSecretRecord = {
@@ -86,6 +98,33 @@ type InstalledAppRecord = {
   name: string;
   slug: string;
   description: string;
+};
+
+type SubagentRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  visibility: 'private' | 'workspace' | 'public';
+  exposedCapabilities: string[];
+  updatedAt: string;
+};
+
+type MemoryEntryRecord = {
+  id: string;
+  key: string;
+  content: string;
+  visibility: 'private' | 'workspace' | 'public';
+  namespaceType: string;
+  namespaceId: string | null;
+  updatedAt: string;
+};
+
+type FileEntryRecord = {
+  id: string;
+  path: string;
+  visibility: 'private' | 'workspace' | 'public';
+  metadata: Record<string, unknown>;
+  updatedAt: string;
 };
 
 type SuperAgentRecord = {
@@ -114,6 +153,7 @@ type StudioContextValue = {
   contextSection: StudioContextSection;
   session: StudioSessionRecord | null;
   sessions: StudioSessionRecord[];
+  lineage: StudioLineage;
   messages: StudioMessageRecord[];
   events: StudioEventRecord[];
   workspaces: WorkspaceRecord[];
@@ -124,6 +164,9 @@ type StudioContextValue = {
   installedSkills: InstalledSkillRecord[];
   installedApps: InstalledAppRecord[];
   superAgent: SuperAgentRecord | null;
+  subagents: SubagentRecord[];
+  memoryEntries: MemoryEntryRecord[];
+  fileEntries: FileEntryRecord[];
   fileTree: StudioFileNode[];
   tabs: StudioEditorTab[];
   activeTabId: string | null;
@@ -220,6 +263,7 @@ export function StudioProvider(props: {
   const [contextSection, setContextSection] = useState<StudioContextSection>('apps');
   const [session, setSession] = useState<StudioSessionRecord | null>(null);
   const [sessions, setSessions] = useState<StudioSessionRecord[]>([]);
+  const [lineage, setLineage] = useState<StudioLineage>({ parent: null, children: [] });
   const [messages, setMessages] = useState<StudioMessageRecord[]>([]);
   const [events, setEvents] = useState<StudioEventRecord[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
@@ -230,6 +274,9 @@ export function StudioProvider(props: {
   const [installedSkills, setInstalledSkills] = useState<InstalledSkillRecord[]>([]);
   const [installedApps, setInstalledApps] = useState<InstalledAppRecord[]>([]);
   const [superAgent, setSuperAgent] = useState<SuperAgentRecord | null>(null);
+  const [subagents, setSubagents] = useState<SubagentRecord[]>([]);
+  const [memoryEntries, setMemoryEntries] = useState<MemoryEntryRecord[]>([]);
+  const [fileEntries, setFileEntries] = useState<FileEntryRecord[]>([]);
   const [fileTree, setFileTree] = useState<StudioFileNode[]>([]);
   const [tabs, setTabs] = useState<StudioEditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -283,6 +330,7 @@ export function StudioProvider(props: {
     setModeState(normalizeMode(String(payload.mode ?? requestedMode)));
     setSession(nextSession);
     setSessions((payload.sessions ?? []) as StudioSessionRecord[]);
+    setLineage((payload.lineage ?? { parent: null, children: [] }) as StudioLineage);
     setMessages((payload.messages ?? []) as StudioMessageRecord[]);
     setEvents((payload.events ?? []) as StudioEventRecord[]);
     setWorkspaces((payload.workspaces ?? []) as WorkspaceRecord[]);
@@ -293,9 +341,27 @@ export function StudioProvider(props: {
     setInstalledSkills(mapInstalledSkills(payload.installedSkills));
     setInstalledApps(mapInstalledApps(payload.installedApps));
     setSuperAgent((payload.superAgent ?? null) as SuperAgentRecord | null);
+    setSubagents((payload.subagents ?? []) as SubagentRecord[]);
+    setMemoryEntries((payload.memoryEntries ?? []) as MemoryEntryRecord[]);
     setFileTree((payload.fileTree ?? []) as StudioFileNode[]);
     setLoading(false);
   }, [requestedMode, requestedProjectId, requestedSessionId]);
+
+  const refreshLinkedFiles = useCallback(async () => {
+    const search = new URLSearchParams();
+    if (session?.id) {
+      search.set('sessionId', session.id);
+    } else if (currentWorkspaceId) {
+      search.set('workspaceId', currentWorkspaceId);
+    } else {
+      setFileEntries([]);
+      return;
+    }
+    const response = await fetchWithBrowserSession(`/api/files?${search.toString()}`, { cache: 'no-store' });
+    if (!response.response.ok) return;
+    const payload = await response.response.json() as { entries?: FileEntryRecord[] };
+    setFileEntries(payload.entries ?? []);
+  }, [currentWorkspaceId, session?.id]);
 
   const refreshFiles = useCallback(async () => {
     const projectId = currentProject?.id;
@@ -309,6 +375,10 @@ export function StudioProvider(props: {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    void refreshLinkedFiles();
+  }, [refreshLinkedFiles]);
 
   useEffect(() => {
     setModeState(requestedMode);
@@ -610,6 +680,7 @@ export function StudioProvider(props: {
     contextSection,
     session,
     sessions,
+    lineage,
     messages,
     events,
     workspaces,
@@ -620,6 +691,9 @@ export function StudioProvider(props: {
     installedSkills,
     installedApps,
     superAgent,
+    subagents,
+    memoryEntries,
+    fileEntries,
     fileTree,
     tabs,
     activeTabId,
@@ -659,9 +733,12 @@ export function StudioProvider(props: {
     enableAdvancedMode,
     events,
     fileTree,
+    fileEntries,
     installedApps,
     installedSkills,
+    lineage,
     loading,
+    memoryEntries,
     messages,
     mode,
     openContext,
@@ -678,6 +755,7 @@ export function StudioProvider(props: {
     sessions,
     setMode,
     sidebarOpen,
+    subagents,
     superAgent,
     tabs,
     terminal,

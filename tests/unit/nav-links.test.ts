@@ -14,7 +14,7 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toEqual(['Home', 'Studio', 'Apps', 'Skills', 'Projects', 'Workflows']);
+    expect(links.map(item => item.label)).toEqual(['Home', 'Studio', 'Memory', 'Apps', 'Skills', 'Projects', 'Workflows']);
   });
 
   it('shows a minimal unauthenticated navigation', () => {

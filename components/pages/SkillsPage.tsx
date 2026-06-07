@@ -37,6 +37,7 @@ type PublishedSkill = {
   category: string;
   description: string;
   verified?: boolean;
+  visibility?: 'private' | 'workspace' | 'public';
 };
 
 export default function SkillsPage() {
@@ -158,6 +159,7 @@ export default function SkillsPage() {
                       description={skill.description}
                       runtime={skill.category}
                       verified={skill.verified === true}
+                      footer={<div className="os-entity-meta">{skill.visibility ?? 'private'}</div>}
                     />
                   ))}
                 </div>

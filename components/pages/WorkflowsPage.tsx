@@ -28,6 +28,7 @@ type Workflow = {
   code_state?: string | null;
   canonical_doc?: Record<string, unknown>;
   status: string;
+  visibility?: 'private' | 'workspace' | 'public';
   schedule: string | null;
   last_result?: unknown;
   last_error?: string | null;
@@ -233,7 +234,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
             <Card>
               <div className="os-entity-title" style={{ marginBottom: 12 }}>Settings</div>
               <div className="os-entity-copy">Schedule: {active.schedule || 'Manual'}</div>
-              <div className="os-entity-copy">Visibility is managed during publishing.</div>
+              <div className="os-entity-copy">Visibility: {active.visibility ?? 'private'}</div>
             </Card>
           </>
         )}

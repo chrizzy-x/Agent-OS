@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { filterAccessibleResources, normalizeVisibility, resolveViewerWorkspaceIds } from '@/src/access/service';
 import { findAccountById } from '@/src/auth/agent-store';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
@@ -26,16 +27,21 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') || 'popular';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
+    let viewerAgentId: string | null = null;
+    try {
+      viewerAgentId = requireAgentContext(request.headers).agentId;
+    } catch {
+      viewerAgentId = null;
+    }
     const authorId = searchParams.get('mine') === '1' || searchParams.get('mine') === 'true'
-      ? requireAgentContext(request.headers).agentId
+      ? viewerAgentId
       : searchParams.get('author');
 
     try {
       const supabase = getSupabaseAdmin();
       let query = supabase
         .from('skills')
-        .select('id,name,slug,version,author_id,author_name,category,description,icon,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,published,verified,created_at', { count: 'exact' })
-        .eq('published', true);
+        .select('id,name,slug,version,author_id,author_name,workspace_id,category,description,icon,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,published,verified,visibility,created_at,updated_at', { count: 'exact' });
 
       if (authorId) query = query.eq('author_id', authorId);
       if (category && category !== 'all' && category !== 'All') query = query.ilike('category', category);
@@ -47,18 +53,62 @@ export async function GET(request: NextRequest) {
       const offset = (page - 1) * limit;
       const { data, error, count } = await query.range(offset, offset + limit - 1);
       if (!error) {
-        return NextResponse.json({ skills: omitAgentIdentifierFields(data ?? []), pagination: { page, limit, total: count ?? 0 } });
+        let skills: Array<Record<string, unknown>> = ((data ?? []) as Array<Record<string, unknown>>).map(skill => ({
+          ...skill,
+          visibility: normalizeVisibility(skill.visibility, skill.published === true ? 'public' : 'private'),
+        }));
+        if (viewerAgentId) {
+          skills = await filterAccessibleResources({
+            viewer: { agentId: viewerAgentId, workspaceIds: await resolveViewerWorkspaceIds(viewerAgentId) },
+            resources: skills.map(skill => ({
+              ...skill,
+              id: String(skill.id),
+              ownerAgentId: String(skill.author_id),
+              workspaceId: typeof skill.workspace_id === 'string' ? skill.workspace_id : null,
+            })),
+            sourceType: 'skill',
+            permission: 'skill:read',
+          }) as Array<Record<string, unknown>>;
+        } else {
+          skills = skills.filter(skill => skill.visibility === 'public' || skill.published === true);
+        }
+        return NextResponse.json({ skills: omitAgentIdentifierFields(skills), pagination: { page, limit, total: count ?? 0 } });
       }
     } catch {
       // Fall back to local catalog below.
     }
 
     const state = await readLocalRuntimeState();
-    let skills = [...state.skills.catalog].filter(skill => skill.published);
-    if (authorId) skills = skills.filter(skill => skill.author_id === authorId);
-    if (category && category !== 'all' && category !== 'All') skills = skills.filter(skill => skill.category.toLowerCase() === category.toLowerCase());
+    let skills: Array<Record<string, unknown>> = [...state.skills.catalog].map(skill => ({
+      ...skill,
+      visibility: normalizeVisibility((skill as { visibility?: unknown }).visibility, skill.published ? 'public' : 'private'),
+    }));
+    if (authorId) skills = skills.filter(skill => String(skill.author_id ?? '') === authorId);
+    if (category && category !== 'all' && category !== 'All') {
+      skills = skills.filter(skill => String(skill.category ?? '').toLowerCase() === category.toLowerCase());
+    }
     if (search) {
-      skills = skills.filter(skill => [skill.name, skill.description, skill.category, ...skill.tags].join(' ').toLowerCase().includes(search));
+      skills = skills.filter(skill => [
+        String(skill.name ?? ''),
+        String(skill.description ?? ''),
+        String(skill.category ?? ''),
+        ...(Array.isArray(skill.tags) ? skill.tags.map(tag => String(tag)) : []),
+      ].join(' ').toLowerCase().includes(search));
+    }
+    if (viewerAgentId) {
+      skills = await filterAccessibleResources({
+        viewer: { agentId: viewerAgentId },
+        resources: skills.map(skill => ({
+          ...skill,
+          id: String(skill.id),
+          ownerAgentId: String(skill.author_id ?? ''),
+          workspaceId: typeof skill.workspace_id === 'string' ? skill.workspace_id : null,
+        })),
+        sourceType: 'skill',
+        permission: 'skill:read',
+      }) as Array<Record<string, unknown>>;
+    } else {
+      skills = skills.filter(skill => skill.visibility === 'public' || skill.published);
     }
 
     skills.sort((left, right) => compareBySort(sort, left as unknown as Record<string, unknown>, right as unknown as Record<string, unknown>));
@@ -94,7 +144,8 @@ export async function POST(request: NextRequest) {
       : typeof body.status === 'string'
         ? body.status
         : 'draft';
-    const isPublished = publishState === 'published';
+    const visibility = body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : 'private';
+    const isPublished = publishState === 'published' || visibility === 'public';
 
     const supabase = getSupabaseAdmin();
     const account = await findAccountById(agentCtx.agentId);
@@ -109,6 +160,7 @@ export async function POST(request: NextRequest) {
         icon: typeof body.icon === 'string' ? body.icon : '[skill]',
         author_id: agentCtx.agentId,
         author_name: account?.name ?? 'AgentOS Publisher',
+        workspace_id: typeof body.workspaceId === 'string' ? body.workspaceId : null,
         pricing_model: typeof body.pricing_model === 'string' ? body.pricing_model : 'free',
         price_per_call: typeof body.price_per_call === 'number' ? body.price_per_call : 0,
         free_tier_calls: typeof body.free_tier_calls === 'number' ? body.free_tier_calls : 100,
@@ -120,6 +172,7 @@ export async function POST(request: NextRequest) {
         tags: Array.isArray(body.tags) ? body.tags : [],
         publish_state: publishState,
         published: isPublished,
+        visibility,
       })
       .select('id, slug')
       .single();

@@ -3,8 +3,10 @@ export type StudioMode = 'nl' | 'code';
 export type StudioContextSection =
   | 'apps'
   | 'skills'
+  | 'subagents'
   | 'workflows'
   | 'memory'
+  | 'files'
   | 'vault'
   | 'logs';
 

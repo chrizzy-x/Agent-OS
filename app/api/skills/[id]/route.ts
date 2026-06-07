@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertResourceAccess, normalizeVisibility } from '@/src/access/service';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { readLocalRuntimeState } from '@/src/storage/local-state';
-import { requireRouteCapability } from '@/src/auth/request';
+import { requireAgentContext, requireRouteCapability } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -30,6 +31,29 @@ export async function GET(
         : await query.eq('slug', id).single();
 
       if (!error && data) {
+        let viewerAgentId: string | null = null;
+        try {
+          viewerAgentId = requireAgentContext(_request.headers).agentId;
+        } catch {
+          viewerAgentId = null;
+        }
+        const skill = data as Record<string, unknown>;
+        const visibility = normalizeVisibility(skill.visibility, skill.published === true ? 'public' : 'private');
+        if (!viewerAgentId) {
+          if (visibility !== 'public' && skill.published !== true) {
+            return NextResponse.json({ code: 'NOT_FOUND', error: 'Skill not found', message: 'Skill not found' }, { status: 404 });
+          }
+        } else {
+          await assertResourceAccess({
+            viewerAgentId,
+            ownerAgentId: String(skill.author_id),
+            workspaceId: typeof skill.workspace_id === 'string' ? skill.workspace_id : null,
+            visibility,
+            sourceType: 'skill',
+            sourceId: String(skill.id),
+            permission: 'skill:read',
+          });
+        }
         return NextResponse.json({ skill: omitAgentIdentifierFields(data) });
       }
     } catch {
@@ -38,7 +62,7 @@ export async function GET(
 
     const state = await readLocalRuntimeState();
     const skill = state.skills.catalog.find(item => isUuid ? item.id === id : item.slug === id);
-    if (!skill || !skill.published) {
+    if (!skill || (!skill.published && normalizeVisibility((skill as { visibility?: unknown }).visibility, 'private') !== 'public')) {
       return NextResponse.json({ code: 'NOT_FOUND', error: 'Skill not found', message: 'Skill not found' }, { status: 404 });
     }
 
@@ -102,6 +126,9 @@ export async function PUT(
       .from('skills')
       .update({
         ...allowed,
+        ...(allowed.visibility === 'private' || allowed.visibility === 'workspace' || allowed.visibility === 'public'
+          ? { visibility: allowed.visibility }
+          : {}),
         ...(publishState ? { publish_state: publishState } : {}),
         ...(publishState ? { published: publishState === 'published' } : {}),
         updated_at: new Date().toISOString(),

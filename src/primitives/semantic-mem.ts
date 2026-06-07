@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { getSupabaseAdmin } from '../storage/supabase.js';
 import { withAudit } from '../runtime/audit.js';
 import { validate } from '../utils/validation.js';
 import type { AgentContext } from '../auth/permissions.js';
+import { deleteMemoryEntry, listAccessibleMemoryEntries, upsertMemoryEntry } from '../memory/service.js';
 
 const keySchema = z.string().min(1).max(256);
 
@@ -24,18 +24,15 @@ export async function semanticMemRemember(
   return withAudit(
     { agentId: ctx.agentId, primitive: 'mem', operation: 'remember', metadata: { key } },
     async () => {
-      const supabase = getSupabaseAdmin();
-      const { error } = await supabase.from('agent_memory_store').upsert(
-        {
-          agent_id: ctx.agentId,
-          key,
-          content,
-          tags,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'agent_id,key' },
-      );
-      if (error) throw new Error(`Failed to store memory: ${error.message}`);
+      await upsertMemoryEntry({
+        ownerAgentId: ctx.agentId,
+        key,
+        content,
+        tags,
+        namespaceType: 'agent',
+        namespaceId: ctx.agentId,
+        visibility: 'private',
+      });
       return { key, stored: true };
     },
   );
@@ -59,24 +56,23 @@ export async function semanticMemRecall(
   return withAudit(
     { agentId: ctx.agentId, primitive: 'mem', operation: 'recall', metadata: { query, tags } },
     async () => {
-      const supabase = getSupabaseAdmin();
-      let q = supabase
-        .from('agent_memory_store')
-        .select('key, content, tags, updated_at')
-        .eq('agent_id', ctx.agentId)
-        .order('updated_at', { ascending: false })
-        .limit(limit);
-
-      if (query) {
-        q = q.ilike('key', `%${query}%`);
-      }
-      if (tags && tags.length > 0) {
-        q = q.overlaps('tags', tags);
-      }
-
-      const { data, error } = await q;
-      if (error) throw new Error(`Failed to recall memories: ${error.message}`);
-      return { memories: (data ?? []) as { key: string; content: string; tags: string[]; updated_at: string }[] };
+      const memories = await listAccessibleMemoryEntries({
+        viewerAgentId: ctx.agentId,
+        ownerAgentId: ctx.agentId,
+        namespaceType: 'agent',
+        namespaceId: ctx.agentId,
+        search: query,
+        tags,
+        limit,
+      });
+      return {
+        memories: memories.map(memory => ({
+          key: memory.key,
+          content: memory.content,
+          tags: memory.tags,
+          updated_at: memory.updatedAt,
+        })),
+      };
     },
   );
 }
@@ -91,14 +87,13 @@ export async function semanticMemForget(
   return withAudit(
     { agentId: ctx.agentId, primitive: 'mem', operation: 'forget', metadata: { key } },
     async () => {
-      const supabase = getSupabaseAdmin();
-      const { error, count } = await supabase
-        .from('agent_memory_store')
-        .delete({ count: 'exact' })
-        .eq('agent_id', ctx.agentId)
-        .eq('key', key);
-      if (error) throw new Error(`Failed to delete memory: ${error.message}`);
-      return { key, deleted: (count ?? 0) > 0 };
+      const result = await deleteMemoryEntry({
+        ownerAgentId: ctx.agentId,
+        key,
+        namespaceType: 'agent',
+        namespaceId: ctx.agentId,
+      });
+      return { key, deleted: result.deleted };
     },
   );
 }
@@ -116,21 +111,22 @@ export async function semanticMemList(
   return withAudit(
     { agentId: ctx.agentId, primitive: 'mem', operation: 'history', metadata: { tags } },
     async () => {
-      const supabase = getSupabaseAdmin();
-      let q = supabase
-        .from('agent_memory_store')
-        .select('key, content, tags, updated_at')
-        .eq('agent_id', ctx.agentId)
-        .order('updated_at', { ascending: false })
-        .limit(200);
-
-      if (tags && tags.length > 0) {
-        q = q.overlaps('tags', tags);
-      }
-
-      const { data, error } = await q;
-      if (error) throw new Error(`Failed to list memories: ${error.message}`);
-      return { memories: (data ?? []) as { key: string; content: string; tags: string[]; updated_at: string }[] };
+      const memories = await listAccessibleMemoryEntries({
+        viewerAgentId: ctx.agentId,
+        ownerAgentId: ctx.agentId,
+        namespaceType: 'agent',
+        namespaceId: ctx.agentId,
+        tags,
+        limit: 200,
+      });
+      return {
+        memories: memories.map(memory => ({
+          key: memory.key,
+          content: memory.content,
+          tags: memory.tags,
+          updated_at: memory.updatedAt,
+        })),
+      };
     },
   );
 }

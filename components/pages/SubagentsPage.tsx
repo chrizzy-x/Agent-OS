@@ -21,6 +21,8 @@ type Subagent = {
   instructions: string;
   status: string;
   workspaceId: string;
+  visibility: 'private' | 'workspace' | 'public';
+  exposedCapabilities?: string[];
 };
 
 type SubagentsPageProps = {
@@ -42,7 +44,14 @@ export default function SubagentsPage({
 }: SubagentsPageProps) {
   const [loading, setLoading] = useState(true);
   const [subagents, setSubagents] = useState<Subagent[]>([]);
-  const [draft, setDraft] = useState({ workspaceId: '', name: '', description: '', instructions: '' });
+  const [draft, setDraft] = useState({
+    workspaceId: '',
+    name: '',
+    description: '',
+    instructions: '',
+    visibility: 'private',
+    exposedCapabilities: '',
+  });
   const [message, setMessage] = useState('');
 
   const load = useCallback(async () => {
@@ -71,12 +80,18 @@ export default function SubagentsPage({
     const response = await fetch('/api/subagents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draft),
+      body: JSON.stringify({
+        ...draft,
+        exposedCapabilities: draft.exposedCapabilities
+          .split(',')
+          .map(item => item.trim())
+          .filter(Boolean),
+      }),
     });
     const payload = await response.json();
     setMessage(response.ok ? 'Subagent created' : payload.error ?? 'Create failed');
     if (response.ok) {
-      setDraft(current => ({ ...current, name: '', description: '', instructions: '' }));
+      setDraft(current => ({ ...current, name: '', description: '', instructions: '', exposedCapabilities: '' }));
       await load();
     }
   }
@@ -95,6 +110,22 @@ export default function SubagentsPage({
         <div style={{ display: 'grid', gap: 12 }}>
           <Input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder="Agent name" />
           <Input value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} placeholder="Description" />
+          <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(0, 1fr)', gap: 12 }}>
+            <select
+              value={draft.visibility}
+              onChange={event => setDraft(current => ({ ...current, visibility: event.target.value as 'private' | 'workspace' | 'public' }))}
+              style={{ minHeight: 44, borderRadius: 12, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', color: 'inherit', padding: '0 12px' }}
+            >
+              <option value="private">private</option>
+              <option value="workspace">workspace</option>
+              <option value="public">public</option>
+            </select>
+            <Input
+              value={draft.exposedCapabilities}
+              onChange={event => setDraft(current => ({ ...current, exposedCapabilities: event.target.value }))}
+              placeholder="Capabilities (comma-separated)"
+            />
+          </div>
           <Textarea value={draft.instructions} onChange={event => setDraft(current => ({ ...current, instructions: event.target.value }))} placeholder="Instructions" />
         </div>
 
@@ -106,7 +137,7 @@ export default function SubagentsPage({
               <AgentCard
                 key={subagent.id}
                 title={subagent.name}
-                description={subagent.description ?? 'Private agent'}
+                description={`${subagent.description ?? 'Private agent'} • ${subagent.visibility}`}
                 status={subagent.status}
                 footer={<Link href={`${basePath}/${subagent.id}`} className="btn-primary">Open</Link>}
               />

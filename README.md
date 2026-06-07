@@ -4,7 +4,7 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> v6.3
+> v6.4
 
 AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, and activity.
 
@@ -15,16 +15,20 @@ Live:
 Supporting message:
 - talk to it, build with it, and install what it needs
 
-## V6.3 status
+## V6.4 status
 
-V6.3 ships:
+V6.4 ships:
 - `/` as Super AgentOS Home with recent chats, installed apps, installed skills, workflows, activity, and quick actions
 - `/studio` as one workspace with shared NL Studio and Code Studio modes
+- permissioned sharing and canonical `private|workspace|public` visibility across sessions, subagents, workflows, skills, memory, and governed file records
+- current-chat search and permission-filtered cross-session chat search
+- `/memory` for governed memory and file records across private, workspace, and public scopes
 - `/marketplace` as a lightweight discovery layer
 - `/appstore` with real app install, open, update, uninstall, and pin flows
 - `/skills` as the public Skill Store for installable capabilities
 - `/appstore/[slug]` with readiness, permissions, secrets, skills, targets, health, and owner analytics
 - `/agents` as the canonical private-agent runtime surface
+- `/subagents` as an alias to the same private-agent runtime surface
 - `/vault` with assignment-aware secret validation and runtime grants
 - hardened Vault runtime injection with temporary secret access, runtime cleanup, access audit events, and shared output redaction
 - `/mcp` with advanced tool discovery, connector diagnostics, and runtime execution visibility
@@ -32,6 +36,7 @@ V6.3 ships:
 - `/billing` with free-beta self-serve plan transitions across Retail Free, Retail Pro, Enterprise Plus, and Enterprise Max
 - SDK app auto-discovery and legacy `kernel_registry` recovery into factual public listings
 - global search across apps, skills, workflows, sessions, projects, agents, and Vault secret names only
+- governed memory, governed files, and permission grants exposed through typed APIs and V6.4 SDK helpers
 - session branching with parent lineage and isolated branch messages and events
 - session rename, archive, and persistence with server-backed ownership enforcement
 - structured Studio intent outcomes for chat replies, previews, approvals, forbidden states, unsupported actions, and completed actions

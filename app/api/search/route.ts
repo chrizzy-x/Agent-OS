@@ -4,6 +4,7 @@ import { requireAgentContext } from '@/src/auth/request';
 import { DOCS_CATALOG } from '@/src/docs/catalog';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { listStudioSessions } from '@/src/studio/persistence';
+import { listAccessibleSubagents } from '@/src/subagents/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { listVaultSecrets } from '@/src/vault/service';
 import { listProjects } from '@/src/projects/service';
@@ -11,7 +12,7 @@ import { listWorkspaces } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
 
-type SearchKind = 'app' | 'skill' | 'workflow' | 'session' | 'project' | 'vault' | 'doc' | 'connector' | 'ffp_route' | 'ffp_primitive';
+type SearchKind = 'app' | 'skill' | 'workflow' | 'session' | 'project' | 'subagent' | 'vault' | 'doc' | 'connector' | 'ffp_route' | 'ffp_primitive';
 
 type SearchResult = {
   id: string;
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
     const workspacePromise = listWorkspaces(ctx.agentId);
     const projectsPromise = listProjects({ ownerAgentId: ctx.agentId, status: 'active' });
 
-    const [apps, installedApps, sessions, workspaces, projects, workflowsResult, publishedSkillsResult, ownSkillsResult, connectorsResult, ffpRoutesResult] = await Promise.all([
+    const [apps, installedApps, sessions, workspaces, projects, workflowsResult, publishedSkillsResult, ownSkillsResult, connectorsResult, ffpRoutesResult, subagents] = await Promise.all([
       listAgentApps({
         viewerAgentId: ctx.agentId,
         viewerWorkspaceIds: (await workspacePromise).map(workspace => workspace.id),
@@ -101,6 +102,10 @@ export async function GET(request: NextRequest) {
         .from('ffp_chain_executions')
         .select('id,chain_id,tool,status,error_message,executed_at')
         .order('executed_at', { ascending: false }),
+      listAccessibleSubagents({
+        viewerAgentId: ctx.agentId,
+        workspaceIds: (await workspacePromise).map(workspace => workspace.id),
+      }).catch(() => []),
     ]);
 
     const installedSlugSet = new Set(installedApps.map(item => item.app.slug));
@@ -192,6 +197,18 @@ export async function GET(request: NextRequest) {
           subtitle: item.description ?? `${workspaces.find(workspace => workspace.id === item.workspaceId)?.name ?? 'Workspace'} project`,
           href: `/studio?mode=code&project=${encodeURIComponent(item.id)}`,
           actionLabel: 'Open Project',
+          updatedAt: item.updatedAt,
+        })),
+      subagent: subagents
+        .filter(item => matchesSearch(search, item.name, item.description ?? '', item.instructions))
+        .filter(() => type === 'all' || type === 'subagent')
+        .map(item => ({
+          id: item.id,
+          kind: 'subagent',
+          title: item.name,
+          subtitle: item.description ?? `${item.visibility} subagent`,
+          href: `/agents/${item.id}`,
+          actionLabel: 'Open Subagent',
           updatedAt: item.updatedAt,
         })),
       vault: vaultResults.filter(() => type === 'all' || type === 'vault'),

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { assertResourceAccess, normalizeVisibility } from '@/src/access/service';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
@@ -27,6 +28,7 @@ function mapWorkflow(row: Record<string, unknown>): Record<string, unknown> {
     });
     return {
       ...row,
+      visibility: normalizeVisibility(row.visibility, row.published === true ? 'public' : 'private'),
       canonical_doc: hydrated.canonical,
       steps: hydrated.steps,
       graph_state: hydrated.graphState,
@@ -48,13 +50,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .from('agent_workflows')
       .select('*')
       .eq('id', id)
-      .eq('agent_id', ctx.agentId)
       .maybeSingle();
 
     if (error) throw error;
     if (!data) {
       return NextResponse.json({ code: 'NOT_FOUND', error: 'Workflow not found', message: 'Workflow not found' }, { status: 404 });
     }
+    await assertResourceAccess({
+      viewerAgentId: ctx.agentId,
+      ownerAgentId: String((data as Record<string, unknown>).agent_id),
+      workspaceId: typeof (data as Record<string, unknown>).workspace_id === 'string' ? String((data as Record<string, unknown>).workspace_id) : null,
+      visibility: typeof (data as Record<string, unknown>).visibility === 'string' ? String((data as Record<string, unknown>).visibility) : null,
+      sourceType: 'workflow',
+      sourceId: id,
+      permission: 'workflow:execute',
+    });
 
     return NextResponse.json({ workflow: omitAgentIdentifierFields(mapWorkflow(data as Record<string, unknown>)) });
   } catch (error: unknown) {
@@ -97,6 +107,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.schedule !== undefined) patch.schedule = typeof body.schedule === 'string' ? body.schedule : null;
     if (typeof body.name === 'string') patch.name = body.name.slice(0, 80);
     if (typeof body.summary === 'string' || body.summary === null) patch.summary = body.summary;
+    if (body.visibility === 'private' || body.visibility === 'workspace' || body.visibility === 'public') patch.visibility = body.visibility;
 
     const mode = pickMode(body);
     if (mode) {

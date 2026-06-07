@@ -3,7 +3,8 @@ import { NextRequest } from 'next/server';
 
 const routeMocks = vi.hoisted(() => ({
   requireRouteCapability: vi.fn(),
-  listPrivateSubagents: vi.fn(),
+  resolveViewerWorkspaceIds: vi.fn(),
+  listAccessibleSubagents: vi.fn(),
   createPrivateSubagent: vi.fn(),
 }));
 
@@ -12,8 +13,12 @@ vi.mock('../../src/auth/request.js', () => ({
 }));
 
 vi.mock('../../src/subagents/service.js', () => ({
-  listPrivateSubagents: routeMocks.listPrivateSubagents,
+  listAccessibleSubagents: routeMocks.listAccessibleSubagents,
   createPrivateSubagent: routeMocks.createPrivateSubagent,
+}));
+
+vi.mock('../../src/access/service.js', () => ({
+  resolveViewerWorkspaceIds: routeMocks.resolveViewerWorkspaceIds,
 }));
 
 import { GET, POST } from '../../app/api/subagents/route.js';
@@ -22,12 +27,14 @@ describe('subagents route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routeMocks.requireRouteCapability.mockResolvedValue({ agentId: 'agent-1' });
-    routeMocks.listPrivateSubagents.mockResolvedValue([]);
+    routeMocks.resolveViewerWorkspaceIds.mockResolvedValue(['workspace-1']);
+    routeMocks.listAccessibleSubagents.mockResolvedValue([]);
     routeMocks.createPrivateSubagent.mockResolvedValue({
       id: 'subagent-1',
       workspaceId: 'workspace-1',
       projectId: 'project-1',
       name: 'Research Scout',
+      visibility: 'private',
       status: 'active',
     });
   });
@@ -35,8 +42,9 @@ describe('subagents route', () => {
   it('threads workspace and project filters through GET', async () => {
     const response = await GET(new NextRequest('http://localhost/api/subagents?workspaceId=workspace-1&projectId=project-1'));
     expect(response.status).toBe(200);
-    expect(routeMocks.listPrivateSubagents).toHaveBeenCalledWith({
-      ownerAgentId: 'agent-1',
+    expect(routeMocks.listAccessibleSubagents).toHaveBeenCalledWith({
+      viewerAgentId: 'agent-1',
+      workspaceIds: ['workspace-1'],
       workspaceId: 'workspace-1',
       projectId: 'project-1',
     });
@@ -62,6 +70,8 @@ describe('subagents route', () => {
       name: 'Research Scout',
       description: null,
       instructions: undefined,
+      visibility: 'private',
+      exposedCapabilities: undefined,
     });
     expect(body.subagent.projectId).toBe('project-1');
   });

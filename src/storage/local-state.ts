@@ -98,6 +98,7 @@ export type LocalSkillRecord = {
   version: string;
   author_id: string;
   author_name: string;
+  workspace_id?: string | null;
   category: string;
   description: string;
   icon: string;

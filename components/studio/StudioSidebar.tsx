@@ -1,8 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Input } from '@/components/os/ui';
 import { useStudio } from '@/components/studio/StudioProvider';
+
+type ChatSearchMatch = {
+  messageId: string;
+  sessionId: string;
+  sessionTitle: string;
+  snippet: string;
+  timestamp: string;
+};
 
 export default function StudioSidebar() {
   const {
@@ -17,6 +25,8 @@ export default function StudioSidebar() {
     openContext,
   } = useStudio();
   const [query, setQuery] = useState('');
+  const [chatMatches, setChatMatches] = useState<ChatSearchMatch[]>([]);
+  const [searchingChats, setSearchingChats] = useState(false);
 
   const filteredSessions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -32,6 +42,36 @@ export default function StudioSidebar() {
       || (item.description ?? '').toLowerCase().includes(normalized),
     );
   }, [projects, query]);
+
+  useEffect(() => {
+    let active = true;
+    if (query.trim().length < 2) {
+      setChatMatches([]);
+      setSearchingChats(false);
+      return () => { active = false; };
+    }
+
+    setSearchingChats(true);
+    void fetch(`/api/search/chats?q=${encodeURIComponent(query.trim())}&scope=all${session?.id ? `&sessionId=${encodeURIComponent(session.id)}` : ''}`, {
+      cache: 'no-store',
+    })
+      .then(async response => response.ok ? response.json() : { matches: [] })
+      .then(payload => {
+        if (!active) return;
+        setChatMatches(Array.isArray(payload.matches) ? payload.matches.slice(0, 6) : []);
+      })
+      .catch(() => {
+        if (!active) return;
+        setChatMatches([]);
+      })
+      .finally(() => {
+        if (active) setSearchingChats(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [query, session?.id]);
 
   return (
     <div style={{ display: 'grid', gap: 22, padding: 20 }}>
@@ -146,16 +186,52 @@ export default function StudioSidebar() {
         </div>
       </div>
 
+      {query.trim().length >= 2 ? (
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Chat Search</div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {chatMatches.map(item => (
+              <button
+                key={`${item.sessionId}:${item.messageId}`}
+                type="button"
+                onClick={() => selectSession(item.sessionId)}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  borderRadius: 16,
+                  border: '1px solid var(--border)',
+                  background: 'rgba(255,255,255,0.02)',
+                  color: 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <div style={{ fontWeight: 600 }}>{item.sessionTitle}</div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5 }}>{item.snippet}</div>
+                </div>
+              </button>
+            ))}
+            {!searchingChats && chatMatches.length === 0 ? (
+              <div style={{ padding: '12px 14px', borderRadius: 16, border: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
+                No chat matches.
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ display: 'grid', gap: 8 }}>
         {[
           ['Apps', 'apps'],
           ['Skills', 'skills'],
+          ['Subagents', 'subagents'],
+          ['Files', 'files'],
           ['Recent', 'logs'],
         ].map(([label, section]) => (
           <button
             key={label}
             type="button"
-            onClick={() => openContext(section as 'apps' | 'skills' | 'logs')}
+            onClick={() => openContext(section as 'apps' | 'skills' | 'subagents' | 'files' | 'logs')}
             style={{
               minHeight: 44,
               padding: '0 14px',

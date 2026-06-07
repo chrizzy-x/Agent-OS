@@ -9,6 +9,8 @@ export default function StudioTopbar() {
     browserSession,
     mode,
     setMode,
+    session,
+    lineage,
     currentProject,
     createSession,
     advancedMode,
@@ -38,6 +40,8 @@ export default function StudioTopbar() {
           </span>
         </div>
         <Badge tone="accent">{currentProject?.status ?? 'active'}</Badge>
+        {session ? <Badge tone="default">{session.visibility}</Badge> : null}
+        {lineage.parent ? <Badge tone="success">Branch</Badge> : null}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -48,6 +52,8 @@ export default function StudioTopbar() {
           <Button variant="secondary" onClick={enableAdvancedMode}>Enable terminal</Button>
         )}
         <Button variant="secondary" onClick={createSession}>New chat</Button>
+        <Button variant="secondary" onClick={() => openContext('memory')}>Memory</Button>
+        <Button variant="secondary" onClick={() => openContext('files')}>Files</Button>
         <Button variant="secondary" onClick={() => openContext('logs')}>Context</Button>
       </div>
     </header>

@@ -225,7 +225,7 @@ describe('GET /api/search', () => {
 
     expect(response.status).toBe(200);
     expect(body.groups.vault[0].title).toBe('OPENAI_API_KEY');
-    expect(body.groups.subagent).toBeUndefined();
+    expect(Array.isArray(body.groups.subagent)).toBe(true);
     expect(body.groups.project[0].href).toBe('/studio?mode=code&project=project-1');
     expect(body.groups.project[0].actionLabel).toBe('Open Project');
     expect(body.groups.connector).toEqual([]);

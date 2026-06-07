@@ -8,10 +8,10 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'v6.3 - AgentOS now ships as one AI operating system centered on Super AgentOS.',
-  'v6.3 - Studio is now one workspace with NL and Code modes that share the same session, project, and memory.',
-  'v6.3 - Super AgentOS is surfaced as the user-owned operating agent for sessions, memory, installed skills, connected apps, private workflows, and recent actions.',
-  'v6.3 - Home, apps, and skills were simplified so retail users see outcomes first.',
+  'v6.4 - AgentOS now ships governed sharing and canonical visibility across sessions, subagents, workflows, skills, memory, and files.',
+  'v6.4 - Studio now supports current-chat search, permission-filtered cross-session chat search, governed memory context, and governed file context.',
+  'v6.4 - Super AgentOS Home now surfaces subagents, privacy badges, governed memory/files, and recent operating activity.',
+  'v6.4 - The V6.4 SDK adds typed helpers for agents, memory, files, knowledge, vault, workflow, chat, and app registration flows.',
   'v6.2 - beta readiness hardening for Vault runtime injection, output redaction, disabled-app gating, developer access shells, and production lifecycle flows.',
   'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
   'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
@@ -81,17 +81,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v6.3 <span style={{ color: 'var(--accent)' }}>&ldquo;Operating System for the Agent Economy&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">Agent OS v6.4 <span style={{ color: 'var(--accent)' }}>&ldquo;Operating System for the Agent Economy&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.3 ships Super AgentOS Home, one Studio with NL and Code modes, simpler stores, shared project context, and hardened session persistence. Live at <code>{APP_URL}</code>.
+            v6.4 ships permissioned sharing, canonical visibility, governed memory/files, and search across active Studio work. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.3</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.4</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS is now organized around one idea: every user gets a Super AgentOS. In v6.3, Home, Studio, apps, skills, workflows, memory, Vault, and activity all reinforce that shared system instead of feeling like separate products.
+              AgentOS now treats visibility, sharing, memory, files, sessions, and subagents as one governed system. In v6.4, Home, Studio, memory, workflows, skills, apps, Vault, and activity all share the same access model.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

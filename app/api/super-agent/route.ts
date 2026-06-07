@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { getSuperAgentProfile, updateSuperAgentInstructions } from '@/src/agentos/super-agent';
 import { listInstalledAgentApps } from '@/src/appstore/service';
+import { listAccessibleMemoryEntries } from '@/src/memory/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { listStudioSessions } from '@/src/studio/persistence';
+import { listAccessibleSubagents } from '@/src/subagents/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -17,7 +19,7 @@ export async function GET(request: NextRequest) {
       ownerAgentId: ctx.agentId,
       workspaceId,
     });
-    const [sessions, installedApps, skillsResult, workflowsResult, eventsResult] = await Promise.all([
+    const [sessions, installedApps, skillsResult, workflowsResult, eventsResult, subagents, memoryEntries, fileResult] = await Promise.all([
       listStudioSessions(ctx.agentId, { status: 'active' }),
       listInstalledAgentApps(ctx.agentId).catch(() => []),
       getSupabaseAdmin()
@@ -36,10 +38,27 @@ export async function GET(request: NextRequest) {
         .eq('owner_agent_id', ctx.agentId)
         .order('created_at', { ascending: false })
         .limit(8),
+      listAccessibleSubagents({
+        viewerAgentId: ctx.agentId,
+        workspaceId,
+      }).catch(() => []),
+      listAccessibleMemoryEntries({
+        viewerAgentId: ctx.agentId,
+        workspaceId,
+        limit: 50,
+      }).catch(() => []),
+      getSupabaseAdmin()
+        .from('agent_files')
+        .select('id,visibility,metadata,workspace_id')
+        .eq('agent_id', ctx.agentId),
     ]);
 
     const filteredSessions = sessions.filter(session => !workspaceId || session.workspaceId === workspaceId);
     const filteredApps = installedApps.filter(item => !workspaceId || item.app.workspaceId === workspaceId);
+    const filteredSubagents = subagents.filter(item => !workspaceId || item.workspaceId === workspaceId);
+    const filteredMemory = memoryEntries.filter(item => !workspaceId || item.workspaceId === workspaceId);
+    const filteredFiles = ((fileResult.data ?? []) as Array<Record<string, unknown>>)
+      .filter(row => !workspaceId || String(row.workspace_id ?? '') === workspaceId);
     const filteredWorkflows = ((workflowsResult.data ?? []) as Array<Record<string, unknown>>)
       .filter(row => !workspaceId || String(row.workspace_id ?? '') === workspaceId)
       .map(row => ({
@@ -61,13 +80,38 @@ export async function GET(request: NextRequest) {
         sessionId: typeof row.session_id === 'string' ? row.session_id : null,
       }));
 
+    const visibilitySummary = {
+      sessions: filteredSessions.reduce<Record<'private' | 'workspace' | 'public', number>>((acc, session) => {
+        const visibility = session.visibility === 'workspace' || session.visibility === 'public' ? session.visibility : 'private';
+        acc[visibility] += 1;
+        return acc;
+      }, { private: 0, workspace: 0, public: 0 }),
+      subagents: filteredSubagents.reduce<Record<'private' | 'workspace' | 'public', number>>((acc, subagent) => {
+        acc[subagent.visibility] += 1;
+        return acc;
+      }, { private: 0, workspace: 0, public: 0 }),
+      memory: filteredMemory.reduce<Record<'private' | 'workspace' | 'public', number>>((acc, entry) => {
+        acc[entry.visibility] += 1;
+        return acc;
+      }, { private: 0, workspace: 0, public: 0 }),
+      files: filteredFiles.reduce<Record<'private' | 'workspace' | 'public', number>>((acc, file) => {
+        const visibility = file.visibility === 'workspace' || file.visibility === 'public' ? file.visibility : 'private';
+        acc[visibility] += 1;
+        return acc;
+      }, { private: 0, workspace: 0, public: 0 }),
+    };
+
     return NextResponse.json({
       superAgent: profile,
       summary: {
         activeSessions: filteredSessions.length,
+        subagents: filteredSubagents.length,
+        memoryEntries: filteredMemory.length,
+        files: filteredFiles.length,
         installedSkills: (skillsResult.data ?? []).length,
         connectedApps: filteredApps.length,
         privateWorkflows: filteredWorkflows.length,
+        visibility: visibilitySummary,
         recentActions,
       },
     });

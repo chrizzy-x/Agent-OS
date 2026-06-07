@@ -58,7 +58,7 @@ const sections = [
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'v6.3 launch notes for Super AgentOS Home, Studio, apps, skills, and workflows.',
+    desc: 'v6.4 launch notes for Super AgentOS Home, Studio, governed memory/files, and permissioned sharing.',
     badge: 'v6',
   },
 ];
