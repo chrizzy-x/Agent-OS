@@ -56,8 +56,8 @@ export async function PATCH(
     const agentCtx = canManageAll ? null : await requireRouteCapability(request.headers, 'apps.publish');
     const { slug } = await params;
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const visibility = body.visibility === 'public' || body.visibility === 'private' || body.visibility === 'unlisted'
-      ? body.visibility
+    const visibility = body.visibility === 'public' || body.visibility === 'private' || body.visibility === 'workspace' || body.visibility === 'unlisted'
+      ? body.visibility === 'unlisted' ? 'workspace' : body.visibility
       : typeof body.published === 'boolean'
         ? body.published ? 'public' : 'private'
         : undefined;

@@ -31,15 +31,16 @@ export async function GET(request: NextRequest) {
     const scopedAssignments = workspaceId ? assignmentQuery.eq('workspace_id', workspaceId) : assignmentQuery;
     const assignmentsResult = await scopedAssignments;
     const assignments = (assignmentsResult.data ?? []) as Array<Record<string, unknown>>;
-    const countsBySecret = new Map<string, { apps: number; workflows: number; skills: number; total: number }>();
+    const countsBySecret = new Map<string, { apps: number; subagents: number; workflows: number; skills: number; total: number }>();
 
     for (const row of assignments) {
       const secretId = String(row.secret_id ?? '');
       if (!secretId) continue;
       const subjectType = typeof row.subject_type === 'string' ? row.subject_type : '';
-      const current = countsBySecret.get(secretId) ?? { apps: 0, workflows: 0, skills: 0, total: 0 };
+      const current = countsBySecret.get(secretId) ?? { apps: 0, subagents: 0, workflows: 0, skills: 0, total: 0 };
       current.total += 1;
       if (subjectType === 'app') current.apps += 1;
+      if (subjectType === 'subagent') current.subagents += 1;
       if (subjectType === 'workflow') current.workflows += 1;
       if (subjectType === 'skill') current.skills += 1;
       countsBySecret.set(secretId, current);
@@ -48,10 +49,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ...result,
       secrets: result.secrets.map(secret => {
-        const counts = countsBySecret.get(secret.id) ?? { apps: 0, workflows: 0, skills: 0, total: 0 };
+        const counts = countsBySecret.get(secret.id) ?? { apps: 0, subagents: 0, workflows: 0, skills: 0, total: 0 };
         return {
           ...secret,
           assignedAppsCount: counts.apps,
+          assignedSubagentsCount: counts.subagents,
           assignedWorkflowsCount: counts.workflows,
           assignedSkillsCount: counts.skills,
           assignmentCount: counts.total,

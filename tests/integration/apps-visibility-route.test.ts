@@ -115,7 +115,7 @@ describe.sequential('app visibility routes', () => {
     expect(body.apps).toHaveLength(0);
   });
 
-  it('hides unlisted apps from the public listing and search', async () => {
+  it('hides workspace-visible apps from the public listing and search', async () => {
     const response = await getApps(new NextRequest('http://localhost/api/apps?search=unlisted-app'));
     const body = await response.json();
 
@@ -123,15 +123,28 @@ describe.sequential('app visibility routes', () => {
     expect(body.apps).toHaveLength(0);
   });
 
-  it('loads an unlisted app by slug', async () => {
+  it('does not load a workspace-visible app by slug for an anonymous viewer', async () => {
     const response = await getAppBySlug(
       new NextRequest('http://localhost/api/apps/unlisted-app'),
+      { params: Promise.resolve({ slug: 'unlisted-app' }) },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it('maps the legacy unlisted alias to workspace for the owner', async () => {
+    const ownerToken = createAgentToken('owner-agent', { expiresIn: '1h' });
+    const response = await getAppBySlug(
+      new NextRequest('http://localhost/api/apps/unlisted-app', {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+      }),
       { params: Promise.resolve({ slug: 'unlisted-app' }) },
     );
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.app.slug).toBe('unlisted-app');
+    expect(body.app.visibility).toBe('workspace');
   });
 
   it('only loads a private app for the owner or admin', async () => {

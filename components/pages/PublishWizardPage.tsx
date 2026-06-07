@@ -38,7 +38,7 @@ type WizardState = {
   optionalSecrets: string;
   permissions: string;
   screenshots: string[];
-  visibility: 'private' | 'unlisted' | 'public';
+  visibility: 'private' | 'workspace' | 'public';
 };
 
 const DEFAULT_STATE: WizardState = {
@@ -224,7 +224,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
               <Badge tone="accent">{state.runtime}</Badge>
               <div className="os-entity-title">{state.name || 'Untitled app'}</div>
               <div className="os-entity-copy">{state.description || 'Short description preview'}</div>
-              <Badge tone={state.visibility === 'public' ? 'success' : state.visibility === 'unlisted' ? 'accent' : 'default'}>{state.visibility}</Badge>
+              <Badge tone={state.visibility === 'public' ? 'success' : state.visibility === 'workspace' ? 'accent' : 'default'}>{state.visibility}</Badge>
             </div>
           </Card>
         ) : (
@@ -360,10 +360,10 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
                 <div style={{ display: 'grid', gap: 12 }}>
                   <Select value={state.visibility} onChange={event => setState(current => ({ ...current, visibility: event.target.value as WizardState['visibility'] }))}>
                     <option value="private">Private</option>
-                    <option value="unlisted">Unlisted</option>
+                    <option value="workspace">Workspace</option>
                     <option value="public">Public</option>
                   </Select>
-                  <div className="os-entity-copy">Internal apps default to private. Change to unlisted or public when you are ready.</div>
+                  <div className="os-entity-copy">Internal apps default to private. Change to workspace or public when you are ready.</div>
                   <Button onClick={() => void publish()}>{saving ? 'Publishing...' : 'Publish'}</Button>
                 </div>
               </Card>

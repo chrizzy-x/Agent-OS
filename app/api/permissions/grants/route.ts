@@ -56,7 +56,7 @@ export async function DELETE(request: NextRequest) {
     const url = new URL(request.url);
     const grant = await revokePermissionGrant({
       actorAgentId: ctx.agentId,
-      grantId: url.searchParams.get('id') ?? undefined,
+      grantId: url.searchParams.get('grantId') ?? url.searchParams.get('id') ?? undefined,
       workspaceId: url.searchParams.get('workspaceId'),
       sourceType: url.searchParams.get('sourceType') ?? undefined,
       sourceId: url.searchParams.get('sourceId') ?? undefined,

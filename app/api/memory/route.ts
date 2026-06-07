@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       targetId: ctx.agentId,
     }).catch(() => []);
 
-    return NextResponse.json({ entries, incomingGrants });
+    return NextResponse.json({ entries, incomingGrants, viewerAgentId: ctx.agentId });
   } catch (error) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

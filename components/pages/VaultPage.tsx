@@ -28,6 +28,7 @@ type Secret = {
   updatedAt: string;
   lastAccessedAt: string | null;
   assignedAppsCount?: number;
+  assignedSubagentsCount?: number;
   assignedWorkflowsCount?: number;
   assignedSkillsCount?: number;
   assignmentCount?: number;
@@ -58,10 +59,11 @@ type VersionEntry = {
 
 type DrawerId = 'secret-details' | 'secret-history' | 'secret-assign';
 
-type SubjectType = 'app' | 'workflow' | 'skill' | 'session' | 'sdk_credential' | 'super_agentos';
+type SubjectType = 'app' | 'subagent' | 'workflow' | 'skill' | 'session' | 'sdk_credential' | 'super_agentos';
 
 const SUBJECT_OPTIONS: Array<{ value: SubjectType; label: string }> = [
   { value: 'app', label: 'App' },
+  { value: 'subagent', label: 'Subagent' },
   { value: 'workflow', label: 'Workflow' },
   { value: 'skill', label: 'Skill' },
   { value: 'session', label: 'Session' },
@@ -312,16 +314,17 @@ export default function VaultPage() {
         </div>
 
         {loading ? <LoadingState label="Loading vault" /> : secrets.length === 0 ? (
-          <EmptyState title="No secrets stored" body="Create a secret, then assign it to apps, workflows, skills, or sessions." action={<Button onClick={() => setCreateOpen(true)}>Create secret</Button>} />
+          <EmptyState title="No secrets stored" body="Create a secret, then assign it to apps, subagents, workflows, skills, or sessions." action={<Button onClick={() => setCreateOpen(true)}>Create secret</Button>} />
         ) : (
           <Card>
             <DataTable
-              columns={['Name', 'Status', 'Last used', 'Assigned apps', 'Assigned workflows', 'Actions']}
+              columns={['Name', 'Status', 'Last used', 'Assigned apps', 'Assigned subagents', 'Assigned workflows', 'Actions']}
               rows={secrets.map(secret => [
                 <button key={`${secret.id}-pick`} type="button" onClick={() => drawer.openDrawer('secret-details', secret.id)} style={{ background: 'transparent', border: 0, padding: 0, color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>{secret.name}</button>,
                 <Badge key={`${secret.id}-status`} tone={secret.status === 'active' ? 'success' : 'warning'}>{secret.status}</Badge>,
                 formatDate(secret.lastAccessedAt),
                 String(secret.assignedAppsCount ?? 0),
+                String(secret.assignedSubagentsCount ?? 0),
                 String(secret.assignedWorkflowsCount ?? 0),
                 <div key={`${secret.id}-actions`} className="os-inline-actions">
                   <Button variant="secondary" onClick={() => drawer.openDrawer('secret-details', secret.id)}>Inspect</Button>
@@ -378,6 +381,7 @@ export default function VaultPage() {
                 <div className="os-entity-copy">Last used: {formatDate(selected.lastAccessedAt)}</div>
                 <div className="os-entity-copy">Updated: {formatDate(selected.updatedAt)}</div>
                 <div className="os-entity-copy">Assigned apps: {selected.assignedAppsCount ?? 0}</div>
+                <div className="os-entity-copy">Assigned subagents: {selected.assignedSubagentsCount ?? 0}</div>
                 <div className="os-entity-copy">Assigned workflows: {selected.assignedWorkflowsCount ?? 0}</div>
                 <div className="os-entity-copy">Assigned skills: {selected.assignedSkillsCount ?? 0}</div>
               </div>
@@ -434,7 +438,7 @@ export default function VaultPage() {
               {SUBJECT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
             </Select>
             <Input value={subjectId} onChange={event => setSubjectId(event.target.value)} placeholder="Runtime subject id" />
-            <div className="os-entity-copy">Examples: app slug, workflow id, skill slug, session id, SDK credential id, or Super AgentOS runtime id.</div>
+            <div className="os-entity-copy">Examples: app slug, subagent id, workflow id, skill slug, session id, SDK credential id, or Super AgentOS runtime id.</div>
           </div>
         )}
       </Drawer>

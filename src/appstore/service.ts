@@ -237,7 +237,8 @@ export function normalizeAgentAppSlug(value: string): string {
 }
 
 function normalizeVisibility(value: unknown, published?: unknown): AgentAppVisibility {
-  if (value === 'public' || value === 'private' || value === 'unlisted') return value;
+  if (value === 'public' || value === 'private' || value === 'workspace') return value;
+  if (value === 'unlisted') return 'workspace';
   if (published === false) return 'private';
   return 'public';
 }
@@ -699,9 +700,14 @@ async function listInstalledSkillSlugs(agentId: string): Promise<string[]> {
     .filter(Boolean);
 }
 
-function canAccessHiddenApp(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
+function canAccessPrivateApp(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
   if (options.canManageAll) return true;
   if (options.viewerAgentId && app.publisherId === options.viewerAgentId) return true;
+  return false;
+}
+
+function canAccessWorkspaceApp(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
+  if (canAccessPrivateApp(app, options)) return true;
   if (app.workspaceId && Array.isArray(options.viewerWorkspaceIds) && options.viewerWorkspaceIds.includes(app.workspaceId)) return true;
   return false;
 }
@@ -711,10 +717,15 @@ function canManageDisabledApp(app: AgentAppListing, options: AgentAppAccessOptio
   return Boolean(options.viewerAgentId && app.publisherId === options.viewerAgentId);
 }
 
+function canAccessAppByVisibility(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
+  if (app.visibility === 'public') return true;
+  if (app.visibility === 'workspace') return canAccessWorkspaceApp(app, options);
+  return canAccessPrivateApp(app, options);
+}
+
 function canAccessAppBySlug(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
   if (app.disabled && !canManageDisabledApp(app, options)) return false;
-  if (app.visibility === 'public' || app.visibility === 'unlisted') return true;
-  return canAccessHiddenApp(app, options);
+  return canAccessAppByVisibility(app, options);
 }
 
 function getAppUnavailableReason(app: AgentAppListing): string | null {
@@ -1079,10 +1090,16 @@ export async function listAgentApps(options: ListAgentAppsOptions = {}): Promise
     apps = apps.filter(app => app.publisherId === publisherId);
   }
 
+  const requestedVisibility = options.visibility === 'unlisted'
+    ? 'workspace'
+    : options.visibility === 'public' || options.visibility === 'private' || options.visibility === 'workspace'
+      ? options.visibility
+      : null;
+
   apps = apps.filter(app => {
     if (source && source !== 'all' && app.source !== source) return false;
     if (runtimeType && runtimeType !== 'all' && app.runtimeType !== runtimeType) return false;
-    if (visibility && visibility !== 'all' && app.visibility !== visibility) return false;
+    if (requestedVisibility && app.visibility !== requestedVisibility) return false;
     if (!options.includeHidden) return app.visibility === 'public' && !app.disabled;
     return canAccessAppBySlug(app, options);
   });
@@ -1149,7 +1166,7 @@ export async function upsertExternalSdkAgentApp(input: {
     deviceTargets?: string[];
     manifest?: Record<string, unknown>;
     defaultConfig?: Record<string, unknown>;
-    visibility?: AgentAppVisibility;
+    visibility?: AgentAppVisibility | 'unlisted';
   };
 }): Promise<AgentAppListing> {
   const product = input.product.trim();
@@ -1350,12 +1367,12 @@ export async function getAgentAppInstallReadiness(params: {
   let app = await getAgentAppBySlug(params.slug, viewer);
   if (!app) {
     const candidate = await getAgentAppBySlug(params.slug, { canManageAll: true });
-    if (candidate && candidate.disabled && (candidate.visibility === 'public' || canAccessHiddenApp(candidate, viewer))) {
+    if (candidate && candidate.disabled && canAccessAppByVisibility(candidate, viewer)) {
       app = candidate;
     }
   }
   if (!app) throw new ValidationError('App not found');
-  if (app.visibility === 'private' && !canAccessHiddenApp(app, {
+  if (!canAccessAppByVisibility(app, {
     viewerAgentId: params.agentId,
     viewerWorkspaceIds: params.viewerWorkspaceIds,
     canManageAll: params.canManageAll,

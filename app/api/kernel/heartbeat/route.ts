@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
         deviceTargets?: string[];
         manifest?: Record<string, unknown>;
         defaultConfig?: Record<string, unknown>;
-        visibility?: 'public' | 'private' | 'unlisted';
+        visibility?: 'public' | 'private' | 'workspace' | 'unlisted';
       };
     };
 

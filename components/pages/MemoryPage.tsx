@@ -7,6 +7,7 @@ import { Badge, Card, EmptyState, LoadingState, PageHeader, SearchBar } from '@/
 
 type MemoryEntry = {
   id: string;
+  ownerAgentId: string;
   key: string;
   content: string;
   visibility: 'private' | 'workspace' | 'public';
@@ -29,9 +30,21 @@ function toneForVisibility(value: string): 'default' | 'accent' | 'success' {
   return 'default';
 }
 
+type MemoryGroupKey = 'my' | 'agent' | 'privateSubagent' | 'workspace' | 'shared';
+
+function classifyMemoryEntry(entry: MemoryEntry, viewerAgentId: string | null): MemoryGroupKey {
+  if (viewerAgentId && entry.ownerAgentId !== viewerAgentId) return 'shared';
+  if (entry.namespaceType === 'user') return 'my';
+  if (entry.namespaceType === 'agent') return 'agent';
+  if (entry.namespaceType === 'subagent' && entry.visibility === 'private') return 'privateSubagent';
+  if (entry.namespaceType === 'workspace' || entry.visibility === 'workspace') return 'workspace';
+  return 'shared';
+}
+
 export default function MemoryPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [viewerAgentId, setViewerAgentId] = useState<string | null>(null);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
   const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
 
@@ -46,9 +59,11 @@ export default function MemoryPage() {
         memoryRes.ok ? memoryRes.json() : Promise.resolve({}),
         filesRes.ok ? filesRes.json() : Promise.resolve({}),
       ]);
+      setViewerAgentId(typeof memoryBody.viewerAgentId === 'string' ? memoryBody.viewerAgentId : null);
       setMemoryEntries(memoryBody.entries ?? []);
       setFileEntries(filesBody.entries ?? []);
     } catch {
+      setViewerAgentId(null);
       setMemoryEntries([]);
       setFileEntries([]);
     } finally {
@@ -76,6 +91,22 @@ export default function MemoryPage() {
     );
   }, [fileEntries, query]);
 
+  const memoryGroups = useMemo(() => {
+    const groups: Array<{ key: MemoryGroupKey; title: string; items: MemoryEntry[] }> = [
+      { key: 'my', title: 'My Memory', items: [] },
+      { key: 'agent', title: 'Agent Memory', items: [] },
+      { key: 'privateSubagent', title: 'Private Subagent Memory', items: [] },
+      { key: 'workspace', title: 'Workspace Memory', items: [] },
+      { key: 'shared', title: 'Shared Memory', items: [] },
+    ];
+    const lookup = new Map(groups.map(group => [group.key, group]));
+    for (const entry of filteredMemory) {
+      lookup.get(classifyMemoryEntry(entry, viewerAgentId))?.items.push(entry);
+    }
+    return groups;
+  }, [filteredMemory, viewerAgentId]);
+  const visibleMemoryGroups = memoryGroups.filter(group => group.items.length > 0);
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/memory" />
@@ -92,24 +123,30 @@ export default function MemoryPage() {
           <EmptyState title="Nothing stored yet" body="Create memory entries, artifacts, or governed files from Studio, workflows, or subagents." />
         ) : (
           <div style={{ display: 'grid', gap: 16 }}>
-            <Card>
-              <div className="os-entity-head" style={{ marginBottom: 12 }}>
-                <div className="os-entity-title">Memory</div>
-                <Badge tone="accent">{filteredMemory.length}</Badge>
-              </div>
-              <div style={{ display: 'grid', gap: 12 }}>
-                {filteredMemory.map(entry => (
-                  <div key={entry.id} style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-                      <strong>{entry.key}</strong>
-                      <Badge tone={toneForVisibility(entry.visibility)}>{entry.visibility}</Badge>
+            {filteredMemory.length === 0 ? (
+              <Card>
+                <div className="os-empty-body">No memory entries match this filter.</div>
+              </Card>
+            ) : visibleMemoryGroups.map(group => (
+              <Card key={group.key}>
+                <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                  <div className="os-entity-title">{group.title}</div>
+                  <Badge tone={group.key === 'workspace' ? 'accent' : group.key === 'shared' ? 'success' : 'default'}>{group.items.length}</Badge>
+                </div>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {group.items.map(entry => (
+                    <div key={entry.id} style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+                        <strong>{entry.key}</strong>
+                        <Badge tone={toneForVisibility(entry.visibility)}>{entry.visibility}</Badge>
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)', marginBottom: 6 }}>{entry.content}</div>
+                      <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{entry.namespaceType}{entry.namespaceId ? `:${entry.namespaceId}` : ''}</div>
                     </div>
-                    <div style={{ color: 'var(--text-secondary)', marginBottom: 6 }}>{entry.content}</div>
-                    <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{entry.namespaceType}{entry.namespaceId ? `:${entry.namespaceId}` : ''}</div>
-                  </div>
-                ))}
-              </div>
-            </Card>
+                  ))}
+                </div>
+              </Card>
+            ))}
 
             <Card>
               <div className="os-entity-head" style={{ marginBottom: 12 }}>

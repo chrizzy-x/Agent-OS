@@ -4,7 +4,7 @@ export type AgentAppCommand = {
 };
 
 export type AgentAppSource = 'internal' | 'external_sdk';
-export type AgentAppVisibility = 'public' | 'private' | 'unlisted';
+export type AgentAppVisibility = 'public' | 'private' | 'workspace';
 export type AgentAppRuntimeType = 'agentos-app' | 'external-app' | 'workspace-app';
 export type AgentAppHealthStatus = 'online' | 'offline' | 'degraded' | 'disabled' | 'unknown';
 export type AgentAppEndpointStatus = 'healthy' | 'offline' | 'degraded' | 'disabled' | 'unknown';

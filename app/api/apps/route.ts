@@ -43,6 +43,15 @@ export async function GET(request: NextRequest) {
           includeHidden = false;
         }
       }
+    } else {
+      try {
+        const viewer = requireAgentContext(request.headers);
+        viewerAgentId = viewer.agentId;
+        viewerWorkspaceIds = (await listWorkspaces(viewer.agentId)).map(workspace => workspace.id);
+        includeHidden = true;
+      } catch {
+        includeHidden = false;
+      }
     }
 
     const apps = await listAgentApps({
@@ -128,14 +137,14 @@ export async function PATCH(request: NextRequest) {
 
     const slug = stringBodyValue(body, 'slug', 'slug');
     const visibility = stringBodyValue(body, 'visibility', 'visibility');
-    const normalizedVisibility = visibility === 'public' || visibility === 'private' || visibility === 'unlisted'
-      ? visibility
+    const normalizedVisibility = visibility === 'public' || visibility === 'private' || visibility === 'workspace' || visibility === 'unlisted'
+      ? visibility === 'unlisted' ? 'workspace' : visibility
       : typeof body.published === 'boolean'
         ? body.published ? 'public' : 'private'
         : undefined;
 
     if (!slug) throw new ValidationError('App slug required');
-    if (!normalizedVisibility) throw new ValidationError('Visibility must be public, private, or unlisted');
+    if (!normalizedVisibility) throw new ValidationError('Visibility must be public, private, or workspace');
 
     const app = await updateAgentAppVisibility({
       slug,

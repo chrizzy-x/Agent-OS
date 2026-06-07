@@ -17,6 +17,14 @@ function SectionList(props: { title: string; items: Array<{ id: string; title: s
   );
 }
 
+function classifyMemoryEntry(entry: { namespaceType: string; visibility: string }): 'my' | 'agent' | 'privateSubagent' | 'workspace' | 'shared' {
+  if (entry.namespaceType === 'user') return 'my';
+  if (entry.namespaceType === 'agent') return 'agent';
+  if (entry.namespaceType === 'subagent' && entry.visibility === 'private') return 'privateSubagent';
+  if (entry.namespaceType === 'workspace' || entry.visibility === 'workspace') return 'workspace';
+  return 'shared';
+}
+
 export default function StudioContextDrawer() {
   const {
     contextOpen,
@@ -36,6 +44,22 @@ export default function StudioContextDrawer() {
   } = useStudio();
 
   const title = contextSection.charAt(0).toUpperCase() + contextSection.slice(1);
+  const memoryGroups = [
+    { key: 'my', title: 'My Memory' },
+    { key: 'agent', title: 'Agent Memory' },
+    { key: 'privateSubagent', title: 'Private Subagent Memory' },
+    { key: 'workspace', title: 'Workspace Memory' },
+    { key: 'shared', title: 'Shared Memory' },
+  ].map(group => ({
+    ...group,
+    items: memoryEntries
+      .filter(item => classifyMemoryEntry(item) === group.key)
+      .map(item => ({
+        id: item.id,
+        title: item.key,
+        body: `${item.namespaceType}${item.namespaceId ? `:${item.namespaceId}` : ''} | ${item.visibility} | ${item.content}`,
+      })),
+  })).filter(group => group.items.length > 0);
 
   return (
     <Drawer
@@ -73,14 +97,14 @@ export default function StudioContextDrawer() {
       {contextSection === 'subagents' ? <SectionList title="Subagents" items={subagents.map(item => ({
         id: item.id,
         title: item.name,
-        body: `${item.visibility} access${item.exposedCapabilities.length > 0 ? ` • ${item.exposedCapabilities.join(', ')}` : ''}${item.description ? ` • ${item.description}` : ''}`,
+        body: `${item.visibility} access${item.exposedCapabilities.length > 0 ? ` | ${item.exposedCapabilities.join(', ')}` : ''}${item.description ? ` | ${item.description}` : ''}`,
       }))} /> : null}
       {contextSection === 'workflows' ? <SectionList title="Workflows" items={workflows.map(item => ({ id: item.id, title: item.name, body: item.summary ?? item.status }))} /> : null}
       {contextSection === 'vault' ? <SectionList title="Vault" items={vaultSecrets.map(item => ({ id: item.id, title: item.name, body: item.status }))} /> : null}
       {contextSection === 'files' ? <SectionList title="Files and Artifacts" items={fileEntries.map(item => ({
         id: item.id,
         title: item.path,
-        body: `${String(item.metadata.kind ?? 'file')} • ${item.visibility}`,
+        body: `${String(item.metadata.kind ?? 'file')} | ${item.visibility}`,
       }))} /> : null}
       {contextSection === 'logs' ? <SectionList title="Logs" items={[
         ...(lineage.parent ? [{ id: `parent-${lineage.parent.id}`, title: 'Parent session', body: lineage.parent.title }] : []),
@@ -88,11 +112,13 @@ export default function StudioContextDrawer() {
         ...events.slice(-8).map(item => ({ id: `studio-${item.id}`, title: item.type, body: JSON.stringify(item.payload) })),
         ...terminalEvents.slice(-8).map(item => ({ id: `terminal-${item.id}`, title: item.type, body: item.chunk ?? item.message ?? '' })),
       ]} /> : null}
-      {contextSection === 'memory' ? <SectionList title="Memory" items={memoryEntries.map(item => ({
-        id: item.id,
-        title: item.key,
-        body: `${item.namespaceType}${item.namespaceId ? `:${item.namespaceId}` : ''} • ${item.visibility} • ${item.content}`,
-      }))} /> : null}
+      {contextSection === 'memory' ? (
+        <div style={{ display: 'grid', gap: 18 }}>
+          {memoryGroups.length > 0 ? memoryGroups.map(group => (
+            <SectionList key={group.key} title={group.title} items={group.items} />
+          )) : <SectionList title="Memory" items={[]} />}
+        </div>
+      ) : null}
     </Drawer>
   );
 }

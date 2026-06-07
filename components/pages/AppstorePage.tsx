@@ -332,7 +332,7 @@ export default function AppstorePage() {
         </div>
 
         {loading ? <LoadingState label="Loading App Store" /> : filtered.length === 0 ? (
-          <EmptyState title="No apps found" body="No public apps matched this search or category." />
+          <EmptyState title="No apps found" body="No accessible apps matched this search or category." />
         ) : (
           <div className="os-drawer-stack">
             {session ? (
