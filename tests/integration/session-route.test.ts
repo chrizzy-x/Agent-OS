@@ -65,6 +65,21 @@ describe('session routes', () => {
     expect(response.headers.get('set-cookie')).toContain('agent_session=');
   });
 
+  it('does not mark browser session cookies as secure on localhost http requests', async () => {
+    const token = createAgentToken('agent-1', { expiresIn: '1h' });
+    const request = new NextRequest('http://127.0.0.1:3000/api/session/token', {
+      method: 'POST',
+      headers: {
+        Cookie: `agent_session=${token}`,
+      },
+    });
+
+    const response = await issueToken(request);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('set-cookie')).not.toContain('Secure');
+  });
+
   it('clears the cookie on sign out', async () => {
     const request = new NextRequest('http://localhost/api/session', { method: 'DELETE' });
     const response = await DELETE(request);

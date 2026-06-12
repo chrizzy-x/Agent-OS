@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
+import { runTrackedExecution } from '@/src/execution/service';
 import { runInstalledSkill } from '@/src/skills/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { sanitizeOutput } from '@/src/utils/output-sanitizer';
@@ -21,20 +22,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'validation_error', message: 'skill_slug and capability are required' }, { status: 400 });
     }
 
-    const execution = await runInstalledSkill({
+    const tracked = await runTrackedExecution({
       agentId: agentContext.agentId,
-      skillSlug,
-      capability,
-      input: body.params ?? {},
+      sourceType: 'skill',
+      sourceId: skillSlug,
+      skillId: skillSlug,
+      title: `Run skill ${skillSlug}.${capability}`,
+      input: { capability, params: body.params ?? {} },
+      run: () => runInstalledSkill({
+        agentId: agentContext.agentId,
+        skillSlug,
+        capability,
+        input: body.params ?? {},
+      }),
     });
+    const execution = tracked.result;
 
     return NextResponse.json({
       success: true,
       result: sanitizeOutput(execution.result),
       execution_time_ms: execution.executionTimeMs,
+      execution: tracked.execution,
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
-    return NextResponse.json({ error: err.message, message: err.message }, { status: err.statusCode });
+    return NextResponse.json({ code: err.code, error: err.message, message: err.message, whatFailed: err.whatFailed, why: err.why, where: err.where, possibleFix: err.possibleFix }, { status: err.statusCode });
   }
 }

@@ -20,6 +20,13 @@ export type AgentFileRecord = {
   updatedAt: string;
 };
 
+export type AgentFileContent = {
+  entry: AgentFileRecord;
+  data: string;
+  contentEncoding: 'utf8' | 'base64';
+  contentType: string;
+};
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -47,6 +54,11 @@ function mapFile(row: Record<string, unknown>): AgentFileRecord {
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
   };
+}
+
+function inlineDataFromMetadata(metadata: Record<string, unknown>): string | null {
+  const inline = metadata.inline_data;
+  return typeof inline === 'string' && inline.length > 0 ? inline : null;
 }
 
 export async function listAccessibleFiles(params: {
@@ -171,6 +183,129 @@ export async function upsertAgentFile(params: {
 
   if (error) throw new Error(`Failed to save file: ${error.message}`);
   return mapFile(data as Record<string, unknown>);
+}
+
+export async function getAgentFileContent(params: {
+  viewerAgentId: string;
+  path: string;
+}): Promise<AgentFileContent> {
+  const path = normalizePath(params.path);
+  const { data, error } = await getSupabaseAdmin()
+    .from('agent_files')
+    .select('*')
+    .eq('agent_id', params.viewerAgentId)
+    .eq('path', path)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load file: ${error.message}`);
+  if (!data) throw new PermissionError('File not found or not accessible');
+
+  const entry = mapFile(data as Record<string, unknown>);
+  const inlineData = inlineDataFromMetadata(entry.metadata);
+  if (inlineData) {
+    const buffer = Buffer.from(inlineData, 'base64');
+    const isText = (entry.contentType ?? '').startsWith('text/') || /json|xml|csv|markdown|javascript|typescript/.test(entry.contentType ?? '');
+    return {
+      entry,
+      data: isText ? buffer.toString('utf8') : inlineData,
+      contentEncoding: isText ? 'utf8' : 'base64',
+      contentType: entry.contentType ?? 'application/octet-stream',
+    };
+  }
+
+  if (!entry.storageRef) {
+    return {
+      entry,
+      data: '',
+      contentEncoding: 'utf8',
+      contentType: entry.contentType ?? 'application/octet-stream',
+    };
+  }
+
+  const download = await getSupabaseAdmin().storage.from(STORAGE_BUCKET).download(entry.storageRef);
+  if (download.error) throw new Error(`Failed to read file storage: ${download.error.message}`);
+  const buffer = Buffer.from(await download.data.arrayBuffer());
+  const isText = (entry.contentType ?? '').startsWith('text/') || /json|xml|csv|markdown|javascript|typescript/.test(entry.contentType ?? '');
+  return {
+    entry,
+    data: isText ? buffer.toString('utf8') : buffer.toString('base64'),
+    contentEncoding: isText ? 'utf8' : 'base64',
+    contentType: entry.contentType ?? 'application/octet-stream',
+  };
+}
+
+export async function renameAgentFile(params: {
+  ownerAgentId: string;
+  path: string;
+  nextPath: string;
+}): Promise<AgentFileRecord> {
+  const path = normalizePath(params.path);
+  const nextPath = normalizePath(params.nextPath);
+  const current = await getAgentFileContent({ viewerAgentId: params.ownerAgentId, path });
+  const nextStorageRef = current.entry.storageRef ? storagePath(params.ownerAgentId, nextPath) : null;
+  let metadata = current.entry.metadata;
+
+  if (current.entry.storageRef && nextStorageRef) {
+    const payload = current.contentEncoding === 'utf8'
+      ? Buffer.from(current.data, 'utf8')
+      : Buffer.from(current.data, 'base64');
+    const upload = await getSupabaseAdmin().storage.from(STORAGE_BUCKET).upload(nextStorageRef, payload, {
+      contentType: current.contentType,
+      upsert: true,
+    });
+    if (upload.error) {
+      metadata = {
+        ...metadata,
+        inline_data: payload.toString('base64'),
+        storage_backend: 'inline',
+      };
+    } else {
+      await getSupabaseAdmin().storage.from(STORAGE_BUCKET).remove([current.entry.storageRef]).catch(() => undefined);
+      metadata = {
+        ...metadata,
+        storage_backend: 'storage',
+      };
+    }
+  }
+
+  const { data, error } = await getSupabaseAdmin()
+    .from('agent_files')
+    .update({
+      path: nextPath,
+      storage_ref: nextStorageRef,
+      metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('agent_id', params.ownerAgentId)
+    .eq('path', path)
+    .select('*')
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to rename file: ${error.message}`);
+  if (!data) throw new PermissionError('File not found or not accessible');
+  return mapFile(data as Record<string, unknown>);
+}
+
+export async function summarizeAgentFile(params: {
+  viewerAgentId: string;
+  path: string;
+}): Promise<{ entry: AgentFileRecord; summary: string }> {
+  const content = await getAgentFileContent(params);
+  if (content.contentEncoding !== 'utf8') {
+    return {
+      entry: content.entry,
+      summary: `${content.entry.path} is a binary file (${content.contentType}, ${content.entry.sizeBytes} bytes). Preview is available as a download or base64 payload.`,
+    };
+  }
+
+  const normalized = content.data.replace(/\s+/g, ' ').trim();
+  const preview = normalized.slice(0, 800);
+  const lines = content.data.split(/\r?\n/).length;
+  const words = normalized ? normalized.split(/\s+/).length : 0;
+  return {
+    entry: content.entry,
+    summary: `${content.entry.path}: ${lines} lines, ${words} words. ${preview || 'The file is empty.'}`,
+  };
 }
 
 export async function deleteAgentFile(params: {

@@ -2,7 +2,7 @@ import { ValidationError } from '../../utils/errors.js';
 import type { XPostRecord, XUserProfile } from './types.js';
 
 const X_API_BASE_URL = 'https://api.x.com/2';
-const X_USER_AGENT = 'AgentOS/1.0 (+https://agentos-app.vercel.app)';
+const X_USER_AGENT = 'AgentOS/1.0 (+https://www.agentos.services)';
 
 function summarizeXApiError(payload: unknown): string {
   if (!payload || typeof payload !== 'object') {

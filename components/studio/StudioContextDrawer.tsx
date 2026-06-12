@@ -1,7 +1,9 @@
 'use client';
 
 import { Drawer } from '@/components/os/overlays';
+import { Badge, StatusPill } from '@/components/os/ui';
 import { useStudio } from '@/components/studio/StudioProvider';
+import { fetchWithBrowserSession } from '@/src/auth/browser-session';
 
 function SectionList(props: { title: string; items: Array<{ id: string; title: string; body: string }> }) {
   return (
@@ -34,14 +36,65 @@ export default function StudioContextDrawer() {
     installedApps,
     installedSkills,
     subagents,
+    activeSubagent,
     workflows,
     memoryEntries,
     fileEntries,
     vaultSecrets,
+    session,
+    currentProject,
+    terminal,
     terminalEvents,
     events,
+    executions,
+    recoveryExecutions,
+    notifications,
+    requestExecutionAction,
+    markNotification,
+    refresh,
     lineage,
   } = useStudio();
+
+  async function previewFile(path: string) {
+    const response = await fetchWithBrowserSession(`/api/files?action=preview&path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+    const payload = await response.response.json().catch(() => null) as { data?: string; contentEncoding?: string } | null;
+    window.alert(payload?.contentEncoding === 'base64' ? 'Binary preview is available as base64.' : payload?.data?.slice(0, 2000) || 'No preview available.');
+  }
+
+  async function summarizeFile(path: string) {
+    const response = await fetchWithBrowserSession(`/api/files?action=summarize&path=${encodeURIComponent(path)}`, { cache: 'no-store' });
+    const payload = await response.response.json().catch(() => null) as { summary?: string } | null;
+    window.alert(payload?.summary || 'No summary available.');
+    await refresh();
+  }
+
+  async function renameFile(path: string) {
+    const nextPath = window.prompt('Rename file', path);
+    if (!nextPath || nextPath.trim() === path) return;
+    await fetchWithBrowserSession('/api/files', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, nextPath }),
+    });
+    await refresh();
+  }
+
+  async function deleteFile(path: string) {
+    if (!window.confirm(`Delete ${path}?`)) return;
+    await fetchWithBrowserSession(`/api/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+    await refresh();
+  }
+
+  async function exportMemory() {
+    const response = await fetchWithBrowserSession('/api/memory?export=1&limit=200', { cache: 'no-store' });
+    const payload = await response.response.text();
+    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `agentos-memory-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   const title = contextSection.charAt(0).toUpperCase() + contextSection.slice(1);
   const memoryGroups = [
@@ -60,6 +113,44 @@ export default function StudioContextDrawer() {
         body: `${item.namespaceType}${item.namespaceId ? `:${item.namespaceId}` : ''} | ${item.visibility} | ${item.content}`,
       })),
   })).filter(group => group.items.length > 0);
+  const summary = [
+    {
+      id: 'session',
+      title: 'Session',
+      body: session?.title ?? 'No active session',
+      badges: [
+        session?.visibility ?? 'private',
+        currentProject?.name ?? 'No project',
+      ],
+    },
+    {
+      id: 'agent',
+      title: 'Agent',
+      body: activeSubagent?.description ?? 'Super AgentOS primary session',
+      badges: [
+        activeSubagent?.name ?? 'Super AgentOS',
+        activeSubagent?.status ?? 'active',
+      ],
+    },
+    {
+      id: 'runtime',
+      title: 'Runtime',
+      body: terminal ? `${terminal.shell} in ${terminal.cwd}` : 'Terminal not started in this project',
+      badges: [
+        terminal?.status ?? 'idle',
+        `${executions.length} executions`,
+      ],
+    },
+    {
+      id: 'memory',
+      title: 'Memory',
+      body: `${memoryEntries.length} visible memory records and ${fileEntries.length} governed files`,
+      badges: [
+        `${workflows.length} workflows`,
+        `${notifications.filter(item => item.status === 'unread').length} alerts`,
+      ],
+    },
+  ];
 
   return (
     <Drawer
@@ -71,8 +162,22 @@ export default function StudioContextDrawer() {
       mobilePlacement="bottom"
       size="md"
     >
+      <div style={{ display: 'grid', gap: 12, marginBottom: 18 }}>
+        {summary.map(item => (
+          <div key={item.id} style={{ padding: '14px 16px', borderRadius: 16, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+              <strong>{item.title}</strong>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {item.badges.map(badge => badge ? <Badge key={badge} tone="default">{badge}</Badge> : null)}
+              </div>
+            </div>
+            <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{item.body}</div>
+          </div>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-        {(['apps', 'skills', 'subagents', 'workflows', 'memory', 'files', 'vault', 'logs'] as const).map(section => (
+        {(['apps', 'skills', 'subagents', 'workflows', 'memory', 'files', 'vault', 'logs', 'recovery', 'notifications'] as const).map(section => (
           <button
             key={section}
             type="button"
@@ -97,23 +202,94 @@ export default function StudioContextDrawer() {
       {contextSection === 'subagents' ? <SectionList title="Subagents" items={subagents.map(item => ({
         id: item.id,
         title: item.name,
-        body: `${item.visibility} access${item.exposedCapabilities.length > 0 ? ` | ${item.exposedCapabilities.join(', ')}` : ''}${item.description ? ` | ${item.description}` : ''}`,
+        body: `${item.status} | ${item.visibility} access${item.exposedCapabilities.length > 0 ? ` | ${item.exposedCapabilities.join(', ')}` : ''}${item.description ? ` | ${item.description}` : ''}`,
       }))} /> : null}
       {contextSection === 'workflows' ? <SectionList title="Workflows" items={workflows.map(item => ({ id: item.id, title: item.name, body: item.summary ?? item.status }))} /> : null}
       {contextSection === 'vault' ? <SectionList title="Vault" items={vaultSecrets.map(item => ({ id: item.id, title: item.name, body: item.status }))} /> : null}
-      {contextSection === 'files' ? <SectionList title="Files and Artifacts" items={fileEntries.map(item => ({
-        id: item.id,
-        title: item.path,
-        body: `${String(item.metadata.kind ?? 'file')} | ${item.visibility}`,
-      }))} /> : null}
+      {contextSection === 'files' ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <strong>Files and Artifacts</strong>
+          {fileEntries.length > 0 ? fileEntries.map(item => (
+            <div key={item.id} style={{ padding: '14px 16px', borderRadius: 16, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)', display: 'grid', gap: 8 }}>
+              <div style={{ fontWeight: 600 }}>{item.path}</div>
+              <div style={{ color: 'var(--text-secondary)' }}>{String(item.metadata.kind ?? 'file')} | {item.visibility}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => void previewFile(item.path)} style={{ minHeight: 32, padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', color: 'inherit', cursor: 'pointer' }}>Preview</button>
+                <button type="button" onClick={() => void summarizeFile(item.path)} style={{ minHeight: 32, padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', color: 'inherit', cursor: 'pointer' }}>Summarize</button>
+                <button type="button" onClick={() => void renameFile(item.path)} style={{ minHeight: 32, padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', color: 'inherit', cursor: 'pointer' }}>Rename</button>
+                <button type="button" onClick={() => void deleteFile(item.path)} style={{ minHeight: 32, padding: '0 10px', borderRadius: 10, border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.08)', color: 'inherit', cursor: 'pointer' }}>Delete</button>
+              </div>
+            </div>
+          )) : <span style={{ color: 'var(--text-secondary)' }}>Nothing here yet.</span>}
+        </div>
+      ) : null}
+      {contextSection === 'recovery' ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <strong>Recovery Center</strong>
+          {recoveryExecutions.length > 0 ? recoveryExecutions.map(item => (
+            <div key={item.id} style={{ padding: '14px 16px', borderRadius: 16, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)', display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <strong>{item.title}</strong>
+                <StatusPill status={item.status} />
+              </div>
+              {item.failure ? (
+                <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  {String(item.failure.whatFailed ?? item.failure.why ?? 'Execution needs attention')}
+                </div>
+              ) : <div style={{ color: 'var(--text-secondary)' }}>{item.sourceType}</div>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {(['resume', 'retry', 'cancel', 'rollback'] as const).map(action => (
+                  <button
+                    key={action}
+                    type="button"
+                    onClick={() => void requestExecutionAction(item.id, action)}
+                    style={{
+                      minHeight: 34,
+                      padding: '0 12px',
+                      borderRadius: 12,
+                      border: '1px solid var(--border)',
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'inherit',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )) : <span style={{ color: 'var(--text-secondary)' }}>No recoverable executions.</span>}
+        </div>
+      ) : null}
+      {contextSection === 'notifications' ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <strong>Notifications</strong>
+          {notifications.length > 0 ? notifications.map(item => (
+            <div key={item.id} style={{ padding: '14px 16px', borderRadius: 16, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)', display: 'grid', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <strong>{item.title}</strong>
+                <StatusPill status={item.status} />
+              </div>
+              <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{item.body}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => void markNotification(item.id, 'read')} style={{ minHeight: 32, padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', color: 'inherit', cursor: 'pointer' }}>Read</button>
+                <button type="button" onClick={() => void markNotification(item.id, 'archived')} style={{ minHeight: 32, padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', color: 'inherit', cursor: 'pointer' }}>Archive</button>
+              </div>
+            </div>
+          )) : <span style={{ color: 'var(--text-secondary)' }}>No notifications.</span>}
+        </div>
+      ) : null}
       {contextSection === 'logs' ? <SectionList title="Logs" items={[
         ...(lineage.parent ? [{ id: `parent-${lineage.parent.id}`, title: 'Parent session', body: lineage.parent.title }] : []),
         ...lineage.children.map(item => ({ id: `child-${item.id}`, title: 'Branch session', body: item.title })),
         ...events.slice(-8).map(item => ({ id: `studio-${item.id}`, title: item.type, body: JSON.stringify(item.payload) })),
-        ...terminalEvents.slice(-8).map(item => ({ id: `terminal-${item.id}`, title: item.type, body: item.chunk ?? item.message ?? '' })),
+        ...executions.slice(0, 8).map(item => ({ id: `execution-${item.id}`, title: item.status, body: `${item.sourceType} | ${item.title}` })),
+        ...(terminal ? [{ id: `terminal-status-${terminal.id}`, title: 'Terminal session', body: `${terminal.status} | ${terminal.cwd}` }] : []),
+        ...terminalEvents.slice(-8).map(item => ({ id: `terminal-${item.id}`, title: item.type, body: `${item.chunk ?? item.message ?? ''}${item.status ? ` | ${item.status}` : ''}` })),
       ]} /> : null}
       {contextSection === 'memory' ? (
         <div style={{ display: 'grid', gap: 18 }}>
+          <button type="button" onClick={() => void exportMemory()} style={{ justifySelf: 'start', minHeight: 36, padding: '0 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.04)', color: 'inherit', cursor: 'pointer' }}>Export memory</button>
           {memoryGroups.length > 0 ? memoryGroups.map(group => (
             <SectionList key={group.key} title={group.title} items={group.items} />
           )) : <SectionList title="Memory" items={[]} />}

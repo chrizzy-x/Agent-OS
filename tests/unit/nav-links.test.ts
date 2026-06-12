@@ -14,11 +14,11 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toEqual(['Home', 'Studio', 'Memory', 'Apps', 'Skills', 'Projects', 'Workflows']);
+    expect(links.map(item => item.label)).toEqual(['Super AgentOS', 'AppStore', 'Workflows', 'Skills', 'Files', 'Settings']);
   });
 
   it('shows a minimal unauthenticated navigation', () => {
     const links = buildSessionNavLinks(null);
-    expect(links.map(item => item.label)).toEqual(['Home', 'Studio', 'Apps', 'Skills', 'Docs']);
+    expect(links.map(item => item.label)).toEqual(['Super AgentOS', 'AppStore', 'Workflows', 'Skills', 'Files', 'Settings']);
   });
 });

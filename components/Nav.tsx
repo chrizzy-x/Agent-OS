@@ -14,22 +14,22 @@ interface NavProps {
 export function buildSessionNavLinks(session: BrowserSession | null): Array<{ href: string; label: string }> {
   if (!session) {
     return [
-      { href: '/', label: 'Home' },
-      { href: '/studio', label: 'Studio' },
-      { href: '/appstore', label: 'Apps' },
+      { href: '/studio', label: 'Super AgentOS' },
+      { href: '/appstore', label: 'AppStore' },
+      { href: '/workflows', label: 'Workflows' },
       { href: '/skills', label: 'Skills' },
-      { href: '/docs', label: 'Docs' },
+      { href: '/files', label: 'Files' },
+      { href: '/settings', label: 'Settings' },
     ];
   }
 
   const links: Array<{ href: string; label: string }> = [
-    { href: '/', label: 'Home' },
-    { href: '/studio', label: 'Studio' },
-    { href: '/memory', label: 'Memory' },
-    { href: '/appstore', label: 'Apps' },
-    { href: '/skills', label: 'Skills' },
-    { href: '/projects', label: 'Projects' },
+    { href: '/studio', label: 'Super AgentOS' },
+    { href: '/appstore', label: 'AppStore' },
     { href: '/workflows', label: 'Workflows' },
+    { href: '/skills', label: 'Skills' },
+    { href: '/files', label: 'Files' },
+    { href: '/settings', label: 'Settings' },
   ];
 
   return links;
@@ -127,7 +127,7 @@ export default function Nav({ activePath }: NavProps) {
                 <span style={{ color: 'var(--text-secondary)', fontSize: 14, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {session.agentName ?? 'AgentOS'}
                 </span>
-                <Link href="/studio" className="btn-primary">Open Studio</Link>
+                <Link href="/studio" className="btn-primary">Open Super AgentOS</Link>
               </>
             ) : (
               <>
@@ -187,7 +187,7 @@ export default function Nav({ activePath }: NavProps) {
             </Link>
           ))}
           {session ? (
-            <Link href="/studio" className="btn-primary" onClick={() => setMenuOpen(false)}>Open Studio</Link>
+            <Link href="/studio" className="btn-primary" onClick={() => setMenuOpen(false)}>Open Super AgentOS</Link>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
               <Link href="/signin" className="btn-ghost" onClick={() => setMenuOpen(false)}>Sign in</Link>

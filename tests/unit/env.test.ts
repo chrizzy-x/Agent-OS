@@ -24,9 +24,9 @@ beforeEach(() => {
 
 describe('env helpers', () => {
   it('prefers NEXT_PUBLIC_APP_URL for the public app URL', () => {
-    process.env.NEXT_PUBLIC_APP_URL = 'https://agentos-app.vercel.app';
+    process.env.NEXT_PUBLIC_APP_URL = 'https://www.agentos.services';
     process.env.NEXT_PUBLIC_API_URL = 'https://legacy.example.com';
-    expect(getPublicAppUrl()).toBe('https://agentos-app.vercel.app');
+    expect(getPublicAppUrl()).toBe('https://www.agentos.services');
   });
 
   it('falls back to the legacy Supabase service key alias', () => {
@@ -69,10 +69,10 @@ describe('env helpers', () => {
 
   it('reads X OAuth settings and splits scopes', () => {
     process.env.X_CLIENT_ID = 'test-x-client-id';
-    process.env.X_REDIRECT_URI = 'https://agentos-app.vercel.app/api/x/callback';
+    process.env.X_REDIRECT_URI = 'https://www.agentos.services/api/x/callback';
     process.env.X_OAUTH_SCOPES = 'tweet.read,tweet.write users.read';
 
-    expect(getXRedirectUri()).toBe('https://agentos-app.vercel.app/api/x/callback');
+    expect(getXRedirectUri()).toBe('https://www.agentos.services/api/x/callback');
     expect(hasXOAuthConfig()).toBe(true);
     expect(getXOAuthScopes()).toEqual(['tweet.read', 'tweet.write', 'users.read']);
   });
@@ -80,11 +80,11 @@ describe('env helpers', () => {
   it('reports readiness for Meta, Telegram, and Google social providers', () => {
     process.env.META_APP_ID = 'meta-app-id';
     process.env.META_APP_SECRET = 'meta-app-secret';
-    process.env.META_REDIRECT_URI = 'https://agentos-app.vercel.app/api/meta/callback';
+    process.env.META_REDIRECT_URI = 'https://www.agentos.services/api/meta/callback';
     process.env.TELEGRAM_BOT_TOKEN = 'telegram-bot-token';
     process.env.GOOGLE_CLIENT_ID = 'google-client-id';
     process.env.GOOGLE_CLIENT_SECRET = 'google-client-secret';
-    process.env.GOOGLE_REDIRECT_URI = 'https://agentos-app.vercel.app/api/youtube/callback';
+    process.env.GOOGLE_REDIRECT_URI = 'https://www.agentos.services/api/youtube/callback';
 
     expect(hasMetaOAuthConfig()).toBe(true);
     expect(hasTelegramBotConfig()).toBe(true);

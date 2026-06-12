@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.2.0", "timestamp": "...", "tools": 32 }',
+    response: '{ "status": "ok", "version": "6.5.1", "timestamp": "...", "tools": 44 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -32,12 +32,12 @@ const endpoints: Endpoint[] = [
       { field: 'allowedDomains', type: 'string[]', required: false, desc: 'Optional outbound domain allowlist. Empty means all domains allowed.' },
       { field: 'allowedTools', type: 'string[]', required: false, desc: 'Optional tool permission list. Defaults to all built-in agentos.* primitives.' },
     ],
-    response: '{ "token": "eyJ...", "expiresIn": "90d", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
+    response: `{"token":"eyJ...","expiresIn":"90d","allowedDomains":["httpbin.org"],"allowedTools":["agentos.net_http_get"],"mcpEndpoint":"${BASE}/mcp","toolsEndpoint":"${BASE}/tools"}`,
   },
   {
     method: 'GET', path: '/agent/me', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Return the current external-agent registration details without reissuing the token.',
-    response: '{ "name": "My Agent", "status": "active", "allowedDomains": ["httpbin.org"], "allowedTools": ["agentos.net_http_get"], "totalCalls": 1, "lastActiveAt": "...", "createdAt": "...", "mcpEndpoint": "https://agentos-app.vercel.app/mcp", "toolsEndpoint": "https://agentos-app.vercel.app/tools" }',
+    response: `{"name":"My Agent","status":"active","allowedDomains":["httpbin.org"],"allowedTools":["agentos.net_http_get"],"totalCalls":1,"lastActiveAt":"...","createdAt":"...","mcpEndpoint":"${BASE}/mcp","toolsEndpoint":"${BASE}/tools"}`,
   },
   {
     method: 'GET', path: '/api/agents', auth: 'Browser Session or Bearer (Agent)',
@@ -187,6 +187,73 @@ const endpoints: Endpoint[] = [
     response: '{ "kind": "help|preview|result|error", "summary": "...", "result": {...}, "snippet": "..." }',
   },
   {
+    method: 'POST', path: '/api/studio/intent/stream', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Stream a Super AgentOS chat request while persisting an execution record, logs, final reply, approvals, and notifications.',
+    body: [
+      { field: 'message', type: 'string', required: true, desc: 'User request for Super AgentOS' },
+      { field: 'sessionId', type: 'string', required: true, desc: 'Studio session id' },
+      { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace scope' },
+      { field: 'projectId', type: 'string', required: false, desc: 'Project scope' },
+    ],
+    response: 'text/event-stream: execution, reply, error, and done events',
+  },
+  {
+    method: 'GET', path: '/api/executions', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Search persisted executions by status, source type, workflow, app, skill, session, workspace, or title.',
+    response: '{ "executions": [{ "id": "...", "status": "completed", "sourceType": "super_agent", "title": "..." }] }',
+  },
+  {
+    method: 'GET', path: '/api/executions/{id}', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Load one execution and its execution logs.',
+    response: '{ "execution": {...}, "logs": [{ "level": "info", "message": "..." }] }',
+  },
+  {
+    method: 'POST', path: '/api/executions/{id}/actions', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Persist an execution action request: pause, resume, retry, cancel, or rollback.',
+    body: [
+      { field: 'action', type: 'pause | resume | retry | cancel | rollback', required: true, desc: 'Requested execution action' },
+    ],
+    response: '{ "execution": { "id": "...", "status": "paused" } }',
+  },
+  {
+    method: 'GET', path: '/api/recovery', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List recoverable executions for the Recovery Center.',
+    response: '{ "executions": [{ "status": "failed", "failure": { "whatFailed": "..." } }] }',
+  },
+  {
+    method: 'POST', path: '/api/recovery', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Resume, retry, cancel, or rollback a recoverable execution.',
+    body: [
+      { field: 'executionId', type: 'string', required: true, desc: 'Execution id' },
+      { field: 'action', type: 'resume | retry | cancel | rollback', required: true, desc: 'Recovery action' },
+    ],
+    response: '{ "execution": {...} }',
+  },
+  {
+    method: 'POST', path: '/api/panic', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Cancel active queued, running, waiting, and paused executions in scope and create a notification.',
+    body: [
+      { field: 'workspaceId', type: 'string', required: false, desc: 'Optional workspace scope' },
+      { field: 'sessionId', type: 'string', required: false, desc: 'Optional session scope' },
+    ],
+    response: '{ "stopped": 2, "executions": [...] }',
+  },
+  {
+    method: 'GET', path: '/api/notifications', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List task, approval, workflow, recovery, and panic notifications.',
+    response: '{ "notifications": [{ "title": "Task completed", "status": "unread" }] }',
+  },
+  {
+    method: 'POST', path: '/api/notifications', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Create a notification or mark one read, unread, or archived.',
+    body: [
+      { field: 'notificationId', type: 'string', required: false, desc: 'Existing notification to update' },
+      { field: 'status', type: 'read | unread | archived', required: false, desc: 'Next notification status' },
+      { field: 'title', type: 'string', required: false, desc: 'Title for a new notification' },
+    ],
+    response: '{ "notification": {...} }',
+  },
+  {
     method: 'GET', path: '/api/skills', auth: 'None',
     desc: 'Browse published Skill Store skills. Supports category, search, sort, page, limit, and author query params.',
     response: '{ "skills": [...], "pagination": { "page": 1, "limit": 50, "total": 54 } }',
@@ -305,7 +372,58 @@ const endpoints: Endpoint[] = [
       { field: 'capability', type: 'string', required: true, desc: 'Capability method name' },
       { field: 'params', type: 'object', required: false, desc: 'Capability input payload' },
     ],
-    response: '{ "success": true, "result": <any>, "execution_time_ms": 12 }',
+    response: '{ "success": true, "result": <any>, "execution_time_ms": 12, "execution": {...} }',
+  },
+  {
+    method: 'GET', path: '/api/files', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List or search governed files. Use action=preview or action=summarize with path for file-specific operations.',
+    response: '{ "entries": [{ "path": "brief.md", "visibility": "private" }] }',
+  },
+  {
+    method: 'POST', path: '/api/files', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Upload or save a governed file and persist the file execution.',
+    body: [
+      { field: 'path', type: 'string', required: true, desc: 'File path' },
+      { field: 'data', type: 'string', required: false, desc: 'UTF-8 or base64 content' },
+      { field: 'contentEncoding', type: 'utf8 | base64', required: false, desc: 'Payload encoding' },
+      { field: 'visibility', type: 'private | workspace | public', required: false, desc: 'Governed visibility' },
+    ],
+    response: '{ "entry": {...}, "execution": {...} }',
+  },
+  {
+    method: 'PATCH', path: '/api/files', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Rename a governed file and persist the file execution.',
+    body: [
+      { field: 'path', type: 'string', required: true, desc: 'Current file path' },
+      { field: 'nextPath', type: 'string', required: true, desc: 'New file path' },
+    ],
+    response: '{ "entry": {...}, "execution": {...} }',
+  },
+  {
+    method: 'DELETE', path: '/api/files', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Delete a governed file by path and persist the file execution.',
+    response: '{ "path": "brief.md", "deleted": true, "execution": {...} }',
+  },
+  {
+    method: 'GET', path: '/api/memory', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List, search, or export governed memory. Add export=1 to return the v6.5.1 memory export payload.',
+    response: '{ "entries": [{ "key": "preference", "namespaceType": "user" }], "viewerAgentId": "..." }',
+  },
+  {
+    method: 'POST', path: '/api/memory', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Create or update governed memory and persist the memory execution.',
+    body: [
+      { field: 'key', type: 'string', required: true, desc: 'Memory key' },
+      { field: 'content', type: 'string', required: true, desc: 'Memory content' },
+      { field: 'namespaceType', type: 'user | agent | subagent | workspace | workflow | app | skill', required: false, desc: 'Memory namespace' },
+      { field: 'visibility', type: 'private | workspace | public', required: false, desc: 'Governed visibility' },
+    ],
+    response: '{ "entry": {...}, "execution": {...} }',
+  },
+  {
+    method: 'DELETE', path: '/api/memory', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Delete governed memory by key and namespace and persist the memory execution.',
+    response: '{ "deleted": true, "execution": {...} }',
   },
   {
     method: 'GET', path: '/api/ops/metrics', auth: 'None',

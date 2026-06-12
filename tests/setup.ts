@@ -8,11 +8,11 @@ process.env.SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
 process.env.SUPABASE_SERVICE_KEY = 'test-service-role-key';
-process.env.NEXT_PUBLIC_APP_URL = 'https://agentos-app.vercel.app';
+process.env.NEXT_PUBLIC_APP_URL = 'https://www.agentos.services';
 process.env.ALLOWED_DOMAINS = 'httpbin.org,api.example.com';
 process.env.X_CLIENT_ID = 'test-x-client-id';
 process.env.X_CLIENT_SECRET = 'test-x-client-secret';
-process.env.X_REDIRECT_URI = 'https://agentos-app.vercel.app/api/x/callback';
+process.env.X_REDIRECT_URI = 'https://www.agentos.services/api/x/callback';
 process.env.SOCIAL_TOKEN_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 process.env.X_TOKEN_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 process.env.X_OAUTH_SCOPES = 'tweet.read tweet.write users.read offline.access';
@@ -72,6 +72,7 @@ export const mockSupabaseFrom = vi.fn(() => ({
   lt: vi.fn().mockReturnThis(),
   lte: vi.fn().mockReturnThis(),
   ilike: vi.fn().mockReturnThis(),
+  is: vi.fn().mockReturnThis(),
   or: vi.fn().mockReturnThis(),
   contains: vi.fn().mockReturnThis(),
   maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),

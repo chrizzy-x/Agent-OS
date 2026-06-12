@@ -53,6 +53,9 @@ export type StudioSessionRecord = {
   linkedMemoryRefs: string[];
   title: string;
   status: string;
+  pinnedAt: string | null;
+  archivedAt: string | null;
+  deletedAt: string | null;
   state: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -115,6 +118,9 @@ function mapSession(row: Record<string, unknown>): StudioSessionRecord {
       : [],
     title: typeof row.title === 'string' ? row.title : 'AgentOS Studio',
     status: typeof row.status === 'string' ? row.status : 'active',
+    pinnedAt: typeof row.pinned_at === 'string' ? row.pinned_at : null,
+    archivedAt: typeof row.archived_at === 'string' ? row.archived_at : null,
+    deletedAt: typeof row.deleted_at === 'string' ? row.deleted_at : null,
     state: asRecord(row.state),
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
@@ -177,6 +183,8 @@ export async function listStudioSessions(
     .from('nl_studio_sessions')
     .select('*')
     .eq('owner_agent_id', ownerAgentId)
+    .is('deleted_at', null)
+    .order('pinned_at', { ascending: false, nullsFirst: false })
     .order('updated_at', { ascending: false });
 
   if (options.status && options.status !== 'all') {
@@ -427,6 +435,8 @@ export async function updateStudioSession(params: {
   title?: string;
   statePatch?: Record<string, unknown>;
   status?: string;
+  pinned?: boolean;
+  deleted?: boolean;
   visibility?: 'private' | 'workspace' | 'public';
   linkedSubagentId?: string | null;
   linkedWorkflowId?: string | null;
@@ -452,6 +462,18 @@ export async function updateStudioSession(params: {
   if (params.status !== undefined) {
     if (!params.status.trim()) throw new ValidationError('session status is required');
     patch.status = params.status.trim().slice(0, 80);
+    if (patch.status === 'archived') {
+      patch.archived_at = new Date().toISOString();
+    }
+  }
+
+  if (params.pinned !== undefined) {
+    patch.pinned_at = params.pinned ? new Date().toISOString() : null;
+  }
+
+  if (params.deleted === true) {
+    patch.status = 'deleted';
+    patch.deleted_at = new Date().toISOString();
   }
 
   if (params.visibility !== undefined) {

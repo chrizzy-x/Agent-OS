@@ -38,6 +38,9 @@ type StudioSessionRecord = {
   linkedFilePaths?: string[];
   linkedMemoryRefs?: string[];
   updatedAt: string;
+  pinnedAt?: string | null;
+  archivedAt?: string | null;
+  deletedAt?: string | null;
 };
 
 type StudioMessageRecord = {
@@ -102,10 +105,13 @@ type InstalledAppRecord = {
 
 type SubagentRecord = {
   id: string;
+  workspaceId: string;
+  projectId: string | null;
   name: string;
   description: string | null;
   visibility: 'private' | 'workspace' | 'public';
   exposedCapabilities: string[];
+  status: string;
   updatedAt: string;
 };
 
@@ -125,6 +131,31 @@ type FileEntryRecord = {
   visibility: 'private' | 'workspace' | 'public';
   metadata: Record<string, unknown>;
   updatedAt: string;
+};
+
+type ExecutionRecord = {
+  id: string;
+  title: string;
+  status: 'queued' | 'running' | 'waiting_for_user' | 'paused' | 'completed' | 'partially_completed' | 'failed' | 'cancelled';
+  sourceType: string;
+  sourceId: string | null;
+  sessionId: string | null;
+  failure: Record<string, unknown> | null;
+  output: unknown;
+  durationMs: number | null;
+  estimatedCost: number;
+  updatedAt: string;
+  createdAt: string;
+};
+
+type NotificationRecord = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  status: 'unread' | 'read' | 'archived';
+  executionId: string | null;
+  createdAt: string;
 };
 
 type SuperAgentRecord = {
@@ -165,8 +196,12 @@ type StudioContextValue = {
   installedApps: InstalledAppRecord[];
   superAgent: SuperAgentRecord | null;
   subagents: SubagentRecord[];
+  activeSubagent: SubagentRecord | null;
   memoryEntries: MemoryEntryRecord[];
   fileEntries: FileEntryRecord[];
+  executions: ExecutionRecord[];
+  recoveryExecutions: ExecutionRecord[];
+  notifications: NotificationRecord[];
   fileTree: StudioFileNode[];
   tabs: StudioEditorTab[];
   activeTabId: string | null;
@@ -182,9 +217,18 @@ type StudioContextValue = {
   composerValue: string;
   sendMessage: (message?: string) => Promise<void>;
   approvePending: () => Promise<void>;
-  createSession: () => Promise<void>;
+  createSession: (options?: { linkedSubagentId?: string | null; title?: string }) => Promise<void>;
+  focusSubagent: (subagentId: string) => Promise<void>;
+  createSubagent: (input: {
+    name: string;
+    description?: string;
+    visibility?: 'private' | 'workspace' | 'public';
+    exposedCapabilities?: string[];
+  }) => Promise<SubagentRecord | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
+  pinSession: (sessionId: string, pinned: boolean) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
   selectSession: (sessionId: string) => void;
   selectProject: (projectId: string) => void;
   openFile: (path: string) => Promise<void>;
@@ -193,6 +237,9 @@ type StudioContextValue = {
   refreshFiles: () => Promise<void>;
   startTerminal: () => Promise<void>;
   sendTerminalInput: () => Promise<void>;
+  panicStop: () => Promise<void>;
+  requestExecutionAction: (executionId: string, action: 'pause' | 'resume' | 'retry' | 'cancel' | 'rollback') => Promise<void>;
+  markNotification: (notificationId: string, status: 'read' | 'unread' | 'archived') => Promise<void>;
   refresh: () => Promise<void>;
 };
 
@@ -277,6 +324,9 @@ export function StudioProvider(props: {
   const [subagents, setSubagents] = useState<SubagentRecord[]>([]);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntryRecord[]>([]);
   const [fileEntries, setFileEntries] = useState<FileEntryRecord[]>([]);
+  const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
+  const [recoveryExecutions, setRecoveryExecutions] = useState<ExecutionRecord[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [fileTree, setFileTree] = useState<StudioFileNode[]>([]);
   const [tabs, setTabs] = useState<StudioEditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -288,6 +338,10 @@ export function StudioProvider(props: {
   const [composerValue, setComposerValue] = useState(props.initialPrompt ?? '');
 
   const currentWorkspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? workspaces[0]?.id ?? null;
+  const activeSubagent = useMemo(
+    () => session?.linkedSubagentId ? subagents.find(item => item.id === session.linkedSubagentId) ?? null : null,
+    [session?.linkedSubagentId, subagents],
+  );
 
   const pushRoute = useCallback((nextMode: StudioMode, nextSessionId?: string | null, nextProjectId?: string | null) => {
     router.replace(buildStudioUrl({
@@ -363,6 +417,37 @@ export function StudioProvider(props: {
     setFileEntries(payload.entries ?? []);
   }, [currentWorkspaceId, session?.id]);
 
+  const refreshRuntimeState = useCallback(async () => {
+    if (!currentWorkspaceId && !session?.id) {
+      setExecutions([]);
+      setRecoveryExecutions([]);
+      setNotifications([]);
+      return;
+    }
+    const executionParams = new URLSearchParams();
+    executionParams.set('limit', '40');
+    if (session?.id) executionParams.set('sessionId', session.id);
+    if (currentWorkspaceId) executionParams.set('workspaceId', currentWorkspaceId);
+    const recoveryParams = new URLSearchParams(executionParams);
+    const [executionResponse, recoveryResponse, notificationResponse] = await Promise.all([
+      fetchWithBrowserSession(`/api/executions?${executionParams.toString()}`, { cache: 'no-store' }),
+      fetchWithBrowserSession(`/api/recovery?${recoveryParams.toString()}`, { cache: 'no-store' }),
+      fetchWithBrowserSession('/api/notifications?status=all&limit=30', { cache: 'no-store' }),
+    ]);
+    if (executionResponse.response.ok) {
+      const payload = await executionResponse.response.json() as { executions?: ExecutionRecord[] };
+      setExecutions(payload.executions ?? []);
+    }
+    if (recoveryResponse.response.ok) {
+      const payload = await recoveryResponse.response.json() as { executions?: ExecutionRecord[] };
+      setRecoveryExecutions(payload.executions ?? []);
+    }
+    if (notificationResponse.response.ok) {
+      const payload = await notificationResponse.response.json() as { notifications?: NotificationRecord[] };
+      setNotifications(payload.notifications ?? []);
+    }
+  }, [currentWorkspaceId, session?.id]);
+
   const refreshFiles = useCallback(async () => {
     const projectId = currentProject?.id;
     if (!projectId) return;
@@ -379,6 +464,10 @@ export function StudioProvider(props: {
   useEffect(() => {
     void refreshLinkedFiles();
   }, [refreshLinkedFiles]);
+
+  useEffect(() => {
+    void refreshRuntimeState();
+  }, [refreshRuntimeState]);
 
   useEffect(() => {
     setModeState(requestedMode);
@@ -445,7 +534,7 @@ export function StudioProvider(props: {
     setContextOpen(false);
   }, []);
 
-  const createSession = useCallback(async () => {
+  const createSession = useCallback(async (options?: { linkedSubagentId?: string | null; title?: string }) => {
     if (!currentWorkspaceId) return;
     const response = await fetchWithBrowserSession('/api/studio/sessions', {
       method: 'POST',
@@ -453,7 +542,8 @@ export function StudioProvider(props: {
       body: JSON.stringify({
         workspaceId: currentWorkspaceId,
         projectId: currentProject?.id ?? requestedProjectId,
-        title: 'New chat',
+        linkedSubagentId: options?.linkedSubagentId ?? null,
+        title: options?.title ?? 'New chat',
       }),
     });
     if (!response.response.ok) return;
@@ -461,8 +551,57 @@ export function StudioProvider(props: {
     if (!payload.session) return;
     setComposerValue('');
     setPendingApproval(null);
+    setSidebarOpen(false);
     pushRoute(mode, payload.session.id, payload.session.projectId ?? currentProject?.id ?? null);
   }, [currentProject?.id, currentWorkspaceId, mode, pushRoute, requestedProjectId]);
+
+  const focusSubagent = useCallback(async (subagentId: string) => {
+    const target = subagents.find(item => item.id === subagentId);
+    if (!target || !currentWorkspaceId) return;
+    const preferredProjectId = currentProject?.id ?? requestedProjectId ?? target.projectId ?? null;
+    const existing = sessions.find(item =>
+      item.linkedSubagentId === subagentId
+      && (!preferredProjectId || item.projectId === preferredProjectId),
+    ) ?? sessions.find(item => item.linkedSubagentId === subagentId);
+
+    if (existing) {
+      pushRoute(mode, existing.id, existing.projectId ?? currentProject?.id ?? null);
+      setSidebarOpen(false);
+      return;
+    }
+
+    await createSession({
+      linkedSubagentId: subagentId,
+      title: `${target.name} session`,
+    });
+  }, [createSession, currentProject?.id, currentWorkspaceId, mode, pushRoute, requestedProjectId, sessions, subagents]);
+
+  const createSubagent = useCallback(async (input: {
+    name: string;
+    description?: string;
+    visibility?: 'private' | 'workspace' | 'public';
+    exposedCapabilities?: string[];
+  }) => {
+    if (!currentWorkspaceId) return null;
+    const response = await fetchWithBrowserSession('/api/subagents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: currentWorkspaceId,
+        projectId: currentProject?.id ?? requestedProjectId,
+        name: input.name,
+        description: input.description ?? '',
+        visibility: input.visibility ?? 'private',
+        exposedCapabilities: input.exposedCapabilities ?? [],
+      }),
+    });
+    if (!response.response.ok) return null;
+    const payload = await response.response.json() as { subagent?: SubagentRecord };
+    if (!payload.subagent) return null;
+    const created = payload.subagent;
+    setSubagents(current => [created, ...current.filter(item => item.id !== created.id)]);
+    return created;
+  }, [currentProject?.id, currentWorkspaceId, requestedProjectId]);
 
   const renameSession = useCallback(async (sessionId: string, title: string) => {
     const nextTitle = title.trim();
@@ -477,8 +616,32 @@ export function StudioProvider(props: {
     setSession(current => current && current.id === sessionId ? { ...current, title: nextTitle } : current);
   }, []);
 
-  const archiveSession = useCallback(async (sessionId: string) => {
+  const pinSession = useCallback(async (sessionId: string, pinned: boolean) => {
     const response = await fetchWithBrowserSession(`/api/studio/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned }),
+    });
+    if (!response.response.ok) return;
+    const now = pinned ? new Date().toISOString() : null;
+    setSessions(current => current.map(item => item.id === sessionId ? { ...item, pinnedAt: now } : item));
+    setSession(current => current && current.id === sessionId ? { ...current, pinnedAt: now } : current);
+    await refresh();
+  }, [refresh]);
+
+  const archiveSession = useCallback(async (sessionId: string) => {
+    const response = await fetchWithBrowserSession(`/api/studio/sessions/${sessionId}?mode=archive`, {
+      method: 'DELETE',
+    });
+    if (!response.response.ok) return;
+    if (session?.id === sessionId) {
+      pushRoute(mode, null, currentProject?.id ?? null);
+    }
+    await refresh();
+  }, [currentProject?.id, mode, pushRoute, refresh, session?.id]);
+
+  const deleteSession = useCallback(async (sessionId: string) => {
+    const response = await fetchWithBrowserSession(`/api/studio/sessions/${sessionId}?mode=delete`, {
       method: 'DELETE',
     });
     if (!response.response.ok) return;
@@ -503,6 +666,7 @@ export function StudioProvider(props: {
     if (!nextMessage || !session) return;
     setSending(true);
     setPendingApproval(null);
+    const assistantMessageId = `streaming-assistant-${Date.now()}`;
     setMessages(current => [...current, {
       id: `optimistic-user-${Date.now()}`,
       role: 'user',
@@ -511,7 +675,7 @@ export function StudioProvider(props: {
     }]);
     setComposerValue('');
 
-    const response = await fetchWithBrowserSession('/api/studio/intent', {
+    const response = await fetchWithBrowserSession('/api/studio/intent/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -521,32 +685,76 @@ export function StudioProvider(props: {
         projectId: currentProject?.id,
       }),
     });
-    const payload = await response.response.json().catch(() => ({})) as Record<string, unknown>;
+    if (!response.response.body) {
+      setSending(false);
+      await refresh();
+      return;
+    }
+    const reader = response.response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let assistantInserted = false;
+    let lastPayload: Record<string, unknown> | null = null;
 
-    const reply = typeof payload.reply === 'string' ? payload.reply : null;
-    if (reply) {
+    function handleSseBlock(block: string) {
+      const event = block.split('\n').find(line => line.startsWith('event: '))?.slice(7).trim();
+      const data = block.split('\n').find(line => line.startsWith('data: '))?.slice(6);
+      if (!event || !data) return;
+      const payload = JSON.parse(data) as Record<string, unknown>;
+      if (event === 'reply' || event === 'error') {
+        lastPayload = payload;
+        const reply = typeof payload.reply === 'string' ? payload.reply : typeof payload.message === 'string' ? payload.message : '';
+        if (reply) {
+          if (!assistantInserted) {
+            assistantInserted = true;
+            setMessages(current => [...current, {
+              id: assistantMessageId,
+              role: 'assistant',
+              content: reply,
+              createdAt: new Date().toISOString(),
+            }]);
+          } else {
+            setMessages(current => current.map(item => item.id === assistantMessageId ? { ...item, content: reply } : item));
+          }
+        }
+        if (typeof payload.confirmToken === 'string' && reply) {
+          setPendingApproval({
+            confirmToken: payload.confirmToken,
+            reply,
+          });
+        }
+        if (typeof payload.navigateTo === 'string') {
+          router.push(payload.navigateTo);
+        }
+      }
+    }
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() ?? '';
+      for (const block of blocks) {
+        if (block.trim()) handleSseBlock(block);
+      }
+    }
+    if (buffer.trim()) handleSseBlock(buffer);
+    if (!assistantInserted && lastPayload) {
+      const payload = lastPayload as Record<string, unknown>;
+      const reply = typeof payload.reply === 'string' ? payload.reply : 'No response was returned.';
       setMessages(current => [...current, {
-        id: `optimistic-assistant-${Date.now()}`,
+        id: assistantMessageId,
         role: 'assistant',
         content: reply,
         createdAt: new Date().toISOString(),
       }]);
     }
 
-    if (typeof payload.confirmToken === 'string' && reply) {
-      setPendingApproval({
-        confirmToken: payload.confirmToken,
-        reply,
-      });
-    }
-
-    if (typeof payload.navigateTo === 'string') {
-      router.push(payload.navigateTo);
-    }
-
     await refresh();
+    await refreshRuntimeState();
     setSending(false);
-  }, [composerValue, currentProject?.id, refresh, router, session]);
+  }, [composerValue, currentProject?.id, refresh, refreshRuntimeState, router, session]);
 
   const approvePending = useCallback(async () => {
     if (!pendingApproval || !session) return;
@@ -575,8 +783,9 @@ export function StudioProvider(props: {
     }
     setPendingApproval(null);
     await refresh();
+    await refreshRuntimeState();
     setSending(false);
-  }, [pendingApproval, refresh, router, session]);
+  }, [pendingApproval, refresh, refreshRuntimeState, router, session]);
 
   async function openFile(path: string) {
     const existing = tabs.find(tab => tab.path === path);
@@ -666,6 +875,40 @@ export function StudioProvider(props: {
     setTerminalDraft('');
   }, [advancedMode, terminal?.id, terminalDraft]);
 
+  const requestExecutionAction = useCallback(async (
+    executionId: string,
+    action: 'pause' | 'resume' | 'retry' | 'cancel' | 'rollback',
+  ) => {
+    await fetchWithBrowserSession(`/api/executions/${executionId}/actions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    await refreshRuntimeState();
+  }, [refreshRuntimeState]);
+
+  const panicStop = useCallback(async () => {
+    await fetchWithBrowserSession('/api/panic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: currentWorkspaceId,
+        sessionId: session?.id ?? null,
+      }),
+    });
+    await refreshRuntimeState();
+    openContext('recovery');
+  }, [currentWorkspaceId, openContext, refreshRuntimeState, session?.id]);
+
+  const markNotification = useCallback(async (notificationId: string, status: 'read' | 'unread' | 'archived') => {
+    await fetchWithBrowserSession('/api/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationId, status }),
+    });
+    await refreshRuntimeState();
+  }, [refreshRuntimeState]);
+
   const value = useMemo<StudioContextValue>(() => ({
     loading,
     sending,
@@ -692,8 +935,12 @@ export function StudioProvider(props: {
     installedApps,
     superAgent,
     subagents,
+    activeSubagent,
     memoryEntries,
     fileEntries,
+    executions,
+    recoveryExecutions,
+    notifications,
     fileTree,
     tabs,
     activeTabId,
@@ -710,8 +957,12 @@ export function StudioProvider(props: {
     sendMessage,
     approvePending,
     createSession,
+    focusSubagent,
+    createSubagent,
     renameSession,
+    pinSession,
     archiveSession,
+    deleteSession,
     selectSession,
     selectProject,
     openFile,
@@ -720,9 +971,13 @@ export function StudioProvider(props: {
     refreshFiles,
     startTerminal,
     sendTerminalInput,
+    panicStop,
+    requestExecutionAction,
+    markNotification,
     refresh,
   }), [
     activeTabId,
+    activeSubagent,
     advancedMode,
     browserSession,
     closeContext,
@@ -732,6 +987,7 @@ export function StudioProvider(props: {
     currentProject,
     enableAdvancedMode,
     events,
+    executions,
     fileTree,
     fileEntries,
     installedApps,
@@ -743,7 +999,9 @@ export function StudioProvider(props: {
     mode,
     openContext,
     pendingApproval,
+    notifications,
     projects,
+    recoveryExecutions,
     refresh,
     refreshFiles,
     saveActiveTab,
@@ -753,6 +1011,8 @@ export function StudioProvider(props: {
     sending,
     session,
     sessions,
+    focusSubagent,
+    createSubagent,
     setMode,
     sidebarOpen,
     subagents,
@@ -766,10 +1026,15 @@ export function StudioProvider(props: {
     workspaces,
     createSession,
     renameSession,
+    pinSession,
     archiveSession,
+    deleteSession,
     approvePending,
     startTerminal,
     sendTerminalInput,
+    panicStop,
+    requestExecutionAction,
+    markNotification,
     openFile,
     updateTabContent,
   ]);

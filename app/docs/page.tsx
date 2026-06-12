@@ -58,8 +58,8 @@ const sections = [
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'v6.4 launch notes for Super AgentOS Home, Studio, governed memory/files, and permissioned sharing.',
-    badge: 'v6',
+    desc: 'v6.5.1 launch notes for unified Super AgentOS, persisted execution, recovery, governed memory/files, and release hardening.',
+    badge: 'v6.5.1',
   },
 ];
 
@@ -325,7 +325,7 @@ export default function DocsPage() {
                 <span style={{ marginLeft: '12px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>30-second example</span>
                 <div style={{ marginLeft: 'auto' }}>
                   <Link href="/studio" style={{ fontSize: '11px', color: 'var(--accent)', textDecoration: 'none', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>
-                    Open Studio →
+                    Open Super AgentOS →
                   </Link>
                 </div>
               </div>

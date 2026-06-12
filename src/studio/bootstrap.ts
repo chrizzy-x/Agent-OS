@@ -12,17 +12,63 @@ import { listProjectFiles } from './files.js';
 import type { StudioMode } from './types.js';
 import type { StudioSessionRecord } from './persistence.js';
 
+async function loadBootstrapWorkflows(ownerAgentId: string): Promise<Array<Record<string, unknown>>> {
+  const supabase = getSupabaseAdmin();
+  const primary = await supabase
+    .from('agent_workflows')
+    .select('id,name,summary,status,schedule,graph_state,code_state,canonical_doc,workspace_id,project_id,updated_at')
+    .eq('agent_id', ownerAgentId)
+    .order('updated_at', { ascending: false });
+
+  if (!primary.error) {
+    return (primary.data ?? []) as Array<Record<string, unknown>>;
+  }
+
+  if (primary.error.code !== '42703') {
+    return [];
+  }
+
+  const legacy = await supabase
+    .from('agent_workflows')
+    .select('id,name,summary,status,schedule,graph_state,code_state,canonical_doc,workspace_id,updated_at')
+    .eq('agent_id', ownerAgentId)
+    .order('updated_at', { ascending: false });
+
+  if (legacy.error) {
+    return [];
+  }
+
+  return ((legacy.data ?? []) as Array<Record<string, unknown>>).map(row => ({
+    ...row,
+    project_id: null,
+  }));
+}
+
+async function loadBootstrapInstalledSkills(ownerAgentId: string): Promise<Array<Record<string, unknown>>> {
+  const result = await getSupabaseAdmin()
+    .from('skill_installations')
+    .select('id,installed_at,skill:skills(id,name,slug,category,description)')
+    .eq('agent_id', ownerAgentId)
+    .order('installed_at', { ascending: false });
+
+  if (result.error) {
+    return [];
+  }
+
+  return (result.data ?? []) as Array<Record<string, unknown>>;
+}
+
 export async function buildStudioBootstrap(params: {
   ownerAgentId: string;
   sessionId?: string | null;
   projectId?: string | null;
   mode?: StudioMode;
 }): Promise<Record<string, unknown>> {
-  await reconcileAgentOSProvisioning(params.ownerAgentId);
+  await reconcileAgentOSProvisioning(params.ownerAgentId).catch(() => undefined);
 
   const [workspaces, sessions] = await Promise.all([
-    listWorkspaces(params.ownerAgentId),
-    listStudioSessions(params.ownerAgentId, { status: 'active' }),
+    listWorkspaces(params.ownerAgentId).catch(() => [] as Awaited<ReturnType<typeof listWorkspaces>>),
+    listStudioSessions(params.ownerAgentId, { status: 'active' }).catch(() => [] as StudioSessionRecord[]),
   ]);
 
   const defaultWorkspace = workspaces[0] ?? await resolveDefaultWorkspaceForAgent(params.ownerAgentId);
@@ -36,7 +82,28 @@ export async function buildStudioBootstrap(params: {
       ownerAgentId: params.ownerAgentId,
       workspaceId: defaultWorkspace.id,
       projectId: params.projectId ?? null,
-    });
+    }).catch(() => null);
+    if (!project) {
+      return {
+        mode: params.mode ?? 'nl',
+        session: null,
+        sessions,
+        messages: [],
+        events: [],
+        lineage: { parent: null, children: [] },
+        workspaces,
+        projects: [],
+        currentProject: null,
+        workflows: [],
+        vaultSecrets: [],
+        installedSkills: [],
+        installedApps: [],
+        superAgent: null,
+        fileTree: [],
+        subagents: [],
+        memoryEntries: [],
+      };
+    }
     const superAgent = await getSuperAgentProfile({
       ownerAgentId: params.ownerAgentId,
       workspaceId: defaultWorkspace.id,
@@ -50,8 +117,10 @@ export async function buildStudioBootstrap(params: {
       initialState: {
         mode: params.mode === 'code' ? 'CODE_STUDIO' : 'NL_STUDIO',
       },
-    });
-    sessions.unshift(session);
+    }).catch(() => null);
+    if (session) {
+      sessions.unshift(session);
+    }
   }
 
   const activeWorkspaceId = session?.workspaceId ?? defaultWorkspace?.id ?? null;
@@ -60,25 +129,17 @@ export async function buildStudioBootstrap(params: {
       ownerAgentId: params.ownerAgentId,
       workspaceId: activeWorkspaceId,
       status: 'all',
-    })
+    }).catch(() => [])
     : [];
   const activeProjectId = session?.projectId ?? params.projectId ?? projects[0]?.id ?? null;
   const activeProject = activeProjectId
     ? projects.find(project => project.id === activeProjectId) ?? null
     : null;
 
-  const [bundle, workflowsResult, skillsResult, installedApps, vault, superAgent, fileTree, subagents, memoryEntries] = await Promise.all([
-    session ? getStudioSessionBundle(params.ownerAgentId, session.id) : Promise.resolve(null),
-    getSupabaseAdmin()
-      .from('agent_workflows')
-      .select('id,name,summary,status,schedule,graph_state,code_state,canonical_doc,workspace_id,project_id,updated_at')
-      .eq('agent_id', params.ownerAgentId)
-      .order('updated_at', { ascending: false }),
-    getSupabaseAdmin()
-      .from('skill_installations')
-      .select('id,installed_at,skill:skills(id,name,slug,category,description)')
-      .eq('agent_id', params.ownerAgentId)
-      .order('installed_at', { ascending: false }),
+  const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries] = await Promise.all([
+    session ? getStudioSessionBundle(params.ownerAgentId, session.id).catch(() => null) : Promise.resolve(null),
+    loadBootstrapWorkflows(params.ownerAgentId).catch(() => []),
+    loadBootstrapInstalledSkills(params.ownerAgentId).catch(() => []),
     listInstalledAgentApps(params.ownerAgentId).catch(() => []),
     activeWorkspaceId
       ? listVaultSecrets({ ownerAgentId: params.ownerAgentId, workspaceId: activeWorkspaceId }).catch(() => ({ secrets: [] }))
@@ -102,7 +163,7 @@ export async function buildStudioBootstrap(params: {
     }).catch(() => []),
   ]);
 
-  const workflows = ((workflowsResult.data ?? []) as Array<Record<string, unknown>>)
+  const filteredWorkflows = workflows
     .filter(row => !activeWorkspaceId || String(row.workspace_id ?? '') === activeWorkspaceId)
     .filter(row => !activeProjectId || !row.project_id || String(row.project_id ?? '') === activeProjectId)
     .map(row => ({
@@ -126,9 +187,9 @@ export async function buildStudioBootstrap(params: {
     workspaces,
     projects,
     currentProject: activeProject,
-    workflows,
+    workflows: filteredWorkflows,
     vaultSecrets: vault.secrets ?? [],
-    installedSkills: skillsResult.data ?? [],
+    installedSkills,
     installedApps: installedApps.map(entry => ({
       id: entry.app.id,
       name: entry.app.name,

@@ -52,6 +52,10 @@ describe('toErrorResponse', () => {
       code: 'NOT_FOUND',
       message: 'file missing',
       statusCode: 404,
+      whatFailed: 'file missing',
+      why: 'file missing',
+      where: 'NotFoundError',
+      possibleFix: 'Review the request input, permissions, and connected account state before retrying.',
     });
   });
 

@@ -7,6 +7,7 @@ import {
   clearAgentSessionCookies,
   extractAccessTokenFromCookie,
   extractRefreshTokenFromCookie,
+  getCookieRequestContext,
 } from '@/src/auth/session-cookie';
 import { findAccountById } from '@/src/auth/agent-store';
 import { reconcileAgentOSProvisioning } from '@/src/agentos/provisioning';
@@ -80,7 +81,7 @@ export async function GET(request: NextRequest) {
     { authenticated: false, error: 'unauthorized', message: 'Not signed in' },
     { status: optional ? 200 : 401 },
   );
-  clearAgentSessionCookies(response);
+  clearAgentSessionCookies(response, getCookieRequestContext(request));
   return response;
 }
 
@@ -98,6 +99,6 @@ export async function DELETE(request: NextRequest) {
   }
 
   const response = NextResponse.json({ success: true });
-  clearAgentSessionCookies(response);
+  clearAgentSessionCookies(response, getCookieRequestContext(request));
   return response;
 }

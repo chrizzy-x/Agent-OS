@@ -102,7 +102,7 @@ function PublicLanding() {
   return (
     <SurfaceShell activePath="/">
       <section style={{ display: 'grid', gap: 28, padding: '52px 0 72px' }}>
-        <Badge tone="accent">AgentOS v6.4</Badge>
+        <Badge tone="accent">AgentOS v6.5.1</Badge>
         <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(42px, 7vw, 76px)', lineHeight: 0.95, letterSpacing: '-0.05em' }}>
             Your AI operating system.

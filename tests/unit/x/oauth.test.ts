@@ -5,7 +5,7 @@ import { buildXAuthorizationUrl, parseXOAuthStateCookie } from '../../../src/int
 describe('X OAuth helpers', () => {
   beforeEach(() => {
     process.env.X_CLIENT_ID = 'client-id';
-    process.env.X_REDIRECT_URI = 'https://agentos-app.vercel.app/api/x/callback';
+    process.env.X_REDIRECT_URI = 'https://www.agentos.services/api/x/callback';
     process.env.X_TOKEN_ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
     process.env.X_OAUTH_SCOPES = 'tweet.read tweet.write users.read offline.access';
   });

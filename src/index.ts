@@ -14,6 +14,7 @@ import {
 import { handleAgentMe } from './routes/agent-me.js';
 import { readJsonBody, sendJson } from './routes/http.js';
 import { handleRegister } from './routes/register.js';
+import { APP_VERSION } from './config/release.js';
 import {
   closeStudioTerminal,
   createStudioTerminal,
@@ -249,7 +250,7 @@ async function handleStudioTerminalStream(req: IncomingMessage, res: ServerRespo
 function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     name: 'AgentOS',
-    version: '6.4.0',
+    version: APP_VERSION,
     description: 'AgentOS runtime for tools, sessions, files, and Code Studio terminal execution.',
     status: 'ok',
     endpoints: {
@@ -273,7 +274,7 @@ function handleRoot(_req: IncomingMessage, res: ServerResponse): void {
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   sendJson(res, 200, {
     status: 'ok',
-    version: '6.4.0',
+    version: APP_VERSION,
     timestamp: new Date().toISOString(),
     tools: Object.keys(TOOLS).length,
   });

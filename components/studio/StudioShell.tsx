@@ -29,7 +29,7 @@ export default function StudioShell() {
         </aside>
         <section className="studio-main">
           <StudioTopbar />
-          <div style={{ minHeight: 0, flex: 1 }}>
+          <div style={{ minHeight: 0, flex: 1, display: 'flex', flexDirection: 'column' }}>
             {mode === 'code' ? <CodeStudioPanel /> : <NLStudioPanel />}
           </div>
         </section>
@@ -48,9 +48,12 @@ export default function StudioShell() {
 
       <style>{`
         .studio-shell {
+          height: 100vh;
+          height: 100dvh;
           min-height: 100vh;
           display: grid;
           grid-template-columns: 280px minmax(0, 1fr);
+          overflow: hidden;
         }
 
         .studio-sidebar-desktop {
@@ -60,8 +63,11 @@ export default function StudioShell() {
 
         .studio-main {
           min-width: 0;
+          min-height: 0;
+          height: 100%;
           display: flex;
           flex-direction: column;
+          overflow: hidden;
         }
 
         .studio-mobile-only {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
 import { requireRouteCapability } from '@/src/auth/request';
-import { setAgentSessionCookie } from '@/src/auth/session-cookie';
+import { getCookieRequestContext, setAgentSessionCookie } from '@/src/auth/session-cookie';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         expiresIn: '90 days',
       },
     });
-    setAgentSessionCookie(response, bearerToken);
+    setAgentSessionCookie(response, bearerToken, getCookieRequestContext(request));
     return response;
   } catch (error) {
     const err = toErrorResponse(error);

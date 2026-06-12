@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAgentAppReadiness, recordAgentAppOpen } from '@/src/appstore/service';
 import { requireRouteCapability } from '@/src/auth/request';
+import { runTrackedExecution } from '@/src/execution/service';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { toErrorResponse } from '@/src/utils/errors';
 import { listWorkspaces } from '@/src/workspaces/service';
@@ -52,12 +53,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         ready: false,
       }, { status: 400 });
     }
-    const result = await recordAgentAppOpen({ agentId: ctx.agentId, slug, target });
+    const tracked = await runTrackedExecution({
+      agentId: ctx.agentId,
+      sourceType: 'app',
+      sourceId: slug,
+      appId: readiness.app.id,
+      title: `Open app ${slug}`,
+      input: { target },
+      run: () => recordAgentAppOpen({ agentId: ctx.agentId, slug, target }),
+    });
+    const result = tracked.result;
     return NextResponse.json({
       app: omitAgentIdentifierFields(result.app),
       installation: result.installation,
       openUrl: result.openUrl,
       target: result.target,
+      execution: tracked.execution,
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

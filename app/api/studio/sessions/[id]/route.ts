@@ -27,6 +27,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       sessionId: id,
       title: typeof body.title === 'string' ? body.title : undefined,
       status: typeof body.status === 'string' ? body.status : undefined,
+      pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
+      deleted: body.deleted === true ? true : undefined,
       visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : body.visibility === 'private' ? 'private' : undefined,
       linkedSubagentId: typeof body.linkedSubagentId === 'string' ? body.linkedSubagentId : body.linkedSubagentId === null ? null : undefined,
       linkedWorkflowId: typeof body.linkedWorkflowId === 'string' ? body.linkedWorkflowId : body.linkedWorkflowId === null ? null : undefined,
@@ -52,12 +54,15 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.update');
     const { id } = await params;
+    const mode = new URL(request.url).searchParams.get('mode');
+    const deleteMode = mode === 'delete';
     const session = await updateStudioSession({
       ownerAgentId: ctx.agentId,
       sessionId: id,
-      status: 'archived',
+      status: deleteMode ? undefined : 'archived',
+      deleted: deleteMode ? true : undefined,
     });
-    return NextResponse.json({ session, archived: true });
+    return NextResponse.json({ session, archived: !deleteMode, deleted: deleteMode });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

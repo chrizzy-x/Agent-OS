@@ -54,6 +54,10 @@ function createStatefulSupabase() {
         filters.push({ field, value });
         return query;
       },
+      is(field: string, value: unknown) {
+        filters.push({ field, value });
+        return query;
+      },
       order(field: string, options?: { ascending?: boolean }) {
         orderField = field;
         ascending = options?.ascending !== false;

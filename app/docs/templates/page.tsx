@@ -19,7 +19,7 @@ const TEMPLATES = [
     code: `// ─────────────────────────────────────────
 // PRICE ALERT BOT  —  edit the 4 lines below
 // ─────────────────────────────────────────
-const API_KEY   = 'YOUR_API_KEY_HERE';  // from agentos-app.vercel.app/signup
+const API_KEY   = 'YOUR_API_KEY_HERE';  // from www.agentos.services/signup
 const ASSET     = 'bitcoin';            // try: ethereum, solana, etc.
 const CONDITION = 'below';              // 'below' or 'above'
 const THRESHOLD = 60000;               // your target price in USD
@@ -73,7 +73,7 @@ checkPrice();`,
     code: `// ─────────────────────────────────────────
 // DAILY RESEARCH DIGEST  —  edit 2 lines
 // ─────────────────────────────────────────
-const API_KEY = 'YOUR_API_KEY_HERE';  // from agentos-app.vercel.app/signup
+const API_KEY = 'YOUR_API_KEY_HERE';  // from www.agentos.services/signup
 const ASSET   = 'bitcoin';            // try: ethereum, solana, dogecoin
 // ─────────────────────────────────────────
 
@@ -137,7 +137,7 @@ dailyDigest();`,
     code: `// ─────────────────────────────────────────
 // PORTFOLIO TRACKER  —  edit your holdings
 // ─────────────────────────────────────────
-const API_KEY = 'YOUR_API_KEY_HERE';  // from agentos-app.vercel.app/signup
+const API_KEY = 'YOUR_API_KEY_HERE';  // from www.agentos.services/signup
 
 const MY_PORTFOLIO = [
   { asset: 'bitcoin',  amount: 0.5  },  // ← change these to your holdings
@@ -216,7 +216,7 @@ portfolioSnapshot();`,
     code: `// ─────────────────────────────────────────
 // MEMORY STORE  —  edit 1 line
 // ─────────────────────────────────────────
-const API_KEY = 'YOUR_API_KEY_HERE';  // from agentos-app.vercel.app/signup
+const API_KEY = 'YOUR_API_KEY_HERE';  // from www.agentos.services/signup
 // ─────────────────────────────────────────
 
 const BASE = '${BASE_URL}';
@@ -261,7 +261,7 @@ console.log('📋 All user memory:', all);
     code: `// ─────────────────────────────────────────
 // WEB MONITOR  —  edit 3 lines
 // ─────────────────────────────────────────
-const API_KEY  = 'YOUR_API_KEY_HERE';               // from agentos-app.vercel.app/signup
+const API_KEY  = 'YOUR_API_KEY_HERE';               // from www.agentos.services/signup
 const WATCH_URL = 'https://api.coincap.io/v2/assets/bitcoin'; // any URL you want to watch
 const WATCH_KEY = 'priceUsd';                        // what field to track changes on
 // ─────────────────────────────────────────

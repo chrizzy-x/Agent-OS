@@ -275,6 +275,19 @@ export async function listIncomingPermissionGrants(params: {
     .filter(grant => params.includeExpired ? !grant.revokedAt : isGrantActive(grant, now));
 }
 
+async function safeListIncomingPermissionGrants(params: {
+  targetType: string;
+  targetId: string;
+  permission?: string;
+  includeExpired?: boolean;
+}): Promise<PermissionGrant[]> {
+  try {
+    return await listIncomingPermissionGrants(params);
+  } catch {
+    return [];
+  }
+}
+
 export async function hasPermissionGrant(params: {
   sourceType: string;
   sourceId: string;
@@ -282,7 +295,7 @@ export async function hasPermissionGrant(params: {
   targetId: string;
   permission: string;
 }): Promise<boolean> {
-  const grants = await listIncomingPermissionGrants({
+  const grants = await safeListIncomingPermissionGrants({
     targetType: params.targetType,
     targetId: params.targetId,
     permission: params.permission,
@@ -331,7 +344,7 @@ export async function filterAccessibleResources<T extends VisibilitySubject & { 
   permission?: string;
 }): Promise<T[]> {
   const viewerWorkspaceIds = params.viewer.workspaceIds ?? await resolveViewerWorkspaceIds(params.viewer.agentId);
-  const activeGrants = await listIncomingPermissionGrants({
+  const activeGrants = await safeListIncomingPermissionGrants({
     targetType: 'agent',
     targetId: params.viewer.agentId,
     permission: params.permission,

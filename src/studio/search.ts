@@ -1,4 +1,5 @@
 import { filterAccessibleResources } from '../access/service.js';
+import { scoreSearchMatch } from '../search/scoring.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { listWorkspaces } from '../workspaces/service.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
@@ -149,8 +150,11 @@ export async function searchStudioSessionMessages(params: {
         senderType: message.role,
         timestamp: message.createdAt,
         matchPositions: positions,
+        score: scoreSearchMatch(normalized, message.searchText, message.content, session.title),
       }];
-    });
+    })
+    .sort((left, right) => right.score - left.score || right.timestamp.localeCompare(left.timestamp))
+    .map(({ score: _score, ...match }) => match);
 }
 
 export async function searchAccessibleChatMessages(params: {
@@ -195,17 +199,21 @@ export async function searchAccessibleChatMessages(params: {
       const session = sessionMap.get(message.sessionId);
       if (!session) return [];
       const positions = buildMatchPositions(message.searchText, normalized);
-      if (positions.length === 0) return [];
+      const score = scoreSearchMatch(normalized, message.searchText, message.content, session.title);
+      if (positions.length === 0 && score === 0) return [];
       const first = positions[0];
       return [{
         messageId: message.id,
         sessionId: message.sessionId,
         sessionTitle: session.title,
-        snippet: buildSnippet(message.content, first.start, first.end),
+        snippet: first ? buildSnippet(message.content, first.start, first.end) : message.content.slice(0, 120).trim(),
         senderType: message.role,
         timestamp: message.createdAt,
         matchPositions: positions,
+        score,
       }];
     })
+    .sort((left, right) => right.score - left.score || right.timestamp.localeCompare(left.timestamp))
+    .map(({ score: _score, ...match }) => match)
     .slice(0, limit);
 }

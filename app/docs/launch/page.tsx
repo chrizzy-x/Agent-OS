@@ -8,10 +8,15 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'v6.4 - AgentOS now ships governed sharing and canonical visibility across sessions, subagents, workflows, skills, memory, and files.',
-  'v6.4 - Studio now supports current-chat search, permission-filtered cross-session chat search, governed memory context, and governed file context.',
-  'v6.4 - Super AgentOS Home now surfaces subagents, privacy badges, governed memory/files, and recent operating activity.',
-  'v6.4 - The V6.4 SDK adds typed helpers for agents, memory, files, knowledge, vault, workflow, chat, and app registration flows.',
+  'v6.5.1 - Super AgentOS is now the primary product surface with streaming chat, execution cards, files, memory, recovery, notifications, and panic stop.',
+  'v6.5.1 - Unified execution records now persist Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, logs, failures, and recovery state.',
+  'v6.5.1 - Files now support upload, preview, summarize, rename, search, and delete through production APIs and UI.',
+  'v6.5.1 - Memory now supports governed CRUD, search, export, namespace scopes, and permission-aware retrieval.',
+  'v6.5 - Studio now supports in-place multi-agent discovery, creation, switching, and agent-linked sessions without page resets.',
+  'v6.5 - Search now exposes keyword, full-text, and fuzzy matching across apps, skills, workflows, sessions, projects, subagents, Vault names, docs, connectors, and FFP records.',
+  'v6.5 - Memory is now editable in-product with governed create, update, delete, and grant-aware audit visibility.',
+  'v6.5.1 - Release truth alignment standardizes the canonical production host on https://www.agentos.services and aligns public version surfaces on 6.5.1.',
+  'v6.5.1 - Final production deployment completed on June 12, 2026 at https://www.agentos.services with live /health returning 200 and version 6.5.1.',
   'v6.2 - beta readiness hardening for Vault runtime injection, output redaction, disabled-app gating, developer access shells, and production lifecycle flows.',
   'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
   'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
@@ -25,6 +30,12 @@ const releaseHighlights = [
 ];
 
 const changelog = [
+  'Added agent_executions, agent_execution_logs, and agent_notifications persistence for recoverable task state.',
+  'Added /api/executions, /api/recovery, /api/panic, and /api/notifications route surfaces.',
+  'Added file preview, summarize, rename, upload, delete, and search flows to /files and Super AgentOS context.',
+  'Added memory export and execution tracking around memory writes and deletes.',
+  'Added Panic Button, Recovery Center, notification drawer, compact execution sidebar, and execution actions.',
+  'Removed production generic skill fallback; installed skills must execute real skill source code in production.',
   'Repositioned homepage, docs, marketplace, and launch surfaces around AgentOS as the operating system for the agent economy.',
   'Added workspace-first Super AgentOS visibility for sessions, instructions, installed assets, workflows, and recent actions.',
   'Added Studio session rename, archive, project scoping, per-session instructions, and structured intent result states.',
@@ -35,6 +46,7 @@ const changelog = [
   'Added app readiness resolution, target-aware open flows, install and update revalidation, and owner analytics on app profiles.',
   'Added persisted Vault runtime grants, consume and cleanup flows, assignment and permission checks, and secret redaction in Studio persistence.',
   'Added Studio session branching, lineage tracking, chosen and latest snapshot inheritance, and isolated branch messages and events.',
+  'Fixed NL Studio viewport anchoring so the message list scrolls and the composer remains at the bottom of the Super AgentOS workspace.',
   'Enabled free-beta self-serve plan transitions in /billing and POST /api/plans/transition across Retail Free, Retail Pro, Enterprise Plus, and Enterprise Max.',
   'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
   'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
@@ -55,7 +67,7 @@ const changelog = [
 const startLinks = [
   { label: 'Create AgentOS account', href: '/signup' },
   { label: 'Sign in', href: '/signin' },
-  { label: 'Open Studio', href: '/studio' },
+  { label: 'Open Super AgentOS', href: '/studio' },
   { label: 'Browse skills', href: '/skills' },
   { label: 'Browse apps', href: '/appstore' },
   { label: 'Quick Start', href: '/docs/sdk' },
@@ -81,17 +93,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">Agent OS v6.4 <span style={{ color: 'var(--accent)' }}>&ldquo;Operating System for the Agent Economy&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">AgentOS v6.5.1 <span style={{ color: 'var(--accent)' }}>&ldquo;Unified Super AgentOS&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.4 ships permissioned sharing, canonical visibility, governed memory/files, and search across active Studio work. Live at <code>{APP_URL}</code>.
+            v6.5.1 makes Super AgentOS the primary operating surface with persisted execution, recovery, panic stop, governed files, governed memory, apps, skills, workflows, MCP, and production truth alignment. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.4</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.5.1</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS now treats visibility, sharing, memory, files, sessions, and subagents as one governed system. In v6.4, Home, Studio, memory, workflows, skills, apps, Vault, and activity all share the same access model.
+              AgentOS now keeps Super AgentOS at the center of the product. In v6.5.1, chat, agents, apps, skills, workflows, files, memory, Vault, MCP, execution logs, recovery, and notifications stay accessible inside one operating surface without context loss.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

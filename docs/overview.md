@@ -1,12 +1,20 @@
-# Agent OS — Technical Overview
+# AgentOS v6.5.1 Technical Overview
 
-> Operating System Infrastructure for AI Agents · Version 1.0
+> Super AgentOS-first AI operating system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
 
 ---
 
-## What is Agent OS?
+## What is AgentOS?
 
-Agent OS is cloud infrastructure designed specifically for AI agents. It provides six fundamental primitives that autonomous agents need to operate:
+AgentOS is a consumer-facing AI operating system with Super AgentOS as the primary experience. A normal user can ask Super AgentOS to research, analyze, build, summarize files, create workflows, run apps, execute skills, call MCP tools, and recover failed work without manually navigating platform internals.
+
+Builders still get the underlying operating system: apps, skills, workflows, SDK, MCP, files, memory, Vault, audit, and primitives.
+
+V6.5.1 unifies those layers through persisted executions, recovery, panic stop, notifications, governed files, governed memory, and production diagnostic errors.
+
+Production status: v6.5.1 is deployed at https://www.agentos.services. The final June 12, 2026 deployment passed lint, test, production build, local desktop/mobile route smoke, and live `/health` verification with `version: 6.5.1`.
+
+AgentOS also provides six fundamental primitives that autonomous agents need to operate:
 
 | Primitive | What it provides |
 |-----------|-----------------|
@@ -17,7 +25,20 @@ Agent OS is cloud infrastructure designed specifically for AI agents. It provide
 | **db** | SQL database access |
 | **events** | Pub/sub messaging |
 
-Instead of every AI agent developer building backend infrastructure from scratch, Agent OS offers this as a managed service through simple API calls. Developers focus on building intelligent agents — Agent OS handles all the underlying infrastructure complexity.
+Instead of every user or developer assembling apps, skills, workflows, MCPs, memory, and runtime logs by hand, Super AgentOS orchestrates the route and records what happened.
+
+---
+
+## V6.5.1 Product Layers
+
+| Layer | What it provides |
+|-------|------------------|
+| **Super AgentOS** | Streaming chat, files, memory, execution cards, approvals, citations where available, retry/copy/edit actions, and automatic routing |
+| **Execution** | Persisted runs for Super AgentOS, apps, skills, workflows, MCP, files, memory, primitives, logs, failures, cost, and recovery state |
+| **Recovery** | Panic stop, pause/resume/retry/cancel/rollback, failure inspection, and notifications |
+| **Files** | Upload, delete, rename, preview, summarize, search, and permission-aware access |
+| **Memory** | User, session, project, agent, workflow, app, and skill memory with CRUD, search, export, and grants |
+| **Builder** | AppStore, Skills, Workflows, SDK, MCP, Vault, FFP, Developer, and Audit surfaces |
 
 ---
 
@@ -33,7 +54,7 @@ Building an autonomous AI agent requires significant infrastructure:
 
 This setup typically takes weeks of development time and requires ongoing DevOps expertise to maintain.
 
-Agent OS provides all of this out of the box — production-ready in minutes.
+Agent OS provides all of this out of the box - production-ready in minutes.
 
 ---
 

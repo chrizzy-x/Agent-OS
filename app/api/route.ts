@@ -1,11 +1,12 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { APP_VERSION } from '@/src/config/release';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   return NextResponse.json({
     name: 'AgentOS',
-    version: '6.0.0',
+    version: APP_VERSION,
     description: 'Studio, apps, skills, workflows, memory, Vault, and advanced runtime endpoints.',
     status: 'ok',
     endpoints: {

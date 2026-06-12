@@ -17,6 +17,8 @@ export default function StudioTopbar() {
     enableAdvancedMode,
     openContext,
     setSidebarOpen,
+    panicStop,
+    notifications,
   } = useStudio();
 
   return (
@@ -54,7 +56,11 @@ export default function StudioTopbar() {
         <Button variant="secondary" onClick={createSession}>New chat</Button>
         <Button variant="secondary" onClick={() => openContext('memory')}>Memory</Button>
         <Button variant="secondary" onClick={() => openContext('files')}>Files</Button>
+        <Button variant="secondary" onClick={() => openContext('notifications')}>
+          Alerts{notifications.filter(item => item.status === 'unread').length > 0 ? ` (${notifications.filter(item => item.status === 'unread').length})` : ''}
+        </Button>
         <Button variant="secondary" onClick={() => openContext('logs')}>Context</Button>
+        <Button variant="danger" onClick={panicStop}>Panic</Button>
       </div>
     </header>
   );

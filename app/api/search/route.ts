@@ -2,17 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listAgentApps, listInstalledAgentApps } from '@/src/appstore/service';
 import { requireAgentContext } from '@/src/auth/request';
 import { DOCS_CATALOG } from '@/src/docs/catalog';
+import { listProjects } from '@/src/projects/service';
+import { scoreSearchMatch } from '@/src/search/scoring';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { listStudioSessions } from '@/src/studio/persistence';
 import { listAccessibleSubagents } from '@/src/subagents/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { listVaultSecrets } from '@/src/vault/service';
-import { listProjects } from '@/src/projects/service';
 import { listWorkspaces } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
 
-type SearchKind = 'app' | 'skill' | 'workflow' | 'session' | 'project' | 'subagent' | 'vault' | 'doc' | 'connector' | 'ffp_route' | 'ffp_primitive';
+type SearchKind =
+  | 'app'
+  | 'skill'
+  | 'workflow'
+  | 'session'
+  | 'project'
+  | 'subagent'
+  | 'vault'
+  | 'doc'
+  | 'connector'
+  | 'ffp_route'
+  | 'ffp_primitive';
 
 type SearchResult = {
   id: string;
@@ -24,12 +36,16 @@ type SearchResult = {
   updatedAt: string | null;
 };
 
-function matchesSearch(search: string, ...values: Array<string | null | undefined>): boolean {
-  if (!search) return true;
-  return values.some(value => value?.toLowerCase().includes(search));
+type RankedSearchResult = SearchResult & {
+  score: number;
+};
+
+function shouldIncludeKind(type: SearchKind | 'all', kind: SearchKind): boolean {
+  return type === 'all' || type === kind;
 }
 
-function sortResults(left: SearchResult, right: SearchResult): number {
+function sortResults(left: RankedSearchResult, right: RankedSearchResult): number {
+  if (left.score !== right.score) return right.score - left.score;
   const leftStamp = left.updatedAt ?? '';
   const rightStamp = right.updatedAt ?? '';
   if (leftStamp !== rightStamp) return rightStamp.localeCompare(leftStamp);
@@ -56,6 +72,16 @@ function deriveFfpPrimitive(tool: string): string {
   return normalized.split(/[._]/)[0] || 'runtime';
 }
 
+function rankResult(search: string, result: SearchResult, ...fields: Array<string | null | undefined>): RankedSearchResult | null {
+  const score = scoreSearchMatch(search, result.title, result.subtitle, ...fields);
+  return score > 0 ? { ...result, score } : null;
+}
+
+function stripScore(result: RankedSearchResult): SearchResult {
+  const { score: _score, ...rest } = result;
+  return rest;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = requireAgentContext(request.headers);
@@ -71,7 +97,6 @@ export async function GET(request: NextRequest) {
         viewerAgentId: ctx.agentId,
         viewerWorkspaceIds: (await workspacePromise).map(workspace => workspace.id),
         includeHidden: true,
-        search: search || undefined,
         sort: 'recent',
       }),
       listInstalledAgentApps(ctx.agentId).catch(() => []),
@@ -109,7 +134,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const installedSlugSet = new Set(installedApps.map(item => item.app.slug));
-    const vaultResults: SearchResult[] = [];
+    const vaultResults: RankedSearchResult[] = [];
     for (const workspace of workspaces) {
       try {
         const payload = await listVaultSecrets({
@@ -118,7 +143,7 @@ export async function GET(request: NextRequest) {
           search: search || undefined,
         });
         for (const secret of payload.secrets) {
-          vaultResults.push({
+          const ranked = rankResult(search, {
             id: secret.id,
             kind: 'vault',
             title: secret.name,
@@ -126,162 +151,169 @@ export async function GET(request: NextRequest) {
             href: '/vault',
             actionLabel: 'Open Vault',
             updatedAt: secret.updatedAt,
-          });
+          }, workspace.name, secret.name);
+          if (ranked && shouldIncludeKind(type, 'vault')) vaultResults.push(ranked);
         }
       } catch {
         // Continue without exposing vault internals.
       }
     }
 
-    const skillMap = new Map<string, SearchResult>();
+    const skillMap = new Map<string, RankedSearchResult>();
     for (const row of [...(publishedSkillsResult.data ?? []), ...(ownSkillsResult.data ?? [])] as Array<Record<string, unknown>>) {
       const title = String(row.name ?? 'Skill');
       const subtitle = [row.category, row.description].filter(item => typeof item === 'string' && item).join(' - ');
-      if (!matchesSearch(search, title, subtitle, String(row.slug ?? ''))) continue;
-      const id = String(row.id);
-      skillMap.set(id, {
-        id,
+      const ranked = rankResult(search, {
+        id: String(row.id),
         kind: 'skill',
         title,
         subtitle: subtitle || 'Skill',
         href: `/skills/${String(row.slug ?? row.id)}`,
         actionLabel: 'Open Skill',
         updatedAt: String(row.updated_at ?? row.created_at ?? ''),
-      });
+      }, String(row.slug ?? ''), title, subtitle);
+      if (ranked && shouldIncludeKind(type, 'skill')) {
+        skillMap.set(ranked.id, ranked);
+      }
     }
 
-    const grouped: Record<SearchKind, SearchResult[]> = {
+    const ffpPrimitiveMap = new Map<string, RankedSearchResult>();
+    for (const row of (ffpRoutesResult.data ?? []) as Array<Record<string, unknown>>) {
+      const primitive = deriveFfpPrimitive(String(row.tool ?? ''));
+      const ranked = rankResult(search, {
+        id: primitive,
+        kind: 'ffp_primitive',
+        title: primitive.toUpperCase(),
+        subtitle: `FFP primitive from ${String(row.tool ?? 'tool')}`,
+        href: `/ffp?drawer=primitive-detail&item=${encodeURIComponent(primitive)}`,
+        actionLabel: 'Inspect Primitive',
+        updatedAt: typeof row.executed_at === 'string' ? row.executed_at : null,
+      }, primitive, String(row.tool ?? ''));
+      if (ranked && shouldIncludeKind(type, 'ffp_primitive') && !ffpPrimitiveMap.has(primitive)) {
+        ffpPrimitiveMap.set(primitive, ranked);
+      }
+    }
+
+    const grouped: Record<SearchKind, RankedSearchResult[]> = {
       app: apps
-        .filter(app => type === 'all' || type === 'app')
-        .map(app => ({
-          id: app.id,
-          kind: 'app',
-          title: app.name,
-          subtitle: `${app.category} - ${app.description}`,
-          href: `/appstore/${app.slug}`,
-          actionLabel: installedSlugSet.has(app.slug) ? 'Open App' : 'View App',
-          updatedAt: app.updatedAt,
-        })),
-      skill: [...skillMap.values()].filter(item => type === 'all' || type === 'skill'),
+        .flatMap(app => {
+          if (!shouldIncludeKind(type, 'app')) return [];
+          const ranked = rankResult(search, {
+            id: app.id,
+            kind: 'app',
+            title: app.name,
+            subtitle: `${app.category} - ${app.description}`,
+            href: `/appstore/${app.slug}`,
+            actionLabel: installedSlugSet.has(app.slug) ? 'Open App' : 'View App',
+            updatedAt: app.updatedAt,
+          }, app.slug, app.category, app.description, app.publisherName);
+          return ranked ? [ranked] : [];
+        }),
+      skill: [...skillMap.values()],
       workflow: ((workflowsResult.data ?? []) as Array<Record<string, unknown>>)
-        .filter(row => matchesSearch(search, String(row.name ?? ''), String(row.summary ?? ''), String(row.status ?? '')))
-        .filter(() => type === 'all' || type === 'workflow')
-        .map(row => ({
-          id: String(row.id),
-          kind: 'workflow',
-          title: String(row.name ?? 'Workflow'),
-          subtitle: typeof row.summary === 'string' && row.summary ? row.summary : String(row.status ?? 'Workflow'),
-          href: `/workflows/${String(row.id)}`,
-          actionLabel: 'Open Workflow',
-          updatedAt: String(row.updated_at ?? row.created_at ?? ''),
-        })),
+        .flatMap(row => {
+          if (!shouldIncludeKind(type, 'workflow')) return [];
+          const ranked = rankResult(search, {
+            id: String(row.id),
+            kind: 'workflow',
+            title: String(row.name ?? 'Workflow'),
+            subtitle: typeof row.summary === 'string' && row.summary ? row.summary : String(row.status ?? 'Workflow'),
+            href: `/workflows/${String(row.id)}`,
+            actionLabel: 'Open Workflow',
+            updatedAt: String(row.updated_at ?? row.created_at ?? ''),
+          }, String(row.name ?? ''), String(row.summary ?? ''), String(row.status ?? ''));
+          return ranked ? [ranked] : [];
+        }),
       session: sessions
-        .filter(item => matchesSearch(search, item.title, item.status))
-        .filter(() => type === 'all' || type === 'session')
-        .map(item => ({
-          id: item.id,
-          kind: 'session',
-          title: item.title,
-          subtitle: item.status,
-          href: `/studio?session=${encodeURIComponent(item.id)}`,
-          actionLabel: 'Open Session',
-          updatedAt: item.updatedAt,
-        })),
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'session')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'session',
+            title: item.title,
+            subtitle: item.status,
+            href: `/studio?session=${encodeURIComponent(item.id)}`,
+            actionLabel: 'Open Session',
+            updatedAt: item.updatedAt,
+          }, item.title, item.status, item.linkedSubagentId ?? '');
+          return ranked ? [ranked] : [];
+        }),
       project: projects
-        .filter(item => matchesSearch(search, item.name, item.slug, item.description ?? '', item.status))
-        .filter(() => type === 'all' || type === 'project')
-        .map(item => ({
-          id: item.id,
-          kind: 'project',
-          title: item.name,
-          subtitle: item.description ?? `${workspaces.find(workspace => workspace.id === item.workspaceId)?.name ?? 'Workspace'} project`,
-          href: `/studio?mode=code&project=${encodeURIComponent(item.id)}`,
-          actionLabel: 'Open Project',
-          updatedAt: item.updatedAt,
-        })),
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'project')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'project',
+            title: item.name,
+            subtitle: item.description ?? `${workspaces.find(workspace => workspace.id === item.workspaceId)?.name ?? 'Workspace'} project`,
+            href: `/studio?mode=code&project=${encodeURIComponent(item.id)}`,
+            actionLabel: 'Open Project',
+            updatedAt: item.updatedAt,
+          }, item.name, item.slug, item.description ?? '', item.status);
+          return ranked ? [ranked] : [];
+        }),
       subagent: subagents
-        .filter(item => matchesSearch(search, item.name, item.description ?? '', item.instructions))
-        .filter(() => type === 'all' || type === 'subagent')
-        .map(item => ({
-          id: item.id,
-          kind: 'subagent',
-          title: item.name,
-          subtitle: item.description ?? `${item.visibility} subagent`,
-          href: `/agents/${item.id}`,
-          actionLabel: 'Open Subagent',
-          updatedAt: item.updatedAt,
-        })),
-      vault: vaultResults.filter(() => type === 'all' || type === 'vault'),
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'subagent')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'subagent',
+            title: item.name,
+            subtitle: item.description ?? `${item.visibility} subagent`,
+            href: `/agents/${item.id}`,
+            actionLabel: 'Open Subagent',
+            updatedAt: item.updatedAt,
+          }, item.name, item.description ?? '', item.instructions, item.visibility, item.exposedCapabilities.join(' '));
+          return ranked ? [ranked] : [];
+        }),
+      vault: vaultResults,
       connector: ((connectorsResult.data ?? []) as Array<Record<string, unknown>>)
-        .filter(row => matchesSearch(
-          search,
-          String(row.name ?? ''),
-          String(row.description ?? ''),
-          String(row.category ?? ''),
-          summarizeConnectorTools(row.tools),
-        ))
-        .filter(() => type === 'connector')
-        .map(row => ({
-          id: String(row.id ?? row.name),
-          kind: 'connector',
-          title: String(row.name ?? 'Connector'),
-          subtitle: `${String(row.category ?? 'Connector')} - ${summarizeConnectorTools(row.tools)}`,
-          href: `/connectors?drawer=connector-detail&item=${encodeURIComponent(String(row.name ?? ''))}`,
-          actionLabel: 'Inspect Connector',
-          updatedAt: typeof row.created_at === 'string' ? row.created_at : null,
-        })),
+        .flatMap(row => {
+          if (!shouldIncludeKind(type, 'connector')) return [];
+          const ranked = rankResult(search, {
+            id: String(row.id ?? row.name),
+            kind: 'connector',
+            title: String(row.name ?? 'Connector'),
+            subtitle: `${String(row.category ?? 'Connector')} - ${summarizeConnectorTools(row.tools)}`,
+            href: `/connectors?drawer=connector-detail&item=${encodeURIComponent(String(row.name ?? ''))}`,
+            actionLabel: 'Inspect Connector',
+            updatedAt: typeof row.created_at === 'string' ? row.created_at : null,
+          }, String(row.name ?? ''), String(row.description ?? ''), String(row.category ?? ''), summarizeConnectorTools(row.tools));
+          return ranked ? [ranked] : [];
+        }),
       ffp_route: ((ffpRoutesResult.data ?? []) as Array<Record<string, unknown>>)
-        .filter(row => matchesSearch(
-          search,
-          String(row.chain_id ?? ''),
-          String(row.tool ?? ''),
-          String(row.status ?? ''),
-          String(row.error_message ?? ''),
-        ))
-        .filter(() => type === 'ffp_route')
-        .map(row => ({
-          id: String(row.id),
-          kind: 'ffp_route',
-          title: `${String(row.chain_id ?? 'chain')} -> ${String(row.tool ?? 'tool')}`,
-          subtitle: String(row.status ?? 'recorded'),
-          href: `/ffp?drawer=route-detail&item=${encodeURIComponent(String(row.id))}`,
-          actionLabel: 'Inspect Route',
-          updatedAt: typeof row.executed_at === 'string' ? row.executed_at : null,
-        })),
-      ffp_primitive: Object.values(
-        ((ffpRoutesResult.data ?? []) as Array<Record<string, unknown>>)
-          .filter(row => matchesSearch(search, deriveFfpPrimitive(String(row.tool ?? '')), String(row.tool ?? '')))
-          .reduce<Record<string, SearchResult>>((acc, row) => {
-            const primitive = deriveFfpPrimitive(String(row.tool ?? ''));
-            if (type !== 'ffp_primitive') return acc;
-            const existing = acc[primitive];
-            if (!existing) {
-              acc[primitive] = {
-                id: primitive,
-                kind: 'ffp_primitive',
-                title: primitive.toUpperCase(),
-                subtitle: `FFP primitive from ${String(row.tool ?? 'tool')}`,
-                href: `/ffp?drawer=primitive-detail&item=${encodeURIComponent(primitive)}`,
-                actionLabel: 'Inspect Primitive',
-                updatedAt: typeof row.executed_at === 'string' ? row.executed_at : null,
-              };
-            }
-            return acc;
-          }, {}),
-      ),
+        .flatMap(row => {
+          if (!shouldIncludeKind(type, 'ffp_route')) return [];
+          const ranked = rankResult(search, {
+            id: String(row.id),
+            kind: 'ffp_route',
+            title: `${String(row.chain_id ?? 'chain')} -> ${String(row.tool ?? 'tool')}`,
+            subtitle: String(row.status ?? 'recorded'),
+            href: `/ffp?drawer=route-detail&item=${encodeURIComponent(String(row.id))}`,
+            actionLabel: 'Inspect Route',
+            updatedAt: typeof row.executed_at === 'string' ? row.executed_at : null,
+          }, String(row.chain_id ?? ''), String(row.tool ?? ''), String(row.status ?? ''), String(row.error_message ?? ''));
+          return ranked ? [ranked] : [];
+        }),
+      ffp_primitive: [...ffpPrimitiveMap.values()],
       doc: DOCS_CATALOG
-        .filter(item => matchesSearch(search, item.title, item.subtitle, ...(item.keywords ?? [])))
-        .filter(() => type === 'all' || type === 'doc')
-        .map(item => ({
-          ...item,
-          kind: 'doc',
-          actionLabel: 'Open Doc',
-          updatedAt: null,
-        })),
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'doc')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'doc',
+            title: item.title,
+            subtitle: item.subtitle,
+            href: item.href,
+            actionLabel: 'Open Doc',
+            updatedAt: null,
+          }, ...(item.keywords ?? []));
+          return ranked ? [ranked] : [];
+        }),
     };
 
     const results = limitResults(
-      Object.values(grouped).flat().sort(sortResults),
+      Object.values(grouped).flat().sort(sortResults).map(stripScore),
       limit,
     );
 
@@ -289,7 +321,7 @@ export async function GET(request: NextRequest) {
       query: search,
       total: results.length,
       groups: Object.fromEntries(
-        Object.entries(grouped).map(([key, value]) => [key, limitResults(value.sort(sortResults), 8)]),
+        Object.entries(grouped).map(([key, value]) => [key, limitResults(value.sort(sortResults).map(stripScore), 8)]),
       ),
       results,
     });

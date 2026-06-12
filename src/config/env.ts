@@ -1,6 +1,6 @@
-﻿import { ValidationError } from '../utils/errors.js';
+import { ValidationError } from '../utils/errors.js';
+import { CANONICAL_APP_URL } from './release.js';
 
-const DEFAULT_APP_URL = 'https://agentos-app.vercel.app';
 const DEFAULT_X_OAUTH_SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access'];
 
 function sanitizeEnvValue(value: string | undefined): string | undefined {
@@ -33,7 +33,7 @@ function requireEnv(label: string, ...keys: string[]): string {
 }
 
 export function getPublicAppUrl(): string {
-  return getEnv('NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_API_URL') ?? DEFAULT_APP_URL;
+  return getEnv('NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_API_URL') ?? CANONICAL_APP_URL;
 }
 
 export function getAgentOSRuntimeUrl(): string | null {

@@ -1,4 +1,4 @@
-import type { NextResponse } from 'next/server';
+import type { NextRequest, NextResponse } from 'next/server';
 
 export const AGENT_ACCESS_COOKIE = 'agent_access';
 export const AGENT_REFRESH_COOKIE = 'agent_refresh';
@@ -8,6 +8,49 @@ const REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 90;
 
 function shouldUseSecureCookie(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+}
+
+function isLocalHost(value: string | undefined): boolean {
+  if (!value) return false;
+  return value.includes('localhost') || value.includes('127.0.0.1') || value.includes('::1');
+}
+
+type CookieRequestContext = {
+  headers?: Headers | globalThis.Headers;
+  url?: string | URL;
+};
+
+function resolveHostFromUrl(url?: string | URL): string | undefined {
+  if (!url) return undefined;
+  try {
+    return new URL(String(url)).host;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveSecureCookie(context?: CookieRequestContext): boolean {
+  const forwardedProto = context?.headers?.get('x-forwarded-proto') ?? context?.headers?.get('X-Forwarded-Proto') ?? undefined;
+  const host = context?.headers?.get('x-forwarded-host')
+    ?? context?.headers?.get('X-Forwarded-Host')
+    ?? context?.headers?.get('host')
+    ?? context?.headers?.get('Host')
+    ?? resolveHostFromUrl(context?.url)
+    ?? undefined;
+  const protocol = typeof context?.url === 'string' || context?.url instanceof URL
+    ? (() => {
+        try {
+          return new URL(String(context.url)).protocol;
+        } catch {
+          return undefined;
+        }
+      })()
+    : undefined;
+
+  if (forwardedProto === 'http') return false;
+  if (protocol === 'http:') return false;
+  if (isLocalHost(host)) return false;
+  return shouldUseSecureCookie();
 }
 
 function readCookieValue(cookieHeader: string | undefined, name: string): string | undefined {
@@ -39,8 +82,9 @@ export function extractSessionTokenFromCookie(cookieHeader: string | undefined):
 export function setAgentSessionCookies(
   response: NextResponse,
   credentials: { accessToken: string; refreshToken: string },
+  options?: CookieRequestContext,
 ): void {
-  const secure = shouldUseSecureCookie();
+  const secure = resolveSecureCookie(options);
   response.cookies.set({
     name: AGENT_ACCESS_COOKIE,
     value: credentials.accessToken,
@@ -70,8 +114,12 @@ export function setAgentSessionCookies(
   });
 }
 
-export function setAgentSessionCookie(response: NextResponse, token: string): void {
-  const secure = shouldUseSecureCookie();
+export function setAgentSessionCookie(
+  response: NextResponse,
+  token: string,
+  options?: CookieRequestContext,
+): void {
+  const secure = resolveSecureCookie(options);
   response.cookies.set({
     name: AGENT_ACCESS_COOKIE,
     value: token,
@@ -92,8 +140,11 @@ export function setAgentSessionCookie(response: NextResponse, token: string): vo
   });
 }
 
-export function clearAgentSessionCookies(response: NextResponse): void {
-  const secure = shouldUseSecureCookie();
+export function clearAgentSessionCookies(
+  response: NextResponse,
+  options?: CookieRequestContext,
+): void {
+  const secure = resolveSecureCookie(options);
   for (const name of [AGENT_ACCESS_COOKIE, AGENT_REFRESH_COOKIE, AGENT_LEGACY_SESSION_COOKIE]) {
     response.cookies.set({
       name,
@@ -107,8 +158,15 @@ export function clearAgentSessionCookies(response: NextResponse): void {
   }
 }
 
-export function clearAgentSessionCookie(response: NextResponse): void {
-  clearAgentSessionCookies(response);
+export function getCookieRequestContext(request: Pick<NextRequest, 'headers' | 'url'>): CookieRequestContext {
+  return {
+    headers: request.headers,
+    url: request.url,
+  };
+}
+
+export function clearAgentSessionCookie(response: NextResponse, options?: CookieRequestContext): void {
+  clearAgentSessionCookies(response, options);
 }
 
 export function getAgentSessionMaxAgeSeconds(): number {

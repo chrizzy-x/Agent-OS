@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 
 const TARGET_AGENT_ID = process.env.TARGET_AGENT_ID || 'agent_UyAIP-aU5Myf38Ym2JArbJN6';
-const APP_URL = process.env.APP_URL || 'https://agentos-app.vercel.app';
+const APP_URL = process.env.APP_URL || 'https://www.agentos.services';
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const JWT_SECRET = process.env.JWT_SECRET;

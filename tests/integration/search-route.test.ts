@@ -10,6 +10,7 @@ function chain(data: unknown, error: unknown = null) {
     error,
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     ilike: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
@@ -228,9 +229,9 @@ describe('GET /api/search', () => {
     expect(Array.isArray(body.groups.subagent)).toBe(true);
     expect(body.groups.project[0].href).toBe('/studio?mode=code&project=project-1');
     expect(body.groups.project[0].actionLabel).toBe('Open Project');
-    expect(body.groups.connector).toEqual([]);
-    expect(body.groups.ffp_route).toEqual([]);
-    expect(body.groups.ffp_primitive).toEqual([]);
+    expect(body.groups.connector[0].title).toBe('gmail');
+    expect(body.groups.ffp_route[0].title).toContain('chain-agentos');
+    expect(body.groups.ffp_primitive[0].title).toBe('MEM');
     expect(JSON.stringify(body)).not.toContain('sk-live-should-not-leak');
   });
 });

@@ -31,12 +31,12 @@ describe('social platform catalog', () => {
   it('marks scaffolded platforms ready only when their credentials exist', () => {
     process.env.META_APP_ID = 'meta-app-id';
     process.env.META_APP_SECRET = 'meta-app-secret';
-    process.env.META_REDIRECT_URI = 'https://agentos-app.vercel.app/api/meta/callback';
+    process.env.META_REDIRECT_URI = 'https://www.agentos.services/api/meta/callback';
     process.env.TELEGRAM_BOT_TOKEN = 'telegram-bot-token';
     process.env.TELEGRAM_BOT_USERNAME = 'agentos_ops_bot';
     process.env.GOOGLE_CLIENT_ID = 'google-client-id';
     process.env.GOOGLE_CLIENT_SECRET = 'google-client-secret';
-    process.env.GOOGLE_REDIRECT_URI = 'https://agentos-app.vercel.app/api/youtube/callback';
+    process.env.GOOGLE_REDIRECT_URI = 'https://www.agentos.services/api/youtube/callback';
 
     const platforms = buildSocialPlatformCatalog();
     const facebook = platforms.find(platform => platform.id === 'facebook');

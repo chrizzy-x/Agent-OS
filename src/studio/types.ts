@@ -8,7 +8,9 @@ export type StudioContextSection =
   | 'memory'
   | 'files'
   | 'vault'
-  | 'logs';
+  | 'logs'
+  | 'recovery'
+  | 'notifications';
 
 export type StudioFileNode = {
   id: string;

@@ -176,33 +176,28 @@ export default function WorkspaceShell(props: WorkspaceShellProps) {
         </SidebarSection>
       ) : null}
 
-      <SidebarSection title="Studio">
+      <SidebarSection title="Primary">
         <SidebarNav
           items={[
-            { href: '/studio', label: 'Studio', subtitle: 'Conversation', active: props.activePath === '/studio' },
-            { href: '/', label: 'Home', subtitle: 'Your system', active: props.activePath === '/' || props.activePath === '/workspace' || props.activePath === '/workspaces' || props.activePath === '/dashboard' },
+            { href: '/studio', label: 'Super AgentOS', subtitle: 'Ask and execute', active: props.activePath === '/studio' },
+            { href: '/appstore', label: 'AppStore', subtitle: 'Install and open', active: props.activePath === '/appstore' },
+            { href: '/workflows', label: 'Workflows', subtitle: 'Build and run', active: props.activePath === '/workflows' },
+            { href: '/skills', label: 'Skills', subtitle: 'Install capability', active: props.activePath === '/skills' },
+            { href: '/files', label: 'Files', subtitle: 'Preview and summarize', active: props.activePath === '/files' },
+            { href: '/settings', label: 'Settings', subtitle: 'Profile and workspace', active: props.activePath === '/settings' },
+          ]}
+        />
+      </SidebarSection>
+
+      <SidebarSection title="Advanced">
+        <SidebarNav
+          items={[
+            { href: '/', label: 'Home', subtitle: 'Overview', active: props.activePath === '/' || props.activePath === '/workspace' || props.activePath === '/workspaces' || props.activePath === '/dashboard' },
+            { href: '/memory', label: 'Memory', subtitle: 'Governed context', active: props.activePath === '/memory' },
             { href: '/projects', label: 'Projects', subtitle: 'Collection', active: props.activePath === '/projects' },
             { href: '/search', label: 'Search', subtitle: 'Find anything', active: props.activePath === '/search' },
-          ]}
-        />
-      </SidebarSection>
-
-      <SidebarSection title="Install">
-        <SidebarNav
-          items={[
-            { href: '/appstore', label: 'Apps', subtitle: 'Install and open', active: props.activePath === '/appstore' },
-            { href: '/skills', label: 'Skills', subtitle: 'Install capability', active: props.activePath === '/skills' },
-            { href: '/workflows', label: 'Workflows', subtitle: 'Run workflow', active: props.activePath === '/workflows' },
             { href: '/agents', label: 'Agents', subtitle: 'Subagents', active: props.activePath === '/agents' },
             { href: '/vault', label: 'Vault', subtitle: 'Secrets', active: props.activePath === '/vault' },
-          ]}
-        />
-      </SidebarSection>
-
-      <SidebarSection title="System">
-        <SidebarNav
-          items={[
-            { href: '/settings', label: 'Settings', subtitle: 'Profile and workspace', active: props.activePath === '/settings' },
             { href: '/developer', label: 'Developer', subtitle: 'Publish and diagnostics', active: props.activePath === '/developer', locked: !enterprise },
             { href: '/sdk', label: 'SDK', subtitle: 'Apps and credentials', active: props.activePath === '/sdk', locked: !enterprise },
             { href: '/connectors', label: 'Connectors', subtitle: 'Tool connections', active: props.activePath === '/connectors' || props.activePath === '/mcp', locked: !enterprise },

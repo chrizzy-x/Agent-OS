@@ -79,7 +79,9 @@ export async function checkStorageQuota(ctx: AgentContext, additionalBytes: numb
 
   if (error) {
     // If we can't check quota, fail open (don't block agent) but log
-    console.warn('[resource-manager] could not check storage quota:', error.message);
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[resource-manager] could not check storage quota:', error.message);
+    }
     return;
   }
 

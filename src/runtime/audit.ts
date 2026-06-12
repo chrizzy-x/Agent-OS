@@ -27,7 +27,9 @@ export async function logOperation(entry: AuditEntry): Promise<void> {
     });
   } catch (err) {
     // Log to stderr but don't propagate - audit failure must not break agent operations
-    console.error('[audit] failed to write log entry:', err instanceof Error ? err.message : err);
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[audit] failed to write log entry:', err instanceof Error ? err.message : err);
+    }
   }
 }
 

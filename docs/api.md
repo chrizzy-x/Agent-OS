@@ -5,7 +5,7 @@ AgentOS exposes OS-level primitives to apps and services over HTTP. All requests
 ## Base URL
 
 ```
-https://your-deployment.vercel.app
+https://www.agentos.services
 ```
 
 ## Authentication
@@ -50,14 +50,15 @@ Returns server status. No authentication required.
 ```json
 {
   "status": "ok",
-  "version": "6.0.0",
-  "timestamp": "2025-01-15T12:00:00.000Z",
-  "tools": 27
+  "version": "6.5.1",
+  "timestamp": "2026-06-12T08:30:08.265Z",
+  "tools": 44
 }
 ```
 
 > `tools` reflects the current number of registered MCP tools.
-```
+
+Production verification for v6.5.1: `GET https://www.agentos.services/health` returned `200` with `version: 6.5.1` after the final production deployment on June 12, 2026.
 
 ### `GET /tools`
 Lists all available tool names. No authentication required.
@@ -83,13 +84,49 @@ Executes a tool call.
 **Response (error):**
 ```json
 {
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "...",
-    "statusCode": 400
-  }
+  "code": "VALIDATION_ERROR",
+  "message": "...",
+  "whatFailed": "...",
+  "why": "...",
+  "where": "...",
+  "possibleFix": "..."
 }
 ```
+
+---
+
+## V6.5.1 Platform Endpoints
+
+### Unified Execution
+
+All task actions are persisted as executions with statuses `queued`, `running`, `waiting_for_user`, `paused`, `completed`, `partially_completed`, `failed`, and `cancelled`.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/executions` | Search and filter executions by status, source type, workflow, app, skill, session, or text |
+| `GET /api/executions/[id]` | Load one execution and its logs |
+| `POST /api/executions/[id]/actions` | Request `pause`, `resume`, `retry`, `cancel`, or `rollback` |
+| `GET /api/recovery` | List recoverable executions |
+| `POST /api/recovery` | Resume, retry, cancel, or rollback an execution |
+| `POST /api/panic` | Cancel active queued/running/waiting/paused executions in scope |
+
+Execution records include source, session, workflow/app/skill/MCP references, input, output, diagnostic failure details, duration, model, token fields, and estimated cost.
+
+### Files, Memory, Notifications
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/files` | List/search governed files |
+| `GET /api/files?action=preview&path=...` | Preview text files or return binary metadata |
+| `GET /api/files?action=summarize&path=...` | Summarize a file and record the execution |
+| `POST /api/files` | Upload or save a file |
+| `PATCH /api/files` | Rename a file |
+| `DELETE /api/files?path=...` | Delete a file |
+| `GET /api/memory?export=1` | Export accessible memory records |
+| `POST /api/memory` | Create or update governed memory |
+| `DELETE /api/memory` | Delete governed memory |
+| `GET /api/notifications` | List task, approval, workflow, and recovery notifications |
+| `POST /api/notifications` | Create a notification or mark one `read`, `unread`, or `archived` |
 
 ---
 

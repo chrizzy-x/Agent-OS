@@ -22,6 +22,10 @@ function buildGenericExecution(skillSlug: string, capability: string, input: unk
   };
 }
 
+function allowLocalSkillFallback(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK === '1';
+}
+
 export async function runInstalledSkill(params: {
   agentId: string;
   skillSlug: string;
@@ -62,9 +66,7 @@ export async function runInstalledSkill(params: {
     const runtimeSecrets = Array.isArray(skill.required_secrets)
       ? skill.required_secrets.filter((item: unknown): item is string => typeof item === 'string')
       : [];
-    const execution = capability === 'run'
-      ? buildGenericExecution(skill.slug, capability, input, startedAt)
-      : runtimeSecrets.length > 0
+    const execution = runtimeSecrets.length > 0
         ? await withRuntimeSecretsAccess({
             ownerAgentId: agentId,
             names: runtimeSecrets,
@@ -106,6 +108,10 @@ export async function runInstalledSkill(params: {
       error instanceof SecurityError
     ) {
       throw error;
+    }
+
+    if (!allowLocalSkillFallback()) {
+      throw new Error(`Failed to execute skill '${skillSlug}': ${error instanceof Error ? error.message : String(error)}`);
     }
 
     const state = await readLocalRuntimeState();

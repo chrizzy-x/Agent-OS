@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
+import { appendExecutionLog, createExecution, updateExecution } from '@/src/execution/service';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { logOperation } from '@/src/runtime/audit';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -135,11 +136,35 @@ async function updateWorkflowResult(
 }
 
 export async function POST(request: NextRequest) {
+  let executionId: string | null = null;
+  let executionOwner: string | null = null;
   try {
     const ctx = withStudioDefaultAllowedDomains(await requireRouteCapability(request.headers, 'workflows.run'));
+    executionOwner = ctx.agentId;
     const supabase = getSupabaseAdmin();
     let body: { workflowId?: string; force?: boolean } = {};
     try { body = await request.json(); } catch { /* empty body */ }
+    const startedAt = Date.now();
+    const execution = await createExecution({
+      agentId: ctx.agentId,
+      sourceType: 'workflow',
+      sourceId: body.workflowId ?? 'due',
+      workflowId: body.workflowId ?? null,
+      title: body.workflowId ? `Run workflow ${body.workflowId}` : 'Run due workflows',
+      input: body,
+    });
+    executionId = execution.id;
+    await updateExecution({
+      agentId: ctx.agentId,
+      executionId,
+      patch: { status: 'running', startedAt: new Date(startedAt).toISOString() },
+    });
+    await appendExecutionLog({
+      agentId: ctx.agentId,
+      executionId,
+      message: 'Workflow execution started',
+      data: body,
+    });
 
     let candidateTasks: ScheduledTask[] = [];
     let adHocWorkflow: { workflow: WorkflowRow; execution: ToolExecution } | null = null;
@@ -352,8 +377,49 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ran: results.length, results: sanitizeOutput(results) });
+    const output = { ran: results.length, results: sanitizeOutput(results) };
+    const failures = results.filter(item => !item.success);
+    await updateExecution({
+      agentId: ctx.agentId,
+      executionId,
+      patch: {
+        status: failures.length === 0 ? 'completed' : failures.length === results.length ? 'failed' : 'partially_completed',
+        output,
+        failure: failures.length > 0 ? {
+          whatFailed: `${failures.length} workflow step${failures.length === 1 ? '' : 's'} failed`,
+          why: failures.map(item => item.error).filter(Boolean).join('; '),
+          where: 'workflow runtime',
+          possibleFix: 'Inspect workflow logs, fix the failing node input or tool, then retry the run.',
+        } : null,
+        durationMs: Date.now() - startedAt,
+        completedAt: new Date().toISOString(),
+      },
+    });
+    await appendExecutionLog({
+      agentId: ctx.agentId,
+      executionId,
+      level: failures.length > 0 ? 'warning' : 'info',
+      message: failures.length > 0 ? 'Workflow execution partially failed' : 'Workflow execution completed',
+      data: output,
+    });
+    return NextResponse.json({ ...output, executionId });
   } catch (error: unknown) {
+    if (executionId && executionOwner) {
+      await updateExecution({
+        agentId: executionOwner,
+        executionId,
+        patch: {
+          status: 'failed',
+          failure: {
+            whatFailed: sanitizeErrorMessage(error),
+            why: sanitizeErrorMessage(error),
+            where: 'workflow runtime',
+            possibleFix: 'Inspect workflow configuration and retry the run.',
+          },
+          completedAt: new Date().toISOString(),
+        },
+      }).catch(() => undefined);
+    }
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
   }

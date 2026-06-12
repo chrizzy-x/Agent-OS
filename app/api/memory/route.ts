@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { createPermissionGrant, listPermissionGrants, revokePermissionGrant } from '@/src/access/service';
 import { deleteMemoryEntry, listAccessibleMemoryEntries, upsertMemoryEntry } from '@/src/memory/service';
+import { runTrackedExecution } from '@/src/execution/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -25,6 +26,14 @@ export async function GET(request: NextRequest) {
       visibility,
       limit,
     });
+
+    if (url.searchParams.get('export') === '1') {
+      return NextResponse.json({
+        exportedAt: new Date().toISOString(),
+        entries,
+        format: 'agentos-memory-v1',
+      });
+    }
 
     const incomingGrants = await listPermissionGrants({
       actorAgentId: ctx.agentId,
@@ -51,19 +60,28 @@ export async function POST(request: NextRequest) {
     const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : undefined;
     const visibility = body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : 'private';
 
-    const entry = await upsertMemoryEntry({
-      ownerAgentId: ctx.agentId,
-      key,
-      content,
-      tags,
-      namespaceType: namespaceType as 'user' | 'agent' | 'subagent' | 'workspace' | 'workflow' | 'app' | 'skill',
-      namespaceId,
+    const tracked = await runTrackedExecution({
+      agentId: ctx.agentId,
       workspaceId,
-      visibility,
-      metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
-        ? body.metadata as Record<string, unknown>
-        : undefined,
+      sourceType: 'memory',
+      sourceId: key,
+      title: `Save memory ${key}`,
+      input: { key, tags, namespaceType, namespaceId, workspaceId, visibility },
+      run: () => upsertMemoryEntry({
+        ownerAgentId: ctx.agentId,
+        key,
+        content,
+        tags,
+        namespaceType: namespaceType as 'user' | 'agent' | 'subagent' | 'workspace' | 'workflow' | 'app' | 'skill',
+        namespaceId,
+        workspaceId,
+        visibility,
+        metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+          ? body.metadata as Record<string, unknown>
+          : undefined,
+      }),
     });
+    const entry = tracked.result;
 
     if (typeof body.shareTargetAgentId === 'string' && body.shareTargetAgentId.trim()) {
       await createPermissionGrant({
@@ -77,7 +95,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ entry }, { status: 201 });
+    return NextResponse.json({ entry, execution: tracked.execution }, { status: 201 });
   } catch (error) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
@@ -105,13 +123,20 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ grant, revoked: true });
     }
 
-    const result = await deleteMemoryEntry({
-      ownerAgentId: ctx.agentId,
-      key,
-      namespaceType: namespaceType as 'user' | 'agent' | 'subagent' | 'workspace' | 'workflow' | 'app' | 'skill',
-      namespaceId,
+    const tracked = await runTrackedExecution({
+      agentId: ctx.agentId,
+      sourceType: 'memory',
+      sourceId: key,
+      title: `Delete memory ${key}`,
+      input: { key, namespaceType, namespaceId },
+      run: () => deleteMemoryEntry({
+        ownerAgentId: ctx.agentId,
+        key,
+        namespaceType: namespaceType as 'user' | 'agent' | 'subagent' | 'workspace' | 'workflow' | 'app' | 'skill',
+        namespaceId,
+      }),
     });
-    return NextResponse.json(result);
+    return NextResponse.json({ ...tracked.result, execution: tracked.execution });
   } catch (error) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

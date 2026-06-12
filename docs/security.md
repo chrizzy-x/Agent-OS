@@ -187,6 +187,23 @@ Audit writes are fire-and-forget (failures do not block operations) but are logg
 
 Audit logs are immutable — agents have no tools to delete or modify them. Row Level Security with `DENY ALL` policies prevents any direct client access.
 
+## V6.5.1 Unified Execution Controls
+
+Super AgentOS, apps, skills, workflows, MCP-facing tools, files, and memory actions write durable records to `agent_executions` and `agent_execution_logs`.
+
+Each execution records:
+- user/agent scope, session, workspace, source type, source id
+- status across `queued`, `running`, `waiting_for_user`, `paused`, `completed`, `partially_completed`, `failed`, and `cancelled`
+- sanitized input/output, diagnostic failure details, logs, duration, model, token fields, and estimated cost
+
+Sensitive or destructive actions must route through approval or permission grants. Permission grants support scoped decisions such as direct, one-time, session-scoped, and permanent access with optional expiry. Denied approvals produce no active grant.
+
+The Panic Button cancels active queued/running/waiting/paused executions in scope and writes a notification. Recovery actions persist `resume`, `retry`, `cancel`, and `rollback` requests instead of relying on browser-only state.
+
+Production skill execution must run real installed skill source code. Generic local fallback execution is only available in non-production environments when explicitly enabled with `AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK=1`.
+
+Production verification on June 12, 2026 confirmed the deployed v6.5.1 health endpoint at https://www.agentos.services returned `200` with `version: 6.5.1`. The required persistence migration is `src/storage/migrations/026_v651_unified_execution_release.sql`.
+
 ---
 
 ## Dependency Security

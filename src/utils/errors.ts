@@ -69,26 +69,61 @@ export class RateLimitError extends AgentOSError {
   }
 }
 
-export function toErrorResponse(error: unknown): { code: string; message: string; statusCode: number } {
+export type DiagnosticErrorResponse = {
+  code: string;
+  message: string;
+  statusCode: number;
+  whatFailed: string;
+  why: string;
+  where: string;
+  possibleFix: string;
+};
+
+function buildDiagnostic(params: {
+  code: string;
+  message: string;
+  statusCode: number;
+  where: string;
+  why?: string;
+}): DiagnosticErrorResponse {
+  const message = redactSecretsInString(params.message);
+  return {
+    code: params.code,
+    message,
+    statusCode: params.statusCode,
+    whatFailed: message,
+    why: redactSecretsInString(params.why ?? message),
+    where: params.where,
+    possibleFix: params.statusCode >= 500
+      ? 'Retry the action, then inspect execution logs if it fails again.'
+      : 'Review the request input, permissions, and connected account state before retrying.',
+  };
+}
+
+export function toErrorResponse(error: unknown): DiagnosticErrorResponse {
   if (error instanceof AgentOSError) {
-    return {
+    return buildDiagnostic({
       code: error.code,
-      message: redactSecretsInString(error.message),
+      message: error.message,
       statusCode: error.statusCode,
-    };
+      where: error.name,
+    });
   }
 
   if (error instanceof Error) {
-    return {
+    return buildDiagnostic({
       code: 'INTERNAL_ERROR',
       message: 'An internal error occurred',
       statusCode: 500,
-    };
+      where: error.name || 'Runtime',
+      why: 'The server hit an unexpected failure while processing the request.',
+    });
   }
 
-  return {
+  return buildDiagnostic({
     code: 'UNKNOWN_ERROR',
     message: 'An unknown error occurred',
     statusCode: 500,
-  };
+    where: 'Runtime',
+  });
 }
