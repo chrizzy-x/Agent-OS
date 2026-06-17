@@ -80,10 +80,6 @@ function isActive(activePath: string, href: string, aliases: string[] = []) {
   return activePath === base || aliases.includes(activePath);
 }
 
-function openPanic() {
-  window.dispatchEvent(new Event('agentos:open-panic'));
-}
-
 export default function WorkspaceShell(props: WorkspaceShellProps) {
   const [session, setSession] = useState<BrowserSession | null>(props.session ?? null);
   const [workspaces, setWorkspaces] = useState<WorkspaceRef[]>(props.workspaces ?? []);
@@ -204,7 +200,6 @@ export default function WorkspaceShell(props: WorkspaceShellProps) {
       {props.extraSidebar}
       <div className="agentos-sidebar-bottom">
         <button type="button" className="agentos-health">Healthy</button>
-        <button type="button" className="agentos-panic" aria-label="Open PANIC kill switch" onClick={openPanic}>PANIC</button>
       </div>
     </div>
   );

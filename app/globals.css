@@ -1449,7 +1449,7 @@ textarea {
 .agentos-sidebar-bottom {
   display: grid;
   gap: 6px;
-  padding-top: 8px;
+  padding: 8px 0 52px;
   border-top: 1px solid rgba(148, 163, 184, 0.16);
 }
 
@@ -1827,9 +1827,21 @@ nextjs-portal {
     min-height: 40px;
   }
 
-  .agentos-mobile-status span,
-  .agentos-mobile-status button {
+  .agentos-mobile-status span {
     min-height: 34px;
+  }
+
+  .agentos-mobile-status {
+    margin-right: 96px;
+  }
+
+  .panic-button {
+    top: 8px;
+    right: 12px;
+    bottom: auto;
+    left: auto;
+    min-height: 34px;
+    padding-block: 5px;
   }
 
   .agentos-topbar-actions,

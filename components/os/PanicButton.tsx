@@ -73,13 +73,9 @@ export default function PanicButton() {
     setWorking(false);
   }
 
-  const visibleStatus = status ?? {
-    state: 'healthy' as const,
-    activeCount: 0,
-    mcpDisabled: false,
-    vaultDisabled: false,
-    requireReauth: false,
-  };
+  if (!status) return null;
+
+  const visibleStatus = status;
 
   return (
     <>

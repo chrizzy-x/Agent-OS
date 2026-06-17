@@ -16,7 +16,6 @@ export default function StudioTopbar() {
         <button type="button" onClick={() => openContext('logs')}>Logs</button>
         <button type="button" onClick={() => openContext('recovery')}>Recovery</button>
         <button type="button" onClick={() => openContext('notifications')}>Alerts</button>
-        <button type="button" className="danger" onClick={() => window.dispatchEvent(new Event('agentos:open-panic'))}>Panic</button>
       </div>
       <style>{`
         .studio-switchbar {
@@ -55,7 +54,7 @@ export default function StudioTopbar() {
           .studio-mobile-context-actions {
             grid-column: 1 / -1;
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 6px;
           }
 
@@ -69,11 +68,6 @@ export default function StudioTopbar() {
             font-weight: 700;
           }
 
-          .studio-mobile-context-actions button.danger {
-            border-color: rgba(248, 113, 113, 0.35);
-            color: #fecaca;
-            background: linear-gradient(135deg, rgba(127, 29, 29, 0.68), rgba(40, 12, 18, 0.78));
-          }
         }
       `}</style>
     </header>

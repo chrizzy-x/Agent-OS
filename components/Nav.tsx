@@ -34,10 +34,6 @@ export function buildSessionNavLinks(_session: BrowserSession | null): Array<{ h
   ];
 }
 
-function openPanic() {
-  window.dispatchEvent(new Event('agentos:open-panic'));
-}
-
 function initialsFor(session: BrowserSession | null): string {
   const source = session?.agentName?.trim() || 'User';
   return source
@@ -123,7 +119,6 @@ export default function Nav({ activePath }: NavProps) {
 
         <div className="agentos-mobile-status">
           <span>Healthy</span>
-          <button type="button" aria-label="Open PANIC kill switch" onClick={openPanic}>PANIC</button>
         </div>
 
       </header>

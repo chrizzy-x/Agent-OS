@@ -11,7 +11,8 @@ describe('mobile-parity', () => {
       'FFP (temp)',
       'Profile',
       'Logout',
-      'PANIC',
     );
+    expectSourceContains(['app', 'layout.tsx'], '<PanicButton />');
+    expectSourceContains(['app', 'globals.css'], '.panic-button', 'top: 8px', 'right: 12px');
   });
 });

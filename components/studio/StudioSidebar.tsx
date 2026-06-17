@@ -36,10 +36,6 @@ const NAV_GROUPS: Array<Array<{ href: string; label: string }>> = [
   ],
 ];
 
-function openPanic() {
-  window.dispatchEvent(new Event('agentos:open-panic'));
-}
-
 export default function StudioSidebar() {
   const { sessions, session, selectSession, createSession } = useStudio();
   const recentSessions = sessions.filter(item => !item.archivedAt && !item.deletedAt).slice(0, 8);
@@ -72,7 +68,6 @@ export default function StudioSidebar() {
       </nav>
       <div className="agentos-sidebar-bottom">
         <button type="button" className="agentos-health">Healthy</button>
-        <button type="button" className="agentos-panic" aria-label="Open PANIC kill switch" onClick={openPanic}>PANIC</button>
       </div>
       <style>{`
         .agentos-sidebar-action,

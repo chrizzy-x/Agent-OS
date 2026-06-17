@@ -5,6 +5,7 @@ describe('panic-button', () => {
   it('cancels every active canonical execution type through the shared active-status helper', () => {
     expectSourceContains(['src', 'panic', 'service.ts'], 'isExecutionActiveStatus', 'executePanicAction');
     expectSourceContains(['src', 'execution', 'service.ts'], 'QUEUED', 'RUNNING', 'PAUSED', 'CANCELLED');
-    expectSourceContains(['components', 'os', 'workspace-shell.tsx'], 'agentos-panic');
+    expectSourceContains(['app', 'layout.tsx'], '<PanicButton />');
+    expectSourceContains(['components', 'os', 'PanicButton.tsx'], 'panic-button', 'agentos:open-panic');
   });
 });
