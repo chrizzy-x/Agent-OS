@@ -206,6 +206,13 @@ ALTER TABLE library_items
       'recent_activity'
     ));
 
+ALTER TABLE audit_logs
+  ADD COLUMN IF NOT EXISTS workspace_id TEXT,
+  ADD COLUMN IF NOT EXISTS session_id TEXT,
+  ADD COLUMN IF NOT EXISTS execution_id TEXT,
+  ADD COLUMN IF NOT EXISTS source_type TEXT,
+  ADD COLUMN IF NOT EXISTS source_id TEXT;
+
 CREATE INDEX IF NOT EXISTS audit_logs_workspace_created_idx
   ON audit_logs(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS audit_logs_execution_idx
