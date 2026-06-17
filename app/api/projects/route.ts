@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAgentContext } from '@/src/auth/request';
-import { createProject, listProjects } from '@/src/projects/service';
+import { requireAgentContextWithTier } from '@/src/auth/request';
+import { executeAgentOSAction } from '@/src/actions/service';
+import { listProjects } from '@/src/projects/service';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
 
@@ -22,7 +23,7 @@ type ProjectSummaryItem = {
 
 export async function GET(request: NextRequest) {
   try {
-    const ctx = requireAgentContext(request.headers);
+    const ctx = await requireAgentContextWithTier(request.headers);
     const url = new URL(request.url);
     const search = url.searchParams.get('search')?.trim() ?? '';
     const workspaceId = url.searchParams.get('workspace');
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
       updatedAt: project.updatedAt,
       runs: workflowCounts.get(project.id) ?? 0,
       users: sessionCounts.get(project.id) ?? 0,
-      href: `/studio?mode=code&project=${encodeURIComponent(project.id)}`,
+      href: `/projects/${encodeURIComponent(project.id)}`,
       workspaceId: project.workspaceId,
     }));
 
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = requireAgentContext(request.headers);
+    const ctx = await requireAgentContextWithTier(request.headers);
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
     const name = typeof body.name === 'string' ? body.name : '';
@@ -113,17 +114,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'workspaceId and name are required', message: 'workspaceId and name are required' }, { status: 400 });
     }
 
-    const project = await createProject({
-      ownerAgentId: ctx.agentId,
+    const result = await executeAgentOSAction(ctx, {
+      action: 'create_project',
+      source: 'manual_ui',
       workspaceId,
-      name,
-      description: typeof body.description === 'string' ? body.description : null,
-      metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
-        ? body.metadata as Record<string, unknown>
-        : undefined,
+      payload: {
+        name,
+        workspaceId,
+        description: typeof body.description === 'string' ? body.description : null,
+        metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+          ? body.metadata as Record<string, unknown>
+          : undefined,
+      },
     });
+    const project = (result.result as { project: unknown }).project;
 
-    return NextResponse.json({ project }, { status: 201 });
+    return NextResponse.json({ project, execution: result.execution }, { status: 201 });
   } catch (error) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

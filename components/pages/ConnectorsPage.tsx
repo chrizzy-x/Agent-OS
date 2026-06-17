@@ -143,7 +143,7 @@ export default function ConnectorsPage() {
             <div className="os-drawer-stack">
               <div className="os-entity-copy">Connectors: {connectors.length}</div>
               <div className="os-entity-copy">Healthy: {connectors.filter(item => item.healthStatus === 'active').length}</div>
-              <div className="os-entity-copy">Consensus-gated: {connectors.filter(item => item.requiresConsensus).length}</div>
+              <div className="os-entity-copy">Guarded routes: {connectors.filter(item => item.requiresConsensus).length}</div>
             </div>
           </Card>
         )}
@@ -167,7 +167,7 @@ export default function ConnectorsPage() {
                 title={connector.name}
                 description={connector.description}
                 runtime={connector.category}
-                badge={connector.requiresConsensus ? <Badge tone="warning">Consensus</Badge> : <Badge tone={connector.healthStatus === 'active' ? 'success' : connector.healthStatus === 'degraded' ? 'danger' : 'default'}>{connector.healthStatus}</Badge>}
+                badge={connector.requiresConsensus ? <Badge tone="warning">FFP temp</Badge> : <Badge tone={connector.healthStatus === 'active' ? 'success' : connector.healthStatus === 'degraded' ? 'danger' : 'default'}>{connector.healthStatus}</Badge>}
                 footer={(
                   <div className="os-inline-actions">
                     <span className="os-entity-meta">{connector.toolCount} tools | {connector.callCount} calls</span>
@@ -195,7 +195,7 @@ export default function ConnectorsPage() {
               <div className="os-inline-actions">
                 <Badge tone={detail.connector.healthStatus === 'active' ? 'success' : detail.connector.healthStatus === 'degraded' ? 'danger' : 'default'}>{detail.connector.healthStatus}</Badge>
                 <Badge tone="accent">{detail.connector.category}</Badge>
-                {detail.connector.requiresConsensus ? <Badge tone="warning">Consensus {detail.connector.consensusThreshold}</Badge> : null}
+                {detail.connector.requiresConsensus ? <Badge tone="warning">FFP temp {detail.connector.consensusThreshold}</Badge> : null}
               </div>
               <div className="os-drawer-stack" style={{ marginTop: 12 }}>
                 <div className="os-entity-copy">Access: {detail.connector.accessSummary}</div>

@@ -20,7 +20,6 @@ type AnalyticsPayload = {
     successfulRuns: number;
     activeUsers: number;
     installs: number;
-    revenueUsd: number;
     apiCalls: number;
   };
   series: Array<{ date: string; runs: number; installs: number; apiCalls: number; success: number; failed: number }>;
@@ -30,6 +29,23 @@ type AnalyticsPayload = {
   realtime: Array<{ id: string; label: string; status: string; createdAt: string }>;
   empty: boolean;
 };
+
+function isAnalyticsPayload(value: unknown): value is AnalyticsPayload {
+  if (!value || typeof value !== 'object') return false;
+  const payload = value as Partial<AnalyticsPayload>;
+  return Boolean(payload.summary)
+    && typeof payload.summary?.totalRuns === 'number'
+    && typeof payload.summary?.successfulRuns === 'number'
+    && typeof payload.summary?.activeUsers === 'number'
+    && typeof payload.summary?.installs === 'number'
+    && typeof payload.summary?.apiCalls === 'number'
+    && Array.isArray(payload.series)
+    && Array.isArray(payload.runsByStatus)
+    && Array.isArray(payload.topApps)
+    && Array.isArray(payload.topWorkflows)
+    && Array.isArray(payload.realtime)
+    && typeof payload.empty === 'boolean';
+}
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
@@ -42,7 +58,7 @@ export default function AnalyticsPage() {
     try {
       const res = await fetch(`/api/analytics?days=${range}`, { cache: 'no-store' });
       const data = await res.json();
-      setPayload(data);
+      setPayload(res.ok && isAnalyticsPayload(data) ? data : null);
     } catch {
       setPayload(null);
     } finally {
@@ -110,7 +126,7 @@ export default function AnalyticsPage() {
         <PageHeader
           eyebrow="Analytics"
           title="Usage and performance"
-          subtitle="Runs, installs, API calls, revenue, and success rates."
+          subtitle="Runs, installs, API calls, failures, and success rates."
           actions={<Button variant="secondary" onClick={exportAnalytics}>Export</Button>}
         />
         <div style={{ display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: 12 }}>
@@ -133,7 +149,7 @@ export default function AnalyticsPage() {
               <MetricCard label="Successful runs" value={payload.summary.successfulRuns} />
               <MetricCard label="Active users" value={payload.summary.activeUsers} />
               <MetricCard label="Installs" value={payload.summary.installs} />
-              <MetricCard label="Revenue" value={`$${payload.summary.revenueUsd.toLocaleString()}`} />
+              <MetricCard label="Failed runs" value={payload.runsByStatus.find(item => item.label.toLowerCase() === 'failed')?.value ?? Math.max(0, payload.summary.totalRuns - payload.summary.successfulRuns)} />
               <MetricCard label="API calls" value={payload.summary.apiCalls} />
             </div>
 

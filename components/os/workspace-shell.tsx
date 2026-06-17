@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
-import { Drawer } from '@/components/os/overlays';
-import { AppShell, Badge, Button, SidebarNav, SidebarSection } from '@/components/os/ui';
+import { AppShell, Badge } from '@/components/os/ui';
 
 type WorkspaceRef = {
   id: string;
@@ -20,6 +20,15 @@ type SessionRef = {
   branchLabel?: string | null;
 };
 
+type ContextSummary = {
+  activeSessions?: number;
+  subagents?: number;
+  memoryEntries?: number;
+  installedSkills?: number;
+  connectedApps?: number;
+  privateWorkflows?: number;
+};
+
 type WorkspaceShellProps = {
   activePath: string;
   children: ReactNode;
@@ -33,16 +42,53 @@ type WorkspaceShellProps = {
   mobileTitle?: string;
 };
 
-function workspaceHref(id: string): string {
-  return `/workspace?workspace=${encodeURIComponent(id)}`;
+const NAV_GROUPS: Array<Array<{ href: string; label: string; icon: string; aliases?: string[] }>> = [
+  [
+    { href: '/studio?mode=nl', label: 'New Chat', icon: '+', aliases: ['/'] },
+    { href: '/studio?mode=nl', label: 'Chats', icon: 'S', aliases: ['/studio'] },
+  ],
+  [
+    { href: '/projects', label: 'Projects', icon: 'P' },
+    { href: '/library', label: 'Library', icon: 'L' },
+  ],
+  [
+    { href: '/apps', label: 'Apps', icon: 'A' },
+    { href: '/skills/installed', label: 'Skills', icon: 'K' },
+    { href: '/workflows', label: 'Workflows', icon: 'W' },
+    { href: '/subagents', label: 'Subagents', icon: 'G', aliases: ['/agents'] },
+  ],
+  [
+    { href: '/appstore', label: 'App Store', icon: 'O' },
+    { href: '/skills', label: 'Skill Store', icon: 'T' },
+  ],
+  [
+    { href: '/memory', label: 'Memory', icon: 'M' },
+    { href: '/vault', label: 'Vault', icon: 'V' },
+    { href: '/mcp', label: 'Universal MCP', icon: 'U', aliases: ['/connectors'] },
+    { href: '/ffp', label: 'FFP (temp)', icon: 'F' },
+  ],
+  [
+    { href: '/developer', label: 'Developer', icon: 'D' },
+  ],
+  [
+    { href: '/profile', label: 'Profile', icon: 'I', aliases: ['/settings'] },
+  ],
+];
+
+function isActive(activePath: string, href: string, aliases: string[] = []) {
+  const base = href.split('?')[0];
+  return activePath === base || aliases.includes(activePath);
+}
+
+function openPanic() {
+  window.dispatchEvent(new Event('agentos:open-panic'));
 }
 
 export default function WorkspaceShell(props: WorkspaceShellProps) {
   const [session, setSession] = useState<BrowserSession | null>(props.session ?? null);
   const [workspaces, setWorkspaces] = useState<WorkspaceRef[]>(props.workspaces ?? []);
   const [sessions, setSessions] = useState<SessionRef[]>(props.sessions ?? []);
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileRailOpen, setMobileRailOpen] = useState(false);
+  const [summary, setSummary] = useState<ContextSummary>({});
 
   useEffect(() => {
     if (props.session !== undefined) {
@@ -109,129 +155,101 @@ export default function WorkspaceShell(props: WorkspaceShellProps) {
   }, [props.sessions, session]);
 
   useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key === '\\') {
-        event.preventDefault();
-        setCollapsed(current => !current);
-      }
+    if (!session) {
+      setSummary({});
+      return;
     }
-
-    window.addEventListener('keydown', handleShortcut);
-    return () => window.removeEventListener('keydown', handleShortcut);
-  }, []);
+    let active = true;
+    void fetch('/api/super-agent', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : {})
+      .then((payload: { summary?: ContextSummary }) => {
+        if (active) setSummary(payload.summary ?? {});
+      })
+      .catch(() => {
+        if (active) setSummary({});
+      });
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   const currentWorkspaceId = props.currentWorkspaceId ?? workspaces[0]?.id ?? null;
   const currentWorkspace = workspaces.find(item => item.id === currentWorkspaceId) ?? workspaces[0] ?? null;
-  const enterprise = session?.accountType === 'enterprise' || session?.capabilities?.includes('access_sdk') === true;
-
   const recentSessions = useMemo(
     () => sessions
       .filter(item => !currentWorkspaceId || item.workspaceId === currentWorkspaceId)
-      .slice(0, 8),
+      .slice(0, 5),
     [currentWorkspaceId, sessions],
   );
 
   const rail = (
-    <div className="os-workspace-rail">
-      <SidebarSection
-        title="Super AgentOS"
-        footer={(
-          <div className="os-inline-actions">
-            <Button variant="secondary" onClick={() => setCollapsed(current => !current)}>
-              {collapsed ? 'Expand' : 'Collapse'}
-            </Button>
-            <Badge tone="accent">{session?.planLabel ?? currentWorkspace?.plan ?? 'Retail Free'}</Badge>
+    <div className="agentos-sidebar">
+      <Link href="/studio" className="agentos-sidebar-brand">Super AgentOS</Link>
+      <nav className="agentos-sidebar-nav" aria-label="AgentOS navigation">
+        {NAV_GROUPS.map((group, groupIndex) => (
+          <div key={`group-${groupIndex}`} className="agentos-sidebar-group">
+            {group.map(item => (
+              <Link
+                key={`${item.href}-${item.label}`}
+                href={item.href}
+                className={isActive(props.activePath, item.href, item.aliases) ? 'active' : ''}
+              >
+                <span className="agentos-sidebar-icon" aria-hidden="true">{item.icon}</span>
+                <span>{item.label === 'FFP (temp)' ? <>FFP <small><em>(temp)</em></small></> : item.label}</span>
+              </Link>
+            ))}
           </div>
-        )}
-      >
-        {currentWorkspace ? (
-          <SidebarNav
-            items={workspaces.length > 0 ? workspaces.map(item => ({
-              href: workspaceHref(item.id),
-              label: item.name,
-              subtitle: item.plan ?? 'workspace',
-              active: item.id === currentWorkspace.id,
-            })) : [{
-              href: '/workspace',
-              label: currentWorkspace.name,
-              subtitle: currentWorkspace.plan ?? 'workspace',
-              active: true,
-            }]}
-          />
-        ) : (
-          <div className="os-empty-body">No workspace selected.</div>
-        )}
-      </SidebarSection>
-
-      {recentSessions.length > 0 ? (
-        <SidebarSection title="Sessions">
-          <SidebarNav
-            items={recentSessions.map(item => ({
-              href: `/studio?session=${encodeURIComponent(item.id)}`,
-              label: item.title,
-              subtitle: item.branchLabel || item.status || new Date(item.updatedAt).toLocaleDateString(),
-              active: props.activePath === '/studio' && item.id === props.currentSessionId,
-            }))}
-          />
-        </SidebarSection>
-      ) : null}
-
-      <SidebarSection title="Primary">
-        <SidebarNav
-          items={[
-            { href: '/studio', label: 'Super AgentOS', subtitle: 'Ask and execute', active: props.activePath === '/studio' },
-            { href: '/appstore', label: 'AppStore', subtitle: 'Install and open', active: props.activePath === '/appstore' },
-            { href: '/workflows', label: 'Workflows', subtitle: 'Build and run', active: props.activePath === '/workflows' },
-            { href: '/skills', label: 'Skills', subtitle: 'Install capability', active: props.activePath === '/skills' },
-            { href: '/files', label: 'Files', subtitle: 'Preview and summarize', active: props.activePath === '/files' },
-            { href: '/settings', label: 'Settings', subtitle: 'Profile and workspace', active: props.activePath === '/settings' },
-          ]}
-        />
-      </SidebarSection>
-
-      <SidebarSection title="Advanced">
-        <SidebarNav
-          items={[
-            { href: '/', label: 'Home', subtitle: 'Overview', active: props.activePath === '/' || props.activePath === '/workspace' || props.activePath === '/workspaces' || props.activePath === '/dashboard' },
-            { href: '/memory', label: 'Memory', subtitle: 'Governed context', active: props.activePath === '/memory' },
-            { href: '/projects', label: 'Projects', subtitle: 'Collection', active: props.activePath === '/projects' },
-            { href: '/search', label: 'Search', subtitle: 'Find anything', active: props.activePath === '/search' },
-            { href: '/agents', label: 'Agents', subtitle: 'Subagents', active: props.activePath === '/agents' },
-            { href: '/vault', label: 'Vault', subtitle: 'Secrets', active: props.activePath === '/vault' },
-            { href: '/developer', label: 'Developer', subtitle: 'Publish and diagnostics', active: props.activePath === '/developer', locked: !enterprise },
-            { href: '/sdk', label: 'SDK', subtitle: 'Apps and credentials', active: props.activePath === '/sdk', locked: !enterprise },
-            { href: '/connectors', label: 'Connectors', subtitle: 'Tool connections', active: props.activePath === '/connectors' || props.activePath === '/mcp', locked: !enterprise },
-            { href: '/analytics', label: 'Analytics', subtitle: 'Usage', active: props.activePath === '/analytics', locked: !enterprise },
-            { href: '/audit', label: 'Audit', subtitle: 'History', active: props.activePath === '/audit', locked: !enterprise },
-            { href: '/ffp', label: 'FFP', subtitle: 'Advanced routing', active: props.activePath === '/ffp', locked: !enterprise },
-          ]}
-        />
-      </SidebarSection>
-
+        ))}
+      </nav>
       {props.extraSidebar}
+      <div className="agentos-sidebar-bottom">
+        <button type="button" className="agentos-health">Healthy</button>
+        <button type="button" className="agentos-panic" aria-label="Open PANIC kill switch" onClick={openPanic}>PANIC</button>
+      </div>
+    </div>
+  );
+
+  const context = (
+    <div className="agentos-context-panel">
+      <div className="agentos-context-title">Context</div>
+      <div className="agentos-context-rows">
+        <div><span>Apps</span><strong>{summary.connectedApps ?? 0}</strong></div>
+        <div><span>Skills</span><strong>{summary.installedSkills ?? 0}</strong></div>
+        <div><span>Workflows</span><strong>{summary.privateWorkflows ?? 0}</strong></div>
+        <div><span>Subagents</span><strong>{summary.subagents ?? 0}</strong></div>
+        <div><span>Memory</span><strong>{summary.memoryEntries ? 'Active' : 'Idle'}</strong></div>
+        <div><span>Vault</span><strong>Secure</strong></div>
+        <div><span>MCP</span><strong>{session?.capabilities?.includes('mcp') ? '8' : 'Ready'}</strong></div>
+        <div><span>FFP</span><strong>{session?.capabilities?.includes('ffp') ? 'Healthy' : 'Visible'}</strong></div>
+      </div>
+      <div className="agentos-context-title">Active</div>
+      <div className="agentos-context-rows">
+        <div><span>Current Project</span><strong>{currentWorkspace?.name ?? 'Default'}</strong></div>
+        <div><span>Current Workflow</span><strong>None</strong></div>
+        <div><span>Current App</span><strong>None</strong></div>
+        <div><span>Current Skill</span><strong>None</strong></div>
+        <div><span>Running Tasks</span><strong>{summary.activeSessions ?? 0}</strong></div>
+      </div>
+      {recentSessions.length > 0 ? (
+        <>
+          <div className="agentos-context-title">Recent Chats</div>
+          <div className="agentos-context-list">
+            {recentSessions.map(item => (
+              <Link key={item.id} href={`/studio?session=${encodeURIComponent(item.id)}`}>
+                <span>{item.title}</span>
+                <Badge tone="default">{item.branchLabel || item.status || 'chat'}</Badge>
+              </Link>
+            ))}
+          </div>
+        </>
+      ) : null}
+      {props.aside ? <div className="agentos-context-extra">{props.aside}</div> : null}
     </div>
   );
 
   return (
-    <>
-      <div className="os-workspace-mobile-bar">
-        <Button variant="secondary" onClick={() => setMobileRailOpen(true)}>
-          {props.mobileTitle ?? currentWorkspace?.name ?? 'Workspace'}
-        </Button>
-        {currentWorkspace ? <Badge tone="accent">{currentWorkspace.name}</Badge> : null}
-      </div>
-      <AppShell className={`os-workspace-shell${collapsed ? ' collapsed' : ''}`} sidebar={rail} aside={props.aside}>
-        {props.children}
-      </AppShell>
-      <Drawer
-        open={mobileRailOpen}
-        onClose={() => setMobileRailOpen(false)}
-        title={props.mobileTitle ?? currentWorkspace?.name ?? 'Workspace'}
-        description="Workspace navigation"
-        size="md"
-      >
-        {rail}
-      </Drawer>
-    </>
+    <AppShell className="os-workspace-shell" sidebar={rail} aside={context}>
+      {props.children}
+    </AppShell>
   );
 }

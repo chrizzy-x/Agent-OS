@@ -15,8 +15,8 @@ const buckets: AuditBucket[] = [
   {
     title: 'Implemented',
     items: [
-      'Super AgentOS Home, Studio shell, apps, skills, workflows, Vault grants, governed memory/files, MCP routing, and subagent CRUD remain intact.',
-      'Versioned public surfaces now align on AgentOS v6.5.1 and the canonical production host.',
+      'Super AgentOS Studio-first shell, apps, skills, workflows, Vault grants, governed memory/files, MCP routing, and subagent CRUD remain intact.',
+      'Versioned public surfaces now align on AgentOS V6.6.2 and the canonical production host.',
       'Universal search covers apps, skills, workflows, sessions, projects, subagents, Vault names, docs, connectors, and FFP route records.',
       'Unified execution, recovery, panic stop, notifications, file actions, and memory export are implemented through production APIs.',
     ],
@@ -73,7 +73,7 @@ export default function AuditPage() {
           <div className="badge badge-accent mb-4">Production Audit</div>
           <h1 className="text-4xl font-black mb-3">AgentOS v{APP_VERSION} audit - {RELEASE_AUDIT_DATE}</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            This report reflects the V6.5.1 release pass for <code>{APP_URL}</code>. The legacy deployment host <code>{LEGACY_APP_URL}</code> remains compatibility-only.
+            This report reflects the V6.6.2 release pass for <code>{APP_URL}</code>. The legacy deployment host <code>{LEGACY_APP_URL}</code> remains compatibility-only.
           </p>
         </section>
 
@@ -117,7 +117,7 @@ export default function AuditPage() {
         <section className="card p-6">
           <h2 className="text-xl font-bold mb-3">Readiness</h2>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            V6.5.1 is a unified Super AgentOS release: execution, recovery, files, memory, apps, skills, workflows, MCP routing, and diagnostic failures are connected through production APIs.
+            V6.6.2 is a Studio-first Super AgentOS release: execution, recovery, files, memory, apps, skills, workflows, MCP routing, diagnostic failures, and the locked desktop/mobile UI are connected through production APIs.
           </p>
         </section>
       </div>

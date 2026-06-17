@@ -6,7 +6,7 @@ import { toErrorResponse, ValidationError } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
-const ACTIONS = new Set(['pause', 'resume', 'retry', 'cancel', 'rollback']);
+const ACTIONS = new Set(['pause', 'resume', 'retry', 'cancel', 'rollback', 'inspect']);
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const execution = await requestExecutionAction({
       agentId: ctx.agentId,
       executionId: id,
-      action: action as 'pause' | 'resume' | 'retry' | 'cancel' | 'rollback',
+      action: action as 'pause' | 'resume' | 'retry' | 'cancel' | 'rollback' | 'inspect',
     });
 
     await createNotification({

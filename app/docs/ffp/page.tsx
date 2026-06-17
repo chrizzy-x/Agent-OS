@@ -5,27 +5,15 @@ import { APP_URL } from '@/lib/config';
 const endpoints = [
   {
     method: 'GET',
-    path: '/ffp/status',
-    auth: 'None',
-    desc: 'Returns the deployment FFP runtime summary: enabled flag, chain id, node url, and whether consensus is required.',
-  },
-  {
-    method: 'GET',
-    path: '/api/ffp/chains',
-    auth: 'None',
-    desc: 'Public FFP chain discovery. Returns execution totals, success and failure counts, and last execution time per chain.',
-  },
-  {
-    method: 'GET',
-    path: '/api/agent/ffp/audit',
+    path: '/api/ffp/temp',
     auth: 'Browser Session or Bearer',
-    desc: 'Returns the authenticated agent audit history. Supports `chain_id`, `start_time`, and `end_time` query params.',
+    desc: 'Returns the workspace FFP temp status, current route, affected execution types, and bypassed single-agent execution types.',
   },
   {
-    method: 'GET',
-    path: '/api/agent/ffp/consensus',
+    method: 'PATCH',
+    path: '/api/ffp/temp',
     auth: 'Browser Session or Bearer',
-    desc: 'Returns the authenticated agent consensus proposal history.',
+    desc: 'Enables or disables the workspace FFP temp abstraction for multi-agent workflows, subagent collaboration, and multi-agent delegation.',
   },
 ];
 
@@ -47,50 +35,37 @@ export default function FFPPage() {
       <div className="max-w-4xl mx-auto px-4 py-12 space-y-10">
         <section>
           <div className="inline-block bg-purple-50 text-purple-700 text-sm font-medium px-3 py-1 rounded-full mb-4">
-            FFP
+            FFP temp
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">Fabric Flow Protocol</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">FFP temporary routing hook</h1>
           <p className="text-lg text-gray-500">
-            AgentOS V6.2 exposes FFP as a visible module at <code className="bg-gray-100 px-1 rounded text-sm">/ffp</code>. Retail users see a locked enterprise state. Enterprise users see real runtime status, chain activity, audit history, consensus history, related workflows, related apps, and logs.
+            FFP is not live yet in AgentOS V6.6.2. The product exposes a workspace toggle and routing abstraction point only. No consensus engine, validator voting, proposal history, or fake consensus success state ships in this release.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What ships</h2>
-          <ul className="space-y-2 text-sm text-gray-600">
-            <li>Visible FFP navigation for signed-in users.</li>
-            <li>Safe locked state for non-enterprise workspaces.</li>
-            <li>Runtime summary from <code className="bg-gray-100 px-1 rounded text-sm">/ffp/status</code>.</li>
-            <li>Public chain discovery from <code className="bg-gray-100 px-1 rounded text-sm">/api/ffp/chains</code>.</li>
-            <li>Authenticated audit and consensus history from agent-scoped routes.</li>
-            <li>Real related workflows and installed apps pulled from the current workspace.</li>
-          </ul>
-        </section>
-
-        <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">Gating</h2>
+          <h2 className="text-2xl font-bold mb-4">Routing behavior</h2>
           <div className="space-y-3 text-sm text-gray-600">
-            <p>Retail users can see the module, but chain details, consensus history, SDK links, developer links, and sensitive FFP configuration stay enterprise-only.</p>
-            <p>Enterprise users can inspect chain status, audit entries, proposal history, and related execution surfaces from the main FFP dashboard.</p>
+            <p><strong>FFP Disabled:</strong> multi-agent activities route directly to the Unified Execution Engine.</p>
+            <p><strong>FFP Enabled:</strong> multi-agent activities route through the FFP temporary abstraction layer, then to the Unified Execution Engine.</p>
+            <p>Single-agent chat, single workflow runs, app execution, skill execution, file execution, memory execution, and single MCP calls bypass FFP temp.</p>
           </div>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">Environment</h2>
-          <pre className="bg-gray-950 text-gray-200 rounded-lg p-4 text-xs overflow-x-auto">{`FFP_MODE=enabled
-FFP_CHAIN_ID=your-chain-id
-FFP_NODE_URL=https://your-ffp-node.example.com
-FFP_REQUIRE_CONSENSUS=false`}</pre>
-          <p className="text-sm text-gray-600 mt-4">
-            If the deployment does not provide valid FFP configuration, AgentOS keeps the module visible but reports the runtime as disabled.
-          </p>
+          <h2 className="text-2xl font-bold mb-4">Affected execution types</h2>
+          <ul className="space-y-2 text-sm text-gray-600">
+            <li>Multi-agent workflows</li>
+            <li>Subagent collaboration</li>
+            <li>Multi-agent task delegation</li>
+          </ul>
         </section>
 
         <section className="card p-6">
           <h2 className="text-2xl font-bold mb-4">Routes</h2>
           <div className="space-y-4">
             {endpoints.map(endpoint => (
-              <div key={endpoint.path} className="border border-gray-200 rounded-xl p-4">
+              <div key={endpoint.path + endpoint.method} className="border border-gray-200 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-xs font-mono font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded">{endpoint.method}</span>
                   <code className="text-sm font-mono text-gray-800">{endpoint.path}</code>
@@ -104,15 +79,14 @@ FFP_REQUIRE_CONSENSUS=false`}</pre>
 
         <section className="card p-6">
           <h2 className="text-2xl font-bold mb-4">Example</h2>
-          <pre className="bg-gray-950 text-gray-200 rounded-lg p-4 text-xs overflow-x-auto">{`curl -s ${APP_URL}/ffp/status
-
-curl -s ${APP_URL}/api/ffp/chains
-
-curl -s ${APP_URL}/api/agent/ffp/audit \\
+          <pre className="bg-gray-950 text-gray-200 rounded-lg p-4 text-xs overflow-x-auto">{`curl -s ${APP_URL}/api/ffp/temp \\
   -H "Authorization: Bearer $TOKEN"
 
-curl -s ${APP_URL}/api/agent/ffp/consensus \\
-  -H "Authorization: Bearer $TOKEN"`}</pre>
+curl -s ${APP_URL}/api/ffp/temp \\
+  -X PATCH \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"enabled":true}'`}</pre>
         </section>
       </div>
 

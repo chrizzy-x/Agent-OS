@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: 'invalid_plan',
-        message: 'Choose Retail Free, Retail Pro, Enterprise Plus, or Enterprise Max under the matching account type.',
+        message: 'Choose Free, Pro, Enterprise, or Enterprise Max under the matching account type.',
       },
       { status: 400 },
     );

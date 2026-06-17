@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { listAgentApps, listInstalledAgentApps } from '@/src/appstore/service';
 import { requireAgentContext } from '@/src/auth/request';
 import { DOCS_CATALOG } from '@/src/docs/catalog';
+import { listAccessibleFiles } from '@/src/files/service';
+import { listLibrary } from '@/src/library/service';
+import { listAccessibleMemoryEntries } from '@/src/memory/service';
 import { listProjects } from '@/src/projects/service';
 import { scoreSearchMatch } from '@/src/search/scoring';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
@@ -15,11 +18,16 @@ export const runtime = 'nodejs';
 
 type SearchKind =
   | 'app'
+  | 'installed_app'
   | 'skill'
+  | 'installed_skill'
   | 'workflow'
   | 'session'
   | 'project'
+  | 'library'
   | 'subagent'
+  | 'file'
+  | 'memory'
   | 'vault'
   | 'doc'
   | 'connector'
@@ -92,7 +100,7 @@ export async function GET(request: NextRequest) {
     const workspacePromise = listWorkspaces(ctx.agentId);
     const projectsPromise = listProjects({ ownerAgentId: ctx.agentId, status: 'active' });
 
-    const [apps, installedApps, sessions, workspaces, projects, workflowsResult, publishedSkillsResult, ownSkillsResult, connectorsResult, ffpRoutesResult, subagents] = await Promise.all([
+    const [apps, installedApps, sessions, workspaces, projects, library, files, memoryEntries, workflowsResult, publishedSkillsResult, ownSkillsResult, connectorsResult, ffpRoutesResult, subagents] = await Promise.all([
       listAgentApps({
         viewerAgentId: ctx.agentId,
         viewerWorkspaceIds: (await workspacePromise).map(workspace => workspace.id),
@@ -103,6 +111,9 @@ export async function GET(request: NextRequest) {
       listStudioSessions(ctx.agentId),
       workspacePromise,
       projectsPromise,
+      listLibrary({ ownerAgentId: ctx.agentId, search, limit: 80 }).catch(() => ({ items: [], groups: {}, summary: {} })),
+      listAccessibleFiles({ viewerAgentId: ctx.agentId, search, limit: 50 }).catch(() => []),
+      listAccessibleMemoryEntries({ viewerAgentId: ctx.agentId, ownerAgentId: ctx.agentId, search, visibility: 'all', limit: 50 }).catch(() => []),
       getSupabaseAdmin()
         .from('agent_workflows')
         .select('id,name,summary,status,workspace_id,updated_at,created_at')
@@ -195,6 +206,20 @@ export async function GET(request: NextRequest) {
     }
 
     const grouped: Record<SearchKind, RankedSearchResult[]> = {
+      installed_app: installedApps
+        .flatMap(entry => {
+          if (!shouldIncludeKind(type, 'installed_app')) return [];
+          const ranked = rankResult(search, {
+            id: entry.installation.id,
+            kind: 'installed_app',
+            title: entry.app.name,
+            subtitle: `${entry.installation.status} app - ${entry.app.description}`,
+            href: `/apps`,
+            actionLabel: 'Manage App',
+            updatedAt: entry.installation.updatedAt,
+          }, entry.app.slug, entry.app.category, entry.app.description);
+          return ranked ? [ranked] : [];
+        }),
       app: apps
         .flatMap(app => {
           if (!shouldIncludeKind(type, 'app')) return [];
@@ -207,6 +232,21 @@ export async function GET(request: NextRequest) {
             actionLabel: installedSlugSet.has(app.slug) ? 'Open App' : 'View App',
             updatedAt: app.updatedAt,
           }, app.slug, app.category, app.description, app.publisherName);
+          return ranked ? [ranked] : [];
+        }),
+      installed_skill: library.items
+        .filter(item => item.kind === 'installed_skill')
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'installed_skill')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'installed_skill',
+            title: item.name,
+            subtitle: item.description,
+            href: item.href,
+            actionLabel: 'Open Skill',
+            updatedAt: item.updatedAt,
+          }, item.name, item.description, String(item.metadata.slug ?? ''));
           return ranked ? [ranked] : [];
         }),
       skill: [...skillMap.values()],
@@ -246,10 +286,25 @@ export async function GET(request: NextRequest) {
             kind: 'project',
             title: item.name,
             subtitle: item.description ?? `${workspaces.find(workspace => workspace.id === item.workspaceId)?.name ?? 'Workspace'} project`,
-            href: `/studio?mode=code&project=${encodeURIComponent(item.id)}`,
+            href: `/projects/${encodeURIComponent(item.id)}`,
             actionLabel: 'Open Project',
             updatedAt: item.updatedAt,
           }, item.name, item.slug, item.description ?? '', item.status);
+          return ranked ? [ranked] : [];
+        }),
+      library: library.items
+        .filter(item => item.kind !== 'installed_app' && item.kind !== 'installed_skill' && item.kind !== 'file')
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'library')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'library',
+            title: item.name,
+            subtitle: `${item.kind.replace(/_/g, ' ')} - ${item.description}`,
+            href: item.href,
+            actionLabel: 'Open Library Item',
+            updatedAt: item.updatedAt,
+          }, item.name, item.description, item.kind);
           return ranked ? [ranked] : [];
         }),
       subagent: subagents
@@ -264,6 +319,34 @@ export async function GET(request: NextRequest) {
             actionLabel: 'Open Subagent',
             updatedAt: item.updatedAt,
           }, item.name, item.description ?? '', item.instructions, item.visibility, item.exposedCapabilities.join(' '));
+          return ranked ? [ranked] : [];
+        }),
+      file: files
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'file')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'file',
+            title: item.path,
+            subtitle: item.contentType ?? String(item.metadata.kind ?? 'File'),
+            href: `/files?path=${encodeURIComponent(item.path)}`,
+            actionLabel: 'Open File',
+            updatedAt: item.updatedAt,
+          }, item.path, item.contentType ?? '', JSON.stringify(item.metadata));
+          return ranked ? [ranked] : [];
+        }),
+      memory: memoryEntries
+        .flatMap(item => {
+          if (!shouldIncludeKind(type, 'memory')) return [];
+          const ranked = rankResult(search, {
+            id: item.id,
+            kind: 'memory',
+            title: item.key,
+            subtitle: `${item.namespaceType} memory`,
+            href: '/memory',
+            actionLabel: 'Open Memory',
+            updatedAt: item.updatedAt,
+          }, item.key, item.content, item.tags.join(' '));
           return ranked ? [ranked] : [];
         }),
       vault: vaultResults,

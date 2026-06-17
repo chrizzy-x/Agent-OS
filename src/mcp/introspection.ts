@@ -262,6 +262,6 @@ export function buildConnectorAccessSummary(params: {
   const callsSummary = params.callCount > 0
     ? `${params.callCount} recorded call${params.callCount === 1 ? '' : 's'} (${params.successCount} successful).`
     : 'No recorded calls yet.';
-  const consensusSummary = params.requiresConsensus ? 'Consensus is required.' : 'Consensus is optional.';
+  const consensusSummary = params.requiresConsensus ? 'FFP temp routing is required.' : 'FFP temp routing is optional.';
   return `${referenceSummary} ${callsSummary} ${consensusSummary}`;
 }

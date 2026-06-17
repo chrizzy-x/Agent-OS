@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireAdminAccess } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
-import { getFFPClient } from '@/src/ffp/client';
 
 export const runtime = 'nodejs';
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ privateRef: string }> }
-) {
+export async function GET(req: NextRequest) {
   try {
     requireAdminAccess(req.headers);
-
-    const { privateRef } = await params;
-
-    const proposals = await getFFPClient().queryConsensusHistory(decodeURIComponent(privateRef));
-    return NextResponse.json({ proposals: omitAgentIdentifierFields(proposals), total: proposals.length });
+    return NextResponse.json({
+      proposals: [],
+      total: 0,
+      mode: 'temp',
+      consensusAvailable: false,
+      message: 'FFP consensus history is not live in V6.6.2.',
+    }, { status: 501 });
   } catch (err) {
     const errResp = toErrorResponse(err);
-    return NextResponse.json({ error: errResp }, { status: errResp.statusCode });
+    return NextResponse.json({ error: errResp.message }, { status: errResp.statusCode });
   }
 }

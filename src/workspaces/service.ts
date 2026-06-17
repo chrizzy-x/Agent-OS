@@ -1,7 +1,7 @@
 ﻿import { randomUUID } from 'crypto';
 import { normalizeAgentDisplayName } from '../auth/agent-names.js';
 import { normalizePlan } from '../auth/tiers.js';
-import { readLocalRuntimeState } from '../storage/local-state.js';
+import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { PermissionError } from '../utils/errors.js';
 
@@ -49,6 +49,77 @@ const localMembers = new Map<string, WorkspaceMember[]>();
 const localAgents = new Map<string, WorkspaceAgent[]>();
 const localAudit = new Map<string, WorkspaceAudit[]>();
 
+function mapPersistedWorkspace(row: {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId: string;
+  plan: string;
+  createdAt: string;
+}): Workspace {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    ownerId: row.ownerId,
+    plan: row.plan,
+    createdAt: row.createdAt,
+  };
+}
+
+function mapWorkspaceJoin(value: unknown): Workspace | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!row || typeof row !== 'object') return null;
+  const ws = row as Record<string, unknown>;
+  const id = typeof ws.id === 'string' ? ws.id : '';
+  if (!id) return null;
+  return {
+    id,
+    name: typeof ws.name === 'string' ? ws.name : 'Workspace',
+    slug: typeof ws.slug === 'string' ? ws.slug : normalizeSlug(id),
+    ownerId: typeof ws.owner_id === 'string' ? ws.owner_id : '',
+    plan: typeof ws.plan === 'string' ? normalizePlan(ws.plan) : 'retail_free',
+    createdAt: String(ws.created_at ?? new Date().toISOString()),
+  };
+}
+
+async function listPersistedLocalWorkspaces(userId: string): Promise<Workspace[]> {
+  const state = await readLocalRuntimeState();
+  const memberWorkspaceIds = new Set(
+    state.workspaceMembers
+      .filter(member => member.userId === userId)
+      .map(member => member.workspaceId),
+  );
+  return state.workspaces
+    .filter(workspace => memberWorkspaceIds.has(workspace.id))
+    .map(mapPersistedWorkspace);
+}
+
+async function persistLocalWorkspace(workspace: Workspace): Promise<void> {
+  await updateLocalRuntimeState(state => {
+    state.workspaces = [
+      {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+        ownerId: workspace.ownerId,
+        plan: workspace.plan,
+        createdAt: workspace.createdAt,
+      },
+      ...state.workspaces.filter(item => item.id !== workspace.id),
+    ];
+    state.workspaceMembers = [
+      {
+        workspaceId: workspace.id,
+        userId: workspace.ownerId,
+        role: 'owner',
+        joinedAt: workspace.createdAt,
+      },
+      ...state.workspaceMembers.filter(item => !(item.workspaceId === workspace.id && item.userId === workspace.ownerId)),
+    ];
+  });
+}
+
 function normalizeSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 50) || `workspace-${randomUUID().slice(0, 8)}`;
 }
@@ -87,27 +158,33 @@ export async function listWorkspaces(userId: string): Promise<Workspace[]> {
       .eq('user_id', userId);
 
     if (!error) {
-      return ((data ?? []) as Array<Record<string, unknown>>).flatMap(row => {
-        const ws = row.workspaces as Record<string, unknown> | null;
-        if (!ws) return [];
-        return [{
-          id: String(ws.id),
-          name: String(ws.name),
-          slug: String(ws.slug),
-          ownerId: String(ws.owner_id),
-          plan: String(ws.plan),
-          createdAt: String(ws.created_at),
-        }];
+      const remoteWorkspaces = ((data ?? []) as Array<Record<string, unknown>>).flatMap(row => {
+        const workspace = mapWorkspaceJoin(row.workspaces);
+        return workspace ? [workspace] : [];
       });
+      if (remoteWorkspaces.length > 0) return remoteWorkspaces;
+    }
+
+    const owned = await supabase
+      .from('workspaces')
+      .select('id,name,slug,owner_id,plan,created_at')
+      .eq('owner_id', userId);
+    if (!owned.error && owned.data?.length) {
+      return ((owned.data ?? []) as Array<Record<string, unknown>>)
+        .map(row => mapWorkspaceJoin(row))
+        .filter((workspace): workspace is Workspace => Boolean(workspace));
     }
   } catch {
     // Fall back to local state below.
   }
 
-  return [...localWorkspaces.values()].filter(ws => {
+  const memoryWorkspaces = [...localWorkspaces.values()].filter(ws => {
     const members = localMembers.get(ws.id) ?? [];
     return members.some(m => m.userId === userId);
   });
+  if (memoryWorkspaces.length > 0) return memoryWorkspaces;
+
+  return listPersistedLocalWorkspaces(userId);
 }
 
 export async function assertWorkspaceMembership(workspaceId: string, userId: string): Promise<{
@@ -125,18 +202,32 @@ export async function assertWorkspaceMembership(workspaceId: string, userId: str
 
     if (!error && data) {
       const row = data as Record<string, unknown>;
-      const ws = row.workspaces as Record<string, unknown> | null;
-      if (ws) {
+      const workspace = mapWorkspaceJoin(row.workspaces);
+      if (workspace) {
         return {
           role: (row.role as WorkspaceRole) ?? 'member',
-          workspace: {
-            id: String(ws.id),
-            name: String(ws.name),
-            slug: String(ws.slug),
-            ownerId: String(ws.owner_id),
-            plan: String(ws.plan),
-            createdAt: String(ws.created_at),
-          },
+          workspace,
+        };
+      }
+    }
+
+    const member = await supabase
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!member.error && member.data) {
+      const workspaceResult = await supabase
+        .from('workspaces')
+        .select('id,name,slug,owner_id,plan,created_at')
+        .eq('id', workspaceId)
+        .maybeSingle();
+      const workspace = !workspaceResult.error ? mapWorkspaceJoin(workspaceResult.data) : null;
+      if (workspace) {
+        return {
+          role: ((member.data as Record<string, unknown>).role as WorkspaceRole) ?? 'member',
+          workspace,
         };
       }
     }
@@ -148,6 +239,13 @@ export async function assertWorkspaceMembership(workspaceId: string, userId: str
   const member = (localMembers.get(workspaceId) ?? []).find(item => item.userId === userId);
   if (workspace && member) {
     return { workspace, role: member.role };
+  }
+
+  const state = await readLocalRuntimeState();
+  const persistedWorkspace = state.workspaces.find(item => item.id === workspaceId);
+  const persistedMember = state.workspaceMembers.find(item => item.workspaceId === workspaceId && item.userId === userId);
+  if (persistedWorkspace && persistedMember) {
+    return { workspace: mapPersistedWorkspace(persistedWorkspace), role: persistedMember.role };
   }
 
   throw new PermissionError('Workspace not found or not accessible');
@@ -195,6 +293,9 @@ export async function createWorkspace(params: { name: string; ownerId: string; s
     localMembers.set(workspace.id, [{ workspaceId: workspace.id, userId: workspace.ownerId, role: 'owner', joinedAt: workspace.createdAt }]);
   }
 
+  localWorkspaces.set(workspace.id, workspace);
+  localMembers.set(workspace.id, [{ workspaceId: workspace.id, userId: workspace.ownerId, role: 'owner', joinedAt: workspace.createdAt }]);
+  await persistLocalWorkspace(workspace);
   await appendAudit(workspace.id, workspace.ownerId, 'workspace.created', { slug: workspace.slug });
   return workspace;
 }

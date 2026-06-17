@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.5.1", "timestamp": "...", "tools": 44 }',
+    response: '{ "status": "ok", "version": "6.6.2", "timestamp": "...", "tools": 44 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -65,7 +65,7 @@ const endpoints: Endpoint[] = [
       { field: 'selectedPlan', type: 'retail_free | retail_pro | enterprise_plus | enterprise_max', required: true, desc: 'Beta plan selected during signup' },
       { field: 'planSelectionSkipped', type: 'boolean', required: false, desc: 'Internal onboarding fallback. Defaults to false.' },
     ],
-    response: '{ "success": true, "redirectTo": "/studio", "credentials": { "bearerToken": "eyJ..." | null, "apiKey": "eyJ..." | null, "plan": "retail_pro", "planLabel": "Retail Pro", "capabilities": ["use_nl_studio", "use_bearer_token"], "expiresIn": "90 days" } }',
+    response: '{ "success": true, "redirectTo": "/studio", "credentials": { "bearerToken": "eyJ..." | null, "apiKey": "eyJ..." | null, "plan": "retail_pro", "planLabel": "Pro", "capabilities": ["use_nl_studio", "use_bearer_token"], "expiresIn": "90 days" } }',
   },
   {
     method: 'POST', path: '/api/signin', auth: 'None',
@@ -90,6 +90,39 @@ const endpoints: Endpoint[] = [
     method: 'POST', path: '/api/session/token', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Mint a fresh bearer token for external API, SDK, or CLI use while keeping the browser session active. Requires a plan with bearer-token capability.',
     response: '{ "success": true, "credentials": { "bearerToken": "eyJ...", "apiKey": "eyJ...", "expiresIn": "90 days" } }',
+  },
+  {
+    method: 'GET', path: '/api/bearer-tokens', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List named scoped bearer tokens. Values are masked after one-time creation or rotation reveal.',
+    response: '{ "tokens": [{ "name": "Workspace API", "scopes": ["workspace", "api"], "maskedToken": "eyJhbGci...abc123", "lastUsedAt": null }] }',
+  },
+  {
+    method: 'POST', path: '/api/bearer-tokens', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Create a named scoped bearer token for workspace, project, app, workflow, MCP connector, external agent/tool, or API access.',
+    body: [
+      { field: 'name', type: 'string', required: true, desc: 'Human-readable token name' },
+      { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace scope' },
+      { field: 'projectId', type: 'string', required: false, desc: 'Project scope' },
+      { field: 'scopes', type: 'string[]', required: false, desc: 'workspace, project, app, workflow, mcp_connector, external_agent, or api' },
+    ],
+    response: '{ "token": {...}, "bearerToken": "eyJ...", "oneTimeReveal": true }',
+  },
+  {
+    method: 'PATCH', path: '/api/bearer-tokens', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Rename, rescope, rotate, or revoke a bearer token. Rotation returns the new bearer token once.',
+    body: [
+      { field: 'id', type: 'string', required: true, desc: 'Bearer token id' },
+      { field: 'action', type: 'rotate | revoke', required: false, desc: 'Optional lifecycle action' },
+    ],
+    response: '{ "token": {...}, "bearerToken": "eyJ..." | undefined, "oneTimeReveal": true }',
+  },
+  {
+    method: 'DELETE', path: '/api/bearer-tokens', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Revoke a bearer token without deleting its audit trail.',
+    body: [
+      { field: 'id', type: 'string', required: true, desc: 'Bearer token id' },
+    ],
+    response: '{ "revoked": true, "token": {...} }',
   },
   {
     method: 'POST', path: '/api/plans/transition', auth: 'Browser Session or Bearer (Agent)',
@@ -177,6 +210,20 @@ const endpoints: Endpoint[] = [
     response: '{ "routes": [{ "tool": "mcp.github.create_issue", "primitive": "github", "fallbackUsed": false, "invokedByType": "workflow", "routeDecision": { "source": "external_mcp" }, "related": { "apps": [...], "workflows": [...], "skills": [...] } }], "primitives": [{ "primitive": "github", "executions": 4, "fallbackCount": 1 }] }',
   },
   {
+    method: 'GET', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Read the workspace FFP temp toggle. Real Fabric Furge Protocol consensus is not live in V6.6.2.',
+    response: '{ "enabled": false, "status": "FFP Disabled", "route": "Multi-agent activities -> Unified Execution Engine" }',
+  },
+  {
+    method: 'PATCH', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Enable or disable the temporary FFP routing abstraction for multi-agent workflows, subagent collaboration, and multi-agent delegation only.',
+    body: [
+      { field: 'enabled', type: 'boolean', required: true, desc: 'Workspace-level FFP temp toggle' },
+      { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace scope' },
+    ],
+    response: '{ "enabled": true, "status": "FFP Enabled", "route": "Multi-agent activities -> FFP temporary abstraction layer -> Unified Execution Engine" }',
+  },
+  {
     method: 'POST', path: '/api/studio/command', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Run a Studio command. Mutating commands return a preview first and require a confirmation token on the second request.',
     body: [
@@ -200,7 +247,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/api/executions', auth: 'Browser Session or Bearer (Agent)',
     desc: 'Search persisted executions by status, source type, workflow, app, skill, session, workspace, or title.',
-    response: '{ "executions": [{ "id": "...", "status": "completed", "sourceType": "super_agent", "title": "..." }] }',
+    response: '{ "executions": [{ "id": "...", "type": "CHAT_EXECUTION", "status": "COMPLETED", "sourceType": "super_agent", "title": "..." }] }',
   },
   {
     method: 'GET', path: '/api/executions/{id}', auth: 'Browser Session or Bearer (Agent)',
@@ -213,7 +260,7 @@ const endpoints: Endpoint[] = [
     body: [
       { field: 'action', type: 'pause | resume | retry | cancel | rollback', required: true, desc: 'Requested execution action' },
     ],
-    response: '{ "execution": { "id": "...", "status": "paused" } }',
+    response: '{ "execution": { "id": "...", "status": "PAUSED" } }',
   },
   {
     method: 'GET', path: '/api/recovery', auth: 'Browser Session or Bearer (Agent)',
@@ -231,7 +278,7 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'POST', path: '/api/panic', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Cancel active queued, running, waiting, and paused executions in scope and create a notification.',
+    desc: 'Cancel active QUEUED, RUNNING, and PAUSED executions in scope and create a notification.',
     body: [
       { field: 'workspaceId', type: 'string', required: false, desc: 'Optional workspace scope' },
       { field: 'sessionId', type: 'string', required: false, desc: 'Optional session scope' },
@@ -288,13 +335,22 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'POST', path: '/api/apps/install', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Install or update an app for the current agent after re-running readiness checks.',
+    desc: 'Install or update an app into the workspace after re-running readiness checks. Workspace install creates ownership, Library availability, an execution, activity, notification, and package cache where applicable.',
     body: [
       { field: 'slug', type: 'string', required: true, desc: 'App slug' },
       { field: 'workspaceId', type: 'string', required: false, desc: 'Optional workspace override' },
       { field: 'permissionsApproved', type: 'string[]', required: false, desc: 'Permission approvals to apply during install' },
     ],
     response: '{ "app": {...}, "installation": {...}, "readiness": { "ready": true, "targets": [{ "target": "web", "url": "https://..." }] } }',
+  },
+  {
+    method: 'POST', path: '/api/apps/{slug}/device-install', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Deploy a workspace-installed app to Android, iOS, Desktop, or PWA from Library using the cached workspace package. Does not require returning to App Store.',
+    body: [
+      { field: 'target', type: 'android | ios | desktop | pwa', required: true, desc: 'Local device target' },
+      { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace that owns the app installation' },
+    ],
+    response: '{ "workspaceInstalled": true, "deviceInstalled": true, "target": "pwa", "packageCachedForOfflineInstall": true, "execution": {...} }',
   },
   {
     method: 'GET', path: '/api/apps/installed', auth: 'Browser Session or Bearer (Agent)',
@@ -406,7 +462,7 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/memory', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'List, search, or export governed memory. Add export=1 to return the v6.5.1 memory export payload.',
+    desc: 'List, search, or export governed memory. Add export=1 to return the V6.6.2 memory export payload.',
     response: '{ "entries": [{ "key": "preference", "namespaceType": "user" }], "viewerAgentId": "..." }',
   },
   {

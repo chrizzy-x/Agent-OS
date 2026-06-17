@@ -26,7 +26,6 @@ type DeveloperAnalytics = {
     calls?: number;
     error_rate?: string;
     active_users?: number;
-    revenue_usd?: number;
   };
   app_totals?: {
     installs?: number;
@@ -219,7 +218,7 @@ export default function DeveloperConsolePage() {
         ) : accessState === 'signed_out' ? (
           <PageHeader eyebrow="Developer Access" title="Sign in required" subtitle="Developer Console is available only after sign-in and plan validation." />
         ) : accessState === 'forbidden' ? (
-          <PageHeader eyebrow="Developer Access" title="Enterprise access required" subtitle="Retail workspaces cannot open publishing, SDK, analytics, or billing controls." />
+          <PageHeader eyebrow="Developer Access" title="Enterprise access required" subtitle="Free and Pro plans cannot open publishing, SDK, analytics, or billing controls." />
         ) : (
           <PageHeader eyebrow="Developer Access" title="Checking access" subtitle="Validating developer permissions for this workspace." />
         )}
@@ -236,7 +235,7 @@ export default function DeveloperConsolePage() {
               <MetricCard label="Apps" value={apps.length} />
               <MetricCard label="Installs" value={analytics?.app_totals?.installs ?? apps.reduce((sum, app) => sum + app.installCount, 0)} />
               <MetricCard label="Active users" value={analytics?.totals?.active_users ?? analytics?.app_totals?.opens ?? 0} />
-              <MetricCard label="Revenue" value={`$${analytics?.totals?.revenue_usd?.toFixed(2) ?? '0.00'}`} />
+              <MetricCard label="API calls" value={analytics?.totals?.calls ?? 0} />
               <MetricCard label="Healthy SDK apps" value={analytics?.app_totals?.online ?? registry.filter(item => item.status === 'online').length} />
               <MetricCard label="Error rate" value={`${analytics?.totals?.error_rate ?? '0.0'}%`} />
             </div>

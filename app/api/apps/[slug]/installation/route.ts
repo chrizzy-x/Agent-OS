@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateAgentAppInstallation } from '@/src/appstore/service';
+import { executeAgentOSAction } from '@/src/actions/service';
 import { requireRouteCapability } from '@/src/auth/request';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
-import { runTrackedExecution } from '@/src/execution/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -19,25 +18,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const status = body.status === 'active' || body.status === 'disabled' || body.status === 'removed'
       ? body.status
       : undefined;
-    const tracked = await runTrackedExecution({
-      agentId: ctx.agentId,
-      sourceType: 'app',
-      sourceId: slug,
-      title: `Update app ${slug}`,
-      input: { favorite, permissionsApproved, status },
-      run: () => updateAgentAppInstallation({
-        agentId: ctx.agentId,
+    const actionResult = await executeAgentOSAction(ctx, {
+      action: favorite !== undefined && permissionsApproved === undefined && status === undefined ? 'pin_app' : 'update_app',
+      source: 'manual_ui',
+      payload: {
         slug,
         favorite,
         permissionsApproved,
         status,
-      }),
+      },
     });
-    const result = tracked.result;
+    const result = actionResult.result as { app: unknown; installation: unknown };
     return NextResponse.json({
       app: omitAgentIdentifierFields(result.app),
       installation: result.installation,
-      execution: tracked.execution,
+      execution: actionResult.execution,
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
@@ -49,24 +44,20 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const ctx = await requireRouteCapability(request.headers, 'apps.install');
     const { slug } = await params;
-    const tracked = await runTrackedExecution({
-      agentId: ctx.agentId,
-      sourceType: 'app',
-      sourceId: slug,
-      title: `Uninstall app ${slug}`,
-      input: { status: 'removed' },
-      run: () => updateAgentAppInstallation({
-        agentId: ctx.agentId,
+    const actionResult = await executeAgentOSAction(ctx, {
+      action: 'uninstall_app',
+      source: 'manual_ui',
+      payload: {
         slug,
         status: 'removed',
-      }),
+      },
     });
-    const result = tracked.result;
+    const result = actionResult.result as { app: unknown; installation: unknown };
     return NextResponse.json({
       removed: true,
       app: omitAgentIdentifierFields(result.app),
       installation: result.installation,
-      execution: tracked.execution,
+      execution: actionResult.execution,
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

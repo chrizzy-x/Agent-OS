@@ -32,7 +32,7 @@ describe('AgentOS capability matrix', () => {
     expect(hasCapability('hyper', 'access_sdk')).toBe(false);
   });
 
-  it('allows Enterprise Plus and Max developer capabilities', () => {
+  it('allows Enterprise and Enterprise Max developer capabilities', () => {
     for (const plan of ['enterprise_plus', 'enterprise_max'] as const) {
       expect(hasCapability(plan, 'create_skill')).toBe(true);
       expect(hasCapability(plan, 'publish_skill')).toBe(true);

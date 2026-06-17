@@ -48,7 +48,6 @@ export async function GET(request: NextRequest) {
         const viewer = requireAgentContext(request.headers);
         viewerAgentId = viewer.agentId;
         viewerWorkspaceIds = (await listWorkspaces(viewer.agentId)).map(workspace => workspace.id);
-        includeHidden = true;
       } catch {
         includeHidden = false;
       }

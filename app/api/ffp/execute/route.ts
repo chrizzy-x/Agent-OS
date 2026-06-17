@@ -1,143 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContext } from '@/src/auth/request';
-import { verifyConsensusProof, hashInput } from '@/src/ffp/chain-verifier';
-import type { ConsensusProof } from '@/src/ffp/chain-verifier';
-import { buildChainScopedContext, getScopedAgentId } from '@/src/ffp/chain-context';
-import { executeUniversalToolCall } from '@/src/mcp/registry';
-import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { toErrorResponse, ValidationError } from '@/src/utils/errors';
-import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
+import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
-function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    // 1. Auth — the caller must be a registered agent with a valid bearer token
     requireAgentContext(req.headers);
-
-    // 2. Parse body
-    const body = (await req.json()) as {
-      tool?: unknown;
-      input?: unknown;
-      proof?: unknown;
-      fallback?: unknown;
-      invokedBy?: unknown;
-      routeDecision?: unknown;
-    };
-
-    const { tool, input, proof } = body;
-
-    if (typeof tool !== 'string' || !tool) {
-      throw new ValidationError('tool is required');
-    }
-    if (!proof || typeof proof !== 'object') {
-      throw new ValidationError('proof is required');
-    }
-
-    // 3. Verify consensus proof
-    const typedProof = proof as ConsensusProof;
-    const verificationResult = verifyConsensusProof(typedProof, input ?? {});
-    if (!verificationResult.valid) {
-      return NextResponse.json(
-        { error: verificationResult.reason },
-        { status: 403 },
-      );
-    }
-
-    // 4. Build chain-scoped context (auto-namespaces all 6 primitives)
-    const scopedCtx = buildChainScopedContext(typedProof.chainId, typedProof.agentId);
-    const scopedAgentId = getScopedAgentId(typedProof.chainId, typedProof.agentId);
-
-    // 5. Execute the tool call
-    const inputObj =
-      input !== null && input !== undefined && typeof input === 'object'
-        ? (input as Record<string, unknown>)
-        : {};
-    const fallback = asObject(body.fallback);
-    const invokedBy = asObject(body.invokedBy);
-    const routeDecision = asObject(body.routeDecision);
-
-    let result: unknown;
-    let status: 'success' | 'failed' = 'success';
-    let errorMessage: string | null = null;
-
-    try {
-      result = await executeUniversalToolCall({
-        agentContext: scopedCtx,
-        name: tool,
-        arguments: inputObj,
-      });
-    } catch (execError) {
-      status = 'failed';
-      errorMessage = sanitizeErrorMessage(execError);
-      result = null;
-    }
-
-    const sanitizedInput = sanitizeOutput(inputObj);
-    const sanitizedResult = sanitizeOutput(result ?? null);
-
-    // 6. Log execution to ffp_chain_executions
-    const supabase = getSupabaseAdmin();
-    const { data: logRow } = await supabase
-      .from('ffp_chain_executions')
-      .insert({
-        chain_id: typedProof.chainId,
-        agent_id: typedProof.agentId,
-        scoped_agent_id: scopedAgentId,
-        proposal_id: typedProof.proposalId,
-        tool,
-        input: sanitizedInput,
-        result: sanitizedResult,
-        status,
-        error_message: errorMessage,
-        consensus_threshold: typedProof.threshold,
-        validator_count: typedProof.signatures.length,
-        input_hash: hashInput(input ?? {}),
-        fallback_used: fallback.used === true,
-        fallback_reason: typeof fallback.reason === 'string' ? fallback.reason : null,
-        invoked_by_type: typeof invokedBy.type === 'string' ? invokedBy.type : null,
-        invoked_by_id: typeof invokedBy.id === 'string' ? invokedBy.id : null,
-        route_decision: sanitizeOutput({
-          ...routeDecision,
-          selectedTool: typeof routeDecision.selectedTool === 'string' ? routeDecision.selectedTool : tool,
-          selectedPrimitive: typeof routeDecision.selectedPrimitive === 'string'
-            ? routeDecision.selectedPrimitive
-            : String(tool).replace(/^agentos\./, '').replace(/^mcp\./, '').split(/[._]/)[0] || 'runtime',
-          status,
-        }),
-      })
-      .select('id')
-      .single();
-
-    const executionId: string | null = logRow?.id ?? null;
-
-    // 7. Return result (or error if execution failed)
-    if (status === 'failed') {
-      return NextResponse.json(
-        {
-          executed: false,
-          error: errorMessage,
-          executionId,
-          chainId: typedProof.chainId,
-        },
-        { status: 422 },
-      );
-    }
-
     return NextResponse.json({
-      executed: true,
-      result: sanitizedResult,
-      executionId,
-      chainId: typedProof.chainId,
-    });
+      executed: false,
+      mode: 'temp',
+      consensusAvailable: false,
+      error: 'FFP execution is not live in V6.6.2. Multi-agent work routes through the temporary abstraction layer into the Unified Execution Engine.',
+    }, { status: 501 });
   } catch (error) {
-    console.error('[ffp/execute]', sanitizeErrorMessage(error));
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
   }

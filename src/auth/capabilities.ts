@@ -140,7 +140,7 @@ export function capabilityMessage(capability: Capability): string {
     || capability === 'manage_webhook'
     || capability === 'manage_versions'
   ) {
-    return 'App/Skill creation and SDK access require Enterprise Plus or Enterprise Max. You can continue saving this as a private workflow, use Bearer token access if available, or upgrade.';
+    return 'App/Skill creation and SDK access require Enterprise or Enterprise Max. You can continue saving this as a private workflow, use Bearer token access if available, or upgrade.';
   }
 
   return `Plan capability required: ${capability}`;

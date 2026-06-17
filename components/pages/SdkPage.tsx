@@ -193,7 +193,7 @@ export default function SdkPage() {
         ) : accessState === 'signed_out' ? (
           <PageHeader eyebrow="SDK Access" title="Sign in required" subtitle="SDK credentials and registrations are available only after sign-in." />
         ) : accessState === 'forbidden' ? (
-          <PageHeader eyebrow="SDK Access" title="Enterprise access required" subtitle="Retail workspaces cannot access SDK credentials, registrations, or publishing." />
+          <PageHeader eyebrow="SDK Access" title="Enterprise access required" subtitle="Free and Pro plans cannot access SDK credentials, registrations, or publishing." />
         ) : (
           <PageHeader eyebrow="SDK Access" title="Checking access" subtitle="Validating SDK permissions for this workspace." />
         )}
@@ -203,7 +203,7 @@ export default function SdkPage() {
             ? <EmptyState title="Session expired" body="Sign in again to manage SDK credentials and app registrations." action={<Button href="/signin">Sign in again</Button>} />
             : <EmptyState title="Sign in required" body="Sign in to manage SDK credentials and app registrations." action={<Button href="/signin">Sign in</Button>} />
         ) : !enterprise ? (
-          <EmptyState title="Enterprise access required" body="Retail workspaces cannot access SDK credentials, registrations, or publishing." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState title="Enterprise access required" body="Free and Pro plans cannot access SDK credentials, registrations, or publishing." action={<Button href="/studio">Open Studio</Button>} />
         ) : (
           <div className="os-drawer-stack">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>

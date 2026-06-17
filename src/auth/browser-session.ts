@@ -1,5 +1,6 @@
 export interface BrowserSession {
   agentName: string | null;
+  avatarUrl?: string | null;
   plan?: string;
   planLabel?: string;
   accountType?: 'retail' | 'enterprise';
@@ -103,7 +104,8 @@ export async function fetchBrowserSession(): Promise<BrowserSession | null> {
 }
 
 export async function fetchWithBrowserSession(input: RequestInfo | URL, init?: RequestInit): Promise<{ response: Response; authState: BrowserSessionAuthState }> {
-  const response = await fetch(input, init);
+  const requestInit: RequestInit = { ...init, credentials: init?.credentials ?? 'include' };
+  const response = await fetch(input, requestInit);
   if (response.status !== 401) {
     if (response.ok) rememberBrowserSession();
     return { response, authState: 'active' };
@@ -118,7 +120,7 @@ export async function fetchWithBrowserSession(input: RequestInfo | URL, init?: R
     };
   }
 
-  const retry = await fetch(input, init);
+  const retry = await fetch(input, requestInit);
   if (retry.ok) {
     rememberBrowserSession();
     return { response: retry, authState: 'active' };

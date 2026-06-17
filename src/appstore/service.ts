@@ -21,6 +21,7 @@ import {
 
 export type AgentAppSort = 'popular' | 'recent' | 'name';
 export type AgentAppOpenTarget = 'web' | 'android' | 'ios';
+export type AgentAppDeviceInstallTarget = 'android' | 'ios' | 'desktop' | 'pwa';
 
 export type AgentAppAccessOptions = {
   viewerAgentId?: string | null;
@@ -96,6 +97,17 @@ export type AgentAppPackage = {
   };
   manifest: AgentAppManifest;
   defaultConfig: Record<string, unknown>;
+};
+
+export type AgentAppDeviceInstallResult = {
+  workspaceInstalled: true;
+  deviceInstalled: true;
+  target: AgentAppDeviceInstallTarget;
+  supportedDeviceTargets: AgentAppDeviceInstallTarget[];
+  packageCachedForOfflineInstall: boolean;
+  packageRef: string;
+  app: AgentAppListing;
+  installation: AgentAppInstallation;
 };
 
 type DbAgentAppRow = {
@@ -196,6 +208,10 @@ const APP_VERSION_SELECT = 'id,app_id,version,change_summary,created_at';
 const KERNEL_REGISTRY_DISCOVERY_SELECT = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,health_status,endpoint_status,version,registered_at,last_heartbeat_at,last_error,disabled,heartbeat_count';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_PRE_WORKSPACE = 'agent_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
+
+function allowLocalAppstoreFallback(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.AGENTOS_ALLOW_LOCAL_APPSTORE_FALLBACK === '1';
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -625,6 +641,7 @@ async function loadStoredApps(): Promise<AgentAppListing[]> {
     // Local fallback below.
   }
 
+  if (!allowLocalAppstoreFallback()) return [];
   const state = await readLocalRuntimeState();
   return (state.agentApps.catalog ?? []).map(normalizeLocalApp);
 }
@@ -717,6 +734,29 @@ function canManageDisabledApp(app: AgentAppListing, options: AgentAppAccessOptio
   return Boolean(options.viewerAgentId && app.publisherId === options.viewerAgentId);
 }
 
+function isInternalVerificationSdkIdentity(value: string | null | undefined): boolean {
+  const normalized = normalizeAgentAppSlug(String(value ?? ''));
+  return normalized.startsWith('direct-debug-sdk-')
+    || normalized.startsWith('prod-verification-sdk-')
+    || normalized.startsWith('qa-verification-sdk-');
+}
+
+function isInternalVerificationSdkListing(app: AgentAppListing): boolean {
+  return app.source === 'external_sdk'
+    && (
+      isInternalVerificationSdkIdentity(app.slug)
+      || isInternalVerificationSdkIdentity(app.kernelProduct)
+      || isInternalVerificationSdkIdentity(app.name)
+    );
+}
+
+function isPublicMarketplaceApp(app: AgentAppListing): boolean {
+  return app.visibility === 'public'
+    && app.published
+    && !app.disabled
+    && !isInternalVerificationSdkListing(app);
+}
+
 function canAccessAppByVisibility(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
   if (app.visibility === 'public') return true;
   if (app.visibility === 'workspace') return canAccessWorkspaceApp(app, options);
@@ -724,6 +764,7 @@ function canAccessAppByVisibility(app: AgentAppListing, options: AgentAppAccessO
 }
 
 function canAccessAppBySlug(app: AgentAppListing, options: AgentAppAccessOptions): boolean {
+  if (isInternalVerificationSdkListing(app) && !canManageDisabledApp(app, options)) return false;
   if (app.disabled && !canManageDisabledApp(app, options)) return false;
   return canAccessAppByVisibility(app, options);
 }
@@ -1002,6 +1043,7 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
       const commandTopic = stringValue(row.command_topic).trim();
       const statusTopic = stringValue(row.status_topic).trim();
       if (!product || !publisherId || !commandTopic || !statusTopic) continue;
+      if (isInternalVerificationSdkIdentity(product)) continue;
 
       const owner = owners.get(publisherId);
       if (!owner?.enterprise) continue;
@@ -1100,7 +1142,7 @@ export async function listAgentApps(options: ListAgentAppsOptions = {}): Promise
     if (source && source !== 'all' && app.source !== source) return false;
     if (runtimeType && runtimeType !== 'all' && app.runtimeType !== runtimeType) return false;
     if (requestedVisibility && app.visibility !== requestedVisibility) return false;
-    if (!options.includeHidden) return app.visibility === 'public' && !app.disabled;
+    if (!options.includeHidden) return isPublicMarketplaceApp(app);
     return canAccessAppBySlug(app, options);
   });
 
@@ -1522,9 +1564,16 @@ export async function installAgentApp(params: {
       : { data: primary.data, error: primary.error };
     if (legacy.error) throw new Error(legacy.error.message);
     if (shouldCountInstall) await recordAgentAppInstall(readiness.app.slug);
+    const installation = mapInstallationRow((legacy.data as DbAppInstallationRow) ?? {});
+    await cacheAgentAppPackage({
+      ownerAgentId: params.agentId,
+      workspaceId: installation.workspaceId ?? params.workspaceId ?? readiness.app.workspaceId ?? null,
+      app: readiness.app,
+      appPackage: buildAgentAppPackage(readiness.app),
+    }).catch(() => undefined);
     return {
       app: readiness.app,
-      installation: mapInstallationRow((legacy.data as DbAppInstallationRow) ?? {}),
+      installation,
     };
   } catch {
     let shouldCountInstall = false;
@@ -1570,6 +1619,12 @@ export async function installAgentApp(params: {
       return mapInstallationRow(next);
     });
     if (shouldCountInstall) await recordAgentAppInstall(readiness.app.slug);
+    await cacheAgentAppPackage({
+      ownerAgentId: params.agentId,
+      workspaceId: installation.workspaceId ?? params.workspaceId ?? readiness.app.workspaceId ?? null,
+      app: readiness.app,
+      appPackage: buildAgentAppPackage(readiness.app),
+    }).catch(() => undefined);
     return {
       app: readiness.app,
       installation,
@@ -1602,7 +1657,7 @@ export async function listInstalledAgentApps(agentId: string): Promise<Array<{ a
     // Local fallback below.
   }
 
-  if (installations.length === 0) {
+  if (installations.length === 0 && allowLocalAppstoreFallback()) {
     const state = await readLocalRuntimeState();
     installations = (state.agentApps.installations[agentId] ?? [])
       .map(installation => mapInstallationRow(installation))
@@ -1842,5 +1897,203 @@ export function buildAgentAppPackage(app: AgentAppListing): AgentAppPackage {
     },
     manifest: app.manifest,
     defaultConfig: app.defaultConfig,
+  };
+}
+
+export function resolveSupportedDeviceTargets(app: AgentAppListing): AgentAppDeviceInstallTarget[] {
+  const raw = [
+    ...app.deviceTargets,
+    app.distribution.androidUrl ? 'android' : '',
+    app.distribution.iosUrl ? 'ios' : '',
+    app.distribution.webUrl || app.appUrl ? 'pwa' : '',
+  ].join(' ').toLowerCase();
+  const targets = new Set<AgentAppDeviceInstallTarget>();
+  if (raw.includes('android')) targets.add('android');
+  if (raw.includes('ios') || raw.includes('iphone') || raw.includes('ipad')) targets.add('ios');
+  if (raw.includes('desktop') || raw.includes('mac') || raw.includes('windows') || raw.includes('linux')) targets.add('desktop');
+  if (raw.includes('pwa') || raw.includes('web') || raw.includes('cloud')) targets.add('pwa');
+  return [...targets];
+}
+
+function normalizeDeviceTarget(value: unknown): AgentAppDeviceInstallTarget {
+  if (value === 'android' || value === 'ios' || value === 'desktop' || value === 'pwa') return value;
+  throw new ValidationError('Unsupported device target');
+}
+
+async function cacheAgentAppPackage(params: {
+  ownerAgentId: string;
+  workspaceId: string | null;
+  app: AgentAppListing;
+  appPackage: AgentAppPackage;
+}): Promise<{ packageRef: string; cached: boolean }> {
+  const now = new Date().toISOString();
+  const packageRef = `agentos://workspace/${params.workspaceId ?? params.ownerAgentId}/apps/${params.app.slug}/${params.app.manifest.version}`;
+  const payload = {
+    id: randomUUID(),
+    app_id: params.app.id,
+    workspace_id: params.workspaceId,
+    owner_agent_id: params.ownerAgentId,
+    package_ref: packageRef,
+    package_payload: params.appPackage,
+    version: params.app.manifest.version,
+    status: 'cached',
+    cached_at: now,
+    updated_at: now,
+  };
+
+  try {
+    const { error } = await getSupabaseAdmin()
+      .from('app_package_cache')
+      .upsert(payload, { onConflict: 'workspace_id,app_id,version' });
+    if (!error) return { packageRef, cached: true };
+  } catch {
+    // Fall through to local dev/test cache.
+  }
+
+  await updateLocalRuntimeState(state => {
+    const existing = state.appPackageCache.find(item =>
+      item.ownerAgentId === params.ownerAgentId
+      && item.appId === params.app.id
+      && item.workspaceId === params.workspaceId
+      && item.version === params.app.manifest.version
+    );
+    if (existing) {
+      existing.packageRef = packageRef;
+      existing.packagePayload = params.appPackage as unknown as Record<string, unknown>;
+      existing.status = 'cached';
+      existing.cachedAt = now;
+      existing.updatedAt = now;
+      return;
+    }
+    state.appPackageCache.unshift({
+      id: randomUUID(),
+      appId: params.app.id,
+      workspaceId: params.workspaceId,
+      ownerAgentId: params.ownerAgentId,
+      packageRef,
+      packagePayload: params.appPackage as unknown as Record<string, unknown>,
+      version: params.app.manifest.version,
+      status: 'cached',
+      cachedAt: now,
+      updatedAt: now,
+    });
+  });
+  return { packageRef, cached: true };
+}
+
+export async function getAgentAppPackageCacheStatus(params: {
+  ownerAgentId: string;
+  workspaceId: string | null;
+  appId: string;
+  version?: string | null;
+}): Promise<{ cached: boolean; packageRef: string | null }> {
+  try {
+    let query = getSupabaseAdmin()
+      .from('app_package_cache')
+      .select('package_ref,status')
+      .eq('owner_agent_id', params.ownerAgentId)
+      .eq('app_id', params.appId)
+      .eq('status', 'cached')
+      .order('cached_at', { ascending: false })
+      .limit(1);
+    if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
+    if (params.version) query = query.eq('version', params.version);
+    const { data, error } = await query.maybeSingle();
+    if (!error && data) {
+      return { cached: true, packageRef: typeof data.package_ref === 'string' ? data.package_ref : null };
+    }
+  } catch {
+    // Fall through to local state.
+  }
+
+  const state = await readLocalRuntimeState();
+  const cached = state.appPackageCache.find(item =>
+    item.ownerAgentId === params.ownerAgentId
+    && item.appId === params.appId
+    && item.status === 'cached'
+    && (!params.workspaceId || item.workspaceId === params.workspaceId)
+    && (!params.version || item.version === params.version)
+  );
+  return { cached: Boolean(cached), packageRef: cached?.packageRef ?? null };
+}
+
+export async function installAgentAppToDevice(params: {
+  agentId: string;
+  slug: string;
+  target: unknown;
+  workspaceId?: string | null;
+}): Promise<AgentAppDeviceInstallResult> {
+  const target = normalizeDeviceTarget(params.target);
+  const entry = await getInstalledAgentApp(params.agentId, params.slug);
+  if (!entry || entry.installation.status !== 'active') {
+    throw new PermissionError('App must be installed in the workspace before device installation.');
+  }
+  const workspaceId = params.workspaceId ?? entry.installation.workspaceId ?? entry.app.workspaceId ?? null;
+  const supportedDeviceTargets = resolveSupportedDeviceTargets(entry.app);
+  if (!supportedDeviceTargets.includes(target)) {
+    throw new ValidationError(`This app does not support ${target} installation`);
+  }
+  const appPackage = buildAgentAppPackage(entry.app);
+  const cache = await cacheAgentAppPackage({
+    ownerAgentId: params.agentId,
+    workspaceId,
+    app: entry.app,
+    appPackage,
+  });
+  const now = new Date().toISOString();
+
+  try {
+    const { error } = await getSupabaseAdmin()
+      .from('app_device_installations')
+      .upsert({
+        id: randomUUID(),
+        app_id: entry.app.id,
+        installation_id: entry.installation.id,
+        owner_agent_id: params.agentId,
+        workspace_id: workspaceId,
+        target,
+        package_ref: cache.packageRef,
+        status: 'installed',
+        installed_at: now,
+        updated_at: now,
+      }, { onConflict: 'owner_agent_id,app_id,target' });
+    if (error) throw new Error(error.message);
+  } catch {
+    await updateLocalRuntimeState(state => {
+      const existing = state.appDeviceInstallations.find(item =>
+        item.ownerAgentId === params.agentId
+        && item.appId === entry.app.id
+        && item.target === target
+      );
+      if (existing) {
+        existing.status = 'installed';
+        existing.packageRef = cache.packageRef;
+        existing.workspaceId = workspaceId;
+        existing.updatedAt = now;
+        return;
+      }
+      state.appDeviceInstallations.unshift({
+        id: randomUUID(),
+        appId: entry.app.id,
+        workspaceId,
+        ownerAgentId: params.agentId,
+        target,
+        packageRef: cache.packageRef,
+        status: 'installed',
+        installedAt: now,
+        updatedAt: now,
+      });
+    });
+  }
+
+  return {
+    workspaceInstalled: true,
+    deviceInstalled: true,
+    target,
+    supportedDeviceTargets,
+    packageCachedForOfflineInstall: cache.cached,
+    packageRef: cache.packageRef,
+    app: entry.app,
+    installation: entry.installation,
   };
 }

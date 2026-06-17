@@ -3,6 +3,7 @@ import { runInstalledSkill } from '../skills/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { TOOLS, type ToolHandler } from '../tools.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { assertMcpRuntimeAllowed } from '../panic/service.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 export type StandardToolDefinition = {
@@ -443,6 +444,7 @@ export async function executeUniversalToolCall(params: {
     };
   }
 
+  await assertMcpRuntimeAllowed(params.agentContext.agentId);
   return router.routeMCPCall({
     agentId: params.agentContext.agentId,
     server: normalized.server,

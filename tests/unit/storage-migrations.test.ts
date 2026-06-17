@@ -168,5 +168,40 @@ describe('storage migrations', () => {
     expect(sql).toContain('ALTER TABLE skills');
     expect(sql).toContain("CHECK (visibility IN ('public', 'private', 'workspace', 'unlisted'))");
   });
+
+  it('adds V6.5.2 Library and runtime control primitives', () => {
+    const sql = readFileSync(join(migrationsDir, '027_v652_product_alignment.sql'), 'utf8');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS library_items');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_runtime_controls');
+    expect(sql).toContain("CHECK (source_type IN ('installed_app', 'installed_skill', 'saved_workflow', 'subagent', 'template', 'file', 'published_asset', 'forked_asset'))");
+    expect(sql).toContain("CHECK (panic_state IN ('healthy', 'warning', 'heavy_activity', 'emergency'))");
+    expect(sql).toContain('ALTER TABLE library_items ENABLE ROW LEVEL SECURITY');
+  });
+
+  it('adds V6.6.2 action audit metadata and recovery fields', () => {
+    const sql = readFileSync(join(migrationsDir, '028_v661_production_closure.sql'), 'utf8');
+
+    expect(sql).toContain('ALTER TABLE audit_logs');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS execution_id TEXT');
+    expect(sql).toContain('ALTER TABLE agent_executions');
+    expect(sql).toContain("CHECK (recovery_action IS NULL OR recovery_action IN ('resume', 'retry', 'rollback', 'inspect', 'cancel'))");
+    expect(sql).toContain('ALTER TABLE agent_runtime_controls');
+    expect(sql).toContain('ALTER TABLE library_items');
+  });
+
+  it('adds V6.6.2 execution closure primitives', () => {
+    const sql = readFileSync(join(migrationsDir, '029_v662_execution_closure.sql'), 'utf8');
+
+    expect(sql).toContain("CHECK (status IN ('QUEUED', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED', 'CANCELLED'))");
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_execution_checkpoints');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS bearer_tokens');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS app_package_cache');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS app_device_installations');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS ffp_temp_settings');
+    expect(sql).toContain("'EXTERNAL_CONNECTION_EXECUTION'");
+    expect(sql).toContain("'mcp_connection'");
+    expect(sql).toContain("'recent_activity'");
+  });
 });
 

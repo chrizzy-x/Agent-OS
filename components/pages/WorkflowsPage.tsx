@@ -6,6 +6,7 @@ import Nav from '@/components/Nav';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { Drawer } from '@/components/os/overlays';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import { summarizeValue, summarizeWorkflowRun } from '@/src/ui/presenters';
 import {
   ActivityFeed,
@@ -41,6 +42,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const router = useRouter();
   const drawer = useRouteDrawer<WorkflowDrawer>();
   const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [activeId, setActiveId] = useState(selectedId ?? '');
   const [search, setSearch] = useState('');
@@ -50,8 +52,15 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/agent/workflows', { cache: 'no-store' });
-      const data = await res.json();
+      const sessionState = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+      setAuthState(sessionState.state);
+      if (!sessionState.session) {
+        setWorkflows([]);
+        return;
+      }
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession('/api/agent/workflows', { cache: 'no-store' });
+      setAuthState(nextAuthState);
+      const data = await response.json();
       const rows = data.workflows ?? [];
       setWorkflows(rows);
       if (!activeId && rows.length > 0) {
@@ -82,7 +91,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
     setWorking(true);
     setNotice('');
     try {
-      const res = await fetch('/api/agent/workflows/run-due', {
+      const { response: res } = await fetchWithBrowserSession('/api/agent/workflows/run-due', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflowId: active.id, force: true }),
@@ -103,7 +112,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
     setNotice('');
     try {
       const nextStatus = active.status === 'paused' ? 'active' : 'paused';
-      const res = await fetch(`/api/agent/workflows/${active.id}`, {
+      const { response: res } = await fetchWithBrowserSession(`/api/agent/workflows/${active.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -180,23 +189,25 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
           eyebrow="Workflow builder"
           title={active?.name || 'Workflows'}
           subtitle={active?.summary || 'Build, run, schedule, and publish workflows.'}
-          actions={(
+          actions={active ? (
             <>
               <Button variant="secondary" onClick={() => void runWorkflow()}>{working ? 'Working...' : 'Test Run'}</Button>
-              {active ? <Button variant="secondary" onClick={() => void toggleStatus()}>{working ? 'Working...' : active.status === 'paused' ? 'Resume' : 'Pause'}</Button> : null}
+              <Button variant="secondary" onClick={() => void toggleStatus()}>{working ? 'Working...' : active.status === 'paused' ? 'Resume' : 'Pause'}</Button>
               <Button variant="ghost" onClick={validateWorkflow}>Validate</Button>
               <Button variant="ghost" onClick={sendToStudio}>AI Assist</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-spec')}>Spec</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime</Button>
               <Button href={`/publishing/new${active ? `?workflowId=${active.id}` : ''}`}>Publish</Button>
             </>
-          )}
+          ) : undefined}
         />
 
         {notice ? <Card><div className="os-entity-copy">{notice}</div></Card> : null}
 
-        {loading ? <LoadingState label="Loading workflows" /> : !active ? (
-          <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." />
+        {loading ? <LoadingState label="Loading workflows" /> : authState === 'signed_out' || authState === 'expired' ? (
+          <EmptyState title={authState === 'expired' ? 'Session expired' : 'Sign in required'} body="Sign in to manage workspace workflows." action={<Button href="/signin">{authState === 'expired' ? 'Sign in again' : 'Sign in'}</Button>} />
+        ) : !active ? (
+          <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." action={<Button href="/studio?mode=workflow">Open Workflow Studio</Button>} />
         ) : (
           <>
             <WorkflowCard

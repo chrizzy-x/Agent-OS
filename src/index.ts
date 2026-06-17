@@ -352,22 +352,24 @@ async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, pri
     return;
   }
 
-  try {
-    const proposals = await getFFPClient().queryConsensusHistory(privateRef);
-    sendJson(res, 200, { proposals: sanitizeOutput(proposals), total: proposals.length });
-  } catch (error) {
-    const err = toErrorResponse(error);
-    sendJson(res, err.statusCode, { error: err, code: err.code, message: err.message });
-  }
+  sendJson(res, 501, {
+    proposals: [],
+    total: 0,
+    mode: 'temp',
+    consensusAvailable: false,
+    message: `FFP consensus history is not live in V6.6.2 for ${privateRef}.`,
+  });
 }
 
 function handleFFPStatus(_req: IncomingMessage, res: ServerResponse): void {
-  const ffp = getFFPClient();
   sendJson(res, 200, {
-    enabled: ffp.config.enabled,
-    chainId: ffp.config.chainId || null,
-    nodeUrl: ffp.config.nodeUrl || null,
-    requireConsensus: ffp.config.requireConsensus,
+    enabled: false,
+    mode: 'temp',
+    chainId: null,
+    nodeUrl: null,
+    requireConsensus: false,
+    consensusAvailable: false,
+    message: 'FFP is a temporary workspace routing layer in V6.6.2. No consensus engine is live.',
   });
 }
 

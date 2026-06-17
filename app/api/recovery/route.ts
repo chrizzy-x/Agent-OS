@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
-import { listExecutions, requestExecutionAction } from '@/src/execution/service';
+import { listExecutions, normalizeExecutionStatus, requestExecutionAction } from '@/src/execution/service';
 import { toErrorResponse, ValidationError } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
       status: 'all',
       limit: Number(url.searchParams.get('limit') ?? 80),
     });
-    const recoverable = executions.filter(item => ['failed', 'paused', 'waiting_for_user', 'cancelled', 'partially_completed'].includes(item.status));
+    const recoverable = executions.filter(item => {
+      const status = normalizeExecutionStatus(item.status);
+      return status === 'FAILED' || status === 'PAUSED' || status === 'CANCELLED';
+    });
     return NextResponse.json({ executions: recoverable });
   } catch (error) {
     const err = toErrorResponse(error);
@@ -31,7 +34,7 @@ export async function POST(request: NextRequest) {
     const executionId = typeof body.executionId === 'string' ? body.executionId : '';
     const action = typeof body.action === 'string' ? body.action : '';
     if (!executionId) throw new ValidationError('executionId is required');
-    if (action !== 'resume' && action !== 'retry' && action !== 'cancel' && action !== 'rollback') {
+    if (action !== 'resume' && action !== 'retry' && action !== 'cancel' && action !== 'rollback' && action !== 'inspect') {
       throw new ValidationError('Unsupported recovery action');
     }
     const execution = await requestExecutionAction({

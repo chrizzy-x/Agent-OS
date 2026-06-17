@@ -16,7 +16,7 @@ const sections = [
   {
     title: 'Quick Start',
     href: '/docs/sdk',
-    desc: 'Create your agent, get credentials, make your first API call, and access your dashboard — all in under 5 minutes.',
+    desc: 'Create your agent, get credentials, make your first API call, and open Studio — all in under 5 minutes.',
     badge: null,
   },
   {
@@ -50,16 +50,16 @@ const sections = [
     badge: null,
   },
   {
-    title: 'FFP / Consensus Mode',
+    title: 'FFP (temp)',
     href: '/docs/ffp',
-    desc: 'Immutable audit trail and multi-party consensus for critical operations. View your audit history in the dashboard.',
+    desc: 'Workspace toggle and temporary multi-agent routing hook. Real Fabric Furge Protocol consensus is not live in V6.6.2.',
     badge: 'Advanced',
   },
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'v6.5.1 launch notes for unified Super AgentOS, persisted execution, recovery, governed memory/files, and release hardening.',
-    badge: 'v6.5.1',
+    desc: 'V6.6.2 launch notes for Studio-first Super AgentOS, persisted execution, recovery, governed memory/files, and release hardening.',
+    badge: 'V6.6.2',
   },
 ];
 
@@ -80,7 +80,7 @@ const sidebarLinks = [
   { label: 'API Reference', href: '/docs/api' },
   { label: 'Primitives', href: '/docs/primitives' },
   { label: 'Skills', href: '/docs/skills' },
-  { label: 'FFP / Consensus', href: '/docs/ffp' },
+  { label: 'FFP (temp)', href: '/docs/ffp' },
   { label: 'Audit Trail', href: '/docs/audit' },
   { label: 'Launch Notes', href: '/docs/launch' },
   { label: 'Features', href: '/docs/features' },
@@ -165,7 +165,7 @@ export default function DocsPage() {
                     fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
                     fontSize: '15px',
                     color: 'var(--text-secondary)',
-                  }}>Home, Studio, developer, and install docs.</div>
+                  }}>Studio, developer, and install docs.</div>
                 </div>
               </div>
               <Badge variant="accent" style={{ marginBottom: '16px' }}>Reference</Badge>

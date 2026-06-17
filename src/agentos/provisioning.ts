@@ -1,6 +1,10 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { isValidPlan, normalizePersistedPlan, normalizePlan, PLAN_LABELS, type AccountType, type AgentPlan } from '../auth/tiers.js';
+import { findAccountById } from '../auth/agent-store.js';
+import { createWorkspace, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
+import { ensureWorkspaceDefaultProject } from '../projects/service.js';
+import { createStudioSession, listStudioSessions } from '../studio/persistence.js';
 
 export type AgentOSProvisioningResult = {
   workspaceId: string;
@@ -39,6 +43,14 @@ async function upsert(table: string, payload: Record<string, unknown>, conflict 
   }
 }
 
+async function insertIfMissing(table: string, payload: Record<string, unknown>, id = 'id'): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from(table).upsert(payload, { onConflict: id, ignoreDuplicates: true });
+  if (error) {
+    throw new Error(`Failed to provision ${table}: ${error.message}`);
+  }
+}
+
 async function resolveProvisionedWorkspaceId(agentId: string): Promise<string> {
   try {
     const { data, error } = await getSupabaseAdmin()
@@ -57,6 +69,52 @@ async function resolveProvisionedWorkspaceId(agentId: string): Promise<string> {
   return stableUuid(`workspace:${agentId}`);
 }
 
+async function provisionLocalAgentOSAccount(params: {
+  agentId: string;
+  agentName: string;
+  email: string;
+  accountType: AccountType;
+  plan: AgentPlan;
+}): Promise<AgentOSProvisioningResult> {
+  const workspace = await createWorkspace({
+    name: workspaceName(params.agentName, params.accountType),
+    ownerId: params.agentId,
+    slug: workspaceSlug(params.agentId),
+    plan: params.plan,
+  });
+  const project = await ensureWorkspaceDefaultProject({
+    ownerAgentId: params.agentId,
+    workspaceId: workspace.id,
+  });
+  const superAgentId = stableId('super_agentos', params.agentId);
+  const instructionProfileId = stableId('instructions', params.agentId, '_default');
+  const vaultId = stableId('vault', workspace.id);
+  const session = await createStudioSession({
+    ownerAgentId: params.agentId,
+    workspaceId: workspace.id,
+    projectId: project.id,
+    superAgentId,
+    title: 'AgentOS Studio',
+    initialState: {
+      mode: 'NL_STUDIO',
+      workflowGraph: { nodes: [], edges: [] },
+      workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
+      artifacts: [],
+      approvals: [],
+      installedSkills: [],
+    },
+  });
+
+  return {
+    workspaceId: workspace.id,
+    projectId: project.id,
+    superAgentId,
+    instructionProfileId,
+    studioSessionId: session.id,
+    vaultId,
+  };
+}
+
 export async function provisionAgentOSAccount(params: {
   agentId: string;
   agentName: string;
@@ -73,6 +131,7 @@ export async function provisionAgentOSAccount(params: {
   const vaultId = stableId('vault', workspaceId);
   const label = PLAN_LABELS[params.plan];
 
+  try {
   await upsert('workspaces', {
     id: workspaceId,
     name: workspaceName(params.agentName, params.accountType),
@@ -145,7 +204,7 @@ export async function provisionAgentOSAccount(params: {
     updated_at: now,
   });
 
-  await upsert('nl_studio_sessions', {
+  await insertIfMissing('nl_studio_sessions', {
     id: studioSessionId,
     workspace_id: workspaceId,
     project_id: projectId,
@@ -186,20 +245,67 @@ export async function provisionAgentOSAccount(params: {
     },
     created_at: now,
   });
+  } catch {
+    return provisionLocalAgentOSAccount(params);
+  }
 
   return { workspaceId, projectId, superAgentId, instructionProfileId, studioSessionId, vaultId };
 }
 
 export async function reconcileAgentOSProvisioning(agentId: string): Promise<AgentOSProvisioningResult | null> {
-  const supabase = getSupabaseAdmin();
-  const { data: agent, error } = await supabase
-    .from('agents')
-    .select('id,name,tier,metadata')
-    .eq('id', agentId)
-    .maybeSingle();
+  let agent: Record<string, unknown> | null = null;
+  try {
+    const supabase = getSupabaseAdmin();
+    const result = await supabase
+      .from('agents')
+      .select('id,name,tier,metadata')
+      .eq('id', agentId)
+      .maybeSingle();
 
-  if (error) throw new Error(`Failed to load account for provisioning reconciliation: ${error.message}`);
-  if (!agent) return null;
+    if (!result.error && result.data) {
+      agent = result.data as Record<string, unknown>;
+    }
+  } catch {
+    // Fall back to local account below.
+  }
+
+  if (!agent) {
+    const local = await findAccountById(agentId);
+    if (!local) return null;
+    const accountType: AccountType = local.metadata.account_type === 'enterprise' ? 'enterprise' : 'retail';
+    const plan = isValidPlan(local.metadata.plan) ? normalizePlan(local.metadata.plan) : normalizePersistedPlan(local.metadata.plan);
+    const existingWorkspace = await resolveDefaultWorkspaceForAgent(local.id).catch(() => null);
+    if (existingWorkspace) {
+      const project = await ensureWorkspaceDefaultProject({
+        ownerAgentId: local.id,
+        workspaceId: existingWorkspace.id,
+      });
+      const superAgentId = stableId('super_agentos', local.id);
+      const sessions = await listStudioSessions(local.id).catch(() => []);
+      const session = sessions[0] ?? await createStudioSession({
+        ownerAgentId: local.id,
+        workspaceId: existingWorkspace.id,
+        projectId: project.id,
+        superAgentId,
+        title: 'AgentOS Studio',
+      });
+      return {
+        workspaceId: existingWorkspace.id,
+        projectId: project.id,
+        superAgentId,
+        instructionProfileId: stableId('instructions', local.id, '_default'),
+        studioSessionId: session.id,
+        vaultId: stableId('vault', existingWorkspace.id),
+      };
+    }
+    return provisionAgentOSAccount({
+      agentId: local.id,
+      agentName: local.name,
+      email: local.email,
+      accountType,
+      plan,
+    });
+  }
 
   const metadata = (agent.metadata as Record<string, unknown> | null | undefined) ?? {};
   const accountType: AccountType = metadata.account_type === 'enterprise' ? 'enterprise' : 'retail';

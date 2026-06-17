@@ -23,30 +23,34 @@ export async function POST(request: NextRequest) {
         const ctx = await requireRouteCapability(request.headers, 'studio.intent');
         const sessionId = typeof body.sessionId === 'string' ? body.sessionId : null;
         const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : null;
+        const projectId = typeof body.projectId === 'string' ? body.projectId : null;
         const message = typeof body.message === 'string' ? body.message : typeof body.instruction === 'string' ? body.instruction : 'Super AgentOS request';
         const startedAt = Date.now();
         const execution = await createExecution({
           agentId: ctx.agentId,
           workspaceId,
+          projectId,
           sessionId,
           sourceType: 'super_agent',
+          type: 'CHAT_EXECUTION',
           sourceId: sessionId,
           title: message.slice(0, 180),
           input: { message, approval: body.approval === true },
+          metadata: { projectId },
           model: 'claude',
         });
         executionId = execution.id;
         await updateExecution({
           agentId: ctx.agentId,
           executionId,
-          patch: { status: 'running', startedAt: new Date(startedAt).toISOString() },
+          patch: { status: 'RUNNING', startedAt: new Date(startedAt).toISOString() },
         });
         await appendExecutionLog({
           agentId: ctx.agentId,
           executionId,
           message: 'Super AgentOS request started',
         });
-        controller.enqueue(encoder.encode(encodeEvent('execution', { executionId, status: 'running' })));
+        controller.enqueue(encoder.encode(encodeEvent('execution', { executionId, status: 'RUNNING' })));
 
         const response = await fetch(new URL('/api/studio/intent', request.url), {
           method: 'POST',
@@ -56,18 +60,20 @@ export async function POST(request: NextRequest) {
         const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
         const completedAt = Date.now();
         const failed = !response.ok || payload.kind === 'error';
+        const failure = failed ? {
+          whatFailed: typeof payload.reply === 'string' ? payload.reply : 'Super AgentOS request failed',
+          why: typeof payload.error === 'string' ? payload.error : 'The intent route returned an error.',
+          where: 'Super AgentOS intent',
+          possibleFix: 'Review the prompt, permissions, and execution logs before retrying.',
+        } : null;
         await updateExecution({
           agentId: ctx.agentId,
           executionId,
           patch: {
-            status: failed ? 'failed' : payload.kind === 'approval_required' ? 'waiting_for_user' : 'completed',
+            status: failed ? 'FAILED' : payload.kind === 'approval_required' ? 'PAUSED' : 'COMPLETED',
             output: payload,
-            failure: failed ? {
-              whatFailed: typeof payload.reply === 'string' ? payload.reply : 'Super AgentOS request failed',
-              why: typeof payload.error === 'string' ? payload.error : 'The intent route returned an error.',
-              where: 'Super AgentOS intent',
-              possibleFix: 'Review the prompt, permissions, and execution logs before retrying.',
-            } : null,
+            error: failure,
+            failure,
             durationMs: completedAt - startedAt,
             completedAt: new Date(completedAt).toISOString(),
           },

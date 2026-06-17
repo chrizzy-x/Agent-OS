@@ -1,4 +1,4 @@
--- AgentOS Migration 026: v6.5.1 unified execution, recovery, notifications, and session lifecycle.
+-- AgentOS Migration 026: V6.6.2 unified execution, recovery, notifications, and session lifecycle.
 
 ALTER TABLE nl_studio_sessions
   ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMPTZ,
@@ -11,12 +11,12 @@ CREATE INDEX IF NOT EXISTS nl_studio_sessions_lifecycle_idx
 CREATE TABLE IF NOT EXISTS agent_executions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-  workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
-  session_id UUID REFERENCES nl_studio_sessions(id) ON DELETE SET NULL,
+  workspace_id TEXT,
+  session_id TEXT,
   source_type TEXT NOT NULL DEFAULT 'super_agent'
     CHECK (source_type IN ('super_agent', 'app', 'skill', 'workflow', 'mcp', 'primitive', 'file', 'memory', 'system')),
   source_id TEXT,
-  workflow_id UUID REFERENCES agent_workflows(id) ON DELETE SET NULL,
+  workflow_id TEXT,
   app_id TEXT,
   skill_id TEXT,
   mcp_server TEXT,
@@ -110,8 +110,8 @@ END $$;
 CREATE TABLE IF NOT EXISTS agent_notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-  workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
-  session_id UUID REFERENCES nl_studio_sessions(id) ON DELETE SET NULL,
+  workspace_id TEXT,
+  session_id TEXT,
   execution_id UUID REFERENCES agent_executions(id) ON DELETE SET NULL,
   type TEXT NOT NULL DEFAULT 'system',
   title TEXT NOT NULL,

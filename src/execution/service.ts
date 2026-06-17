@@ -5,6 +5,14 @@ import { sanitizeErrorMessage, sanitizeOutput } from '../utils/output-sanitizer.
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 export type ExecutionStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'PAUSED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
+
+type LegacyExecutionStatus =
   | 'queued'
   | 'running'
   | 'waiting_for_user'
@@ -14,12 +22,26 @@ export type ExecutionStatus =
   | 'failed'
   | 'cancelled';
 
+export type ExecutionType =
+  | 'CHAT_EXECUTION'
+  | 'WORKFLOW_EXECUTION'
+  | 'APP_EXECUTION'
+  | 'SKILL_EXECUTION'
+  | 'SUBAGENT_EXECUTION'
+  | 'MCP_EXECUTION'
+  | 'FILE_EXECUTION'
+  | 'MEMORY_EXECUTION'
+  | 'EXTERNAL_CONNECTION_EXECUTION';
+
 export type ExecutionSourceType =
+  | ExecutionType
   | 'super_agent'
   | 'app'
   | 'skill'
   | 'workflow'
   | 'mcp'
+  | 'subagent'
+  | 'external_connection'
   | 'primitive'
   | 'file'
   | 'memory'
@@ -27,9 +49,12 @@ export type ExecutionSourceType =
 
 export type ExecutionRecord = {
   id: string;
+  userId: string;
   agentId: string;
   workspaceId: string | null;
+  projectId: string | null;
   sessionId: string | null;
+  type: ExecutionType;
   sourceType: ExecutionSourceType;
   sourceId: string | null;
   workflowId: string | null;
@@ -41,8 +66,18 @@ export type ExecutionRecord = {
   status: ExecutionStatus;
   input: Record<string, unknown>;
   output: unknown;
+  logs: unknown[];
+  error: Record<string, unknown> | null;
   failure: Record<string, unknown> | null;
   rollback: Record<string, unknown> | null;
+  actionType: string | null;
+  actionSource: string | null;
+  notificationId: string | null;
+  deepLink: string | null;
+  recoveryAction: string | null;
+  recoveryRequestedAt: string | null;
+  statusDetail: Record<string, unknown>;
+  metadata: Record<string, unknown>;
   model: string | null;
   tokenPrompt: number;
   tokenCompletion: number;
@@ -50,6 +85,8 @@ export type ExecutionRecord = {
   estimatedCost: number;
   durationMs: number | null;
   startedAt: string | null;
+  pausedAt: string | null;
+  cancelledAt: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -67,9 +104,12 @@ export type ExecutionLogRecord = {
 
 type ExecutionCreateInput = {
   agentId: string;
+  userId?: string | null;
   workspaceId?: string | null;
+  projectId?: string | null;
   sessionId?: string | null;
   sourceType: ExecutionSourceType;
+  type?: ExecutionType;
   sourceId?: string | null;
   workflowId?: string | null;
   appId?: string | null;
@@ -78,14 +118,27 @@ type ExecutionCreateInput = {
   mcpTool?: string | null;
   title: string;
   input?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  actionType?: string | null;
+  actionSource?: string | null;
+  deepLink?: string | null;
   model?: string | null;
 };
 
 type ExecutionUpdateInput = {
-  status?: ExecutionStatus;
+  status?: ExecutionStatus | LegacyExecutionStatus;
   output?: unknown;
+  error?: Record<string, unknown> | null;
   failure?: Record<string, unknown> | null;
   rollback?: Record<string, unknown> | null;
+  actionType?: string | null;
+  actionSource?: string | null;
+  notificationId?: string | null;
+  deepLink?: string | null;
+  recoveryAction?: string | null;
+  recoveryRequestedAt?: string | null;
+  statusDetail?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   model?: string | null;
   tokenPrompt?: number;
   tokenCompletion?: number;
@@ -93,12 +146,102 @@ type ExecutionUpdateInput = {
   estimatedCost?: number;
   durationMs?: number | null;
   startedAt?: string | null;
+  pausedAt?: string | null;
+  cancelledAt?: string | null;
   completedAt?: string | null;
 };
 
 const LOCAL_EXECUTION_PREFIX = 'local-exec-';
 const localExecutions = new Map<string, ExecutionRecord>();
 const localExecutionLogs = new Map<string, ExecutionLogRecord[]>();
+
+const LEGACY_STATUS_TO_CANONICAL: Record<LegacyExecutionStatus, ExecutionStatus> = {
+  queued: 'QUEUED',
+  running: 'RUNNING',
+  waiting_for_user: 'PAUSED',
+  paused: 'PAUSED',
+  completed: 'COMPLETED',
+  partially_completed: 'FAILED',
+  failed: 'FAILED',
+  cancelled: 'CANCELLED',
+};
+
+const CANONICAL_STATUS_TO_LEGACY: Record<ExecutionStatus, LegacyExecutionStatus> = {
+  QUEUED: 'queued',
+  RUNNING: 'running',
+  PAUSED: 'paused',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+};
+
+const SOURCE_TYPE_TO_EXECUTION_TYPE: Record<string, ExecutionType> = {
+  super_agent: 'CHAT_EXECUTION',
+  system: 'CHAT_EXECUTION',
+  workflow: 'WORKFLOW_EXECUTION',
+  app: 'APP_EXECUTION',
+  skill: 'SKILL_EXECUTION',
+  subagent: 'SUBAGENT_EXECUTION',
+  mcp: 'MCP_EXECUTION',
+  file: 'FILE_EXECUTION',
+  memory: 'MEMORY_EXECUTION',
+  external_connection: 'EXTERNAL_CONNECTION_EXECUTION',
+  primitive: 'EXTERNAL_CONNECTION_EXECUTION',
+};
+
+const EXECUTION_TYPE_TO_SOURCE_TYPE: Record<ExecutionType, ExecutionSourceType> = {
+  CHAT_EXECUTION: 'super_agent',
+  WORKFLOW_EXECUTION: 'workflow',
+  APP_EXECUTION: 'app',
+  SKILL_EXECUTION: 'skill',
+  SUBAGENT_EXECUTION: 'subagent',
+  MCP_EXECUTION: 'mcp',
+  FILE_EXECUTION: 'file',
+  MEMORY_EXECUTION: 'memory',
+  EXTERNAL_CONNECTION_EXECUTION: 'external_connection',
+};
+
+export function normalizeExecutionStatus(value: unknown): ExecutionStatus {
+  if (value === 'QUEUED' || value === 'RUNNING' || value === 'PAUSED' || value === 'COMPLETED' || value === 'FAILED' || value === 'CANCELLED') {
+    return value;
+  }
+  const lower = typeof value === 'string' ? value.toLowerCase() : 'queued';
+  return LEGACY_STATUS_TO_CANONICAL[lower as LegacyExecutionStatus] ?? 'QUEUED';
+}
+
+function toLegacyStatus(value: ExecutionStatus | LegacyExecutionStatus | undefined): LegacyExecutionStatus | undefined {
+  if (!value) return undefined;
+  return CANONICAL_STATUS_TO_LEGACY[normalizeExecutionStatus(value)] ?? 'queued';
+}
+
+export function normalizeExecutionType(value: unknown): ExecutionType {
+  if (
+    value === 'CHAT_EXECUTION'
+    || value === 'WORKFLOW_EXECUTION'
+    || value === 'APP_EXECUTION'
+    || value === 'SKILL_EXECUTION'
+    || value === 'SUBAGENT_EXECUTION'
+    || value === 'MCP_EXECUTION'
+    || value === 'FILE_EXECUTION'
+    || value === 'MEMORY_EXECUTION'
+    || value === 'EXTERNAL_CONNECTION_EXECUTION'
+  ) {
+    return value;
+  }
+  return SOURCE_TYPE_TO_EXECUTION_TYPE[String(value ?? 'super_agent')] ?? 'CHAT_EXECUTION';
+}
+
+function toDbSourceType(value: ExecutionSourceType | undefined): string {
+  const type = normalizeExecutionType(value);
+  const source = EXECUTION_TYPE_TO_SOURCE_TYPE[type];
+  return source === 'subagent' || source === 'external_connection' ? 'system' : source;
+}
+
+export function isExecutionActiveStatus(status: unknown): boolean {
+  return normalizeExecutionStatus(status) === 'QUEUED'
+    || normalizeExecutionStatus(status) === 'RUNNING'
+    || normalizeExecutionStatus(status) === 'PAUSED';
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -113,11 +256,15 @@ function isLocalExecutionId(executionId: string): boolean {
 }
 
 function createLocalExecution(params: ExecutionCreateInput, now = new Date().toISOString()): ExecutionRecord {
+  const type = params.type ?? normalizeExecutionType(params.sourceType);
   const execution: ExecutionRecord = {
     id: `${LOCAL_EXECUTION_PREFIX}${crypto.randomUUID()}`,
+    userId: params.userId ?? params.agentId,
     agentId: params.agentId,
     workspaceId: params.workspaceId ?? null,
+    projectId: params.projectId ?? null,
     sessionId: params.sessionId ?? null,
+    type,
     sourceType: params.sourceType,
     sourceId: params.sourceId ?? null,
     workflowId: params.workflowId ?? null,
@@ -126,11 +273,21 @@ function createLocalExecution(params: ExecutionCreateInput, now = new Date().toI
     mcpServer: params.mcpServer ?? null,
     mcpTool: params.mcpTool ?? null,
     title: params.title.trim().slice(0, 240),
-    status: 'queued',
+    status: 'QUEUED',
     input: redactSecretsDeep(params.input ?? {}) as Record<string, unknown>,
     output: null,
+    logs: [],
+    error: null,
     failure: null,
     rollback: null,
+    actionType: params.actionType ?? null,
+    actionSource: params.actionSource ?? null,
+    notificationId: null,
+    deepLink: params.deepLink ?? null,
+    recoveryAction: null,
+    recoveryRequestedAt: null,
+    statusDetail: {},
+    metadata: redactSecretsDeep(params.metadata ?? {}) as Record<string, unknown>,
     model: params.model ?? null,
     tokenPrompt: 0,
     tokenCompletion: 0,
@@ -138,6 +295,8 @@ function createLocalExecution(params: ExecutionCreateInput, now = new Date().toI
     estimatedCost: 0,
     durationMs: null,
     startedAt: null,
+    pausedAt: null,
+    cancelledAt: null,
     completedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -152,10 +311,19 @@ function updateLocalExecution(agentId: string, executionId: string, input: Execu
   if (!current || current.agentId !== agentId) return null;
   const updated: ExecutionRecord = {
     ...current,
-    status: input.status ?? current.status,
+    status: input.status ? normalizeExecutionStatus(input.status) : current.status,
     output: input.output !== undefined ? sanitizeOutput(input.output) : current.output,
+    error: input.error !== undefined ? (input.error ? redactSecretsDeep(input.error) as Record<string, unknown> : null) : current.error,
     failure: input.failure !== undefined ? (input.failure ? redactSecretsDeep(input.failure) as Record<string, unknown> : null) : current.failure,
     rollback: input.rollback !== undefined ? (input.rollback ? redactSecretsDeep(input.rollback) as Record<string, unknown> : null) : current.rollback,
+    actionType: input.actionType !== undefined ? input.actionType : current.actionType,
+    actionSource: input.actionSource !== undefined ? input.actionSource : current.actionSource,
+    notificationId: input.notificationId !== undefined ? input.notificationId : current.notificationId,
+    deepLink: input.deepLink !== undefined ? input.deepLink : current.deepLink,
+    recoveryAction: input.recoveryAction !== undefined ? input.recoveryAction : current.recoveryAction,
+    recoveryRequestedAt: input.recoveryRequestedAt !== undefined ? input.recoveryRequestedAt : current.recoveryRequestedAt,
+    statusDetail: input.statusDetail !== undefined ? redactSecretsDeep(input.statusDetail) as Record<string, unknown> : current.statusDetail,
+    metadata: input.metadata !== undefined ? redactSecretsDeep(input.metadata) as Record<string, unknown> : current.metadata,
     model: input.model !== undefined ? input.model : current.model,
     tokenPrompt: input.tokenPrompt ?? current.tokenPrompt,
     tokenCompletion: input.tokenCompletion ?? current.tokenCompletion,
@@ -163,6 +331,8 @@ function updateLocalExecution(agentId: string, executionId: string, input: Execu
     estimatedCost: input.estimatedCost ?? current.estimatedCost,
     durationMs: input.durationMs !== undefined ? input.durationMs : current.durationMs,
     startedAt: input.startedAt !== undefined ? input.startedAt : current.startedAt,
+    pausedAt: input.pausedAt !== undefined ? input.pausedAt : current.pausedAt,
+    cancelledAt: input.cancelledAt !== undefined ? input.cancelledAt : current.cancelledAt,
     completedAt: input.completedAt !== undefined ? input.completedAt : current.completedAt,
     updatedAt: new Date().toISOString(),
   };
@@ -171,11 +341,16 @@ function updateLocalExecution(agentId: string, executionId: string, input: Execu
 }
 
 function mapExecution(row: Record<string, unknown>): ExecutionRecord {
+  const type = normalizeExecutionType(row.execution_type ?? row.type ?? row.source_type);
+  const error = row.error ? asRecord(row.error) : row.failure ? asRecord(row.failure) : null;
   return {
     id: String(row.id),
+    userId: String(row.user_id ?? row.agent_id),
     agentId: String(row.agent_id),
     workspaceId: typeof row.workspace_id === 'string' ? row.workspace_id : null,
+    projectId: typeof row.project_id === 'string' ? row.project_id : null,
     sessionId: typeof row.session_id === 'string' ? row.session_id : null,
+    type,
     sourceType: String(row.source_type ?? 'super_agent') as ExecutionSourceType,
     sourceId: typeof row.source_id === 'string' ? row.source_id : null,
     workflowId: typeof row.workflow_id === 'string' ? row.workflow_id : null,
@@ -184,11 +359,21 @@ function mapExecution(row: Record<string, unknown>): ExecutionRecord {
     mcpServer: typeof row.mcp_server === 'string' ? row.mcp_server : null,
     mcpTool: typeof row.mcp_tool === 'string' ? row.mcp_tool : null,
     title: String(row.title ?? 'Execution'),
-    status: String(row.status ?? 'queued') as ExecutionStatus,
+    status: normalizeExecutionStatus(row.status),
     input: asRecord(row.input),
     output: row.output ?? null,
-    failure: row.failure ? asRecord(row.failure) : null,
+    logs: Array.isArray(row.logs) ? row.logs : [],
+    error,
+    failure: error,
     rollback: row.rollback ? asRecord(row.rollback) : null,
+    actionType: typeof row.action_type === 'string' ? row.action_type : null,
+    actionSource: typeof row.action_source === 'string' ? row.action_source : null,
+    notificationId: typeof row.notification_id === 'string' ? row.notification_id : null,
+    deepLink: typeof row.deep_link === 'string' ? row.deep_link : null,
+    recoveryAction: typeof row.recovery_action === 'string' ? row.recovery_action : null,
+    recoveryRequestedAt: typeof row.recovery_requested_at === 'string' ? row.recovery_requested_at : null,
+    statusDetail: asRecord(row.status_detail),
+    metadata: asRecord(row.metadata),
     model: typeof row.model === 'string' ? row.model : null,
     tokenPrompt: Number(row.token_prompt ?? 0),
     tokenCompletion: Number(row.token_completion ?? 0),
@@ -196,6 +381,8 @@ function mapExecution(row: Record<string, unknown>): ExecutionRecord {
     estimatedCost: Number(row.estimated_cost ?? 0),
     durationMs: typeof row.duration_ms === 'number' ? row.duration_ms : null,
     startedAt: typeof row.started_at === 'string' ? row.started_at : null,
+    pausedAt: typeof row.paused_at === 'string' ? row.paused_at : null,
+    cancelledAt: typeof row.cancelled_at === 'string' ? row.cancelled_at : null,
     completedAt: typeof row.completed_at === 'string' ? row.completed_at : null,
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
@@ -227,36 +414,74 @@ function diagnosticFailure(error: unknown, where: string): Record<string, unknow
 export async function createExecution(params: ExecutionCreateInput): Promise<ExecutionRecord> {
   if (!params.title.trim()) throw new ValidationError('execution title is required');
   const now = new Date().toISOString();
+  const executionType = params.type ?? normalizeExecutionType(params.sourceType);
+  const sourceType = toDbSourceType(params.sourceType);
+  const baseInsert = {
+    id: crypto.randomUUID(),
+    agent_id: params.agentId,
+    workspace_id: params.workspaceId ?? null,
+    session_id: params.sessionId ?? null,
+    source_type: sourceType,
+    source_id: params.sourceId ?? null,
+    workflow_id: params.workflowId ?? null,
+    app_id: params.appId ?? null,
+    skill_id: params.skillId ?? null,
+    mcp_server: params.mcpServer ?? null,
+    mcp_tool: params.mcpTool ?? null,
+    title: params.title.trim().slice(0, 240),
+    input: redactSecretsDeep(params.input ?? {}) as Record<string, unknown>,
+    action_type: params.actionType ?? null,
+    action_source: params.actionSource ?? null,
+    deep_link: params.deepLink ?? null,
+    model: params.model ?? null,
+    created_at: now,
+    updated_at: now,
+  };
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const canonical = await getSupabaseAdmin()
       .from('agent_executions')
       .insert({
-        id: crypto.randomUUID(),
-        agent_id: params.agentId,
-        workspace_id: params.workspaceId ?? null,
-        session_id: params.sessionId ?? null,
-        source_type: params.sourceType,
-        source_id: params.sourceId ?? null,
-        workflow_id: params.workflowId ?? null,
-        app_id: params.appId ?? null,
-        skill_id: params.skillId ?? null,
-        mcp_server: params.mcpServer ?? null,
-        mcp_tool: params.mcpTool ?? null,
-        title: params.title.trim().slice(0, 240),
-        status: 'queued',
-        input: redactSecretsDeep(params.input ?? {}) as Record<string, unknown>,
-        model: params.model ?? null,
-        created_at: now,
-        updated_at: now,
+        ...baseInsert,
+        user_id: params.userId ?? params.agentId,
+        project_id: params.projectId ?? null,
+        execution_type: executionType,
+        status: 'QUEUED',
+        metadata: redactSecretsDeep(params.metadata ?? {}) as Record<string, unknown>,
       })
       .select('*')
       .single();
 
-    if (error) {
+    if (!canonical.error) return mapExecution(canonical.data as Record<string, unknown>);
+
+    const legacy = await getSupabaseAdmin()
+      .from('agent_executions')
+      .insert({
+        id: baseInsert.id,
+        agent_id: baseInsert.agent_id,
+        workspace_id: baseInsert.workspace_id,
+        session_id: baseInsert.session_id,
+        source_type: baseInsert.source_type,
+        source_id: baseInsert.source_id,
+        workflow_id: baseInsert.workflow_id,
+        app_id: baseInsert.app_id,
+        skill_id: baseInsert.skill_id,
+        mcp_server: baseInsert.mcp_server,
+        mcp_tool: baseInsert.mcp_tool,
+        title: baseInsert.title,
+        input: baseInsert.input,
+        model: baseInsert.model,
+        created_at: baseInsert.created_at,
+        updated_at: baseInsert.updated_at,
+        status: 'queued',
+      })
+      .select('*')
+      .single();
+
+    if (legacy.error) {
       if (useLocalExecutionFallback()) return createLocalExecution(params, now);
-      throw new Error(`Failed to create execution: ${error.message}`);
+      throw new Error(`Failed to create execution: ${legacy.error.message}`);
     }
-    return mapExecution(data as Record<string, unknown>);
+    return mapExecution(legacy.data as Record<string, unknown>);
   } catch (error) {
     if (useLocalExecutionFallback()) return createLocalExecution(params, now);
     throw error;
@@ -274,10 +499,19 @@ export async function updateExecution(params: {
     return updated;
   }
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (params.patch.status !== undefined) patch.status = params.patch.status;
+  if (params.patch.status !== undefined) patch.status = normalizeExecutionStatus(params.patch.status);
   if (params.patch.output !== undefined) patch.output = sanitizeOutput(params.patch.output);
+  if (params.patch.error !== undefined) patch.error = params.patch.error ? redactSecretsDeep(params.patch.error) : null;
   if (params.patch.failure !== undefined) patch.failure = params.patch.failure ? redactSecretsDeep(params.patch.failure) : null;
   if (params.patch.rollback !== undefined) patch.rollback = params.patch.rollback ? redactSecretsDeep(params.patch.rollback) : null;
+  if (params.patch.actionType !== undefined) patch.action_type = params.patch.actionType;
+  if (params.patch.actionSource !== undefined) patch.action_source = params.patch.actionSource;
+  if (params.patch.notificationId !== undefined) patch.notification_id = params.patch.notificationId;
+  if (params.patch.deepLink !== undefined) patch.deep_link = params.patch.deepLink;
+  if (params.patch.recoveryAction !== undefined) patch.recovery_action = params.patch.recoveryAction;
+  if (params.patch.recoveryRequestedAt !== undefined) patch.recovery_requested_at = params.patch.recoveryRequestedAt;
+  if (params.patch.statusDetail !== undefined) patch.status_detail = redactSecretsDeep(params.patch.statusDetail);
+  if (params.patch.metadata !== undefined) patch.metadata = redactSecretsDeep(params.patch.metadata);
   if (params.patch.model !== undefined) patch.model = params.patch.model;
   if (params.patch.tokenPrompt !== undefined) patch.token_prompt = params.patch.tokenPrompt;
   if (params.patch.tokenCompletion !== undefined) patch.token_completion = params.patch.tokenCompletion;
@@ -285,10 +519,12 @@ export async function updateExecution(params: {
   if (params.patch.estimatedCost !== undefined) patch.estimated_cost = params.patch.estimatedCost;
   if (params.patch.durationMs !== undefined) patch.duration_ms = params.patch.durationMs;
   if (params.patch.startedAt !== undefined) patch.started_at = params.patch.startedAt;
+  if (params.patch.pausedAt !== undefined) patch.paused_at = params.patch.pausedAt;
+  if (params.patch.cancelledAt !== undefined) patch.cancelled_at = params.patch.cancelledAt;
   if (params.patch.completedAt !== undefined) patch.completed_at = params.patch.completedAt;
 
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const canonical = await getSupabaseAdmin()
       .from('agent_executions')
       .update(patch)
       .eq('id', params.executionId)
@@ -296,9 +532,32 @@ export async function updateExecution(params: {
       .select('*')
       .maybeSingle();
 
-    if (error) throw new Error(`Failed to update execution: ${error.message}`);
-    if (!data) throw new NotFoundError('Execution not found');
-    return mapExecution(data as Record<string, unknown>);
+    if (!canonical.error && canonical.data) return mapExecution(canonical.data as Record<string, unknown>);
+
+    const legacyPatch = { ...patch };
+    if (params.patch.status !== undefined) legacyPatch.status = toLegacyStatus(params.patch.status);
+    delete legacyPatch.error;
+    delete legacyPatch.metadata;
+    delete legacyPatch.paused_at;
+    delete legacyPatch.cancelled_at;
+    delete legacyPatch.action_source;
+    delete legacyPatch.deep_link;
+    delete legacyPatch.model;
+    delete legacyPatch.token_prompt;
+    delete legacyPatch.token_completion;
+    delete legacyPatch.token_total;
+    delete legacyPatch.estimated_cost;
+    const legacy = await getSupabaseAdmin()
+      .from('agent_executions')
+      .update(legacyPatch)
+      .eq('id', params.executionId)
+      .eq('agent_id', params.agentId)
+      .select('*')
+      .maybeSingle();
+
+    if (legacy.error) throw new Error(`Failed to update execution: ${legacy.error.message}`);
+    if (!legacy.data) throw new NotFoundError('Execution not found');
+    return mapExecution(legacy.data as Record<string, unknown>);
   } catch (error) {
     if (useLocalExecutionFallback()) {
       const updated = updateLocalExecution(params.agentId, params.executionId, params.patch);
@@ -372,8 +631,8 @@ export async function listExecutions(params: {
       .filter(item => item.agentId === params.agentId)
       .filter(item => !params.workspaceId || item.workspaceId === params.workspaceId)
       .filter(item => !params.sessionId || item.sessionId === params.sessionId)
-      .filter(item => !params.status || params.status === 'all' || item.status === params.status)
-      .filter(item => !params.sourceType || params.sourceType === 'all' || item.sourceType === params.sourceType)
+      .filter(item => !params.status || params.status === 'all' || item.status === normalizeExecutionStatus(params.status))
+      .filter(item => !params.sourceType || params.sourceType === 'all' || item.sourceType === params.sourceType || item.type === normalizeExecutionType(params.sourceType))
       .filter(item => !params.workflowId || item.workflowId === params.workflowId)
       .filter(item => !params.appId || item.appId === params.appId)
       .filter(item => !params.skillId || item.skillId === params.skillId)
@@ -392,8 +651,8 @@ export async function listExecutions(params: {
 
     if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
     if (params.sessionId) query = query.eq('session_id', params.sessionId);
-    if (params.status && params.status !== 'all') query = query.eq('status', params.status);
-    if (params.sourceType && params.sourceType !== 'all') query = query.eq('source_type', params.sourceType);
+    if (params.status && params.status !== 'all') query = query.eq('status', normalizeExecutionStatus(params.status));
+    if (params.sourceType && params.sourceType !== 'all') query = query.eq('source_type', toDbSourceType(params.sourceType));
     if (params.workflowId) query = query.eq('workflow_id', params.workflowId);
     if (params.appId) query = query.eq('app_id', params.appId);
     if (params.skillId) query = query.eq('skill_id', params.skillId);
@@ -452,7 +711,7 @@ export async function runTrackedExecution<T>(params: ExecutionCreateInput & {
   execution = await updateExecution({
     agentId: params.agentId,
     executionId: execution.id,
-    patch: { status: 'running', startedAt: new Date(startedAtMs).toISOString() },
+    patch: { status: 'RUNNING', startedAt: new Date(startedAtMs).toISOString() },
   });
   await appendExecutionLog({
     agentId: params.agentId,
@@ -468,7 +727,7 @@ export async function runTrackedExecution<T>(params: ExecutionCreateInput & {
       agentId: params.agentId,
       executionId: execution.id,
       patch: {
-        status: 'completed',
+        status: 'COMPLETED',
         output: result,
         durationMs: completedAt - startedAtMs,
         completedAt: new Date(completedAt).toISOString(),
@@ -488,7 +747,8 @@ export async function runTrackedExecution<T>(params: ExecutionCreateInput & {
       agentId: params.agentId,
       executionId: execution.id,
       patch: {
-        status: 'failed',
+        status: 'FAILED',
+        error: failure,
         failure,
         durationMs: completedAt - startedAtMs,
         completedAt: new Date(completedAt).toISOString(),
@@ -508,21 +768,36 @@ export async function runTrackedExecution<T>(params: ExecutionCreateInput & {
 export async function requestExecutionAction(params: {
   agentId: string;
   executionId: string;
-  action: 'pause' | 'resume' | 'retry' | 'cancel' | 'rollback';
+  action: 'pause' | 'resume' | 'retry' | 'cancel' | 'rollback' | 'inspect';
 }): Promise<ExecutionRecord> {
   const bundle = await getExecutionBundle({ agentId: params.agentId, executionId: params.executionId });
   const execution = bundle.execution;
   const now = new Date().toISOString();
+  if (params.action === 'resume' && execution.type === 'WORKFLOW_EXECUTION') {
+    const checkpoint = asRecord(execution.statusDetail).resumeCheckpoint ?? asRecord(execution.metadata).resumeCheckpoint;
+    if (!checkpoint) {
+      throw new ValidationError('Workflow resume requires a persisted execution checkpoint. The paused execution is preserved for inspection.');
+    }
+  }
   const nextStatusByAction: Record<typeof params.action, ExecutionStatus> = {
-    pause: 'paused',
-    resume: 'queued',
-    retry: 'queued',
-    cancel: 'cancelled',
-    rollback: 'partially_completed',
+    pause: 'PAUSED',
+    resume: 'RUNNING',
+    retry: 'QUEUED',
+    cancel: 'CANCELLED',
+    rollback: execution.status,
+    inspect: execution.status,
   };
   const patch: ExecutionUpdateInput = {
     status: nextStatusByAction[params.action],
+    pausedAt: params.action === 'pause' ? now : undefined,
+    cancelledAt: params.action === 'cancel' ? now : undefined,
     completedAt: params.action === 'cancel' ? now : undefined,
+    recoveryAction: params.action,
+    recoveryRequestedAt: now,
+    statusDetail: {
+      lastRequestedAction: params.action,
+      requestedAt: now,
+    },
     rollback: params.action === 'rollback'
       ? { requestedAt: now, status: 'requested', possibleFix: 'Review logs before rerunning dependent work.' }
       : undefined,
@@ -549,7 +824,7 @@ export async function panicStopActiveExecutions(params: {
     status: 'all',
     limit: 250,
   });
-  const targets = active.filter(item => ['queued', 'running', 'waiting_for_user', 'paused'].includes(item.status));
+  const targets = active.filter(item => isExecutionActiveStatus(item.status));
   const executions: ExecutionRecord[] = [];
   for (const item of targets) {
     executions.push(await requestExecutionAction({

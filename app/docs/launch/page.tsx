@@ -8,23 +8,23 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'v6.5.1 - Super AgentOS is now the primary product surface with streaming chat, execution cards, files, memory, recovery, notifications, and panic stop.',
-  'v6.5.1 - Unified execution records now persist Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, logs, failures, and recovery state.',
-  'v6.5.1 - Files now support upload, preview, summarize, rename, search, and delete through production APIs and UI.',
-  'v6.5.1 - Memory now supports governed CRUD, search, export, namespace scopes, and permission-aware retrieval.',
+  'V6.6.2 - Super AgentOS is now the primary product surface with streaming chat, execution cards, files, memory, recovery, notifications, and panic stop.',
+  'V6.6.2 - Unified execution records now persist Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, logs, failures, and recovery state.',
+  'V6.6.2 - Files now support upload, preview, summarize, rename, search, and delete through production APIs and UI.',
+  'V6.6.2 - Memory now supports governed CRUD, search, export, namespace scopes, and permission-aware retrieval.',
   'v6.5 - Studio now supports in-place multi-agent discovery, creation, switching, and agent-linked sessions without page resets.',
   'v6.5 - Search now exposes keyword, full-text, and fuzzy matching across apps, skills, workflows, sessions, projects, subagents, Vault names, docs, connectors, and FFP records.',
   'v6.5 - Memory is now editable in-product with governed create, update, delete, and grant-aware audit visibility.',
-  'v6.5.1 - Release truth alignment standardizes the canonical production host on https://www.agentos.services and aligns public version surfaces on 6.5.1.',
-  'v6.5.1 - Final production deployment completed on June 12, 2026 at https://www.agentos.services with live /health returning 200 and version 6.5.1.',
+  'V6.6.2 - Release truth alignment standardizes the canonical production host on https://www.agentos.services and aligns public version surfaces on 6.6.2.',
+  'V6.6.2 - Studio-first UI lock makes / and /studio open Super AgentOS before every store, dashboard, or admin-style surface.',
   'v6.2 - beta readiness hardening for Vault runtime injection, output redaction, disabled-app gating, developer access shells, and production lifecycle flows.',
   'v6 "Public Launch" - agent IDs are treated as private secrets across UI, docs, API responses, marketplace/appstore payloads, workflows, Studio, Workspaces, and activity output.',
   'Public deployed-agent actions now use opaque agentRef values from /api/agents; raw private IDs are rejected in browser-facing creation flows.',
   'Browser sessions now expose account name and expiry only. API callers continue to use bearer tokens; IDs stay inside signed tokens and server-side storage.',
   'Marketplace split is ready: Skill Store for installable capabilities, App Store for downloadable agentic apps built on AgentOS.',
-  'v5 "Ares" - FFP Multi-Chain Router: FFP sector chains reach consensus on decisions, AgentOS executes them via a cryptographically verified bridge.',
-  'POST /api/ffp/execute: consensus proof verification, chain-scoped execution, and immutable logging in ffp_chain_executions.',
-  'GET /api/ffp/chains and GET /ffp/status: public FFP runtime and chain discovery endpoints.',
+  'V6.6.2 - FFP is temporary only: the workspace toggle creates a future wiring point, not a live consensus engine.',
+  'GET/PATCH /api/ffp/temp: workspace-level temporary routing setting for multi-agent workflows, subagent collaboration, and multi-agent delegation.',
+  'Single-agent execution bypasses FFP temp; no consensus proof, validator voting, proposal history, or fake consensus result ships in V6.6.2.',
   'v4 "Hermes" - Natural Language Studio, Workflow Library, SDK Kernel, and Redis events command layer.',
   'Crypto-only payments: Solana and Base network USDC, verified on-chain without a payment processor.',
 ];
@@ -42,25 +42,24 @@ const changelog = [
   'Added browser-session refresh handling and deterministic loading, signed-out, expired-session, empty, success, and error states across protected routes.',
   'Removed fake App Store ratings, placeholder marketplace cards, seeded user-facing skill records, and fabricated fallback analytics from launch-facing surfaces.',
   'Recovered valid legacy SDK registry rows into factual external SDK App Store listings, including pre-metadata and pre-019 rows.',
-  'Restored FFP as a first-class module with visible navigation, runtime status, related workflows, related apps, activity, and logs.',
+  'Replaced FFP consensus claims with FFP temp navigation, workspace status, affected execution types, and clear future-wiring language.',
   'Added app readiness resolution, target-aware open flows, install and update revalidation, and owner analytics on app profiles.',
   'Added persisted Vault runtime grants, consume and cleanup flows, assignment and permission checks, and secret redaction in Studio persistence.',
-  'Added Studio session branching, lineage tracking, chosen and latest snapshot inheritance, and isolated branch messages and events.',
-  'Fixed NL Studio viewport anchoring so the message list scrolls and the composer remains at the bottom of the Super AgentOS workspace.',
-  'Enabled free-beta self-serve plan transitions in /billing and POST /api/plans/transition across Retail Free, Retail Pro, Enterprise Plus, and Enterprise Max.',
+  'Kept Studio chat sessions focused on create, continue, rename, archive, delete, search, export, and refresh persistence.',
+  'Locked NL Studio, Workflow Studio, and Code Studio as distinct center workspaces with compact side navigation, context rows, and mobile ChatGPT-style navigation.',
+  'Enabled free-beta self-serve plan transitions in /billing and POST /api/plans/transition across Free, Pro, Enterprise, and Enterprise Max.',
   'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
   'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
   'Changed /api/session to return only authenticated session display fields; no private agent ID leaves the browser session endpoint.',
   'Changed deployed-agent APIs to return agentRef, agent name, status, and metrics; command/activity/subagent routes resolve refs server-side.',
   'Updated Workspaces to add agents by name only and return public workspace/member/audit payloads.',
   'Renamed public FFP dynamic routes from [agentId] to [privateRef] and updated docs to private-reference language.',
-  'Created POST /api/ffp/execute - FFP bridge endpoint: requireAgentContext -> verifyConsensusProof -> buildChainScopedContext -> executeUniversalToolCall -> log to ffp_chain_executions.',
-  'Created GET /api/ffp/chains - public chain discovery: aggregates execution count, success/fail stats, and last execution per chain_id.',
+  'Created GET/PATCH /api/ffp/temp for workspace-level FFP temp status and routing.',
   'Created POST /api/studio/intent - NL intent parser, plan storage, confirm tokens, scheduled workflow support, and natural-language answers.',
   'Created GET+POST /api/agent/workflows and PATCH+DELETE /api/agent/workflows/:id - full workflow CRUD.',
   'Created POST /api/kernel/register, GET /api/kernel/registry, POST /api/kernel/command, GET /api/kernel/status/:product.',
   'Updated Studio UI with NL mode toggle, workflow library panel, kernel status panel, and redacted results.',
-  'Added FFP tab to dashboard with audit trail, consensus history, and refresh.',
+  'Added FFP temp navigation below Universal MCP with a workspace toggle and no consensus results.',
   'Rewrote payments to crypto-only: Solana RPC getTransaction + Base eth_getTransactionReceipt verification.',
 ];
 
@@ -93,17 +92,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">AgentOS v6.5.1 <span style={{ color: 'var(--accent)' }}>&ldquo;Unified Super AgentOS&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">AgentOS V6.6.2 <span style={{ color: 'var(--accent)' }}>&ldquo;Unified Super AgentOS&rdquo;</span> is live</h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.5.1 makes Super AgentOS the primary operating surface with persisted execution, recovery, panic stop, governed files, governed memory, apps, skills, workflows, MCP, and production truth alignment. Live at <code>{APP_URL}</code>.
+            V6.6.2 makes Super AgentOS the primary operating surface with a Studio-first layout, persisted execution, recovery, panic stop, governed files, governed memory, apps, skills, workflows, MCP, and production truth alignment. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.5.1</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in V6.6.2</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS now keeps Super AgentOS at the center of the product. In v6.5.1, chat, agents, apps, skills, workflows, files, memory, Vault, MCP, execution logs, recovery, and notifications stay accessible inside one operating surface without context loss.
+              AgentOS now keeps Super AgentOS at the center of the product. In V6.6.2, / and /studio open the conversation-first operating surface first, with Workflow Studio and Code Studio replacing the chat layout when selected.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

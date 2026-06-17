@@ -206,11 +206,11 @@ export async function updateCrewSettings(input: {
   }
 
   if (nextConsensus && nextMode !== 'multi_agent') {
-    throw new ValidationError('Consensus mode can only be enabled for multi-agent operations');
+    throw new ValidationError('FFP temp routing can only be enabled for multi-agent operations');
   }
 
   if (nextConsensus && !isFfpEnabled()) {
-    throw new ValidationError('FFP mode is disabled for this deployment');
+    throw new ValidationError('FFP temp routing is disabled for this deployment');
   }
 
   const supabase = getSupabaseAdmin();

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import SurfaceShell from '@/components/os/surface-shell';
 import { Badge, Button, Card, EmptyState } from '@/components/os/ui';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
@@ -11,6 +12,7 @@ type HomePayload = {
   apps: Array<{ id: string; name: string; slug: string; description: string }>;
   skills: Array<{ id: string; name: string; slug: string; description: string }>;
   workflows: Array<{ id: string; name: string; summary: string | null; status: string; visibility?: string }>;
+  projects: Array<{ id: string; name: string; description: string; status: string; updatedAt: string; href: string }>;
   subagents: Array<{ id: string; name: string; description: string | null; visibility: string; updatedAt: string }>;
   memoryEntries: Array<{ id: string; key: string; visibility: string; namespaceType: string; updatedAt: string }>;
   files: Array<{ id: string; path: string; visibility: string; metadata: Record<string, unknown> }>;
@@ -28,12 +30,13 @@ type HomePayload = {
 };
 
 const QUICK_ACTIONS = [
-  { label: 'Research', href: '/studio?mode=nl&prompt=Research%20this%20project' },
-  { label: 'Build', href: '/studio?mode=code' },
-  { label: 'Analyze', href: '/studio?mode=nl&prompt=Analyze%20the%20current%20project' },
-  { label: 'Trade', href: '/studio?mode=nl&prompt=Scan%20the%20market' },
-  { label: 'Create Workflow', href: '/workflows' },
-  { label: 'Install App', href: '/appstore' },
+  { label: 'New chat', href: '/studio?mode=nl' },
+  { label: 'Workflow Studio', href: '/studio?mode=workflow' },
+  { label: 'Code Studio', href: '/studio?mode=code' },
+  { label: 'Create project', href: '/projects' },
+  { label: 'Install app', href: '/appstore' },
+  { label: 'Install skill', href: '/skills' },
+  { label: 'Library', href: '/library' },
 ];
 
 function hourGreeting(): string {
@@ -102,7 +105,7 @@ function PublicLanding() {
   return (
     <SurfaceShell activePath="/">
       <section style={{ display: 'grid', gap: 28, padding: '52px 0 72px' }}>
-        <Badge tone="accent">AgentOS v6.5.1</Badge>
+        <Badge tone="accent">AgentOS V6.6.2</Badge>
         <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(42px, 7vw, 76px)', lineHeight: 0.95, letterSpacing: '-0.05em' }}>
             Your AI operating system.
@@ -158,13 +161,16 @@ function PublicLanding() {
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [command, setCommand] = useState('');
   const [payload, setPayload] = useState<HomePayload>({
     sessions: [],
     apps: [],
     skills: [],
     workflows: [],
+    projects: [],
     subagents: [],
     memoryEntries: [],
     files: [],
@@ -194,11 +200,12 @@ export default function HomePage() {
         return;
       }
 
-      const [sessionsRes, appsRes, skillsRes, workflowsRes, superAgentRes, subagentsRes, memoryRes, filesRes] = await Promise.all([
+      const [sessionsRes, appsRes, skillsRes, workflowsRes, projectsRes, superAgentRes, subagentsRes, memoryRes, filesRes] = await Promise.all([
         fetchWithBrowserSession('/api/studio/sessions?status=active', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/apps/installed', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/skills/installed', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/agent/workflows', { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/projects', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/super-agent', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/subagents', { cache: 'no-store' }),
         fetchWithBrowserSession('/api/memory?limit=4', { cache: 'no-store' }),
@@ -207,11 +214,12 @@ export default function HomePage() {
 
       if (!active) return;
 
-      const [sessionsBody, appsBody, skillsBody, workflowsBody, superAgentBody, subagentsBody, memoryBody, filesBody] = await Promise.all([
+      const [sessionsBody, appsBody, skillsBody, workflowsBody, projectsBody, superAgentBody, subagentsBody, memoryBody, filesBody] = await Promise.all([
         sessionsRes.response.ok ? sessionsRes.response.json() : Promise.resolve({}),
         appsRes.response.ok ? appsRes.response.json() : Promise.resolve({}),
         skillsRes.response.ok ? skillsRes.response.json() : Promise.resolve({}),
         workflowsRes.response.ok ? workflowsRes.response.json() : Promise.resolve({}),
+        projectsRes.response.ok ? projectsRes.response.json() : Promise.resolve({}),
         superAgentRes.response.ok ? superAgentRes.response.json() : Promise.resolve({}),
         subagentsRes.response.ok ? subagentsRes.response.json() : Promise.resolve({}),
         memoryRes.response.ok ? memoryRes.response.json() : Promise.resolve({}),
@@ -230,6 +238,7 @@ export default function HomePage() {
           }))
           .slice(0, 4),
         workflows: (workflowsBody.workflows ?? []).slice(0, 4),
+        projects: (projectsBody.projects ?? []).slice(0, 4),
         subagents: (subagentsBody.subagents ?? []).slice(0, 4),
         memoryEntries: (memoryBody.entries ?? []).slice(0, 4),
         files: (filesBody.entries ?? []).slice(0, 4),
@@ -259,6 +268,16 @@ export default function HomePage() {
     return `${hourGreeting()} ${name}`;
   }, [session?.agentName]);
 
+  function submitCommand(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const next = command.trim();
+    if (!next) {
+      router.push('/studio?mode=nl');
+      return;
+    }
+    router.push(`/studio?mode=nl&prompt=${encodeURIComponent(next)}`);
+  }
+
   if (!session && !loading) {
     return <PublicLanding />;
   }
@@ -273,220 +292,108 @@ export default function HomePage() {
 
   return (
     <SurfaceShell activePath="/">
-      <section style={{ display: 'grid', gap: 28 }}>
-        <div style={{ display: 'grid', gap: 12 }}>
+      <section style={{ display: 'grid', gap: 18 }}>
+        <div style={{ display: 'grid', gap: 10 }}>
           <Badge tone="accent">Super AgentOS</Badge>
-          <h1 style={{ margin: 0, fontSize: 'clamp(34px, 5vw, 56px)', letterSpacing: '-0.05em' }}>{greeting}</h1>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 18, lineHeight: 1.8 }}>
-            What would you like your Super AgentOS to do?
-          </p>
+          <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: 0 }}>{greeting}</h1>
         </div>
 
-        <HomeSection title="Quick Actions">
-          <Grid>
-            {QUICK_ACTIONS.map(action => (
-              <Link
-                key={action.label}
-                href={action.href}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  padding: '18px 20px',
-                  borderRadius: 18,
-                  border: '1px solid var(--border)',
-                  background: 'rgba(255,255,255,0.02)',
-                  textDecoration: 'none',
-                }}
-              >
-                <span>{action.label}</span>
-                <span style={{ color: 'var(--text-tertiary)' }}>Open</span>
+        <form onSubmit={submitCommand} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10 }}>
+          <input
+            value={command}
+            onChange={event => setCommand(event.target.value)}
+            className="os-input"
+            placeholder="Message Super AgentOS"
+            style={{ minHeight: 48 }}
+          />
+          <Button type="submit">Send</Button>
+        </form>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+          {QUICK_ACTIONS.map(action => (
+            <Link
+              key={action.label}
+              href={action.href}
+              style={{
+                minHeight: 42,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'rgba(255,255,255,0.02)',
+                textDecoration: 'none',
+              }}
+            >
+              <span>{action.label}</span>
+              <span style={{ color: 'var(--text-tertiary)' }}>Open</span>
+            </Link>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+          <HomeSection title="Recent Chats" actionHref="/studio" actionLabel="Open Studio">
+            {payload.sessions.length > 0 ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {payload.sessions.map(item => (
+                  <Link key={item.id} href={`/studio?session=${encodeURIComponent(item.id)}`} style={{ textDecoration: 'none' }}>
+                    <Card style={{ padding: 12 }}>
+                      <div className="os-entity-head">
+                        <strong>{item.title}</strong>
+                        <span className="os-entity-meta">{formatDate(item.updatedAt)}</span>
+                      </div>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No chats yet" body="Start in Studio and recent sessions show here." action={<Button href="/studio">Open Studio</Button>} />
+            )}
+          </HomeSection>
+
+          <HomeSection title="Projects" actionHref="/projects" actionLabel="All Projects">
+            {payload.projects.length > 0 ? (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {payload.projects.map(item => (
+                  <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
+                    <Card style={{ padding: 12 }}>
+                      <div className="os-entity-head">
+                        <div>
+                          <strong>{item.name}</strong>
+                          <div className="os-entity-copy">{item.description}</div>
+                        </div>
+                        <Badge tone={item.status === 'active' ? 'success' : 'warning'}>{item.status}</Badge>
+                      </div>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No projects yet" body="Create a project to organize chats, assets, memory, secrets, and MCP." action={<Button href="/projects">Projects</Button>} />
+            )}
+          </HomeSection>
+        </div>
+
+        <HomeSection title="Context">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {[
+              { label: 'Apps', value: payload.summary.connectedApps, href: '/apps' },
+              { label: 'Skills', value: payload.summary.installedSkills, href: '/skills/installed' },
+              { label: 'Workflows', value: payload.summary.privateWorkflows, href: '/workflows' },
+              { label: 'Memory', value: payload.summary.memoryEntries, href: '/memory' },
+              { label: 'Files', value: payload.summary.files, href: '/files' },
+              { label: 'Subagents', value: payload.summary.subagents, href: '/agents' },
+            ].map(item => (
+              <Link key={item.label} href={item.href} style={{ textDecoration: 'none' }}>
+                <Card style={{ padding: 12 }}>
+                  <div className="os-entity-meta">{item.label}</div>
+                  <div style={{ fontSize: 24, fontWeight: 700 }}>{item.value}</div>
+                </Card>
               </Link>
             ))}
-          </Grid>
-        </HomeSection>
-
-        <HomeSection title="System Summary">
-          <Grid>
-            {[
-              { title: 'Active chats', value: payload.summary.activeSessions, href: '/studio' },
-              { title: 'Subagents', value: payload.summary.subagents, href: '/agents' },
-              { title: 'Memory entries', value: payload.summary.memoryEntries, href: '/memory' },
-              { title: 'Files', value: payload.summary.files, href: '/memory' },
-            ].map(item => (
-              <Card key={item.title} style={{ padding: 18 }}>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <strong>{item.title}</strong>
-                  <span style={{ fontSize: 28 }}>{item.value}</span>
-                  <Link href={item.href} style={{ color: 'var(--text-secondary)', textDecoration: 'none' }}>Open</Link>
-                </div>
-              </Card>
-            ))}
-          </Grid>
-        </HomeSection>
-
-        <HomeSection title="Privacy">
-          <Grid>
-            {Object.entries(payload.summary.visibility).map(([resource, counts]) => (
-              <Card key={resource} style={{ padding: 18 }}>
-                <div style={{ display: 'grid', gap: 10 }}>
-                  <strong style={{ textTransform: 'capitalize' }}>{resource}</strong>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {Object.entries(counts).map(([visibility, count]) => (
-                      <Badge key={`${resource}-${visibility}`} tone={ToneForVisibility(visibility)}>{visibility}: {count}</Badge>
-                    ))}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </Grid>
-        </HomeSection>
-
-        <HomeSection title="Recent Chats" actionHref="/studio" actionLabel="Open Studio">
-          {payload.sessions.length > 0 ? (
-            <Grid>
-              {payload.sessions.map(item => (
-                <Card key={item.id} style={{ padding: 18 }}>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <strong>{item.title}</strong>
-                    <span style={{ color: 'var(--text-secondary)' }}>{formatDate(item.updatedAt)}</span>
-                  </div>
-                </Card>
-              ))}
-            </Grid>
-          ) : (
-            <EmptyState title="No chats yet" body="Start in Studio and your recent sessions will show up here." action={<Button href="/studio">Open Studio</Button>} />
-          )}
-        </HomeSection>
-
-        <HomeSection title="Subagents" actionHref="/agents" actionLabel="Open Agents">
-          {payload.subagents.length > 0 ? (
-            <Grid>
-              {payload.subagents.map(item => (
-                <Card key={item.id} style={{ padding: 18 }}>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <strong>{item.name}</strong>
-                      <Badge tone={ToneForVisibility(item.visibility)}>{item.visibility}</Badge>
-                    </div>
-                    <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>{item.description ?? 'Private specialist'}</span>
-                  </div>
-                </Card>
-              ))}
-            </Grid>
-          ) : (
-            <EmptyState title="No subagents yet" body="Create focused subagents for research, runtime work, and workflow tasks." action={<Button href="/agents">Open agents</Button>} />
-          )}
-        </HomeSection>
-
-        <HomeSection title="Memory and Files" actionHref="/memory" actionLabel="Open Memory">
-          <Grid>
-            <Card style={{ padding: 18 }}>
-              <div style={{ display: 'grid', gap: 10 }}>
-                <strong>Memory</strong>
-                {payload.memoryEntries.length > 0 ? payload.memoryEntries.map(item => (
-                  <div key={item.id} style={{ display: 'grid', gap: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <span>{item.key}</span>
-                      <Badge tone={ToneForVisibility(item.visibility)}>{item.visibility}</Badge>
-                    </div>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{item.namespaceType}</span>
-                  </div>
-                )) : <span style={{ color: 'var(--text-secondary)' }}>No governed memory yet.</span>}
-              </div>
-            </Card>
-            <Card style={{ padding: 18 }}>
-              <div style={{ display: 'grid', gap: 10 }}>
-                <strong>Files</strong>
-                {payload.files.length > 0 ? payload.files.map(item => (
-                  <div key={item.id} style={{ display: 'grid', gap: 4 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <span style={{ wordBreak: 'break-word' }}>{item.path}</span>
-                      <Badge tone={ToneForVisibility(item.visibility)}>{item.visibility}</Badge>
-                    </div>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{String(item.metadata.kind ?? 'file')}</span>
-                  </div>
-                )) : <span style={{ color: 'var(--text-secondary)' }}>No governed files yet.</span>}
-              </div>
-            </Card>
-          </Grid>
-        </HomeSection>
-
-        <HomeSection title="Installed Apps" actionHref="/appstore" actionLabel="Open App Store">
-          {payload.apps.length > 0 ? (
-            <Grid>
-              {payload.apps.map(item => (
-                <Card key={item.id} style={{ padding: 18 }}>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <strong>{item.name}</strong>
-                    <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>{item.description}</span>
-                  </div>
-                </Card>
-              ))}
-            </Grid>
-          ) : (
-            <EmptyState title="No apps installed" body="Install an app when your Super AgentOS needs a product surface." action={<Button href="/appstore">Browse apps</Button>} />
-          )}
-        </HomeSection>
-
-        <HomeSection title="Installed Skills" actionHref="/skills" actionLabel="Open Skill Store">
-          {payload.skills.length > 0 ? (
-            <Grid>
-              {payload.skills.map(item => (
-                <Card key={item.id} style={{ padding: 18 }}>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <strong>{item.name}</strong>
-                    <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>{item.description}</span>
-                  </div>
-                </Card>
-              ))}
-            </Grid>
-          ) : (
-            <EmptyState title="No skills installed" body="Install capabilities your Super AgentOS can use on demand." action={<Button href="/skills">Browse skills</Button>} />
-          )}
-        </HomeSection>
-
-        <HomeSection title="Recent Workflows" actionHref="/workflows" actionLabel="Open Workflows">
-          {payload.workflows.length > 0 ? (
-            <Grid>
-              {payload.workflows.map(item => (
-                <Card key={item.id} style={{ padding: 18 }}>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <strong>{item.name}</strong>
-                    <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>{item.summary ?? item.status}</span>
-                  </div>
-                </Card>
-              ))}
-            </Grid>
-          ) : (
-            <EmptyState title="No workflows yet" body="Turn repeated work into a reusable run when you are ready." action={<Button href="/workflows">Create workflow</Button>} />
-          )}
-        </HomeSection>
-
-        <HomeSection title="Activity">
-          <Grid>
-            {payload.summary.recentActions.length > 0 ? payload.summary.recentActions.map(item => (
-              <Card key={item.id} style={{ padding: 18 }}>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <strong>{item.type}</strong>
-                  <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>{item.summary}</span>
-                  <span style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{formatDate(item.createdAt)}</span>
-                </div>
-              </Card>
-            )) : [
-              { title: 'Studio', copy: payload.sessions[0] ? `Last active ${formatDate(payload.sessions[0].updatedAt)}` : 'Open Studio to begin.' },
-              { title: 'Apps', copy: payload.apps.length > 0 ? `${payload.apps.length} installed` : 'Nothing installed yet.' },
-              { title: 'Skills', copy: payload.skills.length > 0 ? `${payload.skills.length} installed` : 'No skills installed yet.' },
-            ].map(item => (
-              <Card key={item.title} style={{ padding: 18 }}>
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <strong>{item.title}</strong>
-                  <span style={{ color: 'var(--text-secondary)' }}>{item.copy}</span>
-                </div>
-              </Card>
-            ))}
-          </Grid>
+          </div>
         </HomeSection>
       </section>
     </SurfaceShell>

@@ -48,8 +48,8 @@ export default async function SdkPage() {
         <Step n={1} title="Create your agent">
           <p className="text-gray-600 mb-4">
             Go to <Link href="/signup" className="text-blue-600 hover:underline">/signup</Link>, choose a beta plan, and create your account with email and password.
-            <strong> Retail Pro</strong>, <strong>Enterprise Plus</strong>, and <strong>Enterprise Max</strong> return a bearer token immediately.
-            <strong> Retail Free</strong> stays browser-session only until you upgrade at <Link href="/billing" className="text-blue-600 hover:underline">/billing</Link>.
+            <strong> Pro</strong>, <strong>Enterprise</strong>, and <strong>Enterprise Max</strong> return a bearer token immediately.
+            <strong> Free</strong> stays browser-session only until you upgrade at <Link href="/billing" className="text-blue-600 hover:underline">/billing</Link>.
           </p>
           <p className="text-sm text-gray-500">
             Or use the API directly:
@@ -212,7 +212,7 @@ await mcp('db_insert', { table: 'logs', data: { msg: 'started' } });`}</Code>
           <h3 className="text-base font-semibold text-gray-900 mb-1">Open AgentOS from the SDK</h3>
           <p className="text-sm text-gray-500 mb-4">
             Use your API key to generate a one-time login link. Open it in a browser to get full dashboard access —
-            including FFP audit trail, consensus controls, workflows, and agent metrics.
+            including FFP temp status, workflows, and agent metrics.
             The link expires in 5 minutes and is single-use.
           </p>
           <Code>{`// Generate a login link with your API key
@@ -240,7 +240,7 @@ console.log('AgentOS:', loginUrl);`}</Code>
             {[
               { href: '/docs/primitives', icon: '⚡', title: 'All 30 tools', desc: 'Complete reference for every primitive and its parameters' },
               { href: '/skills', icon: '📦', title: 'Browse Skills', desc: 'Install community skills to extend your agent instantly' },
-              { href: '/docs/skills', icon: '🛠️', title: 'Build a Skill', desc: 'Publish your own skill and earn 70% revenue share' },
+              { href: '/docs/skills', icon: '🛠️', title: 'Build a Skill', desc: 'Publish your own skill with SDK validation' },
             ].map(c => (
               <Link key={c.href} href={c.href}
                 className="border border-gray-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-sm transition-all group">

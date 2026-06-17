@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveViewerWorkspaceIds } from '@/src/access/service';
-import { requireRouteCapability } from '@/src/auth/request';
-import { createPrivateSubagent, listAccessibleSubagents } from '@/src/subagents/service';
+import { requireAgentContextWithTier, requireRouteCapability } from '@/src/auth/request';
+import { executeAgentOSAction } from '@/src/actions/service';
+import { listAccessibleSubagents } from '@/src/subagents/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   try {
-    const ctx = await requireRouteCapability(request.headers, 'subagents.manage');
+    const ctx = await requireAgentContextWithTier(request.headers);
     const { searchParams } = new URL(request.url);
     const subagents = await listAccessibleSubagents({
       viewerAgentId: ctx.agentId,
@@ -32,19 +33,25 @@ export async function POST(request: NextRequest) {
     if (!workspaceId) {
       return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'workspaceId is required', message: 'workspaceId is required' }, { status: 400 });
     }
-    const subagent = await createPrivateSubagent({
-      ownerAgentId: ctx.agentId,
+    const result = await executeAgentOSAction(ctx, {
+      action: 'create_subagent',
+      source: 'manual_ui',
       workspaceId,
       projectId,
-      name: typeof body.name === 'string' ? body.name : '',
-      description: typeof body.description === 'string' ? body.description : null,
-      instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
-      visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : 'private',
-      exposedCapabilities: Array.isArray(body.exposedCapabilities)
-        ? body.exposedCapabilities.filter((item): item is string => typeof item === 'string')
-        : undefined,
+      payload: {
+        workspaceId,
+        projectId,
+        name: typeof body.name === 'string' ? body.name : '',
+        description: typeof body.description === 'string' ? body.description : null,
+        instructions: typeof body.instructions === 'string' ? body.instructions : undefined,
+        visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : 'private',
+        exposedCapabilities: Array.isArray(body.exposedCapabilities)
+          ? body.exposedCapabilities.filter((item): item is string => typeof item === 'string')
+          : undefined,
+      },
     });
-    return NextResponse.json({ subagent }, { status: 201 });
+    const subagent = (result.result as { subagent: unknown }).subagent;
+    return NextResponse.json({ subagent, execution: result.execution }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

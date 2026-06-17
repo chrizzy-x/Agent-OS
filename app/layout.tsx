@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { APP_URL } from '@/lib/config';
+import BrowserSessionFetchGuard from '@/components/os/BrowserSessionFetchGuard';
+import PanicButton from '@/components/os/PanicButton';
+import ThemeController from '@/components/os/ThemeController';
 
 export const metadata: Metadata = {
   title: 'AgentOS',
@@ -43,7 +46,19 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
-      <body className="font-sans antialiased">{children}</body>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var p=localStorage.getItem('agentos.theme')||'system';var t=p==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):p;document.documentElement.dataset.theme=t;document.documentElement.dataset.themePreference=p;}catch{}`,
+          }}
+        />
+      </head>
+      <body className="font-sans antialiased">
+        <ThemeController />
+        <BrowserSessionFetchGuard />
+        {children}
+        <PanicButton />
+      </body>
     </html>
   );
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/src/storage/supabase';
-import { requireAgentContext } from '@/src/auth/request';
+import { requireRouteCapability } from '@/src/auth/request';
+import { executeAgentOSAction } from '@/src/actions/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 // DELETE /api/skills/uninstall - Uninstall a skill
 export async function DELETE(request: NextRequest) {
   try {
-    const agentCtx = requireAgentContext(request.headers);
+    const agentCtx = await requireRouteCapability(request.headers, 'skills.install');
 
     let body: Record<string, unknown>;
     try {
@@ -22,21 +22,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'skill_id is required' }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdmin();
-    const { error } = await supabase
-      .from('skill_installations')
-      .delete()
-      .eq('agent_id', agentCtx.agentId)
-      .eq('skill_id', skill_id);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Decrement install count (best-effort)
-    await supabase.rpc('decrement_skill_installs', { skill_id });
-
-    return NextResponse.json({ success: true });
+    const result = await executeAgentOSAction(agentCtx, {
+      action: 'uninstall_skill',
+      source: 'manual_ui',
+      payload: { skillId: skill_id },
+    });
+    return NextResponse.json({ ...(result.result as Record<string, unknown>), execution: result.execution });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ error: err.message }, { status: err.statusCode });

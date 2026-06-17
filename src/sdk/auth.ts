@@ -101,7 +101,7 @@ export async function requireSdkKernelContext(token: string, requiredScopes: str
   const account = await findAccountById(credential.ownerAgentId);
   const plan = normalizePlan(account?.metadata.plan ?? 'enterprise_plus');
   if (!hasCapability(plan, 'access_sdk')) {
-    throw new PermissionError('Enterprise Plus or Enterprise Max is required for SDK access');
+    throw new PermissionError('Enterprise or Enterprise Max is required for SDK access');
   }
 
   return {

@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { redactSecretsDeep } from '../security/secret-redaction.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
@@ -50,26 +51,37 @@ export async function createNotification(params: {
   metadata?: Record<string, unknown>;
 }): Promise<NotificationRecord> {
   if (!params.title.trim()) throw new ValidationError('notification title is required');
-  const { data, error } = await getSupabaseAdmin()
-    .from('agent_notifications')
-    .insert({
-      id: crypto.randomUUID(),
-      agent_id: params.agentId,
-      workspace_id: params.workspaceId ?? null,
-      session_id: params.sessionId ?? null,
-      execution_id: params.executionId ?? null,
-      type: params.type.trim() || 'system',
-      title: params.title.trim().slice(0, 200),
-      body: params.body.trim().slice(0, 2000),
-      status: 'unread',
-      metadata: redactSecretsDeep(params.metadata ?? {}) as Record<string, unknown>,
-      created_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
+  const row: Record<string, unknown> = {
+    id: crypto.randomUUID(),
+    agent_id: params.agentId,
+    workspace_id: params.workspaceId ?? null,
+    session_id: params.sessionId ?? null,
+    execution_id: params.executionId ?? null,
+    type: params.type.trim() || 'system',
+    title: params.title.trim().slice(0, 200),
+    body: params.body.trim().slice(0, 2000),
+    status: 'unread',
+    metadata: redactSecretsDeep(params.metadata ?? {}) as Record<string, unknown>,
+    created_at: new Date().toISOString(),
+    read_at: null,
+  };
 
-  if (error) throw new Error(`Failed to create notification: ${error.message}`);
-  return mapNotification(data as Record<string, unknown>);
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('agent_notifications')
+      .insert(row)
+      .select('*')
+      .single();
+
+    if (!error && data) return mapNotification(data as Record<string, unknown>);
+  } catch {
+    // Fall through to local state.
+  }
+
+  return updateLocalRuntimeState(state => {
+    state.notifications = [row, ...state.notifications.filter(item => String(item.id) !== String(row.id))];
+    return mapNotification(row);
+  });
 }
 
 export async function listNotifications(params: {
@@ -77,20 +89,31 @@ export async function listNotifications(params: {
   status?: NotificationRecord['status'] | 'all';
   limit?: number;
 }): Promise<NotificationRecord[]> {
-  let query = getSupabaseAdmin()
-    .from('agent_notifications')
-    .select('*')
-    .eq('agent_id', params.agentId)
-    .order('created_at', { ascending: false })
-    .limit(Math.max(1, Math.min(params.limit ?? 50, 200)));
+  try {
+    let query = getSupabaseAdmin()
+      .from('agent_notifications')
+      .select('*')
+      .eq('agent_id', params.agentId)
+      .order('created_at', { ascending: false })
+      .limit(Math.max(1, Math.min(params.limit ?? 50, 200)));
 
-  if (params.status && params.status !== 'all') {
-    query = query.eq('status', params.status);
+    if (params.status && params.status !== 'all') {
+      query = query.eq('status', params.status);
+    }
+
+    const { data, error } = await query;
+    if (!error) return ((data ?? []) as Record<string, unknown>[]).map(mapNotification);
+  } catch {
+    // Fall through to local state.
   }
 
-  const { data, error } = await query;
-  if (error) throw new Error(`Failed to list notifications: ${error.message}`);
-  return ((data ?? []) as Record<string, unknown>[]).map(mapNotification);
+  const state = await readLocalRuntimeState();
+  return state.notifications
+    .filter(item => String(item.agent_id) === params.agentId)
+    .filter(item => !params.status || params.status === 'all' || item.status === params.status)
+    .sort((left, right) => String(right.created_at ?? '').localeCompare(String(left.created_at ?? '')))
+    .slice(0, Math.max(1, Math.min(params.limit ?? 50, 200)))
+    .map(mapNotification);
 }
 
 export async function updateNotification(params: {
@@ -98,18 +121,31 @@ export async function updateNotification(params: {
   notificationId: string;
   status: NotificationRecord['status'];
 }): Promise<NotificationRecord> {
-  const { data, error } = await getSupabaseAdmin()
-    .from('agent_notifications')
-    .update({
-      status: params.status,
-      read_at: params.status === 'read' ? new Date().toISOString() : null,
-    })
-    .eq('id', params.notificationId)
-    .eq('agent_id', params.agentId)
-    .select('*')
-    .maybeSingle();
+  const patch = {
+    status: params.status,
+    read_at: params.status === 'read' ? new Date().toISOString() : null,
+  };
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('agent_notifications')
+      .update(patch)
+      .eq('id', params.notificationId)
+      .eq('agent_id', params.agentId)
+      .select('*')
+      .maybeSingle();
 
-  if (error) throw new Error(`Failed to update notification: ${error.message}`);
-  if (!data) throw new NotFoundError('Notification not found');
-  return mapNotification(data as Record<string, unknown>);
+    if (!error && data) return mapNotification(data as Record<string, unknown>);
+  } catch {
+    // Fall through to local state.
+  }
+
+  return updateLocalRuntimeState(state => {
+    const index = state.notifications.findIndex(item =>
+      String(item.id) === params.notificationId
+      && String(item.agent_id) === params.agentId,
+    );
+    if (index < 0) throw new NotFoundError('Notification not found');
+    state.notifications[index] = { ...state.notifications[index], ...patch };
+    return mapNotification(state.notifications[index]);
+  });
 }

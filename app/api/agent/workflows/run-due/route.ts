@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
     const execution = await createExecution({
       agentId: ctx.agentId,
       sourceType: 'workflow',
+      type: 'WORKFLOW_EXECUTION',
       sourceId: body.workflowId ?? 'due',
       workflowId: body.workflowId ?? null,
       title: body.workflowId ? `Run workflow ${body.workflowId}` : 'Run due workflows',
@@ -157,7 +158,19 @@ export async function POST(request: NextRequest) {
     await updateExecution({
       agentId: ctx.agentId,
       executionId,
-      patch: { status: 'running', startedAt: new Date(startedAt).toISOString() },
+      patch: {
+        status: 'RUNNING',
+        startedAt: new Date(startedAt).toISOString(),
+        metadata: {
+          resumeCheckpoint: {
+            workflowId: body.workflowId ?? null,
+            nodePosition: 0,
+            variables: {},
+            pendingToolCalls: [],
+            memoryState: {},
+          },
+        },
+      },
     });
     await appendExecutionLog({
       agentId: ctx.agentId,
@@ -379,18 +392,20 @@ export async function POST(request: NextRequest) {
 
     const output = { ran: results.length, results: sanitizeOutput(results) };
     const failures = results.filter(item => !item.success);
+    const failure = failures.length > 0 ? {
+      whatFailed: `${failures.length} workflow step${failures.length === 1 ? '' : 's'} failed`,
+      why: failures.map(item => item.error).filter(Boolean).join('; '),
+      where: 'workflow runtime',
+      possibleFix: 'Inspect workflow logs, fix the failing node input or tool, then retry the run.',
+    } : null;
     await updateExecution({
       agentId: ctx.agentId,
       executionId,
       patch: {
-        status: failures.length === 0 ? 'completed' : failures.length === results.length ? 'failed' : 'partially_completed',
+        status: failures.length === 0 ? 'COMPLETED' : 'FAILED',
         output,
-        failure: failures.length > 0 ? {
-          whatFailed: `${failures.length} workflow step${failures.length === 1 ? '' : 's'} failed`,
-          why: failures.map(item => item.error).filter(Boolean).join('; '),
-          where: 'workflow runtime',
-          possibleFix: 'Inspect workflow logs, fix the failing node input or tool, then retry the run.',
-        } : null,
+        error: failure,
+        failure,
         durationMs: Date.now() - startedAt,
         completedAt: new Date().toISOString(),
       },
@@ -405,17 +420,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...output, executionId });
   } catch (error: unknown) {
     if (executionId && executionOwner) {
+      const failure = {
+        whatFailed: sanitizeErrorMessage(error),
+        why: sanitizeErrorMessage(error),
+        where: 'workflow runtime',
+        possibleFix: 'Inspect workflow configuration and retry the run.',
+      };
       await updateExecution({
         agentId: executionOwner,
         executionId,
         patch: {
-          status: 'failed',
-          failure: {
-            whatFailed: sanitizeErrorMessage(error),
-            why: sanitizeErrorMessage(error),
-            where: 'workflow runtime',
-            possibleFix: 'Inspect workflow configuration and retry the run.',
-          },
+          status: 'FAILED',
+          error: failure,
+          failure,
           completedAt: new Date().toISOString(),
         },
       }).catch(() => undefined);

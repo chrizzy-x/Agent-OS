@@ -3,6 +3,7 @@ import { requireRouteCapability } from '@/src/auth/request';
 import { resolveProjectForWorkspace } from '@/src/projects/service';
 import { reconcileAgentOSProvisioning } from '@/src/agentos/provisioning';
 import { createStudioSession, listStudioSessions } from '@/src/studio/persistence';
+import { resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -27,7 +28,9 @@ export async function POST(request: NextRequest) {
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.create');
     await reconcileAgentOSProvisioning(ctx.agentId);
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : '';
+    const workspaceId = typeof body.workspaceId === 'string' && body.workspaceId.trim()
+      ? body.workspaceId
+      : (await resolveDefaultWorkspaceForAgent(ctx.agentId))?.id ?? '';
     const requestedProjectId = typeof body.projectId === 'string' ? body.projectId : null;
     if (!workspaceId) {
       return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'workspace_required', message: 'workspaceId is required' }, { status: 400 });

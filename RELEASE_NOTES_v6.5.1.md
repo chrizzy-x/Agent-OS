@@ -1,4 +1,4 @@
-# AgentOS v6.5.1 Release Notes
+# AgentOS V6.6.2 Release Notes
 
 Release date: June 12, 2026
 Production URL: https://www.agentos.services
@@ -6,7 +6,7 @@ Production deployment alias: https://www.agentos.services
 
 ## Summary
 
-AgentOS v6.5.1 makes Super AgentOS the primary product experience and unifies chat, files, memory, apps, skills, workflows, MCP-facing tools, notifications, panic stop, recovery, and persisted execution into one operating layer.
+AgentOS V6.6.2 makes Super AgentOS the primary product experience and unifies chat, files, memory, apps, skills, workflows, MCP-facing tools, notifications, panic stop, recovery, and persisted execution into one operating layer.
 
 ## Major Changes
 
@@ -42,7 +42,7 @@ All new tables include deny-by-default RLS policies for direct client access.
 - `npm run build`: passed
 - Local browser smoke: public desktop and mobile routes passed with no console errors or horizontal overflow
 - Production deploy: completed and aliased to https://www.agentos.services
-- Live health check: `GET https://www.agentos.services/health` returned `200` with `version: 6.5.1`
+- Live health check: `GET https://www.agentos.services/health` returned `200` with `version: 6.6.2`
 
 ## Known Verification Notes
 
@@ -50,6 +50,6 @@ The in-app browser could not navigate to external HTTPS URLs from this local env
 
 ## GitHub Release
 
-Tag: `v6.5.1`
+Tag: `V6.6.2`
 
 Release publishing requires valid GitHub CLI authentication for `chrizzy-x`.

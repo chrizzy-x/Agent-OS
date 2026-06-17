@@ -10,19 +10,23 @@ export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    const [tools, serverResponse] = await Promise.all([
-      listUniversalMcpTools(),
-      getSupabaseAdmin()
+    const tools = await listUniversalMcpTools().catch(() => []);
+    let servers: Array<Record<string, unknown>> = [];
+    try {
+      const serverResponse = await getSupabaseAdmin()
         .from('mcp_servers')
         .select('name, description, category, icon, requires_consensus, consensus_threshold')
         .eq('active', true)
-        .order('name', { ascending: true }),
-    ]);
+        .order('name', { ascending: true });
+      servers = (serverResponse.data ?? []) as Array<Record<string, unknown>>;
+    } catch {
+      servers = [];
+    }
 
     return NextResponse.json({
       server: 'agentos',
       tools,
-      servers: serverResponse.data ?? [],
+      servers,
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

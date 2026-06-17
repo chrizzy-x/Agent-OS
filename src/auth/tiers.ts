@@ -13,9 +13,9 @@ export const ENTERPRISE_PLANS = ['enterprise_plus', 'enterprise_max'] as const s
 export const PLAN_ORDER = ['retail_free', 'retail_pro', 'enterprise_plus', 'enterprise_max'] as const satisfies readonly AgentPlan[];
 
 export const PLAN_LABELS: Record<AgentPlan, string> = {
-  retail_free: 'Retail Free',
-  retail_pro: 'Retail Pro',
-  enterprise_plus: 'Enterprise Plus',
+  retail_free: 'Free',
+  retail_pro: 'Pro',
+  enterprise_plus: 'Enterprise',
   enterprise_max: 'Enterprise Max',
 };
 

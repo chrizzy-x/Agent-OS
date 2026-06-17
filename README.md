@@ -4,7 +4,7 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> v6.5.1
+> V6.6.2
 
 AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, and activity.
 
@@ -15,16 +15,16 @@ Live:
 Supporting message:
 - talk to it, build with it, and install what it needs
 
-## V6.5.1 status
+## V6.6.2 status
 
-V6.5.1 ships:
+V6.6.2 ships:
 - `/studio` as the primary Super AgentOS operating surface with persisted chat, streaming replies, execution cards, files, memory, apps, skills, workflows, MCP context, recovery, notifications, and panic stop controls
 - unified persisted executions for Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, MCP-facing runtime paths, logs, failures, recovery state, duration, tokens, and estimated cost fields
 - `/files` for governed upload, preview, summarize, rename, search, and delete flows
 - Panic Button and Recovery Center for stopping active work, retrying, resuming, cancelling, rolling back, and inspecting failures
 - notifications for completed tasks, failed tasks, approval requests, workflow completion, and execution status changes
-- `/` as Super AgentOS Home with recent chats, installed apps, installed skills, workflows, activity, and quick actions
-- shared NL Studio and Code Studio modes inside the Super AgentOS workspace
+- `/` and `/studio` as the locked Super AgentOS operating surface, with conversation-first NL Studio as the default view
+- shared NL Studio, Workflow Studio, and Code Studio modes inside the Super AgentOS workspace
 - permissioned sharing and canonical `private|workspace|public` visibility across sessions, subagents, workflows, skills, memory, and governed file records
 - current-chat search and permission-filtered cross-session chat search
 - `/memory` for governed user, session, project, agent, workflow, app, and skill memory records with search, edit, delete, sharing, and export
@@ -37,25 +37,25 @@ V6.5.1 ships:
 - `/vault` with assignment-aware secret validation and runtime grants
 - hardened Vault runtime injection with temporary secret access, runtime cleanup, access audit events, and shared output redaction
 - `/mcp` with advanced tool discovery, connector diagnostics, and runtime execution visibility
-- `/ffp` with runtime status, chains, audit history, consensus history, related workflows, and related apps
-- `/billing` with free-beta self-serve plan transitions across Retail Free, Retail Pro, Enterprise Plus, and Enterprise Max
-- SDK app auto-discovery and legacy `kernel_registry` recovery into factual public listings
+- `/ffp` with the V6.6.2 workspace toggle and temporary multi-agent routing hook
+- `/billing` with self-serve plan transitions across Free, Pro, Enterprise, and Enterprise Max
+- SDK app registration into factual public listings when an Enterprise SDK app is explicitly registered
 - global search across apps, skills, workflows, sessions, projects, agents, and Vault secret names only
-- governed memory, governed files, and permission grants exposed through typed APIs and V6.5.1 SDK helpers
+- governed memory, governed files, and permission grants exposed through typed APIs and V6.6.2 SDK helpers
 - in-Studio multi-agent discovery, creation, switching, and linked-session flow without leaving Studio
 - keyword, full-text, fuzzy search, recent searches, and pinned results across first-party and MCP-facing resource types
 - editable memory records in-product over the existing memory API
-- session branching with parent lineage and isolated branch messages and events
+- session create, continue, rename, archive, delete, search, export, and persistence
 - session create, rename, pin, archive, soft-delete, search, and persistence with server-backed ownership enforcement
 - structured Studio intent outcomes for chat replies, previews, approvals, forbidden states, unsupported actions, and completed actions
 
 Production verification:
 - URL: [https://www.agentos.services](https://www.agentos.services)
 - Deployment alias: [https://www.agentos.services](https://www.agentos.services)
-- Final deploy date: June 12, 2026
-- `GET /health`: `200`, `version: 6.5.1`, `tools: 44`
+- Final deploy date: June 14, 2026
+- `GET /health`: `200`, `version: 6.6.2`, `tools: 44`
 - Quality gates: `npm run lint`, `npm test`, and `npm run build` passed before final deployment
-- Migration: apply `src/storage/migrations/026_v651_unified_execution_release.sql` for session pin/archive/delete timestamps plus unified executions, logs, and notifications
+- Migrations: apply `src/storage/migrations/026_v651_unified_execution_release.sql`, `src/storage/migrations/027_v652_product_alignment.sql`, and `src/storage/migrations/028_v661_production_closure.sql` for unified executions, logs, notifications, Library, runtime controls, action audit metadata, and recovery fields
 - browser session refresh and expired-session handling across protected routes
 - enterprise-only SDK, developer, and publishing shells with signed-out and blocked states
 
@@ -123,10 +123,10 @@ The runtime consume route is SDK-kernel only. Secret values are never returned t
 ## Plans
 
 Public beta plans:
-- `retail_free`
-- `retail_pro`
-- `enterprise_plus`
-- `enterprise_max`
+- Free (`retail_free`)
+- Pro (`retail_pro`)
+- Enterprise (`enterprise_plus`)
+- Enterprise Max (`enterprise_max`)
 
 Self-serve plan transitions are live in free beta mode:
 - `POST /api/plans/transition`
@@ -137,18 +137,15 @@ Self-serve plan transitions are live in free beta mode:
 FFP is visible at `/ffp`.
 
 Behavior:
-- signed-in retail users see the module with a locked enterprise state
-- enterprise workspaces see status, chains, audit history, consensus history, related workflows, related apps, and logs
-- `/ffp/status` exposes runtime mode, chain id, node url, and consensus requirement
-- `/api/ffp/chains` exposes public chain discovery stats
-- `/api/agent/ffp/audit` and `/api/agent/ffp/consensus` are authenticated agent-scoped routes
+- `/api/ffp/temp` exposes the workspace FFP temp status
+- `PATCH /api/ffp/temp` enables or disables the temporary routing abstraction
+- disabled routes multi-agent activities directly to the Unified Execution Engine
+- enabled routes multi-agent workflows, subagent collaboration, and multi-agent delegation through the FFP temporary abstraction before the Unified Execution Engine
+- single-agent execution bypasses FFP temp
 
 Environment:
 ```env
-FFP_MODE=enabled
-FFP_CHAIN_ID=your-chain-id
-FFP_NODE_URL=https://your-ffp-node.example.com
-FFP_REQUIRE_CONSENSUS=false
+FFP_TEMP_ENABLED=false
 ```
 
 ## Search
@@ -164,7 +161,7 @@ FFP_REQUIRE_CONSENSUS=false
 - files
 - docs
 - connectors
-- FFP records
+- FFP temp settings
 
 It never returns Vault secret values.
 
@@ -195,7 +192,7 @@ ANTHROPIC_API_KEY=
 
 Notes:
 - `VAULT_ENCRYPTION_KEY` falls back to `ENCRYPTION_KEY`
-- `FFP_*` values are optional unless FFP is enabled
+- `FFP_TEMP_ENABLED` is optional; the workspace toggle is the source of truth
 
 ## Development
 
@@ -228,7 +225,7 @@ Before deploying:
 - keep `main` fast-forwarded with `origin/main`
 - confirm `.vercel/project.json` points at the intended project
 - verify `/`, `/studio`, `/appstore`, `/appstore/[slug]`, `/skills`, `/skills/[slug]`, `/files`, `/memory`, `/workflows`, `/agents`, `/vault`, `/search`, `/ffp`, `/mcp`, `/developer`, `/sdk`, and redirect aliases for `/workspace`, `/workspaces`, and `/dashboard`
-- after production deployment, update release notes with the production URL, live browser verification result, migration status, and GitHub release URL
+- after production deployment, update release notes with the production URL, deployment alias, migration status, and quality-gate result
 
 ## Project layout
 
@@ -237,8 +234,8 @@ app/                  Next.js routes and pages
 components/           UI and page components
 src/appstore/         app catalog, lifecycle, SDK recovery
 src/vault/            vault assignment, grants, redaction
-src/studio/           sessions, snapshots, branching
-src/ffp/              FFP client and verification
+src/studio/           sessions, snapshots, persistence
+src/ffp/              FFP temp routing settings
 src/storage/          Supabase, Redis, local state, migrations
 tests/                unit, integration, and e2e coverage
 ```

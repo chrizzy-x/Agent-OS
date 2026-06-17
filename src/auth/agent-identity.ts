@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { createHash } from 'crypto';
 import { AgentContext, AgentQuotas, DEFAULT_QUOTAS } from './permissions.js';
 import { isValidPlan, normalizePersistedPlan, normalizePlan, TIER_QUOTAS } from './tiers.js';
 import { AuthError } from '../utils/errors.js';
@@ -8,6 +9,12 @@ export interface AgentTokenPayload {
   sub: string; // agentId
   allowedDomains?: string[];
   quotas?: Partial<AgentQuotas>;
+  bearerTokenId?: string;
+  scopes?: string[];
+  workspaceId?: string | null;
+  projectId?: string | null;
+  subjectType?: string | null;
+  subjectId?: string | null;
   iat?: number;
   exp?: number;
 }
@@ -60,10 +67,51 @@ export function verifyAgentToken(token: string): AgentContext {
   };
 }
 
+function hashToken(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+async function assertStoredBearerToken(payload: AgentTokenPayload, token: string): Promise<void> {
+  if (!payload.bearerTokenId) return;
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('bearer_tokens')
+      .select('id, owner_agent_id, token_hash, status, expires_at')
+      .eq('id', payload.bearerTokenId)
+      .eq('owner_agent_id', payload.sub)
+      .maybeSingle();
+    if (error) {
+      if (process.env.NODE_ENV !== 'production') return;
+      throw new AuthError('Bearer token validation failed');
+    }
+    if (!data) {
+      if (process.env.NODE_ENV !== 'production') return;
+      throw new AuthError('Bearer token has been revoked or removed');
+    }
+    const row = data as Record<string, unknown>;
+    if (row.status !== 'active') throw new AuthError('Bearer token has been revoked');
+    if (typeof row.expires_at === 'string' && new Date(row.expires_at).getTime() <= Date.now()) {
+      throw new AuthError('Bearer token has expired');
+    }
+    if (typeof row.token_hash === 'string' && row.token_hash !== hashToken(token)) {
+      throw new AuthError('Bearer token does not match its stored credential');
+    }
+    await getSupabaseAdmin()
+      .from('bearer_tokens')
+      .update({ last_used_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', payload.bearerTokenId)
+      .eq('owner_agent_id', payload.sub);
+  } catch (error) {
+    if (error instanceof AuthError) throw error;
+    if (process.env.NODE_ENV === 'production') throw new AuthError('Bearer token validation failed');
+  }
+}
+
 // Verify a JWT bearer token and enrich the AgentContext with the agent's tier from DB.
 // Merges TIER_QUOTAS[tier] as baseline, then applies any JWT custom quota overrides.
 export async function verifyAgentTokenWithTier(token: string): Promise<AgentContext> {
   const payload = verifyAgentTokenClaims(token);
+  await assertStoredBearerToken(payload, token);
 
   let tier: AgentContext['tier'] = 'retail_free';
   try {
@@ -104,6 +152,12 @@ export function createAgentToken(
   options?: {
     allowedDomains?: string[];
     quotas?: Partial<AgentQuotas>;
+    bearerTokenId?: string;
+    scopes?: string[];
+    workspaceId?: string | null;
+    projectId?: string | null;
+    subjectType?: string | null;
+    subjectId?: string | null;
     expiresIn?: string | number;
   }
 ): string {
@@ -111,6 +165,12 @@ export function createAgentToken(
     sub: agentId,
     allowedDomains: options?.allowedDomains ?? [],
     quotas: options?.quotas,
+    bearerTokenId: options?.bearerTokenId,
+    scopes: options?.scopes,
+    workspaceId: options?.workspaceId,
+    projectId: options?.projectId,
+    subjectType: options?.subjectType,
+    subjectId: options?.subjectId,
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

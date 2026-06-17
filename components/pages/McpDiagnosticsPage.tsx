@@ -34,6 +34,16 @@ type McpRegistryPayload = {
   }>;
 };
 
+function normalizeMcpPayload(value: unknown): McpRegistryPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Partial<McpRegistryPayload> & { error?: unknown };
+  if (record.error && !Array.isArray(record.tools)) return null;
+  return {
+    tools: Array.isArray(record.tools) ? record.tools : [],
+    servers: Array.isArray(record.servers) ? record.servers : [],
+  };
+}
+
 export default function McpDiagnosticsPage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [payload, setPayload] = useState<McpRegistryPayload | null>(null);
@@ -48,7 +58,7 @@ export default function McpDiagnosticsPage() {
       ]);
       const registry = await registryRes.json();
       setSession(sessionData);
-      setPayload(registry);
+      setPayload(registryRes.ok ? normalizeMcpPayload(registry) : null);
     } catch {
       setPayload(null);
     } finally {
@@ -86,7 +96,7 @@ export default function McpDiagnosticsPage() {
         <PageHeader
           eyebrow="Universal MCP"
           title="Diagnostics"
-          subtitle="Registry-wide visibility into primitives, skills, external connectors, and consensus requirements."
+          subtitle="Registry-wide visibility into primitives, skills, external connectors, and workspace route guards."
           actions={<Button href="/connectors" variant="secondary">Open Connectors</Button>}
         />
 
@@ -110,7 +120,7 @@ export default function McpDiagnosticsPage() {
                     <div className="os-inline-actions">
                       <strong>{server.name}</strong>
                       <Badge tone="accent">{server.category}</Badge>
-                      {server.requires_consensus ? <Badge tone="warning">Consensus {server.consensus_threshold ?? 0}</Badge> : null}
+                      {server.requires_consensus ? <Badge tone="warning">FFP temp {server.consensus_threshold ?? 0}</Badge> : null}
                     </div>
                     <div className="os-entity-copy">{server.description}</div>
                   </Card>
@@ -126,7 +136,7 @@ export default function McpDiagnosticsPage() {
                     <div className="os-inline-actions">
                       <strong>{tool.name}</strong>
                       <Badge tone={tool.source === 'primitive' ? 'default' : tool.source === 'skill' ? 'accent' : 'warning'}>{tool.source}</Badge>
-                      {tool.requires_consensus ? <Badge tone="warning">Consensus</Badge> : null}
+                      {tool.requires_consensus ? <Badge tone="warning">FFP temp</Badge> : null}
                     </div>
                     <div className="os-entity-copy">{tool.description}</div>
                   </Card>

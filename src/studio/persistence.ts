@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
@@ -138,6 +139,17 @@ function mapMessage(row: Record<string, unknown>): StudioMessageRecord {
   };
 }
 
+function mapStateMessages(row: Record<string, unknown>): StudioMessageRecord[] {
+  const state = asRecord(row.state);
+  const messages = Array.isArray(state.messages) ? state.messages : [];
+  return messages
+    .filter((message): message is Record<string, unknown> => Boolean(message && typeof message === 'object' && !Array.isArray(message)))
+    .map(message => mapMessage({
+      ...message,
+      session_id: message.session_id ?? row.id,
+    }));
+}
+
 function mapEvent(row: Record<string, unknown>): StudioEventRecord {
   return {
     id: String(row.id),
@@ -160,43 +172,76 @@ function mapSnapshot(row: Record<string, unknown>): StudioSnapshotRecord {
   };
 }
 
-async function assertSessionOwner(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown>> {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('nl_studio_sessions')
-    .select('*')
-    .eq('id', sessionId)
-    .eq('owner_agent_id', ownerAgentId)
-    .maybeSingle();
+function sortSessionRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  return rows.sort((left, right) => {
+    const pinned = String(right.pinned_at ?? '').localeCompare(String(left.pinned_at ?? ''));
+    return pinned || String(right.updated_at ?? '').localeCompare(String(left.updated_at ?? ''));
+  });
+}
 
-  if (error) throw new Error(`Failed to load Studio session: ${error.message}`);
-  if (!data) throw new PermissionError('Studio session not found or not accessible');
-  return data as Record<string, unknown>;
+async function findLocalSessionRow(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown> | null> {
+  const state = await readLocalRuntimeState();
+  return state.studioSessions.find(row =>
+    String(row.id) === sessionId
+    && String(row.owner_agent_id) === ownerAgentId
+    && !row.deleted_at
+  ) ?? null;
+}
+
+async function assertSessionOwner(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown>> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('nl_studio_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .eq('owner_agent_id', ownerAgentId)
+      .maybeSingle();
+
+    if (!error && data) return data as Record<string, unknown>;
+  } catch {
+    // Fall through to local state.
+  }
+
+  const local = await findLocalSessionRow(sessionId, ownerAgentId);
+  if (local) return local;
+  throw new PermissionError('Studio session not found or not accessible');
 }
 
 export async function listStudioSessions(
   ownerAgentId: string,
   options: { status?: string | 'all' } = {},
 ): Promise<StudioSessionRecord[]> {
-  const supabase = getSupabaseAdmin();
-  let query = supabase
-    .from('nl_studio_sessions')
-    .select('*')
-    .eq('owner_agent_id', ownerAgentId)
-    .is('deleted_at', null)
-    .order('pinned_at', { ascending: false, nullsFirst: false })
-    .order('updated_at', { ascending: false });
+  try {
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from('nl_studio_sessions')
+      .select('*')
+      .eq('owner_agent_id', ownerAgentId)
+      .is('deleted_at', null)
+      .order('pinned_at', { ascending: false, nullsFirst: false })
+      .order('updated_at', { ascending: false });
 
-  if (options.status && options.status !== 'all') {
-    query = query.eq('status', options.status);
-  } else if (!options.status) {
-    query = query.eq('status', 'active');
+    if (options.status && options.status !== 'all') {
+      query = query.eq('status', options.status);
+    } else if (!options.status) {
+      query = query.eq('status', 'active');
+    }
+
+    const { data, error } = await query;
+    if (!error) return ((data ?? []) as Record<string, unknown>[]).map(mapSession);
+  } catch {
+    // Fall through to local state.
   }
 
-  const { data, error } = await query;
-
-  if (error) throw new Error(`Failed to list Studio sessions: ${error.message}`);
-  return ((data ?? []) as Record<string, unknown>[]).map(mapSession);
+  const state = await readLocalRuntimeState();
+  const rows = state.studioSessions.filter(row => {
+    if (String(row.owner_agent_id) !== ownerAgentId || row.deleted_at) return false;
+    if (options.status && options.status !== 'all') return String(row.status) === options.status;
+    if (!options.status) return String(row.status) === 'active';
+    return true;
+  }) as Record<string, unknown>[];
+  return sortSessionRows(rows).map(mapSession);
 }
 
 export async function createStudioSession(params: {
@@ -218,42 +263,55 @@ export async function createStudioSession(params: {
 }): Promise<StudioSessionRecord> {
   await assertWorkspaceMembership(params.workspaceId, params.ownerAgentId);
   const now = new Date().toISOString();
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('nl_studio_sessions')
-    .insert({
-      id: crypto.randomUUID(),
-      workspace_id: params.workspaceId,
-      project_id: params.projectId ?? null,
-      owner_agent_id: params.ownerAgentId,
-      super_agent_id: params.superAgentId ?? null,
-      visibility: params.visibility ?? 'private',
-      parent_session_id: params.parentSessionId ?? null,
-      parent_snapshot_id: params.parentSnapshotId ?? null,
-      branch_label: params.branchLabel?.trim() || null,
-      linked_subagent_id: params.linkedSubagentId ?? null,
-      linked_workflow_id: params.linkedWorkflowId ?? null,
-      linked_app_id: params.linkedAppId ?? null,
-      linked_file_paths: params.linkedFilePaths ?? [],
-      linked_memory_refs: params.linkedMemoryRefs ?? [],
-      title: params.title?.trim() || 'New Studio Session',
-      status: 'active',
-      state: redactSecretsDeep(params.initialState ?? {
-        mode: 'NORMAL_CHAT',
-        workflowGraph: { nodes: [], edges: [] },
-        workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
-        artifacts: [],
-        approvals: [],
-        installedSkills: [],
-      }) as Record<string, unknown>,
-      created_at: now,
-      updated_at: now,
-    })
-    .select()
-    .single();
+  const row: Record<string, unknown> = {
+    id: crypto.randomUUID(),
+    workspace_id: params.workspaceId,
+    project_id: params.projectId ?? null,
+    owner_agent_id: params.ownerAgentId,
+    super_agent_id: params.superAgentId ?? null,
+    visibility: params.visibility ?? 'private',
+    parent_session_id: params.parentSessionId ?? null,
+    parent_snapshot_id: params.parentSnapshotId ?? null,
+    branch_label: params.branchLabel?.trim() || null,
+    linked_subagent_id: params.linkedSubagentId ?? null,
+    linked_workflow_id: params.linkedWorkflowId ?? null,
+    linked_app_id: params.linkedAppId ?? null,
+    linked_file_paths: params.linkedFilePaths ?? [],
+    linked_memory_refs: params.linkedMemoryRefs ?? [],
+    title: params.title?.trim() || 'New Studio Session',
+    status: 'active',
+    state: redactSecretsDeep(params.initialState ?? {
+      mode: 'NORMAL_CHAT',
+      workflowGraph: { nodes: [], edges: [] },
+      workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
+      artifacts: [],
+      approvals: [],
+      installedSkills: [],
+    }) as Record<string, unknown>,
+    pinned_at: null,
+    archived_at: null,
+    deleted_at: null,
+    created_at: now,
+    updated_at: now,
+  };
 
-  if (error) throw new Error(`Failed to create Studio session: ${error.message}`);
-  return mapSession(data as Record<string, unknown>);
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('nl_studio_sessions')
+      .insert(row)
+      .select()
+      .single();
+
+    if (!error && data) return mapSession(data as Record<string, unknown>);
+  } catch {
+    // Fall through to local state.
+  }
+
+  return updateLocalRuntimeState(state => {
+    state.studioSessions = [row, ...state.studioSessions.filter(item => String(item.id) !== String(row.id))];
+    return mapSession(row);
+  });
 }
 
 export async function getStudioSessionBundle(ownerAgentId: string, sessionId: string): Promise<{
@@ -263,65 +321,101 @@ export async function getStudioSessionBundle(ownerAgentId: string, sessionId: st
   lineage: StudioSessionLineage;
 }> {
   const row = await assertSessionOwner(sessionId, ownerAgentId);
-  const supabase = getSupabaseAdmin();
-  const [messages, events, lineage] = await Promise.all([
-    supabase
-      .from('nl_studio_messages')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('nl_studio_events')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true }),
-    getStudioSessionLineage(ownerAgentId, sessionId),
-  ]);
+  try {
+    const supabase = getSupabaseAdmin();
+    const [messages, events, lineage] = await Promise.all([
+      supabase
+        .from('nl_studio_messages')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('nl_studio_events')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true }),
+      getStudioSessionLineage(ownerAgentId, sessionId),
+    ]);
 
-  if (messages.error) throw new Error(`Failed to load Studio messages: ${messages.error.message}`);
-  if (events.error) throw new Error(`Failed to load Studio events: ${events.error.message}`);
+    if (!messages.error && !events.error) {
+      const persistedMessages = ((messages.data ?? []) as Record<string, unknown>[]).map(mapMessage);
+      return {
+        session: mapSession(row),
+        messages: persistedMessages.length > 0 ? persistedMessages : mapStateMessages(row),
+        events: ((events.data ?? []) as Record<string, unknown>[]).map(mapEvent),
+        lineage,
+      };
+    }
+  } catch {
+    // Fall through to local state.
+  }
+
+  const state = await readLocalRuntimeState();
 
   return {
     session: mapSession(row),
-    messages: ((messages.data ?? []) as Record<string, unknown>[]).map(mapMessage),
-    events: ((events.data ?? []) as Record<string, unknown>[]).map(mapEvent),
-    lineage,
+    messages: state.studioMessages
+      .filter(message => String(message.session_id) === sessionId)
+      .sort((left, right) => String(left.created_at ?? '').localeCompare(String(right.created_at ?? '')))
+      .map(mapMessage),
+    events: state.studioEvents
+      .filter(event => String(event.session_id) === sessionId)
+      .sort((left, right) => String(left.created_at ?? '').localeCompare(String(right.created_at ?? '')))
+      .map(mapEvent),
+    lineage: await getStudioSessionLineage(ownerAgentId, sessionId).catch(() => ({ parent: null, children: [] })),
   };
 }
 
 export async function getStudioSessionLineage(ownerAgentId: string, sessionId: string): Promise<StudioSessionLineage> {
   const current = mapSession(await assertSessionOwner(sessionId, ownerAgentId));
-  const supabase = getSupabaseAdmin();
-
-  const [parentResult, childResult] = await Promise.all([
-    current.parentSessionId
-      ? supabase
+  try {
+    const supabase = getSupabaseAdmin();
+    const [parentResult, childResult] = await Promise.all([
+      current.parentSessionId
+        ? supabase
+          .from('nl_studio_sessions')
+          .select('*')
+          .eq('id', current.parentSessionId)
+          .eq('owner_agent_id', ownerAgentId)
+          .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      supabase
         .from('nl_studio_sessions')
         .select('*')
-        .eq('id', current.parentSessionId)
         .eq('owner_agent_id', ownerAgentId)
-        .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    supabase
-      .from('nl_studio_sessions')
-      .select('*')
-      .eq('owner_agent_id', ownerAgentId)
-      .eq('parent_session_id', sessionId)
-      .order('updated_at', { ascending: false }),
-  ]);
+        .eq('parent_session_id', sessionId)
+        .order('updated_at', { ascending: false }),
+    ]);
 
-  if (childResult.error) throw new Error(`Failed to load Studio session lineage: ${childResult.error.message}`);
-  if (parentResult && 'error' in parentResult && parentResult.error) {
-    throw new Error(`Failed to load Studio session lineage: ${parentResult.error.message}`);
+    if (!childResult.error && !(parentResult && 'error' in parentResult && parentResult.error)) {
+      const parent = parentResult && 'data' in parentResult && parentResult.data
+        ? mapSession(parentResult.data as Record<string, unknown>)
+        : null;
+      const children = ((childResult.data ?? []) as Record<string, unknown>[]).map(mapSession);
+      return {
+        parent: parent ? { id: parent.id, title: parent.title, updatedAt: parent.updatedAt } : null,
+        children: children.map(child => ({ id: child.id, title: child.title, updatedAt: child.updatedAt })),
+      };
+    }
+  } catch {
+    // Fall through to local state.
   }
 
-  const parent = parentResult && 'data' in parentResult && parentResult.data
-    ? mapSession(parentResult.data as Record<string, unknown>)
+  const state = await readLocalRuntimeState();
+  const parent = current.parentSessionId
+    ? state.studioSessions.find(row => String(row.id) === current.parentSessionId && String(row.owner_agent_id) === ownerAgentId)
     : null;
-  const children = ((childResult.data ?? []) as Record<string, unknown>[]).map(mapSession);
+  const children = sortSessionRows(state.studioSessions.filter(row =>
+    String(row.owner_agent_id) === ownerAgentId
+    && String(row.parent_session_id ?? '') === sessionId,
+  ) as Record<string, unknown>[]).map(mapSession);
 
   return {
-    parent: parent ? { id: parent.id, title: parent.title, updatedAt: parent.updatedAt } : null,
+    parent: parent ? {
+      id: String(parent.id),
+      title: typeof parent.title === 'string' ? parent.title : 'AgentOS Studio',
+      updatedAt: String(parent.updated_at ?? parent.created_at ?? new Date().toISOString()),
+    } : null,
     children: children.map(child => ({ id: child.id, title: child.title, updatedAt: child.updatedAt })),
   };
 }
@@ -333,33 +427,69 @@ export async function appendStudioMessage(params: {
   content: string;
 }): Promise<StudioMessageRecord> {
   if (!params.content.trim()) throw new ValidationError('message content is required');
-  await assertSessionOwner(params.sessionId, params.ownerAgentId);
+  const session = await assertSessionOwner(params.sessionId, params.ownerAgentId);
 
   const now = new Date().toISOString();
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('nl_studio_messages')
-    .insert({
-      id: crypto.randomUUID(),
-      session_id: params.sessionId,
-      owner_agent_id: params.ownerAgentId,
-      role: params.role,
-      content: redactSecretsInString(params.content),
-      search_text: redactSecretsInString(params.content).toLowerCase().trim(),
-      created_at: now,
-    })
-    .select()
-    .single();
+  const safeContent = redactSecretsInString(params.content);
+  const row: Record<string, unknown> = {
+    id: crypto.randomUUID(),
+    session_id: params.sessionId,
+    owner_agent_id: params.ownerAgentId,
+    role: params.role,
+    content: safeContent,
+    search_text: safeContent.toLowerCase().trim(),
+    created_at: now,
+  };
 
-  if (error) throw new Error(`Failed to append Studio message: ${error.message}`);
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('nl_studio_messages')
+      .insert(row)
+      .select()
+      .single();
 
-  await supabase
-    .from('nl_studio_sessions')
-    .update({ updated_at: now })
-    .eq('id', params.sessionId)
-    .eq('owner_agent_id', params.ownerAgentId);
+    if (!error && data) {
+      await supabase
+        .from('nl_studio_sessions')
+        .update({ updated_at: now })
+        .eq('id', params.sessionId)
+        .eq('owner_agent_id', params.ownerAgentId);
 
-  return mapMessage(data as Record<string, unknown>);
+      return mapMessage(data as Record<string, unknown>);
+    }
+  } catch {
+    // Fall through to local state.
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const state = asRecord(session.state);
+    const messages = Array.isArray(state.messages) ? state.messages : [];
+    const nextState = {
+      ...state,
+      messages: [...messages, row],
+    };
+    const { error } = await supabase
+      .from('nl_studio_sessions')
+      .update({ state: nextState, updated_at: now })
+      .eq('id', params.sessionId)
+      .eq('owner_agent_id', params.ownerAgentId);
+
+    if (!error) return mapMessage(row);
+  } catch {
+    // Fall through to local state.
+  }
+
+  return updateLocalRuntimeState(state => {
+    state.studioMessages.push(row);
+    const sessionIndex = state.studioSessions.findIndex(session =>
+      String(session.id) === params.sessionId
+      && String(session.owner_agent_id) === params.ownerAgentId,
+    );
+    if (sessionIndex >= 0) state.studioSessions[sessionIndex].updated_at = now;
+    return mapMessage(row);
+  });
 }
 
 export async function appendStudioEvent(params: {
@@ -370,23 +500,33 @@ export async function appendStudioEvent(params: {
 }): Promise<StudioEventRecord> {
   const session = await assertSessionOwner(params.sessionId, params.ownerAgentId);
   const now = new Date().toISOString();
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('nl_studio_events')
-    .insert({
-      id: crypto.randomUUID(),
-      session_id: params.sessionId,
-      workspace_id: session.workspace_id,
-      owner_agent_id: params.ownerAgentId,
-      type: params.type,
-      payload: redactSecretsDeep(params.payload ?? {}) as Record<string, unknown>,
-      created_at: now,
-    })
-    .select()
-    .single();
+  const row: Record<string, unknown> = {
+    id: crypto.randomUUID(),
+    session_id: params.sessionId,
+    workspace_id: session.workspace_id,
+    owner_agent_id: params.ownerAgentId,
+    type: params.type,
+    payload: redactSecretsDeep(params.payload ?? {}) as Record<string, unknown>,
+    created_at: now,
+  };
 
-  if (error) throw new Error(`Failed to append Studio event: ${error.message}`);
-  return mapEvent(data as Record<string, unknown>);
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('nl_studio_events')
+      .insert(row)
+      .select()
+      .single();
+
+    if (!error && data) return mapEvent(data as Record<string, unknown>);
+  } catch {
+    // Fall through to local state.
+  }
+
+  return updateLocalRuntimeState(state => {
+    state.studioEvents.push(row);
+    return mapEvent(row);
+  });
 }
 
 export async function appendLatestStudioEvent(params: {
@@ -485,18 +625,30 @@ export async function updateStudioSession(params: {
   if (params.linkedFilePaths !== undefined) patch.linked_file_paths = params.linkedFilePaths;
   if (params.linkedMemoryRefs !== undefined) patch.linked_memory_refs = params.linkedMemoryRefs;
 
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('nl_studio_sessions')
-    .update(patch)
-    .eq('id', params.sessionId)
-    .eq('owner_agent_id', params.ownerAgentId)
-    .select('*')
-    .maybeSingle();
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('nl_studio_sessions')
+      .update(patch)
+      .eq('id', params.sessionId)
+      .eq('owner_agent_id', params.ownerAgentId)
+      .select('*')
+      .maybeSingle();
 
-  if (error) throw new Error(`Failed to update Studio session: ${error.message}`);
-  if (!data) throw new PermissionError('Studio session not found or not accessible');
-  return mapSession(data as Record<string, unknown>);
+    if (!error && data) return mapSession(data as Record<string, unknown>);
+  } catch {
+    // Fall through to local state.
+  }
+
+  return updateLocalRuntimeState(state => {
+    const index = state.studioSessions.findIndex(session =>
+      String(session.id) === params.sessionId
+      && String(session.owner_agent_id) === params.ownerAgentId,
+    );
+    if (index < 0) throw new PermissionError('Studio session not found or not accessible');
+    state.studioSessions[index] = { ...state.studioSessions[index], ...patch };
+    return mapSession(state.studioSessions[index]);
+  });
 }
 
 export async function createStudioSnapshot(params: {

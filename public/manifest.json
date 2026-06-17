@@ -1,6 +1,7 @@
 {
   "name": "AgentOS by PRIME",
   "short_name": "AgentOS",
+  "version": "6.6.2",
   "description": "Autonomous Agent Infrastructure by PRIME",
   "start_url": "/",
   "display": "standalone",

@@ -50,7 +50,7 @@ Returns server status. No authentication required.
 ```json
 {
   "status": "ok",
-  "version": "6.5.1",
+  "version": "6.6.2",
   "timestamp": "2026-06-12T08:30:08.265Z",
   "tools": 44
 }
@@ -58,7 +58,7 @@ Returns server status. No authentication required.
 
 > `tools` reflects the current number of registered MCP tools.
 
-Production verification for v6.5.1: `GET https://www.agentos.services/health` returned `200` with `version: 6.5.1` after the final production deployment on June 12, 2026.
+Production verification for V6.6.2: `GET https://www.agentos.services/health` returned `200` with `version: 6.6.2` after the final production deployment on June 12, 2026.
 
 ### `GET /tools`
 Lists all available tool names. No authentication required.
@@ -95,11 +95,11 @@ Executes a tool call.
 
 ---
 
-## V6.5.1 Platform Endpoints
+## V6.6.2 Platform Endpoints
 
 ### Unified Execution
 
-All task actions are persisted as executions with statuses `queued`, `running`, `waiting_for_user`, `paused`, `completed`, `partially_completed`, `failed`, and `cancelled`.
+All task actions are persisted as executions with canonical statuses `QUEUED`, `RUNNING`, `PAUSED`, `COMPLETED`, `FAILED`, and `CANCELLED`.
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -108,9 +108,25 @@ All task actions are persisted as executions with statuses `queued`, `running`, 
 | `POST /api/executions/[id]/actions` | Request `pause`, `resume`, `retry`, `cancel`, or `rollback` |
 | `GET /api/recovery` | List recoverable executions |
 | `POST /api/recovery` | Resume, retry, cancel, or rollback an execution |
-| `POST /api/panic` | Cancel active queued/running/waiting/paused executions in scope |
+| `POST /api/panic` | Cancel active `QUEUED`, `RUNNING`, and `PAUSED` executions in scope |
 
-Execution records include source, session, workflow/app/skill/MCP references, input, output, diagnostic failure details, duration, model, token fields, and estimated cost.
+Execution records include `{ id, userId, workspaceId, projectId, type, sourceType, sourceId, status, title, input, output, logs, error, metadata, startedAt, completedAt, pausedAt, cancelledAt, createdAt, updatedAt }` plus legacy-compatible source references and metrics.
+
+### Workspace, Library, App Install, and FFP Temp
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/library` | List the workspace Library source of truth: installed apps, installed skills, workflows, subagents, files, MCP connections, external connections, downloads, and recent activity |
+| `GET /api/bearer-tokens` | List named scoped bearer tokens with masked values |
+| `POST /api/bearer-tokens` | Create a one-time-revealed bearer token for API, workspace, project, app, workflow, MCP connector, or external agent/tool scope |
+| `PATCH /api/bearer-tokens` | Rename, rescope, rotate, or revoke a bearer token |
+| `DELETE /api/bearer-tokens` | Revoke a bearer token while preserving audit history |
+| `POST /api/apps/install` | Install an app into the workspace and Library, cache its package where applicable, and make it available to Super AgentOS, Studio, Projects, Workflows, and Subagents |
+| `POST /api/apps/[slug]/device-install` | Deploy a workspace-installed app to Android, iOS, Desktop, or PWA from Library using the cached package |
+| `GET /api/ffp/temp` | Read the workspace FFP temp toggle |
+| `PATCH /api/ffp/temp` | Enable or disable the temporary FFP routing abstraction for multi-agent workflows, subagent collaboration, and multi-agent delegation |
+
+FFP temp is only a future wiring point. It does not run consensus, vote, publish proposals, or create consensus success states.
 
 ### Files, Memory, Notifications
 

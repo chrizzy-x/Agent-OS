@@ -227,7 +227,7 @@ describe('GET /api/search', () => {
     expect(response.status).toBe(200);
     expect(body.groups.vault[0].title).toBe('OPENAI_API_KEY');
     expect(Array.isArray(body.groups.subagent)).toBe(true);
-    expect(body.groups.project[0].href).toBe('/studio?mode=code&project=project-1');
+    expect(body.groups.project[0].href).toBe('/projects/project-1');
     expect(body.groups.project[0].actionLabel).toBe('Open Project');
     expect(body.groups.connector[0].title).toBe('gmail');
     expect(body.groups.ffp_route[0].title).toContain('chain-agentos');

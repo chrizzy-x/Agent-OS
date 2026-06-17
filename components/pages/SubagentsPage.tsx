@@ -5,8 +5,8 @@ import Link from 'next/link';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import {
-  AgentCard,
   Button,
+  DataTable,
   EmptyState,
   Input,
   LoadingState,
@@ -31,16 +31,14 @@ type SubagentsPageProps = {
   eyebrow?: string;
   title?: string;
   subtitle?: string;
-  listLabel?: string;
 };
 
 export default function SubagentsPage({
-  activePath = '/agents',
-  basePath = '/agents',
-  eyebrow = 'Agents',
-  title = 'Agents',
+  activePath = '/subagents',
+  basePath = '/subagents',
+  eyebrow = 'Subagents',
+  title = 'Subagents',
   subtitle = 'Create focused private agents for research, operations, testing, and vault-aware runtime work.',
-  listLabel = 'Agents',
 }: SubagentsPageProps) {
   const [loading, setLoading] = useState(true);
   const [subagents, setSubagents] = useState<Subagent[]>([]);
@@ -99,7 +97,7 @@ export default function SubagentsPage({
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath={activePath} />
-      <WorkspaceShell activePath="/agents">
+      <WorkspaceShell activePath={activePath}>
         <PageHeader
           eyebrow={eyebrow}
           title={title}
@@ -107,14 +105,14 @@ export default function SubagentsPage({
           actions={<Button onClick={() => void createSubagent()}>Create subagent</Button>}
         />
 
-        <div style={{ display: 'grid', gap: 12 }}>
-          <Input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder="Agent name" />
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder="Subagent name" />
           <Input value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} placeholder="Description" />
-          <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(0, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: 10 }}>
             <select
               value={draft.visibility}
               onChange={event => setDraft(current => ({ ...current, visibility: event.target.value as 'private' | 'workspace' | 'public' }))}
-              style={{ minHeight: 44, borderRadius: 12, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', color: 'inherit', padding: '0 12px' }}
+              style={{ minHeight: 34, borderRadius: 7, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', color: 'inherit', padding: '0 10px' }}
             >
               <option value="private">private</option>
               <option value="workspace">workspace</option>
@@ -123,26 +121,28 @@ export default function SubagentsPage({
             <Input
               value={draft.exposedCapabilities}
               onChange={event => setDraft(current => ({ ...current, exposedCapabilities: event.target.value }))}
-              placeholder="Capabilities (comma-separated)"
+              placeholder="Capabilities, comma-separated"
             />
           </div>
           <Textarea value={draft.instructions} onChange={event => setDraft(current => ({ ...current, instructions: event.target.value }))} placeholder="Instructions" />
         </div>
 
         {loading ? <LoadingState label="Loading subagents" /> : subagents.length === 0 ? (
-          <EmptyState title="No private agents yet" body="Create a focused subagent for research, operations, or testing." />
+          <EmptyState title="No private subagents yet" body="Create a focused subagent for research, operations, or testing." />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-            {subagents.map(subagent => (
-              <AgentCard
-                key={subagent.id}
-                title={subagent.name}
-                description={`${subagent.description ?? 'Private agent'} • ${subagent.visibility}`}
-                status={subagent.status}
-                footer={<Link href={`${basePath}/${subagent.id}`} className="btn-primary">Open</Link>}
-              />
-            ))}
-          </div>
+          <DataTable
+            columns={['Subagent', 'Visibility', 'Status', 'Capabilities', '']}
+            rows={subagents.map(subagent => [
+              <div key={`${subagent.id}-name`}>
+                <div className="os-entity-title">{subagent.name}</div>
+                <div className="os-entity-copy">{subagent.description ?? 'Private subagent'}</div>
+              </div>,
+              subagent.visibility,
+              subagent.status,
+              subagent.exposedCapabilities?.join(', ') || 'None',
+              <Link key={`${subagent.id}-open`} href={`${basePath}/${subagent.id}`} className="btn-ghost">Open</Link>,
+            ])}
+          />
         )}
         {message ? <div className="os-entity-copy">{message}</div> : null}
       </WorkspaceShell>

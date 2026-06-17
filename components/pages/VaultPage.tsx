@@ -76,9 +76,11 @@ function formatDate(value: string | null | undefined): string {
 }
 
 function historySummary(entry: HistoryEntry): string {
+  const blocked = new Set(['secret', 'token', 'password', 'authorization', 'value', 'plaintext']);
   const parts = Object.entries(entry.metadata ?? {})
+    .filter(([key]) => !blocked.has(key))
     .slice(0, 3)
-    .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
+    .map(([key, value]) => `${key}: ${['string', 'number', 'boolean'].includes(typeof value) ? String(value) : 'metadata'}`);
   return parts.join(' | ') || 'No metadata';
 }
 

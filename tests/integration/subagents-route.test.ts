@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 const routeMocks = vi.hoisted(() => ({
   requireRouteCapability: vi.fn(),
+  requireAgentContextWithTier: vi.fn(),
   resolveViewerWorkspaceIds: vi.fn(),
   listAccessibleSubagents: vi.fn(),
   createPrivateSubagent: vi.fn(),
@@ -10,6 +11,7 @@ const routeMocks = vi.hoisted(() => ({
 
 vi.mock('../../src/auth/request.js', () => ({
   requireRouteCapability: routeMocks.requireRouteCapability,
+  requireAgentContextWithTier: routeMocks.requireAgentContextWithTier,
 }));
 
 vi.mock('../../src/subagents/service.js', () => ({
@@ -26,7 +28,8 @@ import { GET, POST } from '../../app/api/subagents/route.js';
 describe('subagents route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    routeMocks.requireRouteCapability.mockResolvedValue({ agentId: 'agent-1' });
+    routeMocks.requireRouteCapability.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_free' });
+    routeMocks.requireAgentContextWithTier.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_free' });
     routeMocks.resolveViewerWorkspaceIds.mockResolvedValue(['workspace-1']);
     routeMocks.listAccessibleSubagents.mockResolvedValue([]);
     routeMocks.createPrivateSubagent.mockResolvedValue({

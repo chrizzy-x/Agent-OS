@@ -138,10 +138,10 @@ describe('server-side plan gating', () => {
     const body = await response.json();
 
     expect(response.status).toBe(403);
-    expect(body.error).toContain('Enterprise Plus');
+    expect(body.error).toContain('Enterprise');
   });
 
-  it('allows Enterprise Plus to create Skills', async () => {
+  it('allows Enterprise to create Skills', async () => {
     mockPlan('enterprise_plus');
     const response = await postSkill(authRequest('http://localhost/api/skills', 'enterprise_plus', {
       name: 'Market Data',
@@ -166,7 +166,7 @@ describe('server-side plan gating', () => {
     const body = await response.json();
 
     expect(response.status).toBe(403);
-    expect(body.error).toContain('Enterprise Plus');
+    expect(body.error).toContain('Enterprise');
   });
 
   it('returns typed 403 when retail calls SDK credential creation directly', async () => {

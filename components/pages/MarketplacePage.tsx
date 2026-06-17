@@ -120,11 +120,11 @@ export default function MarketplacePage() {
               background: 'linear-gradient(135deg, rgba(8, 47, 73, 0.22), rgba(15, 118, 110, 0.14))',
             }}
           >
-            <div className="os-entity-title" style={{ fontSize: 24, marginBottom: 10 }}>Monetization-ready by design.</div>
+            <div className="os-entity-title" style={{ fontSize: 24, marginBottom: 10 }}>Workspace-owned discovery.</div>
             <div className="os-entity-copy" style={{ lineHeight: 1.8, marginBottom: 18 }}>
-              Skills and apps are positioned as first-class assets with install flows, publisher surfaces, payout paths,
-              and workspace ownership. This surface stays truthful to the current platform state while remaining ready
-              for live monetization.
+              Apps and skills are first-class workspace assets with install flows, SDK registration, and ownership
+              records. Workflows stay discoverable, shareable, and cloneable in this release, with no workflow
+              monetization surface.
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <Link href="/developer" className="btn-outline">Open developer surfaces</Link>

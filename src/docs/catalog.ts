@@ -53,8 +53,8 @@ export const DOCS_CATALOG: DocsCatalogEntry[] = [
     id: 'docs-ffp',
     href: '/docs/ffp',
     title: 'FFP',
-    subtitle: 'Consensus, audit trail, and protected execution mode.',
-    keywords: ['ffp', 'consensus', 'audit'],
+    subtitle: 'Temporary routing toggle for future Fabric Furge Protocol.',
+    keywords: ['ffp', 'temp', 'routing'],
   },
   {
     id: 'docs-audit',

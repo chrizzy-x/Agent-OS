@@ -673,7 +673,7 @@ async function previewMutatingCommand(params: {
           action: 'mcp.call',
           target: `${params.parsed.server}.${params.parsed.toolName}`,
           payloadSummary: formatJson(params.parsed.input),
-          risks: ['External MCP actions may send messages, mutate remote systems, or trigger consensus checks.'],
+          risks: ['External MCP actions may send messages, mutate remote systems, or route through FFP temp for multi-agent work.'],
         },
         confirmToken,
         `Previewing external MCP call ${params.parsed.server}.${params.parsed.toolName}`,

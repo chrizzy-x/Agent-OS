@@ -27,11 +27,16 @@ import {
 
 type SearchKind =
   | 'app'
+  | 'installed_app'
   | 'skill'
+  | 'installed_skill'
   | 'workflow'
   | 'session'
   | 'project'
+  | 'library'
   | 'subagent'
+  | 'file'
+  | 'memory'
   | 'vault'
   | 'doc'
   | 'connector'
@@ -56,12 +61,17 @@ type SearchPayload = {
 
 const FILTERS: Array<'all' | SearchKind> = [
   'all',
+  'installed_app',
   'app',
+  'installed_skill',
   'skill',
   'workflow',
   'session',
   'project',
+  'library',
   'subagent',
+  'file',
+  'memory',
   'vault',
   'doc',
   'connector',
@@ -71,11 +81,16 @@ const FILTERS: Array<'all' | SearchKind> = [
 
 const LABELS: Record<SearchKind, string> = {
   app: 'Apps',
+  installed_app: 'Installed Apps',
   skill: 'Skills',
+  installed_skill: 'Installed Skills',
   workflow: 'Workflows',
   session: 'Sessions',
   project: 'Projects',
+  library: 'Library',
   subagent: 'Agents',
+  file: 'Files',
+  memory: 'Memory',
   vault: 'Vault',
   doc: 'Docs',
   connector: 'Connectors',
@@ -200,7 +215,7 @@ export default function SearchPage() {
       <SurfaceShell
         activePath="/search"
         title="Search"
-        subtitle="Keyword, full-text, and fuzzy search across chats, projects, apps, skills, workflows, agents, Vault items, connectors, and docs."
+        subtitle="Search chats, projects, Library assets, installed apps, installed skills, workflows, files, memory, Vault, MCP, FFP, and docs."
       >
         <div className="os-drawer-stack">
           <Card>
@@ -215,7 +230,7 @@ export default function SearchPage() {
           </Card>
           <Card>
             <div className="os-entity-title" style={{ marginBottom: 8 }}>Search mode</div>
-            <div className="os-entity-copy">Search covers apps, skills, workflows, sessions, projects, subagents, Vault names, docs, connectors, and FFP records with keyword, full-text, fuzzy matching, recents, and pins.</div>
+            <div className="os-entity-copy">Search covers Super AgentOS context, Library assets, installed apps, installed skills, workflows, sessions, projects, files, memory, Vault names, docs, connectors, and FFP records.</div>
           </Card>
           <SearchBar
             value={query}

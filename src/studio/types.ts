@@ -1,4 +1,4 @@
-export type StudioMode = 'nl' | 'code';
+export type StudioMode = 'nl' | 'workflow' | 'code';
 
 export type StudioContextSection =
   | 'apps'

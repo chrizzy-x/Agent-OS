@@ -1,4 +1,4 @@
-# AgentOS v6.5.1 Technical Overview
+# AgentOS V6.6.2 Technical Overview
 
 > Super AgentOS-first AI operating system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
 
@@ -10,9 +10,7 @@ AgentOS is a consumer-facing AI operating system with Super AgentOS as the prima
 
 Builders still get the underlying operating system: apps, skills, workflows, SDK, MCP, files, memory, Vault, audit, and primitives.
 
-V6.5.1 unifies those layers through persisted executions, recovery, panic stop, notifications, governed files, governed memory, and production diagnostic errors.
-
-Production status: v6.5.1 is deployed at https://www.agentos.services. The final June 12, 2026 deployment passed lint, test, production build, local desktop/mobile route smoke, and live `/health` verification with `version: 6.5.1`.
+V6.6.2 unifies those layers through persisted executions, recovery, panic stop, notifications, governed files, governed memory, workspace Library ownership, bearer-token connectivity, offline-capable app package cache, and production diagnostic errors.
 
 AgentOS also provides six fundamental primitives that autonomous agents need to operate:
 
@@ -29,7 +27,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 
 ---
 
-## V6.5.1 Product Layers
+## V6.6.2 Product Layers
 
 | Layer | What it provides |
 |-------|------------------|
@@ -304,15 +302,13 @@ For technical support, API reference, and community resources, visit the [Agent 
 
 ---
 
-## Deployment Modes
+## FFP Temp
 
-AgentOS runs in one of two modes, selected via the `FFP_MODE` environment variable:
+FFP is temporary in V6.6.2. It is a workspace-level toggle and future wiring point for Fabric Furge Protocol.
 
-| Mode | Description |
-|------|-------------|
-| **Standalone** (default, `FFP_MODE=disabled`) | All primitive operations execute directly — no external dependencies beyond Redis and Supabase. Zero overhead. |
-| **FFP Router** (`FFP_MODE=enabled`) | Every primitive call is additionally logged to the Furge Fabric Protocol consensus network. Optionally, outbound HTTP calls to critical domains require network consensus before execution. |
+| State | Route |
+|-------|-------|
+| **FFP Disabled** | Multi-agent activities -> Unified Execution Engine |
+| **FFP Enabled** | Multi-agent activities -> FFP temporary abstraction layer -> Unified Execution Engine |
 
-In both modes the API surface is identical — only the internal routing changes. Standalone mode is recommended for most deployments.
-
-See [FFP_INTEGRATION.md](../FFP_INTEGRATION.md) for full setup and configuration details.
+FFP temp affects only multi-agent workflows, subagent collaboration, and multi-agent delegation. Single-agent execution bypasses FFP. V6.6.2 does not ship a consensus engine, proposal voting, or fake consensus results.

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -136,7 +137,7 @@ type FileEntryRecord = {
 type ExecutionRecord = {
   id: string;
   title: string;
-  status: 'queued' | 'running' | 'waiting_for_user' | 'paused' | 'completed' | 'partially_completed' | 'failed' | 'cancelled';
+  status: 'QUEUED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
   sourceType: string;
   sourceId: string | null;
   sessionId: string | null;
@@ -216,8 +217,9 @@ type StudioContextValue = {
   setComposerValue: (value: string) => void;
   composerValue: string;
   sendMessage: (message?: string) => Promise<void>;
+  stopGeneration: () => Promise<void>;
   approvePending: () => Promise<void>;
-  createSession: (options?: { linkedSubagentId?: string | null; title?: string }) => Promise<void>;
+  createSession: (options?: { linkedSubagentId?: string | null; title?: string }) => Promise<StudioSessionRecord | null>;
   focusSubagent: (subagentId: string) => Promise<void>;
   createSubagent: (input: {
     name: string;
@@ -246,7 +248,7 @@ type StudioContextValue = {
 const StudioContext = createContext<StudioContextValue | null>(null);
 
 function normalizeMode(value: string | null | undefined): StudioMode {
-  return value === 'code' ? 'code' : 'nl';
+  return value === 'code' || value === 'workflow' ? value : 'nl';
 }
 
 function buildStudioUrl(params: {
@@ -259,6 +261,22 @@ function buildStudioUrl(params: {
   if (params.sessionId) query.set('session', params.sessionId);
   if (params.projectId) query.set('project', params.projectId);
   return `/studio?${query.toString()}`;
+}
+
+function parseStudioStreamPayload(raw: string): Record<string, unknown> {
+  let payload: Record<string, unknown> = {};
+  for (const block of raw.split('\n\n')) {
+    const lines = block.split('\n');
+    const event = lines.find(line => line.startsWith('event: '))?.slice('event: '.length).trim();
+    const data = lines.find(line => line.startsWith('data: '))?.slice('data: '.length);
+    if (!event || !data || (event !== 'reply' && event !== 'error')) continue;
+    try {
+      payload = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      payload = { kind: 'error', reply: 'I could not read the execution result. Inspect Recovery for details.' };
+    }
+  }
+  return payload;
 }
 
 function flattenFiles(nodes: StudioFileNode[]): StudioFileNode[] {
@@ -336,6 +354,8 @@ export function StudioProvider(props: {
   const [advancedMode, setAdvancedMode] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [composerValue, setComposerValue] = useState(props.initialPrompt ?? '');
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const activeStreamExecutionIdRef = useRef<string | null>(null);
 
   const currentWorkspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? workspaces[0]?.id ?? null;
   const activeSubagent = useMemo(
@@ -535,7 +555,7 @@ export function StudioProvider(props: {
   }, []);
 
   const createSession = useCallback(async (options?: { linkedSubagentId?: string | null; title?: string }) => {
-    if (!currentWorkspaceId) return;
+    if (!currentWorkspaceId) return null;
     const response = await fetchWithBrowserSession('/api/studio/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -546,13 +566,14 @@ export function StudioProvider(props: {
         title: options?.title ?? 'New chat',
       }),
     });
-    if (!response.response.ok) return;
+    if (!response.response.ok) return null;
     const payload = await response.response.json() as { session?: StudioSessionRecord };
-    if (!payload.session) return;
+    if (!payload.session) return null;
     setComposerValue('');
     setPendingApproval(null);
     setSidebarOpen(false);
     pushRoute(mode, payload.session.id, payload.session.projectId ?? currentProject?.id ?? null);
+    return payload.session;
   }, [currentProject?.id, currentWorkspaceId, mode, pushRoute, requestedProjectId]);
 
   const focusSubagent = useCallback(async (subagentId: string) => {
@@ -663,10 +684,47 @@ export function StudioProvider(props: {
 
   const sendMessage = useCallback(async (message?: string) => {
     const nextMessage = (message ?? composerValue).trim();
-    if (!nextMessage || !session) return;
+    if (!nextMessage || sending) return;
+    let activeSession = session;
+    let createdSession: StudioSessionRecord | null = null;
+    if (!activeSession) {
+      if (currentWorkspaceId) {
+        const response = await fetchWithBrowserSession('/api/studio/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            workspaceId: currentWorkspaceId,
+            projectId: currentProject?.id ?? requestedProjectId,
+            title: nextMessage.slice(0, 80) || 'New chat',
+          }),
+        });
+        if (response.response.ok) {
+          const payload = await response.response.json() as { session?: StudioSessionRecord };
+          activeSession = payload.session ?? null;
+          createdSession = activeSession;
+          if (activeSession) {
+            setSession(activeSession);
+            setSessions(current => [activeSession as StudioSessionRecord, ...current.filter(item => item.id !== activeSession?.id)]);
+          }
+        }
+      }
+    }
+    if (!activeSession) {
+      setMessages(current => [...current, {
+        id: `session-error-${Date.now()}`,
+        role: 'assistant',
+        content: 'I could not create a chat session. Sign in again or check workspace access.',
+        createdAt: new Date().toISOString(),
+      }]);
+      return;
+    }
+    const executionSession = activeSession;
     setSending(true);
     setPendingApproval(null);
     const assistantMessageId = `streaming-assistant-${Date.now()}`;
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
+    activeStreamExecutionIdRef.current = null;
     setMessages(current => [...current, {
       id: `optimistic-user-${Date.now()}`,
       role: 'user',
@@ -675,86 +733,74 @@ export function StudioProvider(props: {
     }]);
     setComposerValue('');
 
-    const response = await fetchWithBrowserSession('/api/studio/intent/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: nextMessage,
-        sessionId: session.id,
-        workspaceId: session.workspaceId,
-        projectId: currentProject?.id,
-      }),
-    });
-    if (!response.response.body) {
-      setSending(false);
-      await refresh();
-      return;
-    }
-    const reader = response.response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let assistantInserted = false;
-    let lastPayload: Record<string, unknown> | null = null;
-
-    function handleSseBlock(block: string) {
-      const event = block.split('\n').find(line => line.startsWith('event: '))?.slice(7).trim();
-      const data = block.split('\n').find(line => line.startsWith('data: '))?.slice(6);
-      if (!event || !data) return;
-      const payload = JSON.parse(data) as Record<string, unknown>;
-      if (event === 'reply' || event === 'error') {
-        lastPayload = payload;
-        const reply = typeof payload.reply === 'string' ? payload.reply : typeof payload.message === 'string' ? payload.message : '';
-        if (reply) {
-          if (!assistantInserted) {
-            assistantInserted = true;
-            setMessages(current => [...current, {
-              id: assistantMessageId,
-              role: 'assistant',
-              content: reply,
-              createdAt: new Date().toISOString(),
-            }]);
-          } else {
-            setMessages(current => current.map(item => item.id === assistantMessageId ? { ...item, content: reply } : item));
-          }
-        }
-        if (typeof payload.confirmToken === 'string' && reply) {
-          setPendingApproval({
-            confirmToken: payload.confirmToken,
-            reply,
-          });
-        }
-        if (typeof payload.navigateTo === 'string') {
-          router.push(payload.navigateTo);
-        }
-      }
-    }
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const blocks = buffer.split('\n\n');
-      buffer = blocks.pop() ?? '';
-      for (const block of blocks) {
-        if (block.trim()) handleSseBlock(block);
-      }
-    }
-    if (buffer.trim()) handleSseBlock(buffer);
-    if (!assistantInserted && lastPayload) {
-      const payload = lastPayload as Record<string, unknown>;
-      const reply = typeof payload.reply === 'string' ? payload.reply : 'No response was returned.';
+    async function runNonStreamingFallback() {
+      const fallback = await fetchWithBrowserSession('/api/studio/intent/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: nextMessage,
+          sessionId: executionSession.id,
+          workspaceId: executionSession.workspaceId,
+          projectId: currentProject?.id,
+        }),
+      });
+      const payload = parseStudioStreamPayload(await fallback.response.text());
+      const reply = typeof payload.reply === 'string'
+        ? payload.reply
+        : fallback.response.ok
+          ? 'Done.'
+          : 'I could not complete that request. Try again or inspect Recovery.';
       setMessages(current => [...current, {
         id: assistantMessageId,
         role: 'assistant',
         content: reply,
         createdAt: new Date().toISOString(),
       }]);
+      if (typeof payload.confirmToken === 'string') {
+        setPendingApproval({ confirmToken: payload.confirmToken, reply });
+      }
+      if (typeof payload.navigateTo === 'string') {
+        router.push(payload.navigateTo);
+      }
     }
 
-    await refresh();
-    await refreshRuntimeState();
+    try {
+      await runNonStreamingFallback();
+    } catch (error) {
+      const stopped = error instanceof DOMException && error.name === 'AbortError';
+      setMessages(current => [...current, {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: stopped ? 'Stopped.' : 'I could not complete that request. Try again or inspect Recovery.',
+        createdAt: new Date().toISOString(),
+      }]);
+    } finally {
+      streamAbortRef.current = null;
+      activeStreamExecutionIdRef.current = null;
+      setSending(false);
+      if (createdSession) {
+        pushRoute(mode, createdSession.id, createdSession.projectId ?? currentProject?.id ?? null);
+        await refreshRuntimeState();
+        return;
+      }
+      await refresh();
+      await refreshRuntimeState();
+    }
+  }, [composerValue, currentProject?.id, currentWorkspaceId, mode, pushRoute, refresh, refreshRuntimeState, requestedProjectId, router, sending, session]);
+
+  const stopGeneration = useCallback(async () => {
+    streamAbortRef.current?.abort();
+    const executionId = activeStreamExecutionIdRef.current;
+    if (executionId) {
+      await fetchWithBrowserSession(`/api/executions/${executionId}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' }),
+      }).catch(() => undefined);
+      await refreshRuntimeState();
+    }
     setSending(false);
-  }, [composerValue, currentProject?.id, refresh, refreshRuntimeState, router, session]);
+  }, [refreshRuntimeState]);
 
   const approvePending = useCallback(async () => {
     if (!pendingApproval || !session) return;
@@ -955,6 +1001,7 @@ export function StudioProvider(props: {
     setComposerValue,
     composerValue,
     sendMessage,
+    stopGeneration,
     approvePending,
     createSession,
     focusSubagent,
@@ -1008,6 +1055,7 @@ export function StudioProvider(props: {
     selectProject,
     selectSession,
     sendMessage,
+    stopGeneration,
     sending,
     session,
     sessions,

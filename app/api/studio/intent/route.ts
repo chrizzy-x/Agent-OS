@@ -13,11 +13,12 @@ import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { callClaude, tokenDel as legacyTokenDel, tokenGet as legacyTokenGet } from '@/src/studio/planner';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle, updateStudioSession } from '@/src/studio/persistence';
 import { syncWorkflowDocument } from '@/src/workflows/canonical';
-import { resolveProjectForWorkspace, createProject, updateProject } from '@/src/projects/service';
+import { executeAgentOSAction } from '@/src/actions/service';
+import { resolveProjectForWorkspace, updateProject } from '@/src/projects/service';
+import { listWorkspaces } from '@/src/workspaces/service';
 import { listVaultSecrets } from '@/src/vault/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
-import { createPrivateSubagent } from '@/src/subagents/service';
 import { listAgentApps } from '@/src/appstore/service';
 
 export const runtime = 'nodejs';
@@ -71,6 +72,24 @@ type PendingStudioAction =
     sessionId: string | null;
     workspaceId: string;
     projectId: string | null;
+    name: string;
+    intent: AgentOSIntent;
+  }
+  | {
+    type: 'app_install';
+    agentId: string;
+    sessionId: string | null;
+    workspaceId: string | null;
+    slug: string;
+    name: string;
+    intent: AgentOSIntent;
+  }
+  | {
+    type: 'skill_install';
+    agentId: string;
+    sessionId: string | null;
+    workspaceId: string | null;
+    skillId: string;
     name: string;
     intent: AgentOSIntent;
   };
@@ -171,6 +190,11 @@ function parseCreateAgentName(message: string): string | null {
 
 function parseInspectReference(message: string, subject: 'app' | 'skill'): string | null {
   const match = message.match(new RegExp(`\\b(?:inspect|open|show)\\s+${subject}\\s+(.+)$`, 'i'));
+  return match?.[1]?.trim() || null;
+}
+
+function parseInstallReference(message: string, subject: 'app' | 'skill'): string | null {
+  const match = message.match(new RegExp(`\\b(?:install|add)\\s+${subject}\\s+(.+)$`, 'i'));
   return match?.[1]?.trim() || null;
 }
 
@@ -304,38 +328,61 @@ async function resolveSessionContext(agentId: string, sessionId: string | undefi
   title: string | null;
 }> {
   if (!sessionId) return { workspaceId: null, projectId: null, title: null };
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('nl_studio_sessions')
-    .select('workspace_id,project_id,title')
-    .eq('id', sessionId)
-    .eq('owner_agent_id', agentId)
-    .maybeSingle();
-  if (error || !data) return { workspaceId: null, projectId: null, title: null };
-  return {
-    workspaceId: typeof data.workspace_id === 'string' ? data.workspace_id : null,
-    projectId: typeof data.project_id === 'string' ? data.project_id : null,
-    title: typeof data.title === 'string' ? data.title : null,
-  };
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('nl_studio_sessions')
+      .select('workspace_id,project_id,title')
+      .eq('id', sessionId)
+      .eq('owner_agent_id', agentId)
+      .maybeSingle();
+    if (!error && data) {
+      return {
+        workspaceId: typeof data.workspace_id === 'string' ? data.workspace_id : null,
+        projectId: typeof data.project_id === 'string' ? data.project_id : null,
+        title: typeof data.title === 'string' ? data.title : null,
+      };
+    }
+  } catch {
+    // Fall through to local Studio persistence.
+  }
+
+  const bundle = await getStudioSessionBundle(agentId, sessionId).catch(() => null);
+  return bundle?.session
+    ? { workspaceId: bundle.session.workspaceId, projectId: bundle.session.projectId, title: bundle.session.title }
+    : { workspaceId: null, projectId: null, title: null };
 }
 
-async function loadContextNames(workspaceId: string | null, projectId: string | null): Promise<{
+async function loadContextNames(agentId: string, workspaceId: string | null, projectId: string | null): Promise<{
   workspaceName: string | null;
   projectName: string | null;
 }> {
-  const supabase = getSupabaseAdmin();
-  const [workspaceResult, projectResult] = await Promise.all([
-    workspaceId
-      ? supabase.from('workspaces').select('name').eq('id', workspaceId).maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    projectId
-      ? supabase.from('projects').select('name').eq('id', projectId).maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-  ]);
-  return {
-    workspaceName: workspaceResult.data && typeof workspaceResult.data.name === 'string' ? workspaceResult.data.name : null,
-    projectName: projectResult.data && typeof projectResult.data.name === 'string' ? projectResult.data.name : null,
-  };
+  try {
+    const supabase = getSupabaseAdmin();
+    const [workspaceResult, projectResult] = await Promise.all([
+      workspaceId
+        ? supabase.from('workspaces').select('name').eq('id', workspaceId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      projectId
+        ? supabase.from('projects').select('name').eq('id', projectId).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ]);
+    return {
+      workspaceName: workspaceResult.data && typeof workspaceResult.data.name === 'string' ? workspaceResult.data.name : null,
+      projectName: projectResult.data && typeof projectResult.data.name === 'string' ? projectResult.data.name : null,
+    };
+  } catch {
+    const workspace = workspaceId
+      ? (await listWorkspaces(agentId).catch(() => [])).find(item => item.id === workspaceId)
+      : null;
+    const project = workspaceId && projectId
+      ? await resolveProjectForWorkspace({ ownerAgentId: agentId, workspaceId, projectId }).catch(() => null)
+      : null;
+    return {
+      workspaceName: workspace?.name ?? null,
+      projectName: project?.name ?? null,
+    };
+  }
 }
 
 async function executeWorkflowPlan(params: {
@@ -490,12 +537,18 @@ async function executePendingAction(params: {
   }
 
   if (params.pending.type === 'project_create') {
-    const project = await createProject({
-      ownerAgentId: params.ctx.agentId,
+    const action = await executeAgentOSAction(params.ctx, {
+      action: 'create_project',
+      source: 'natural_language',
+      sessionId: params.pending.sessionId,
       workspaceId: params.pending.workspaceId,
-      name: params.pending.name,
-      description: params.pending.description,
+      payload: {
+        workspaceId: params.pending.workspaceId,
+        name: params.pending.name,
+        description: params.pending.description,
+      },
     });
+    const project = (action.result as { project: { name: string } }).project;
     const reply = `Created project ${project.name}.`;
     await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
     return NextResponse.json({
@@ -509,12 +562,19 @@ async function executePendingAction(params: {
   }
 
   if (params.pending.type === 'subagent_create') {
-    const subagent = await createPrivateSubagent({
-      ownerAgentId: params.ctx.agentId,
+    const action = await executeAgentOSAction(params.ctx, {
+      action: 'create_subagent',
+      source: 'natural_language',
+      sessionId: params.pending.sessionId,
       workspaceId: params.pending.workspaceId,
       projectId: params.pending.projectId,
-      name: params.pending.name,
+      payload: {
+        workspaceId: params.pending.workspaceId,
+        projectId: params.pending.projectId,
+        name: params.pending.name,
+      },
     });
+    const subagent = (action.result as { subagent: { id: string; name: string } }).subagent;
     const reply = `Created private agent ${subagent.name}.`;
     await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
     await recordStudioEvent(params.ctx.agentId, params.pending.sessionId, 'subagent_created', {
@@ -529,6 +589,50 @@ async function executePendingAction(params: {
       executed: true,
       subagent,
       navigateTo: `/agents/${subagent.id}`,
+    });
+  }
+
+  if (params.pending.type === 'app_install') {
+    const action = await executeAgentOSAction(params.ctx, {
+      action: 'install_app',
+      source: 'natural_language',
+      sessionId: params.pending.sessionId,
+      workspaceId: params.pending.workspaceId,
+      payload: { slug: params.pending.slug },
+    });
+    const reply = `Installed app ${params.pending.name}.`;
+    await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
+    return NextResponse.json({
+      kind: 'completed',
+      intent: params.pending.intent,
+      statusText: 'Done.',
+      reply,
+      executed: true,
+      result: sanitizeOutput(action.result),
+      execution: action.execution,
+      navigateTo: `/apps`,
+    });
+  }
+
+  if (params.pending.type === 'skill_install') {
+    const action = await executeAgentOSAction(params.ctx, {
+      action: 'install_skill',
+      source: 'natural_language',
+      sessionId: params.pending.sessionId,
+      workspaceId: params.pending.workspaceId,
+      payload: { skillId: params.pending.skillId },
+    });
+    const reply = `Installed skill ${params.pending.name}.`;
+    await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
+    return NextResponse.json({
+      kind: 'completed',
+      intent: params.pending.intent,
+      statusText: 'Done.',
+      reply,
+      executed: true,
+      result: sanitizeOutput(action.result),
+      execution: action.execution,
+      navigateTo: `/skills/installed`,
     });
   }
 
@@ -729,6 +833,80 @@ export async function POST(req: NextRequest) {
         statusText: 'Done.',
         reply,
         navigateTo: '/skills',
+      });
+    }
+
+    const installSkillReference = parseInstallReference(trimmedMessage, 'skill');
+    if (installSkillReference) {
+      const skill = await findSkillRecord(installSkillReference);
+      if (!skill) {
+        const reply = `No skill matched "${installSkillReference}".`;
+        await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+        return NextResponse.json({
+          kind: 'unsupported',
+          intent,
+          statusText: 'Unavailable.',
+          reply,
+          code: 'NOT_FOUND',
+        }, { status: 404 });
+      }
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'skill_install',
+        agentId: ctx.agentId,
+        sessionId,
+        workspaceId,
+        skillId: skill.id,
+        name: skill.name,
+        intent,
+      } satisfies PendingStudioAction));
+      const reply = `Install skill ${skill.name}?`;
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply,
+        confirmToken,
+      });
+    }
+
+    const installAppReference = parseInstallReference(trimmedMessage, 'app');
+    if (installAppReference) {
+      const app = await findAppRecord({
+        agentId: ctx.agentId,
+        workspaceId,
+        reference: installAppReference,
+      });
+      if (!app) {
+        const reply = `No app matched "${installAppReference}".`;
+        await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+        return NextResponse.json({
+          kind: 'unsupported',
+          intent,
+          statusText: 'Unavailable.',
+          reply,
+          code: 'NOT_FOUND',
+        }, { status: 404 });
+      }
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'app_install',
+        agentId: ctx.agentId,
+        sessionId,
+        workspaceId,
+        slug: app.slug,
+        name: app.name,
+        intent,
+      } satisfies PendingStudioAction));
+      const reply = `Install app ${app.name}?`;
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply,
+        confirmToken,
       });
     }
 
@@ -1075,7 +1253,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const names = await loadContextNames(workspaceId, projectId);
+    const names = await loadContextNames(ctx.agentId, workspaceId, projectId);
     const reply = await generateStudioChatReply({
       message: trimmedMessage,
       intent,
@@ -1091,6 +1269,9 @@ export async function POST(req: NextRequest) {
       reply,
     });
   } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[studio-intent]', error);
+    }
     const err = toErrorResponse(error);
     return NextResponse.json({
       kind: 'error',

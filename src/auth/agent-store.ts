@@ -43,6 +43,7 @@ function mapLocalAccount(record: LocalAccountRecord): AgentAccount {
     passwordHash: record.passwordHash,
     metadata: {
       ...(record.passwordReset ? { password_reset: record.passwordReset } : {}),
+      ...(record.avatarUrl ? { avatar_url: record.avatarUrl } : {}),
       plan: record.plan ?? 'retail_free',
       account_type: record.accountType ?? 'retail',
     },

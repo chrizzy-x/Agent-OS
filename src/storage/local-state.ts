@@ -7,6 +7,7 @@ export type LocalAccountRecord = {
   agentId: string;
   email: string;
   agentName: string;
+  avatarUrl?: string | null;
   passwordHash: string;
   plan?: string;
   accountType?: 'retail' | 'enterprise';
@@ -155,6 +156,59 @@ export type LocalAppInstallationRecord = {
   installed_version?: string | null;
 };
 
+export type LocalAppPackageCacheRecord = {
+  id: string;
+  appId: string;
+  workspaceId: string | null;
+  ownerAgentId: string;
+  packageRef: string;
+  packagePayload: Record<string, unknown>;
+  version: string;
+  status: 'cached' | 'stale' | 'removed';
+  cachedAt: string;
+  updatedAt: string;
+};
+
+export type LocalAppDeviceInstallationRecord = {
+  id: string;
+  appId: string;
+  workspaceId: string | null;
+  ownerAgentId: string;
+  target: string;
+  packageRef: string;
+  status: 'installed' | 'removed';
+  installedAt: string;
+  updatedAt: string;
+};
+
+export type LocalBearerTokenRecord = {
+  id: string;
+  ownerAgentId: string;
+  name: string;
+  workspaceId: string | null;
+  projectId: string | null;
+  subjectType: string | null;
+  subjectId: string | null;
+  scopes: string[];
+  permissions: string[];
+  tokenHash: string;
+  maskedToken: string;
+  status: 'active' | 'revoked';
+  lastUsedAt: string | null;
+  rotatedAt: string | null;
+  revokedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LocalFfpTempSettingRecord = {
+  workspaceId: string;
+  ownerAgentId: string;
+  enabled: boolean;
+  updatedAt: string;
+};
+
 export type LocalProjectRecord = {
   id: string;
   workspaceId: string;
@@ -167,6 +221,43 @@ export type LocalProjectRecord = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type LocalWorkspaceRecord = {
+  id: string;
+  name: string;
+  slug: string;
+  ownerId: string;
+  plan: string;
+  createdAt: string;
+};
+
+export type LocalWorkspaceMemberRecord = {
+  workspaceId: string;
+  userId: string;
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+  joinedAt: string;
+};
+
+export type LocalNotificationRow = Record<string, unknown>;
+
+export type LocalLibraryItemRecord = {
+  id: string;
+  ownerAgentId: string;
+  workspaceId: string | null;
+  projectId: string | null;
+  sourceType: string;
+  sourceId: string;
+  name: string;
+  description: string | null;
+  visibility: 'private' | 'workspace' | 'public';
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LocalStudioSessionRow = Record<string, unknown>;
+export type LocalStudioMessageRow = Record<string, unknown>;
+export type LocalStudioEventRow = Record<string, unknown>;
 
 export type LocalVaultRuntimeGrantRecord = {
   id: string;
@@ -241,11 +332,22 @@ export type LocalRuntimeState = {
     catalog: LocalAgentAppRecord[];
     installations: Record<string, LocalAppInstallationRecord[]>;
   };
+  appPackageCache: LocalAppPackageCacheRecord[];
+  appDeviceInstallations: LocalAppDeviceInstallationRecord[];
+  bearerTokens: LocalBearerTokenRecord[];
+  ffpTempSettings: LocalFfpTempSettingRecord[];
+  workspaces: LocalWorkspaceRecord[];
+  workspaceMembers: LocalWorkspaceMemberRecord[];
   projects: Record<string, LocalProjectRecord[]>;
+  studioSessions: LocalStudioSessionRow[];
+  studioMessages: LocalStudioMessageRow[];
+  studioEvents: LocalStudioEventRow[];
+  notifications: LocalNotificationRow[];
   trustedDevices: Record<string, LocalTrustedDeviceRecord[]>;
   authRefreshSessions: Record<string, LocalAuthRefreshSessionRecord[]>;
   sessionAuditLogs: Record<string, LocalSessionAuditLogRecord[]>;
   vaultRuntimeGrants: LocalVaultRuntimeGrantRecord[];
+  libraryItems: LocalLibraryItemRecord[];
 };
 
 const DEFAULT_STATE_FILE = join(tmpdir(), 'agentos-runtime-state.json');
@@ -284,11 +386,22 @@ function createDefaultState(): LocalRuntimeState {
       catalog: [],
       installations: {},
     },
+    appPackageCache: [],
+    appDeviceInstallations: [],
+    bearerTokens: [],
+    ffpTempSettings: [],
+    workspaces: [],
+    workspaceMembers: [],
     projects: {},
+    studioSessions: [],
+    studioMessages: [],
+    studioEvents: [],
+    notifications: [],
     trustedDevices: {},
     authRefreshSessions: {},
     sessionAuditLogs: {},
     vaultRuntimeGrants: [],
+    libraryItems: [],
   };
 }
 
@@ -320,11 +433,22 @@ function normalizeState(value: unknown): LocalRuntimeState {
       catalog: state.agentApps?.catalog ?? defaults.agentApps.catalog,
       installations: state.agentApps?.installations ?? defaults.agentApps.installations,
     },
+    appPackageCache: state.appPackageCache ?? defaults.appPackageCache,
+    appDeviceInstallations: state.appDeviceInstallations ?? defaults.appDeviceInstallations,
+    bearerTokens: state.bearerTokens ?? defaults.bearerTokens,
+    ffpTempSettings: state.ffpTempSettings ?? defaults.ffpTempSettings,
+    workspaces: state.workspaces ?? defaults.workspaces,
+    workspaceMembers: state.workspaceMembers ?? defaults.workspaceMembers,
     projects: state.projects ?? defaults.projects,
+    studioSessions: state.studioSessions ?? defaults.studioSessions,
+    studioMessages: state.studioMessages ?? defaults.studioMessages,
+    studioEvents: state.studioEvents ?? defaults.studioEvents,
+    notifications: state.notifications ?? defaults.notifications,
     trustedDevices: state.trustedDevices ?? defaults.trustedDevices,
     authRefreshSessions: state.authRefreshSessions ?? defaults.authRefreshSessions,
     sessionAuditLogs: state.sessionAuditLogs ?? defaults.sessionAuditLogs,
     vaultRuntimeGrants: state.vaultRuntimeGrants ?? defaults.vaultRuntimeGrants,
+    libraryItems: state.libraryItems ?? defaults.libraryItems,
   };
 }
 

@@ -72,13 +72,19 @@ export async function listAccessibleFiles(params: {
   kind?: 'file' | 'artifact' | 'all';
   limit?: number;
 }): Promise<AgentFileRecord[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from('agent_files')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .limit(Math.max(1, Math.min(params.limit ?? 100, 200)));
+  let data: unknown[] = [];
+  try {
+    const result = await getSupabaseAdmin()
+      .from('agent_files')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(Math.max(1, Math.min(params.limit ?? 100, 200)));
 
-  if (error) throw new Error(`Failed to list files: ${error.message}`);
+    if (result.error) throw result.error;
+    data = result.data ?? [];
+  } catch {
+    data = [];
+  }
 
   let entries = ((data ?? []) as Record<string, unknown>[]).map(mapFile);
   if (params.workspaceId) entries = entries.filter(entry => entry.workspaceId === params.workspaceId);

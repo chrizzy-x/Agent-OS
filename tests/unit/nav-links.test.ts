@@ -3,22 +3,22 @@ import { buildSessionNavLinks } from '../../components/Nav.js';
 import type { BrowserSession } from '../../src/auth/browser-session.js';
 
 describe('studio-first navigation links', () => {
-  it('shows the simplified signed-in top navigation', () => {
+  it('shows the locked signed-in top navigation', () => {
     const retailSession: BrowserSession = {
       agentName: 'Retail',
       plan: 'retail_free',
-      planLabel: 'Retail Free',
+      planLabel: 'Free',
       accountType: 'retail',
       capabilities: ['use_nl_studio'],
       expiresAt: null,
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toEqual(['Super AgentOS', 'AppStore', 'Workflows', 'Skills', 'Files', 'Settings']);
+    expect(links.map(item => item.label)).toEqual(['Search', 'Notifications', 'Profile']);
   });
 
-  it('shows a minimal unauthenticated navigation', () => {
+  it('shows the same minimal unauthenticated navigation', () => {
     const links = buildSessionNavLinks(null);
-    expect(links.map(item => item.label)).toEqual(['Super AgentOS', 'AppStore', 'Workflows', 'Skills', 'Files', 'Settings']);
+    expect(links.map(item => item.label)).toEqual(['Search', 'Notifications', 'Profile']);
   });
 });

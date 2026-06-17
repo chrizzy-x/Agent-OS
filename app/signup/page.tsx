@@ -19,13 +19,13 @@ type AccountType = 'retail' | 'enterprise';
 type PlanKey = 'retail_free' | 'retail_pro' | 'enterprise_plus' | 'enterprise_max';
 
 const RETAIL_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
-  { key: 'retail_free', name: 'Retail Free', detail: 'Studio, Super AgentOS, workflows, apps, skills, vault. Free for now.' },
-  { key: 'retail_pro', name: 'Retail Pro', detail: 'Higher limits and bearer token access. Free for now.' },
+  { key: 'retail_free', name: 'Free', detail: 'Super AgentOS, workspace installs, workflows, subagents, and Vault.' },
+  { key: 'retail_pro', name: 'Pro', detail: 'Higher limits, bearer tokens, and API access.' },
 ];
 
 const ENTERPRISE_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
-  { key: 'enterprise_plus', name: 'Enterprise Plus', detail: 'SDK, Developer Console, Apps, Skills, publishing. Free for now.' },
-  { key: 'enterprise_max', name: 'Enterprise Max', detail: 'Higher limits, audit, governance, and org controls. Free for now.' },
+  { key: 'enterprise_plus', name: 'Enterprise', detail: 'SDK, Developer Console, Apps, Skills, publishing, and teams.' },
+  { key: 'enterprise_max', name: 'Enterprise Max', detail: 'Highest limits, diagnostics, governance, and org controls.' },
 ];
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {

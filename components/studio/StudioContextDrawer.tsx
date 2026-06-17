@@ -19,6 +19,25 @@ function SectionList(props: { title: string; items: Array<{ id: string; title: s
   );
 }
 
+function summarizeEventPayload(payload: unknown): string {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return typeof payload === 'string' && payload.trim() ? payload.trim().slice(0, 160) : 'Event recorded.';
+  }
+
+  const record = payload as Record<string, unknown>;
+  const redacted = new Set(['secret', 'token', 'password', 'authorization', 'apiKey', 'api_key']);
+  const parts = ['title', 'message', 'intent', 'action', 'status', 'sourceType', 'executionId', 'error']
+    .flatMap(key => {
+      if (redacted.has(key)) return [];
+      const value = record[key];
+      if (value === null || value === undefined) return [];
+      if (!['string', 'number', 'boolean'].includes(typeof value)) return [];
+      return [`${key}: ${String(value).slice(0, 96)}`];
+    });
+
+  return parts.length > 0 ? parts.join(' | ') : 'Event metadata recorded.';
+}
+
 function classifyMemoryEntry(entry: { namespaceType: string; visibility: string }): 'my' | 'agent' | 'privateSubagent' | 'workspace' | 'shared' {
   if (entry.namespaceType === 'user') return 'my';
   if (entry.namespaceType === 'agent') return 'agent';
@@ -281,8 +300,8 @@ export default function StudioContextDrawer() {
       ) : null}
       {contextSection === 'logs' ? <SectionList title="Logs" items={[
         ...(lineage.parent ? [{ id: `parent-${lineage.parent.id}`, title: 'Parent session', body: lineage.parent.title }] : []),
-        ...lineage.children.map(item => ({ id: `child-${item.id}`, title: 'Branch session', body: item.title })),
-        ...events.slice(-8).map(item => ({ id: `studio-${item.id}`, title: item.type, body: JSON.stringify(item.payload) })),
+        ...lineage.children.map(item => ({ id: `child-${item.id}`, title: 'Related session', body: item.title })),
+        ...events.slice(-8).map(item => ({ id: `studio-${item.id}`, title: item.type, body: summarizeEventPayload(item.payload) })),
         ...executions.slice(0, 8).map(item => ({ id: `execution-${item.id}`, title: item.status, body: `${item.sourceType} | ${item.title}` })),
         ...(terminal ? [{ id: `terminal-status-${terminal.id}`, title: 'Terminal session', body: `${terminal.status} | ${terminal.cwd}` }] : []),
         ...terminalEvents.slice(-8).map(item => ({ id: `terminal-${item.id}`, title: item.type, body: `${item.chunk ?? item.message ?? ''}${item.status ? ` | ${item.status}` : ''}` })),

@@ -5,6 +5,7 @@ import { maskSecretValue, redactSecretsDeep, redactSecretsInString } from '../se
 import { appendStudioEvent } from '../studio/persistence.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
+import { assertVaultRuntimeAllowed } from '../panic/service.js';
 
 export type VaultSecretMetadata = {
   id: string;
@@ -867,6 +868,7 @@ export async function createRuntimeSecretGrant(params: {
   metadata?: Record<string, unknown>;
   sessionId?: string | null;
 }): Promise<VaultRuntimeGrantRecord> {
+  await assertVaultRuntimeAllowed(params.ownerAgentId);
   const validated = await validateRuntimeSecretRequest(params);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + Math.max(30_000, Math.min(params.expiresInMs ?? 300_000, 900_000))).toISOString();

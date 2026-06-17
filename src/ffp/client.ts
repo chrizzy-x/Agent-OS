@@ -3,7 +3,7 @@
  *
  * Provides two capabilities when FFP_MODE=enabled:
  *   1. ffpLog()       — fire-and-forget audit trail on FFP chains
- *   2. ffpConsensus() — blocking consensus gate for critical operations
+ *   2. FFP temp routing marker for future multi-agent coordination
  *
  * When FFP_MODE is absent or not "enabled", all calls are no-ops with
  * zero overhead. Existing deployments are completely unaffected.
@@ -31,16 +31,6 @@ export interface FFPProposal {
   params: Record<string, unknown>;
   confidence: number;
 }
-
-// Domains that trigger consensus checks when FFP_REQUIRE_CONSENSUS=true
-const CONSENSUS_DOMAINS = [
-  'binance.com',
-  'coinbase.com',
-  'kraken.com',
-  'stripe.com',
-  'paypal.com',
-  'braintreepayments.com',
-];
 
 let instance: FFPClient | null = null;
 
@@ -79,20 +69,14 @@ class FFPClient {
    * Returns false if the network rejects it.
    * Throws on timeout (30 s).
    */
-  async consensus(proposal: FFPProposal): Promise<boolean> {
+  async consensus(_proposal: FFPProposal): Promise<boolean> {
     if (!this.config.enabled || !this.config.requireConsensus) return true;
-
-    const { proposal_id } = await this.post('/propose', {
-      agent_id: this.config.agentId,
-      proposal,
-    }) as { proposal_id: string };
-
-    return this.poll(proposal_id);
+    throw new Error('FFP consensus is not live in V6.6.2. Disable consensus mode or route multi-agent work through FFP temp.');
   }
 
-  /** True if the given URL hits a consensus-gated domain. */
-  isCriticalUrl(url: string): boolean {
-    return CONSENSUS_DOMAINS.some(d => url.includes(d));
+  /** V6.6.2 does not gate single-agent network calls through FFP temp. */
+  isCriticalUrl(_url: string): boolean {
+    return false;
   }
 
   /**
@@ -122,19 +106,10 @@ class FFPClient {
   }
 
   /**
-   * Query consensus proposal history for an agent.
+   * Consensus proposal history is unavailable until real FFP ships.
    */
-  async queryConsensusHistory(agentId: string): Promise<unknown[]> {
-    if (!this.config.enabled) return [];
-
-    const res = await fetch(
-      `${this.config.nodeUrl}/consensus/history?agent_id=${encodeURIComponent(agentId)}`,
-      { headers: { 'Content-Type': 'application/json' } }
-    );
-
-    if (!res.ok) throw new Error(`FFP consensus query failed: ${res.status}`);
-    const body = await res.json() as { proposals: unknown[] };
-    return body.proposals ?? [];
+  async queryConsensusHistory(_agentId: string): Promise<unknown[]> {
+    return [];
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
@@ -149,20 +124,6 @@ class FFPClient {
     return res.json();
   }
 
-  private async poll(proposalId: string, attempts = 30): Promise<boolean> {
-    for (let i = 0; i < attempts; i++) {
-      await new Promise(r => setTimeout(r, 1000));
-
-      const res = await fetch(
-        `${this.config.nodeUrl}/consensus/${encodeURIComponent(proposalId)}`
-      );
-      if (!res.ok) continue;
-
-      const body = await res.json() as { status: string; approved: boolean };
-      if (body.status === 'finalized') return body.approved;
-    }
-    throw new Error(`FFP consensus timeout for proposal ${proposalId}`);
-  }
 }
 
 /**

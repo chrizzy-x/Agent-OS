@@ -115,7 +115,7 @@ export async function buildStudioBootstrap(params: {
       superAgentId: superAgent?.id ?? null,
       title: project.name === 'Default Project' ? 'New Studio Session' : `${project.name} session`,
       initialState: {
-        mode: params.mode === 'code' ? 'CODE_STUDIO' : 'NL_STUDIO',
+        mode: params.mode === 'code' ? 'CODE_STUDIO' : params.mode === 'workflow' ? 'WORKFLOW_STUDIO' : 'NL_STUDIO',
       },
     }).catch(() => null);
     if (session) {

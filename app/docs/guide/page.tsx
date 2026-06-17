@@ -34,7 +34,7 @@ export default function GuidePage() {
           { id: 'studio', label: 'Step 5 — Studio workspace (chat, route, and operate)' },
           { id: 'publish', label: 'Step 6 - Publish your own skill or app' },
           { id: 'ops', label: 'Step 7 — Multi-agent ops & infrastructure crew' },
-          { id: 'ffp', label: 'Step 8 — FFP / consensus mode' },
+          { id: 'ffp', label: 'Step 8 — FFP temp' },
         ]} />
 
         {/* SECTION 1 */}
@@ -64,7 +64,7 @@ export default function GuidePage() {
           <p className="mt-3">You&apos;ll get back:</p>
           <ul className="list-disc ml-6 mt-2 space-y-1" style={{ color: 'var(--text-secondary)' }}>
             <li><strong>Browser session</strong> — always, so Studio and your workspace open immediately.</li>
-            <li><strong>Bearer token</strong> — immediately on Retail Pro, Enterprise Plus, and Enterprise Max. Retail Free upgrades later at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>.</li>
+            <li><strong>Bearer token</strong> — immediately on Pro, Enterprise, and Enterprise Max. Free upgrades later at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>.</li>
             <li><strong>Super AgentOS</strong> — your default workspace owner for sessions, memory, installed skills, connected apps, private workflows, and private agents.</li>
           </ul>
           <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Agent IDs are private internal identifiers. Use your agent name in the UI and your bearer token for API calls.</p>
@@ -448,7 +448,7 @@ console.log('History:', history);`}</Code>
             <Link href="/marketplace" style={{ color: 'var(--accent)' }}>Marketplace</Link> is the discovery layer. It explains how the two stores fit together and how apps built inside or outside AgentOS become discoverable through SDK registration.
           </p>
           <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
-            The <Link href="/skills" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent or workflow. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps. Skills, workflows, and apps are monetization-ready assets inside the same workspace and routing layer.
+            The <Link href="/skills" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent or workflow. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps. Apps, skills, and workflows are workspace-owned assets inside the same routing layer; workflow monetization is not part of V6.6.2.
           </p>
 
           <h3 className="text-base font-semibold mb-2">Install a skill:</h3>
@@ -494,7 +494,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         {/* SECTION 6 */}
         <Section id="studio" title="Step 5 — Studio workspace (chat, route, and operate)">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            The <Link href="/studio" style={{ color: 'var(--accent)' }}>Studio</Link> is the chat-first operating workspace. Sign in at <Link href="/signin" style={{ color: 'var(--accent)' }}>/signin</Link> and you can chat, create sessions, branch work, inspect tools, edit instructions, install skills, inspect apps, save results, and route tasks through workflows from one screen.
+            The <Link href="/studio" style={{ color: 'var(--accent)' }}>Studio</Link> is the chat-first operating workspace. Sign in at <Link href="/signin" style={{ color: 'var(--accent)' }}>/signin</Link> and you can chat, create sessions, inspect tools, edit instructions, install skills, inspect apps, save results, and route tasks through workflows from one screen.
           </p>
 
           <div className="terminal mb-6">
@@ -515,7 +515,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
           </div>
 
           <Callout emoji="🔐">
-            The Studio uses your browser session — no API key needed in the browser. Need to call the API from code or another machine? Use a Pro or Enterprise plan, then generate a bearer token from <Link href="/" style={{ color: 'var(--accent)' }}>Home</Link> or upgrade at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>. Super AgentOS keeps your instructions, sessions, and installed assets scoped to your workspace.
+            The Studio uses your browser session — no API key needed in the browser. Need to call the API from code or another machine? Use a Pro or Enterprise plan, then generate a bearer token from <Link href="/studio" style={{ color: 'var(--accent)' }}>Studio</Link> or upgrade at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>. Super AgentOS keeps your instructions, sessions, and installed assets scoped to your workspace.
           </Callout>
         </Section>
 
@@ -527,9 +527,9 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
 
           <ol className="list-decimal ml-6 space-y-3 mb-6" style={{ color: 'var(--text-secondary)' }}>
             <li>Go to <Link href="/developer" style={{ color: 'var(--accent)' }}>/developer</Link> — sign in first.</li>
-            <li>Click <strong>&quot;+ Publish Skill&quot;</strong>. Fill in the name, description, category, and pricing (free or per-call).</li>
+            <li>Click <strong>&quot;+ Publish Skill&quot;</strong>. Fill in the name, description, category, permissions, and SDK metadata.</li>
             <li>Write your skill as a JavaScript class named <code className="tag text-xs">Skill</code>. Each method corresponds to a capability.</li>
-            <li>Add your payout settings (PayPal email or USDC wallet address) so you can receive earnings.</li>
+            <li>Resolve any validation errors before publishing. Invalid SDK metadata does not create a listing.</li>
             <li>Click <strong>Publish</strong> — your skill goes live in the Skill Store and becomes discoverable through the marketplace discovery layer.</li>
           </ol>
 
@@ -578,14 +578,14 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
 });`}</Code>
 
           <Callout emoji="💰">
-            Earnings are paid monthly. Set your payout method at <Link href="/developer" style={{ color: 'var(--accent)' }}>/developer → Payout Settings</Link>. Supports PayPal, bank transfer (ACH/Wire), and USDC crypto wallet.
+            V6.6.2 supports SDK validation and discoverability for eligible apps and skills. Commercial workflow sales are not part of this release.
           </Callout>
         </Section>
 
         {/* SECTION 8 */}
         <Section id="ops" title="Step 7 — Multi-agent ops & infrastructure crew">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            The <Link href="/developer" style={{ color: 'var(--accent)' }}>Developer dashboard</Link> is for advanced platform operators. It shows diagnostics, publishing flows, and the automation surfaces behind AgentOS.
+            The <Link href="/developer" style={{ color: 'var(--accent)' }}>Developer page</Link> is for advanced platform operators. It shows diagnostics, publishing flows, and the automation surfaces behind AgentOS.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
             Every platform capability has an <strong>active agent</strong> and a <strong>standby agent</strong>. If the active agent degrades or fails, the standby automatically takes over (failover).
@@ -613,12 +613,12 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         </Section>
 
         {/* SECTION 9 */}
-        <Section id="ffp" title="Step 8 — FFP / consensus mode">
+        <Section id="ffp" title="Step 8 — FFP temp">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            FFP (Furge Fabric Protocol) is an optional decentralised consensus layer for <strong>critical financial operations</strong>. When enabled, any agent trying to call a sensitive domain (Binance, Coinbase, Stripe, PayPal, etc.) must get approval from the FFP network before the request is allowed through.
+            FFP is temporary in AgentOS V6.6.2. The page exposes only a workspace toggle and routing hook for future Fabric Furge Protocol support.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            <strong>For most users, FFP is not needed.</strong> It is designed for high-stakes multi-agent deployments where you want a second layer of verification before money moves.
+            When disabled, multi-agent activities route directly to the Unified Execution Engine. When enabled, multi-agent workflows, subagent collaboration, and multi-agent delegation pass through the FFP temporary abstraction layer before the Unified Execution Engine. Single-agent execution bypasses FFP temp.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
             See the full setup guide: <Link href="/docs/ffp" style={{ color: 'var(--accent)' }}>FFP documentation →</Link>

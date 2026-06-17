@@ -1,413 +1,169 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/os/ui';
 import { useStudio } from '@/components/studio/StudioProvider';
 
-const SUGGESTIONS = ['Research', 'Build', 'Analyze', 'Trade', 'Create Workflow', 'Install App'];
+const SUGGESTIONS = ['Install App', 'Create Workflow', 'Create Project', 'Create Skill', 'Search Memory', 'Build App', 'Publish Skill'];
+const COMPOSER_TOOLS = ['Files', 'Commands', 'Projects', 'Mentions'] as const;
 
-type SearchMatch = {
-  messageId: string;
-  matchPositions: Array<{ start: number; end: number }>;
-};
-
-type MessageRecord = {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  createdAt: string;
-};
-
-function renderMarkdown(content: string) {
-  const parts = content.split(/(```[\s\S]*?```)/g).filter(Boolean);
-  return parts.map((part, index) => {
-    if (part.startsWith('```') && part.endsWith('```')) {
-      const raw = part.slice(3, -3);
-      const firstNewline = raw.indexOf('\n');
-      const language = firstNewline > 0 ? raw.slice(0, firstNewline).trim() : '';
-      const code = firstNewline > 0 ? raw.slice(firstNewline + 1) : raw;
-      return (
-        <pre key={`code-${index}`} style={{ overflowX: 'auto', padding: 14, borderRadius: 12, background: 'rgba(15, 23, 42, 0.08)', border: '1px solid var(--border)', lineHeight: 1.5 }}>
-          {language ? <div style={{ color: 'var(--text-tertiary)', fontSize: 12, marginBottom: 8 }}>{language}</div> : null}
-          <code>{code}</code>
-        </pre>
-      );
+function renderContent(content: string) {
+  return content.split(/\n{2,}/).map((block, index) => {
+    const trimmed = block.trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('```')) {
+      return <pre key={index} className="nl-message-code"><code>{trimmed.replace(/^```[\w-]*\n?/, '').replace(/```$/, '')}</code></pre>;
     }
-
-    return part.split(/\n{2,}/).map((block, blockIndex) => {
-      const trimmed = block.trim();
-      if (!trimmed) return null;
-      if (trimmed.startsWith('# ')) return <h2 key={`h-${index}-${blockIndex}`} style={{ margin: '8px 0', fontSize: 22 }}>{trimmed.slice(2)}</h2>;
-      if (trimmed.startsWith('## ')) return <h3 key={`h-${index}-${blockIndex}`} style={{ margin: '8px 0', fontSize: 18 }}>{trimmed.slice(3)}</h3>;
-      if (/^[-*]\s+/m.test(trimmed)) {
-        return (
-          <ul key={`ul-${index}-${blockIndex}`} style={{ margin: '8px 0', paddingLeft: 22 }}>
-            {trimmed.split('\n').map((line, lineIndex) => (
-              <li key={`li-${lineIndex}`}>{line.replace(/^[-*]\s+/, '')}</li>
-            ))}
-          </ul>
-        );
-      }
-      return <p key={`p-${index}-${blockIndex}`} style={{ margin: '8px 0' }}>{trimmed}</p>;
-    });
+    return <p key={index}>{trimmed}</p>;
   });
 }
-
-function MessageActions(props: {
-  message: MessageRecord;
-  onRetry: (content: string) => void;
-  onEdit: (content: string) => void;
-}) {
-  return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-      <button type="button" onClick={() => void navigator.clipboard?.writeText(props.message.content)} style={actionStyle}>Copy</button>
-      {props.message.role === 'user' ? (
-        <>
-          <button type="button" onClick={() => props.onRetry(props.message.content)} style={actionStyle}>Retry</button>
-          <button type="button" onClick={() => props.onEdit(props.message.content)} style={actionStyle}>Edit</button>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-const actionStyle = {
-  minHeight: 30,
-  padding: '0 10px',
-  borderRadius: 10,
-  border: '1px solid var(--border)',
-  background: 'rgba(255,255,255,0.04)',
-  color: 'inherit',
-  cursor: 'pointer',
-  fontSize: 12,
-} as const;
-
-function renderHighlightedContent(
-  content: string,
-  positions: Array<{ start: number; end: number }>,
-  activeLocalIndex: number,
-  messageId: string,
-) {
-  if (positions.length === 0) return content;
-  const nodes: ReactNode[] = [];
-  let cursor = 0;
-  positions.forEach((position, index) => {
-    if (position.start > cursor) {
-      nodes.push(<span key={`${messageId}-text-${cursor}`}>{content.slice(cursor, position.start)}</span>);
-    }
-    nodes.push(
-      <mark
-        key={`${messageId}-match-${position.start}-${index}`}
-        data-search-hit={`${messageId}:${index}`}
-        style={{
-          background: index === activeLocalIndex ? 'rgba(20, 184, 166, 0.45)' : 'rgba(250, 204, 21, 0.34)',
-          color: 'inherit',
-          padding: 0,
-          borderRadius: 4,
-        }}
-      >
-        {content.slice(position.start, position.end)}
-      </mark>,
-    );
-    cursor = position.end;
-  });
-  if (cursor < content.length) {
-    nodes.push(<span key={`${messageId}-tail-${cursor}`}>{content.slice(cursor)}</span>);
-  }
-  return nodes;
-}
-
-const composerButtonStyle = {
-  minHeight: 32,
-  padding: '0 10px',
-  borderRadius: 10,
-  border: '1px solid var(--border)',
-  background: 'rgba(255,255,255,0.04)',
-  color: 'var(--text-secondary)',
-  cursor: 'pointer',
-  font: 'inherit',
-  fontSize: 13,
-  lineHeight: 1,
-} as const;
 
 export default function NLStudioPanel() {
   const {
     browserSession,
     session,
+    sessions,
     messages,
     composerValue,
     setComposerValue,
     sendMessage,
+    stopGeneration,
     pendingApproval,
     approvePending,
     sending,
     executions,
     requestExecutionAction,
+    currentProject,
+    createSession,
+    selectSession,
   } = useStudio();
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchMatches, setSearchMatches] = useState<SearchMatch[]>([]);
-  const [activeFlatMatchIndex, setActiveFlatMatchIndex] = useState(0);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
-
-  const matchBounds = useMemo(() => {
-    const bounds = new Map<string, { start: number; count: number }>();
-    let cursor = 0;
-    for (const item of searchMatches) {
-      bounds.set(item.messageId, { start: cursor, count: item.matchPositions.length });
-      cursor += item.matchPositions.length;
-    }
-    return bounds;
-  }, [searchMatches]);
-
-  const totalMatchCount = useMemo(
-    () => searchMatches.reduce((count, item) => count + item.matchPositions.length, 0),
-    [searchMatches],
-  );
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const conversationRef = useRef<HTMLDivElement | null>(null);
+  const recentChats = useMemo(() => sessions.filter(item => !item.archivedAt && !item.deletedAt).slice(0, 4), [sessions]);
+  const lastUserMessage = useMemo(() => [...messages].reverse().find(message => message.role === 'user')?.content ?? '', [messages]);
 
   useEffect(() => {
-    if (!searchOpen || !session?.id || !searchQuery.trim()) {
-      setSearchMatches([]);
-      setActiveFlatMatchIndex(0);
-      return;
-    }
-
-    let active = true;
-    void fetch(`/api/studio/sessions/${session.id}/search?q=${encodeURIComponent(searchQuery.trim())}`, {
-      cache: 'no-store',
-    })
-      .then(async response => response.ok ? response.json() : { matches: [] })
-      .then(payload => {
-        if (!active) return;
-        const matches = Array.isArray(payload.matches) ? payload.matches as SearchMatch[] : [];
-        setSearchMatches(matches);
-        setActiveFlatMatchIndex(0);
-      })
-      .catch(() => {
-        if (!active) return;
-        setSearchMatches([]);
-        setActiveFlatMatchIndex(0);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [searchOpen, searchQuery, session?.id]);
-
-  useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-        setSearchOpen(true);
-        window.setTimeout(() => searchInputRef.current?.focus(), 0);
-      }
-      if (event.key === 'Escape' && searchOpen) {
-        event.preventDefault();
-        setSearchOpen(false);
-      }
-    }
-
-    window.addEventListener('keydown', handleShortcut);
-    return () => window.removeEventListener('keydown', handleShortcut);
-  }, [searchOpen]);
-
-  useEffect(() => {
-    if (!searchOpen || totalMatchCount === 0) return;
-    const target = document.querySelectorAll('[data-search-hit]')[activeFlatMatchIndex] as HTMLElement | undefined;
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [activeFlatMatchIndex, searchOpen, totalMatchCount]);
-
-  useEffect(() => {
-    const input = composerInputRef.current;
+    const input = composerRef.current;
     if (!input) return;
-    input.style.height = '0px';
-    input.style.height = `${Math.min(160, Math.max(44, input.scrollHeight))}px`;
+    input.style.height = '44px';
+    input.style.height = `${Math.min(140, Math.max(44, input.scrollHeight))}px`;
   }, [composerValue]);
 
-  function moveMatch(direction: 1 | -1) {
-    if (totalMatchCount === 0) return;
-    setActiveFlatMatchIndex(current => (current + direction + totalMatchCount) % totalMatchCount);
-  }
-
-  function closeSearch() {
-    setSearchOpen(false);
-    setSearchQuery('');
-    setSearchMatches([]);
-    setActiveFlatMatchIndex(0);
-  }
+  useEffect(() => {
+    conversationRef.current?.scrollTo({ top: conversationRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, sending]);
 
   function submitComposer() {
-    if (sending || !composerValue.trim()) return;
-    void sendMessage();
+    const nextMessage = (composerRef.current?.value ?? composerValue).trim();
+    if (sending || !nextMessage) return;
+    if (nextMessage !== composerValue) setComposerValue(nextMessage);
+    void sendMessage(nextMessage);
+  }
+
+  function applyTool(tool: typeof COMPOSER_TOOLS[number]) {
+    const project = currentProject?.name ?? 'this project';
+    const prompts: Record<typeof COMPOSER_TOOLS[number], string> = {
+      Files: `Use files from ${project} and `,
+      Commands: '/',
+      Projects: `Use ${project} context to `,
+      Mentions: '@',
+    };
+    setComposerValue(prompts[tool]);
+    window.setTimeout(() => composerRef.current?.focus(), 0);
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto', minHeight: 0, height: '100%' }}>
-      {searchOpen ? (
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'grid', gap: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto auto', gap: 10, alignItems: 'center' }}>
-            <input
-              ref={searchInputRef}
-              value={searchQuery}
-              onChange={event => setSearchQuery(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  moveMatch(event.shiftKey ? -1 : 1);
-                }
-                if (event.key === 'Escape') {
-                  event.preventDefault();
-                  closeSearch();
-                }
-              }}
-              placeholder="Search this chat"
-              style={{
-                minHeight: 42,
-                borderRadius: 12,
-                border: '1px solid var(--border)',
-                background: 'rgba(255,255,255,0.03)',
-                color: 'inherit',
-                padding: '0 12px',
-                font: 'inherit',
-              }}
-            />
-            <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-              {searchQuery.trim() ? `${Math.min(activeFlatMatchIndex + 1, totalMatchCount || 0)}/${totalMatchCount}` : '0/0'}
-            </span>
-            <Button variant="secondary" onClick={() => moveMatch(-1)}>Prev</Button>
-            <Button variant="secondary" onClick={() => moveMatch(1)}>Next</Button>
-          </div>
-          {searchQuery.trim() && totalMatchCount === 0 ? (
-            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>No matches in this chat.</div>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div style={{ minHeight: 0, overflow: 'auto', padding: 28, display: 'grid', gap: 20 }}>
-        {messages.length === 0 ? (
-          <div style={{ display: 'grid', gap: 20, alignContent: 'center', minHeight: '100%' }}>
-            <div style={{ display: 'grid', gap: 12 }}>
-              <div style={{ color: 'var(--text-secondary)' }}>
-                Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'} {browserSession?.agentName ?? 'there'}
-              </div>
-              <h1 style={{ margin: 0, fontSize: 'clamp(34px, 5vw, 56px)', letterSpacing: 0 }}>
-                What would you like your Super AgentOS to do?
-              </h1>
-            </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              {SUGGESTIONS.map(item => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setComposerValue(item)}
-                  style={{
-                    minHeight: 42,
-                    padding: '0 16px',
-                    borderRadius: 999,
-                    border: '1px solid var(--border)',
-                    background: 'rgba(255,255,255,0.03)',
-                    color: 'inherit',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {item}
-                </button>
-              ))}
+    <div className="nl-studio-panel">
+      <section className="nl-chat-surface">
+        <header className="nl-studio-header">
+          <div>
+            <div className="nl-kicker">Super AgentOS</div>
+            <h1>{session?.title ?? 'Super AgentOS'}</h1>
+            <div className="nl-chat-meta">
+              <span>{sending ? 'Running' : 'Ready'}</span>
+              <span>{messages.length} message{messages.length === 1 ? '' : 's'}</span>
+              {currentProject ? <span>{currentProject.name}</span> : null}
             </div>
           </div>
-        ) : (
-          messages.map(message => {
-            const positions = searchMatches.find(item => item.messageId === message.id)?.matchPositions ?? [];
-            const bounds = matchBounds.get(message.id);
-            const activeLocalIndex = bounds && activeFlatMatchIndex >= bounds.start && activeFlatMatchIndex < bounds.start + bounds.count
-              ? activeFlatMatchIndex - bounds.start
-              : -1;
-
-            return (
-              <article
-                key={message.id}
-                style={{
-                  maxWidth: 840,
-                  justifySelf: message.role === 'user' ? 'end' : 'start',
-                  padding: '18px 20px',
-                  borderRadius: 22,
-                  background: message.role === 'user' ? 'rgba(20, 184, 166, 0.16)' : 'rgba(255,255,255,0.03)',
-                  border: '1px solid var(--border)',
-                  lineHeight: 1.8,
-                }}
+          <div className="nl-recent-chats">
+            <button type="button" className="nl-new-chat" onClick={() => void createSession()}>New Chat</button>
+            {recentChats.length > 0 ? recentChats.map(chat => (
+              <button
+                key={chat.id}
+                type="button"
+                className={chat.id === session?.id ? 'active' : ''}
+                onClick={() => selectSession(chat.id)}
               >
-                {positions.length > 0
-                  ? renderHighlightedContent(message.content, positions, activeLocalIndex, message.id)
-                  : renderMarkdown(message.content)}
-                <MessageActions
-                  message={message}
-                  onRetry={content => void sendMessage(content)}
-                  onEdit={content => setComposerValue(content)}
-                />
-              </article>
-            );
-          })
-        )}
-        {executions.length > 0 ? (
-          <div style={{ maxWidth: 840, display: 'grid', gap: 10 }}>
-            {executions.slice(0, 4).map(execution => (
-              <div key={execution.id} style={{ padding: '12px 14px', borderRadius: 14, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)', display: 'grid', gap: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                  <strong>{execution.title}</strong>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{execution.status}</span>
-                </div>
-                {execution.failure ? (
-                  <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-                    {String(execution.failure.whatFailed ?? execution.failure.why ?? 'Execution failed')}
-                  </div>
-                ) : null}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {chat.title}
+              </button>
+            )) : <span>{browserSession?.agentName ? `Ready for ${browserSession.agentName}` : 'Ready'}</span>}
+          </div>
+        </header>
+
+        <div className="nl-conversation" ref={conversationRef}>
+          {messages.length === 0 ? (
+            <div className="nl-empty-conversation">
+              <span>Conversation</span>
+              <strong>What would you like your Super AgentOS to do?</strong>
+            </div>
+          ) : messages.map(message => (
+            <article key={message.id} className={`nl-message ${message.role}`}>
+              <div className="nl-message-role">{message.role === 'assistant' ? 'Super AgentOS' : 'You'}</div>
+              <div className="nl-message-body">{renderContent(message.content)}</div>
+              <div className="nl-message-actions">
+                <button type="button" onClick={() => void navigator.clipboard?.writeText(message.content)}>Copy</button>
+                {message.role === 'user' ? <button type="button" onClick={() => setComposerValue(message.content)}>Edit</button> : null}
+                {message.role === 'user' ? <button type="button" onClick={() => void sendMessage(message.content)}>Retry</button> : null}
+                {message.role === 'assistant' && lastUserMessage ? <button type="button" onClick={() => void sendMessage(lastUserMessage)}>Regenerate</button> : null}
+              </div>
+            </article>
+          ))}
+
+          {sending ? (
+            <div className="nl-message assistant nl-streaming">
+              <div className="nl-message-role">Super AgentOS</div>
+              <div className="nl-message-body"><p>Working...</p></div>
+              <div className="nl-message-actions">
+                <button type="button" onClick={() => void stopGeneration()}>Stop</button>
+              </div>
+            </div>
+          ) : null}
+
+          {executions.length > 0 ? (
+            <div className="nl-runtime-strip">
+              {executions.slice(0, 3).map(execution => (
+                <div key={execution.id}>
+                  <span>{execution.title}</span>
+                  <strong>{execution.status}</strong>
                   {(['pause', 'resume', 'retry', 'cancel'] as const).map(action => (
-                    <button key={action} type="button" onClick={() => void requestExecutionAction(execution.id, action)} style={actionStyle}>{action}</button>
+                    <button key={action} type="button" onClick={() => void requestExecutionAction(execution.id, action)}>{action}</button>
                   ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="nl-suggestion-chips">
+        {SUGGESTIONS.map(item => (
+          <button key={item} type="button" onClick={() => setComposerValue(item)}>{item}</button>
+        ))}
       </div>
 
-      <div style={{ borderTop: '1px solid var(--border)', padding: '10px clamp(12px, 3vw, 24px) 14px', display: 'grid', gap: 10, background: 'var(--bg-primary)', zIndex: 2 }}>
+      <section className="nl-composer-zone">
         {pendingApproval ? (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '12px 14px',
-              borderRadius: 16,
-              border: '1px solid rgba(251, 191, 36, 0.24)',
-              background: 'rgba(251, 191, 36, 0.08)',
-            }}
-          >
+          <div className="nl-approval-row">
             <span>{pendingApproval.reply}</span>
             <Button onClick={approvePending}>Approve</Button>
           </div>
         ) : null}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateRows: 'auto 34px',
-            gap: 4,
-            width: 'min(780px, 100%)',
-            justifySelf: 'center',
-            padding: '8px 10px 8px',
-            borderRadius: 20,
-            border: '1px solid rgba(148, 163, 184, 0.24)',
-            background: 'rgba(255,255,255,0.055)',
-            boxShadow: '0 14px 45px rgba(0,0,0,0.16)',
-          }}
-        >
+        <form className="nl-composer" onSubmit={event => {
+          event.preventDefault();
+          submitComposer();
+        }}>
           <textarea
-            ref={composerInputRef}
+            ref={composerRef}
             value={composerValue}
             onChange={event => setComposerValue(event.target.value)}
             onKeyDown={event => {
@@ -416,64 +172,333 @@ export default function NLStudioPanel() {
                 submitComposer();
               }
             }}
-            placeholder="Message your Super AgentOS"
+            placeholder="Message Super AgentOS"
             rows={1}
-            style={{
-              width: '100%',
-              minHeight: 38,
-              maxHeight: 132,
-              border: 'none',
-              outline: 'none',
-              resize: 'none',
-              overflowY: 'auto',
-              background: 'transparent',
-              color: 'inherit',
-              font: 'inherit',
-              lineHeight: 1.5,
-              padding: '7px 6px 4px',
-            }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchOpen(true);
-                  window.setTimeout(() => searchInputRef.current?.focus(), 0);
-                }}
-                style={composerButtonStyle}
-              >
-                Search
-              </button>
-              <span style={{ color: 'var(--text-tertiary)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                Shift+Enter for newline
-              </span>
+          <div className="nl-composer-footer">
+            <div>
+              {COMPOSER_TOOLS.map(tool => (
+                <button key={tool} type="button" onClick={() => applyTool(tool)}>{tool}</button>
+              ))}
             </div>
-            <button
-              type="button"
-              aria-label={sending ? 'Super AgentOS is working' : 'Send message'}
-              disabled={sending || !composerValue.trim()}
-              onClick={submitComposer}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 999,
-                border: '1px solid rgba(20, 184, 166, 0.45)',
-                background: sending || !composerValue.trim() ? 'rgba(255,255,255,0.08)' : 'var(--accent)',
-                color: sending || !composerValue.trim() ? 'var(--text-tertiary)' : '#021014',
-                cursor: sending || !composerValue.trim() ? 'default' : 'pointer',
-                font: 'inherit',
-                fontWeight: 800,
-                lineHeight: 1,
-                display: 'grid',
-                placeItems: 'center',
-              }}
-            >
-              {sending ? '...' : '↑'}
+            <button type="button" className="nl-send" disabled={sending || !composerValue.trim()} aria-label="Send message" onClick={submitComposer}>
+              {sending ? '...' : '^'}
             </button>
+            {sending ? <button type="button" className="nl-stop" onClick={() => void stopGeneration()}>Stop</button> : null}
           </div>
-        </div>
-      </div>
+        </form>
+      </section>
+
+      <style>{`
+        .nl-studio-panel {
+          min-height: 0;
+          height: 100%;
+          display: grid;
+          grid-template-rows: minmax(0, 1fr) auto auto;
+          overflow: hidden;
+        }
+
+        .nl-chat-surface {
+          min-height: 0;
+          display: grid;
+          grid-template-rows: auto minmax(0, 1fr);
+          overflow: hidden;
+        }
+
+        .nl-studio-header {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(160px, 280px);
+          gap: 12px;
+          padding: 14px 18px 8px;
+        }
+
+        .nl-kicker {
+          color: var(--text-tertiary);
+          font-size: 0.78rem;
+        }
+
+        .nl-chat-meta {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-top: 8px;
+        }
+
+        .nl-chat-meta span {
+          min-height: 22px;
+          display: inline-flex;
+          align-items: center;
+          padding: 0 7px;
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          color: var(--text-secondary);
+          background: rgba(255,255,255,0.025);
+          font-size: 0.72rem;
+        }
+
+        .nl-studio-header h1 {
+          margin: 0;
+          font-size: clamp(2rem, 4vw, 3.4rem);
+          line-height: 1;
+          letter-spacing: 0;
+        }
+
+        .nl-recent-chats {
+          display: grid;
+          gap: 4px;
+          align-content: start;
+        }
+
+        .nl-recent-chats button,
+        .nl-recent-chats span {
+          min-height: 28px;
+          padding: 0 8px;
+          border: 1px solid var(--border);
+          border-radius: 6px;
+          background: rgba(255,255,255,0.018);
+          color: var(--text-secondary);
+          font-size: 0.78rem;
+          text-align: left;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .nl-recent-chats button.active,
+        .nl-recent-chats button:hover {
+          color: var(--text-primary);
+          border-color: rgba(20, 184, 166, 0.3);
+          background: rgba(20, 184, 166, 0.1);
+        }
+
+        .nl-recent-chats .nl-new-chat {
+          justify-content: center;
+          color: var(--text-primary);
+          border-color: rgba(20, 184, 166, 0.34);
+          background: rgba(20, 184, 166, 0.13);
+        }
+
+        .nl-conversation {
+          min-height: 0;
+          height: 100%;
+          padding: 8px 18px 12px;
+          overflow: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .nl-empty-conversation {
+          min-height: 75%;
+          display: grid;
+          align-content: center;
+          gap: 10px;
+          color: var(--text-secondary);
+        }
+
+        .nl-empty-conversation strong {
+          max-width: 720px;
+          color: var(--text-primary);
+          font-size: clamp(1.8rem, 4vw, 3.4rem);
+          line-height: 1.12;
+          font-weight: 600;
+        }
+
+        .nl-message {
+          max-width: 760px;
+          display: grid;
+          gap: 6px;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: rgba(255,255,255,0.025);
+        }
+
+        .nl-message.user {
+          align-self: flex-end;
+          background: rgba(20, 184, 166, 0.11);
+        }
+
+        .nl-streaming {
+          border-color: rgba(20, 184, 166, 0.3);
+        }
+
+        .nl-message-role {
+          color: var(--text-tertiary);
+          font-size: 0.72rem;
+          text-transform: capitalize;
+        }
+
+        .nl-message-body {
+          color: var(--text-primary);
+          line-height: 1.55;
+        }
+
+        .nl-message-body p {
+          margin: 0 0 8px;
+        }
+
+        .nl-message-code {
+          margin: 0;
+          padding: 10px;
+          overflow: auto;
+          border-radius: 7px;
+          background: var(--code-bg);
+          font-size: 0.8rem;
+        }
+
+        .nl-message-actions,
+        .nl-runtime-strip div {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+
+        .nl-message-actions button,
+        .nl-runtime-strip button,
+        .nl-suggestion-chips button,
+        .nl-composer-footer button {
+          min-height: 26px;
+          padding: 0 8px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.025);
+          color: var(--text-secondary);
+          font-size: 0.75rem;
+          cursor: pointer;
+        }
+
+        .nl-runtime-strip {
+          display: grid;
+          gap: 6px;
+          max-width: 760px;
+        }
+
+        .nl-runtime-strip div {
+          padding: 8px 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: rgba(255,255,255,0.018);
+        }
+
+        .nl-runtime-strip span {
+          min-width: 0;
+          flex: 1;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .nl-suggestion-chips {
+          display: flex;
+          gap: 6px;
+          padding: 8px 18px;
+          overflow-x: auto;
+          border-top: 1px solid var(--border);
+        }
+
+        .nl-composer-zone {
+          display: grid;
+          gap: 8px;
+          padding: 10px 18px 14px;
+          background: linear-gradient(180deg, rgba(7,17,25,0.78), var(--bg-primary));
+        }
+
+        .nl-approval-row {
+          width: min(820px, 100%);
+          justify-self: center;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 8px 10px;
+          border: 1px solid rgba(251, 191, 36, 0.24);
+          border-radius: 8px;
+          background: rgba(251, 191, 36, 0.08);
+        }
+
+        .nl-composer {
+          width: min(860px, 100%);
+          justify-self: center;
+          display: grid;
+          gap: 8px;
+          padding: 10px;
+          border: 1px solid rgba(148, 163, 184, 0.28);
+          border-radius: 18px;
+          background: rgba(13, 23, 32, 0.96);
+        }
+
+        .nl-composer textarea {
+          width: 100%;
+          min-height: 44px;
+          max-height: 140px;
+          border: 0;
+          outline: 0;
+          resize: none;
+          background: transparent;
+          color: var(--text-primary);
+          line-height: 1.5;
+        }
+
+        .nl-composer-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+
+        .nl-composer-footer > div {
+          min-width: 0;
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+        }
+
+        .nl-send {
+          width: 32px;
+          height: 32px;
+          flex: 0 0 32px;
+          display: grid;
+          place-items: center;
+          border-color: rgba(20, 184, 166, 0.45) !important;
+          background: var(--accent) !important;
+          color: #021014 !important;
+        }
+
+        .nl-send:disabled {
+          background: rgba(255,255,255,0.06) !important;
+          color: var(--text-tertiary) !important;
+        }
+
+        .nl-stop {
+          border-color: rgba(248, 113, 113, 0.32) !important;
+          color: #fecaca !important;
+          background: rgba(127, 29, 29, 0.34) !important;
+        }
+
+        @media (max-width: 720px) {
+          .nl-studio-header {
+            grid-template-columns: minmax(0, 1fr);
+            padding: 12px;
+          }
+
+          .nl-recent-chats {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .nl-conversation,
+          .nl-suggestion-chips,
+          .nl-composer-zone {
+            padding-left: 12px;
+            padding-right: 12px;
+          }
+
+          .nl-studio-header h1 {
+            font-size: 2rem;
+          }
+        }
+      `}</style>
     </div>
   );
 }

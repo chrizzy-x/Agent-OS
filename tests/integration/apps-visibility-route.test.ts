@@ -73,6 +73,7 @@ describe.sequential('app visibility routes', () => {
     vi.clearAllMocks();
     stateFile = join(tmpdir(), `agentos-appstore-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
     process.env.AGENTOS_STATE_FILE = stateFile;
+    process.env.AGENTOS_ALLOW_LOCAL_APPSTORE_FALLBACK = '1';
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === 'agent_apps') {
         return {
@@ -96,11 +97,23 @@ describe.sequential('app visibility routes', () => {
   });
 
   afterEach(() => {
+    delete process.env.AGENTOS_ALLOW_LOCAL_APPSTORE_FALLBACK;
     rmSync(stateFile, { force: true });
   });
 
   it('shows only public apps in the public listing', async () => {
     const response = await getApps(new NextRequest('http://localhost/api/apps'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.apps.map((app: { slug: string }) => app.slug)).toEqual(['public-app']);
+  });
+
+  it('keeps signed-in generic Appstore browsing public-only', async () => {
+    const token = createAgentToken('owner-agent', { expiresIn: '1h' });
+    const response = await getApps(new NextRequest('http://localhost/api/apps', {
+      headers: { Authorization: `Bearer ${token}` },
+    }));
     const body = await response.json();
 
     expect(response.status).toBe(200);

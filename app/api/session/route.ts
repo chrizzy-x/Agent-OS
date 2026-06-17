@@ -34,10 +34,16 @@ async function buildSessionPayload(agentId: string, token: string) {
   const claims = verifyAgentTokenClaims(token);
   const agent = await findAccountById(agentId);
   const plan = getPlanDescriptor(agent?.metadata.plan);
+  const avatarUrl = typeof agent?.metadata.avatar_url === 'string'
+    ? agent.metadata.avatar_url
+    : typeof agent?.metadata.avatarUrl === 'string'
+      ? agent.metadata.avatarUrl
+      : null;
   return {
     authenticated: true,
     session: {
       agentName: agent?.name ?? null,
+      avatarUrl,
       plan: plan.plan,
       planLabel: plan.label,
       accountType: plan.enterprise ? 'enterprise' : 'retail',

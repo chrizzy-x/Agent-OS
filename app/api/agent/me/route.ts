@@ -35,6 +35,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       name: data?.name ?? null,
       email: typeof metadata.email === 'string' ? metadata.email : null,
       username: typeof metadata.username === 'string' ? metadata.username : null,
+      avatarUrl: typeof metadata.avatar_url === 'string' ? metadata.avatar_url : typeof metadata.avatarUrl === 'string' ? metadata.avatarUrl : null,
       bio: typeof metadata.bio === 'string' ? metadata.bio : null,
       website: typeof metadata.website === 'string' ? metadata.website : null,
       preferences: {
@@ -77,6 +78,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     const metadataPatch: Record<string, unknown> = {
       ...(typeof body.email === 'string' ? { email: body.email.trim() } : {}),
       ...(typeof body.username === 'string' ? { username: body.username.trim() } : {}),
+      ...(typeof body.avatarUrl === 'string' ? { avatar_url: body.avatarUrl.trim().slice(0, 180000) } : {}),
       ...(typeof body.bio === 'string' ? { bio: body.bio.trim() } : {}),
       ...(typeof body.website === 'string' ? { website: body.website.trim() } : {}),
       ...(typeof incomingPreferences.theme === 'string' ? { theme: incomingPreferences.theme } : {}),
@@ -123,6 +125,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
       const account = state.accounts[ctx.agentId];
       if (!account) return;
       if (name) account.agentName = name;
+      if (typeof metadataPatch.avatar_url === 'string') account.avatarUrl = String(metadataPatch.avatar_url);
       account.updatedAt = new Date().toISOString();
       account.email = typeof metadataPatch.email === 'string' ? String(metadataPatch.email) : account.email;
     });

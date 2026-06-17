@@ -7,10 +7,10 @@ import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-ses
 import { getUpgradeablePlans, PLAN_LABELS, type AgentPlan } from '@/src/auth/tiers';
 
 const PLAN_CARDS: Array<{ plan: AgentPlan; summary: string; note: string }> = [
-  { plan: 'retail_free', summary: 'Studio, workflows, agents, apps, skills, and Vault.', note: 'Browser session only.' },
-  { plan: 'retail_pro', summary: 'Retail Free plus bearer-token access and higher limits.', note: 'Best for API and CLI use.' },
-  { plan: 'enterprise_plus', summary: 'Retail Pro plus SDK, developer console, apps, skills, MCP, and FFP.', note: 'Best for builders and teams.' },
-  { plan: 'enterprise_max', summary: 'Enterprise Plus plus audit and governance headroom.', note: 'Highest beta plan.' },
+  { plan: 'retail_free', summary: 'Core Super AgentOS, workspace installs, workflows, subagents, and Vault.', note: 'Browser session access.' },
+  { plan: 'retail_pro', summary: 'Free plus bearer tokens, higher limits, and API access.', note: 'Best for API and CLI use.' },
+  { plan: 'enterprise_plus', summary: 'Pro plus SDK, developer console, publishing, MCP, and team controls.', note: 'Best for builders and teams.' },
+  { plan: 'enterprise_max', summary: 'Enterprise plus highest limits, governance, and diagnostics.', note: 'Highest plan.' },
 ];
 
 export default function BillingPage() {

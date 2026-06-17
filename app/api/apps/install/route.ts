@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hasAdminAccess, requireRouteCapability } from '@/src/auth/request';
-import { getAgentAppReadiness, installAgentApp } from '@/src/appstore/service';
-import { runTrackedExecution } from '@/src/execution/service';
+import { getAgentAppReadiness } from '@/src/appstore/service';
+import { executeAgentOSAction } from '@/src/actions/service';
 import { appendStudioEvent } from '@/src/studio/persistence';
 import { assertWorkspaceMembership, listWorkspaces } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -75,25 +75,18 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const tracked = await runTrackedExecution({
-      agentId: ctx.agentId,
+    const actionResult = await executeAgentOSAction(ctx, {
+      action: 'install_app',
+      source: 'manual_ui',
       workspaceId,
       sessionId,
-      sourceType: 'app',
-      sourceId: slug,
-      appId: readiness.app.id,
-      title: `Install app ${slug}`,
-      input: { slug, permissionsApproved },
-      run: () => installAgentApp({
-        agentId: ctx.agentId,
+      canManageAll: hasAdminAccess(request.headers),
+      payload: {
         slug,
-        workspaceId,
-        viewerWorkspaceIds,
-        canManageAll: hasAdminAccess(request.headers),
         permissionsApproved,
-      }),
+      },
     });
-    const result = tracked.result;
+    const result = actionResult.result as { app: { slug: string; name: string }; installation: unknown };
     if (sessionId) {
       await appendStudioEvent({
         ownerAgentId: ctx.agentId,
@@ -114,7 +107,7 @@ export async function POST(request: NextRequest) {
         updateAvailable: false,
         targets: readiness.targets,
       },
-      execution: tracked.execution,
+      execution: actionResult.execution,
     }, { status: 201 });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

@@ -5,10 +5,10 @@ import Nav from '@/components/Nav';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import {
-  AppCard,
   Badge,
   Button,
   Card,
+  DataTable,
   EmptyState,
   LoadingState,
   PageHeader,
@@ -91,9 +91,9 @@ export default function SkillsPage() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/skills" />
+      <Nav activePath="/skills/installed" />
       <WorkspaceShell
-        activePath="/skills"
+        activePath="/skills/installed"
         aside={(
           <Card>
             <div className="os-entity-title" style={{ marginBottom: 12 }}>Summary</div>
@@ -126,19 +126,19 @@ export default function SkillsPage() {
               {filteredInstalled.length === 0 ? (
                 <EmptyState title="No installed skills" body="Use the Skill Store to install focused capabilities into this workspace." action={<Button href="/skills">Open Skill Store</Button>} />
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-                  {filteredInstalled.map(entry => entry.skill ? (
-                    <AppCard
-                      key={entry.id}
-                      href={`/skills/${entry.skill.slug}`}
-                      title={entry.skill.name}
-                      description={entry.skill.description}
-                      runtime={entry.skill.category}
-                      verified={entry.skill.verified === true}
-                      footer={<div className="os-entity-meta">Installed {new Date(entry.installed_at).toLocaleDateString()}</div>}
-                    />
-                  ) : null)}
-                </div>
+                <DataTable
+                  columns={['Skill', 'Category', 'Installed', 'Status', '']}
+                  rows={filteredInstalled.filter(entry => entry.skill).map(entry => [
+                    <div key={`${entry.id}-skill`}>
+                      <div className="os-entity-title">{entry.skill?.name}</div>
+                      <div className="os-entity-copy">{entry.skill?.description}</div>
+                    </div>,
+                    entry.skill?.category ?? 'Skill',
+                    new Date(entry.installed_at).toLocaleDateString(),
+                    entry.skill?.verified === true ? <Badge key={`${entry.id}-verified`} tone="success">Verified</Badge> : <Badge key={`${entry.id}-installed`} tone="default">Installed</Badge>,
+                    <Button key={`${entry.id}-open`} href={`/skills/${entry.skill?.slug}`} variant="secondary">Open</Button>,
+                  ])}
+                />
               )}
             </Card>
 
@@ -150,19 +150,18 @@ export default function SkillsPage() {
               {filteredPublished.length === 0 ? (
                 <div className="os-empty-body">No published skills from this workspace yet.</div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-                  {filteredPublished.map(skill => (
-                    <AppCard
-                      key={skill.id}
-                      href={`/skills/${skill.slug}`}
-                      title={skill.name}
-                      description={skill.description}
-                      runtime={skill.category}
-                      verified={skill.verified === true}
-                      footer={<div className="os-entity-meta">{skill.visibility ?? 'private'}</div>}
-                    />
-                  ))}
-                </div>
+                <DataTable
+                  columns={['Skill', 'Category', 'Visibility', '']}
+                  rows={filteredPublished.map(skill => [
+                    <div key={`${skill.id}-skill`}>
+                      <div className="os-entity-title">{skill.name}</div>
+                      <div className="os-entity-copy">{skill.description}</div>
+                    </div>,
+                    skill.category,
+                    skill.visibility ?? 'private',
+                    <Button key={`${skill.id}-open`} href={`/skills/${skill.slug}`} variant="secondary">Open</Button>,
+                  ])}
+                />
               )}
             </Card>
           </div>

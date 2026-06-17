@@ -54,7 +54,7 @@ type SubagentDetailPageProps = {
 };
 
 export default function SubagentDetailPage({
-  activePath = '/agents',
+  activePath = '/subagents',
 }: SubagentDetailPageProps) {
   const params = useParams<{ id: string }>();
   const id = params?.id ?? '';
