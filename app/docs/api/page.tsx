@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.6.2", "timestamp": "...", "tools": 44 }',
+    response: '{ "status": "ok", "version": "6.6.3", "timestamp": "...", "tools": 44 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -211,17 +211,17 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Read the workspace FFP temp toggle. Real Fabric Furge Protocol consensus is not live in V6.6.2.',
+    desc: 'Read the disabled FFP compatibility status. All runtime execution bypasses FFP in v6.6.3.',
     response: '{ "enabled": false, "status": "FFP Disabled", "route": "Multi-agent activities -> Unified Execution Engine" }',
   },
   {
     method: 'PATCH', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Enable or disable the temporary FFP routing abstraction for multi-agent workflows, subagent collaboration, and multi-agent delegation only.',
+    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.3.',
     body: [
       { field: 'enabled', type: 'boolean', required: true, desc: 'Workspace-level FFP temp toggle' },
       { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace scope' },
     ],
-    response: '{ "enabled": true, "status": "FFP Enabled", "route": "Multi-agent activities -> FFP temporary abstraction layer -> Unified Execution Engine" }',
+    response: '{ "error": "Method Not Allowed", "enabled": false, "status": "FFP Disabled" }',
   },
   {
     method: 'POST', path: '/api/studio/command', auth: 'Browser Session or Bearer (Agent)',

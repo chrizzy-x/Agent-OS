@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import Nav from '@/components/Nav';
 
 export default function SurfaceShell(props: {
   activePath: string;
@@ -9,8 +8,7 @@ export default function SurfaceShell(props: {
   children: ReactNode;
 }) {
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-      <Nav activePath={props.activePath} />
+    <div style={{ minHeight: '100%', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       <main className="container" style={{ paddingTop: 32, paddingBottom: 48 }}>
         {props.title ? (
           <header

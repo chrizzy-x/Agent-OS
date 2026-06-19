@@ -1,4 +1,6 @@
-# AgentOS V6.6.2 Technical Overview
+# AgentOS V6.6.3 Technical Overview
+
+V6.6.3 mounts one persistent application shell around product and documentation routes. The shell owns workspace, project, session, navigation, responsive sidebars, context, and interaction telemetry while Studio remains one stateful module inside the operating system.
 
 > Super AgentOS-first AI operating system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
 
@@ -31,7 +33,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 
 | Layer | What it provides |
 |-------|------------------|
-| **Super AgentOS** | Streaming chat, files, memory, execution cards, approvals, citations where available, retry/copy/edit actions, and automatic routing |
+| **Super AgentOS** | Conversation-first NL Studio with real SSE streaming, Markdown/GFM replies, stop/cancel, lazy chat creation, persisted history, search, files, memory, approvals, and automatic routing |
 | **Execution** | Persisted runs for Super AgentOS, apps, skills, workflows, MCP, files, memory, primitives, logs, failures, cost, and recovery state |
 | **Recovery** | Panic stop, pause/resume/retry/cancel/rollback, failure inspection, and notifications |
 | **Files** | Upload, delete, rename, preview, summarize, search, and permission-aware access |
@@ -182,6 +184,23 @@ Agent App / Service
 | Uptime SLA | 99.9% |
 | Storage | Unlimited per agent |
 
+## NL Studio
+
+NL Studio is the default `/studio` mode. It opens as a clean draft instead of creating an empty database session. The first submitted message creates the chat, persists the user turn, streams the assistant response over SSE, and stores the completed or partial assistant output.
+
+The current interface includes:
+
+- prompt suggestions for new chats
+- a responsive sticky composer
+- Markdown and GitHub-flavored Markdown rendering
+- live generation status and stop control
+- safe cancellation that waits for the stream to settle
+- persisted recent chats and cross-chat search
+- session reopening across project boundaries
+- separate NL Studio, Workflow Studio, and Code Studio modes
+
+See [studio.md](./studio.md) for route contracts and UI behavior.
+
 ---
 
 ## Security
@@ -304,11 +323,11 @@ For technical support, API reference, and community resources, visit the [Agent 
 
 ## FFP Temp
 
-FFP is temporary in V6.6.2. It is a workspace-level toggle and future wiring point for Fabric Furge Protocol.
+FFP is disabled in V6.6.3. The route and compatibility records remain visible as a future wiring point for Fabric Furge Protocol.
 
 | State | Route |
 |-------|-------|
 | **FFP Disabled** | Multi-agent activities -> Unified Execution Engine |
 | **FFP Enabled** | Multi-agent activities -> FFP temporary abstraction layer -> Unified Execution Engine |
 
-FFP temp affects only multi-agent workflows, subagent collaboration, and multi-agent delegation. Single-agent execution bypasses FFP. V6.6.2 does not ship a consensus engine, proposal voting, or fake consensus results.
+All execution bypasses FFP in V6.6.3. No consensus engine, proposal voting, activation control, or fake consensus result is exposed.

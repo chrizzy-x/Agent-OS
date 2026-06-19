@@ -47,18 +47,26 @@ function normalizeMcpPayload(value: unknown): McpRegistryPayload | null {
 export default function McpDiagnosticsPage() {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [payload, setPayload] = useState<McpRegistryPayload | null>(null);
+  const [externalAgents, setExternalAgents] = useState<Array<{ agentRef: string; name: string; status: string | null; last_active_at: string | null }>>([]);
+  const [connectors, setConnectors] = useState<Array<{ id: string; name: string; healthStatus: string; toolCount: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessionData, registryRes] = await Promise.all([
+      const [sessionData, registryRes, agentsRes, connectorsRes] = await Promise.all([
         fetchBrowserSession().catch(() => null),
         fetch('/api/mcp', { cache: 'no-store' }),
+        fetch('/api/agents', { cache: 'no-store' }),
+        fetch('/api/connectors', { cache: 'no-store' }),
       ]);
       const registry = await registryRes.json();
+      const agents = await agentsRes.json();
+      const connectorPayload = await connectorsRes.json();
       setSession(sessionData);
       setPayload(registryRes.ok ? normalizeMcpPayload(registry) : null);
+      setExternalAgents(agentsRes.ok ? agents.agents ?? [] : []);
+      setConnectors(connectorsRes.ok ? connectorPayload.connectors ?? [] : []);
     } catch {
       setPayload(null);
     } finally {
@@ -104,6 +112,30 @@ export default function McpDiagnosticsPage() {
           <EmptyState title="Diagnostics unavailable" body="The MCP registry could not be loaded." />
         ) : (
           <div className="os-drawer-stack">
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Connected Agents</div>
+              <div className="os-drawer-stack">
+                {externalAgents.length > 0 ? externalAgents.map(agent => (
+                  <div key={agent.agentRef} className="os-entity-head">
+                    <span className="os-entity-copy">{agent.name}</span>
+                    <Badge tone={agent.status === 'active' ? 'success' : 'default'}>{agent.status ?? 'idle'}</Badge>
+                  </div>
+                )) : <div className="os-empty-body">No external agents connected.</div>}
+              </div>
+            </Card>
+
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Connected Services</div>
+              <div className="os-drawer-stack">
+                {connectors.length > 0 ? connectors.map(connector => (
+                  <div key={connector.id} className="os-entity-head">
+                    <span className="os-entity-copy">{connector.name}</span>
+                    <Badge tone={connector.healthStatus === 'active' ? 'success' : 'default'}>{connector.healthStatus}</Badge>
+                  </div>
+                )) : <div className="os-empty-body">No external services connected.</div>}
+              </div>
+            </Card>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
               <MetricCard label="Total tools" value={payload.tools.length} />
               <MetricCard label="Primitives" value={sourceCounts.primitives} />
@@ -113,7 +145,7 @@ export default function McpDiagnosticsPage() {
             </div>
 
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Registered servers</div>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>External MCP Registry</div>
               <div className="os-drawer-stack">
                 {payload.servers.length === 0 ? <div className="os-empty-body">No external connectors registered.</div> : payload.servers.map(server => (
                   <Card key={server.name}>
@@ -129,7 +161,7 @@ export default function McpDiagnosticsPage() {
             </Card>
 
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Tool registry</div>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Connected Tools</div>
               <div className="os-drawer-stack">
                 {payload.tools.slice(0, 24).map(tool => (
                   <Card key={tool.name}>

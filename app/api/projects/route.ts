@@ -19,6 +19,8 @@ type ProjectSummaryItem = {
   users: number;
   href: string;
   workspaceId: string;
+  pinned: boolean;
+  metadata: Record<string, unknown>;
 };
 
 export async function GET(request: NextRequest) {
@@ -78,6 +80,8 @@ export async function GET(request: NextRequest) {
       users: sessionCounts.get(project.id) ?? 0,
       href: `/projects/${encodeURIComponent(project.id)}`,
       workspaceId: project.workspaceId,
+      pinned: project.metadata.pinned === true,
+      metadata: project.metadata,
     }));
 
     const chart = projectItems
@@ -94,7 +98,7 @@ export async function GET(request: NextRequest) {
         totalUsers: projectItems.reduce((sum, item) => sum + item.users, 0),
       },
       projects: projectItems,
-      favorites: projectItems.filter(item => item.status === 'active').slice(0, 3),
+      favorites: projectItems.filter(item => item.pinned),
       chart,
     });
   } catch (error) {

@@ -4,7 +4,7 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> V6.6.2
+> V6.6.3
 
 AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, and activity.
 
@@ -14,6 +14,12 @@ Live:
 
 Supporting message:
 - talk to it, build with it, and install what it needs
+
+## V6.6.3 status
+
+V6.6.3 restores the persistent AgentOS operating-system shell, complete top-level navigation, workspace/session/project access, desktop sidebars, mobile drawers, mode-aware Studio context, structured composer tools, Community, and read-only FFP Coming Soon behavior without removing v6.6.2 streaming or execution functionality.
+
+See [Navigation & Workspace Recovery release notes](RELEASE_NOTES_v6.6.3.md).
 
 ## V6.6.2 status
 
@@ -25,6 +31,9 @@ V6.6.2 ships:
 - notifications for completed tasks, failed tasks, approval requests, workflow completion, and execution status changes
 - `/` and `/studio` as the locked Super AgentOS operating surface, with conversation-first NL Studio as the default view
 - shared NL Studio, Workflow Studio, and Code Studio modes inside the Super AgentOS workspace
+- rebuilt NL Studio chat layout with an empty-state prompt launcher, sticky responsive composer, Markdown/GFM replies, visible streaming status, stop control, and desktop/mobile conversation parity
+- lazy chat creation so opening NL Studio starts clean without creating an empty persisted session
+- real SSE response streaming with partial-output persistence, safe cancellation, chat-history reopen, cross-project session selection, and search-backed recent chats
 - permissioned sharing and canonical `private|workspace|public` visibility across sessions, subagents, workflows, skills, memory, and governed file records
 - current-chat search and permission-filtered cross-session chat search
 - `/memory` for governed user, session, project, agent, workflow, app, and skill memory records with search, edit, delete, sharing, and export
@@ -37,7 +46,7 @@ V6.6.2 ships:
 - `/vault` with assignment-aware secret validation and runtime grants
 - hardened Vault runtime injection with temporary secret access, runtime cleanup, access audit events, and shared output redaction
 - `/mcp` with advanced tool discovery, connector diagnostics, and runtime execution visibility
-- `/ffp` with the V6.6.2 workspace toggle and temporary multi-agent routing hook
+- `/ffp` retained as disabled Coming Soon compatibility surface in V6.6.3
 - `/billing` with self-serve plan transitions across Free, Pro, Enterprise, and Enterprise Max
 - SDK app registration into factual public listings when an Enterprise SDK app is explicitly registered
 - global search across apps, skills, workflows, sessions, projects, agents, and Vault secret names only
@@ -52,9 +61,9 @@ V6.6.2 ships:
 Production verification:
 - URL: [https://www.agentos.services](https://www.agentos.services)
 - Deployment alias: [https://www.agentos.services](https://www.agentos.services)
-- Final deploy date: June 14, 2026
+- Final deploy date: June 18, 2026
 - `GET /health`: `200`, `version: 6.6.2`, `tools: 44`
-- Quality gates: `npm run lint`, `npm test`, and `npm run build` passed before final deployment
+- Quality gates: `npm run lint`, all 370 tests, `npm run build`, and Playwright desktop/mobile NL Studio flows passed before final deployment
 - Migrations: apply `src/storage/migrations/026_v651_unified_execution_release.sql`, `src/storage/migrations/027_v652_product_alignment.sql`, and `src/storage/migrations/028_v661_production_closure.sql` for unified executions, logs, notifications, Library, runtime controls, action audit metadata, and recovery fields
 - browser session refresh and expired-session handling across protected routes
 - enterprise-only SDK, developer, and publishing shells with signed-out and blocked states
@@ -203,6 +212,8 @@ npm run lint
 npm test
 npm run build
 ```
+
+NL Studio behavior and route details are documented in [docs/studio.md](docs/studio.md).
 
 ## Deployment
 

@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import SurfaceShell from '@/components/os/surface-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { ConfirmModal, Drawer } from '@/components/os/overlays';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
@@ -84,6 +86,7 @@ function platformBadges(app: AppDetails | null): string[] {
 }
 
 export default function AppstorePage() {
+  const shell = useApplicationShell();
   const drawer = useRouteDrawer<'app-preview' | 'app-install'>();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [apps, setApps] = useState<AgentAppListing[]>([]);
@@ -108,7 +111,7 @@ export default function AppstorePage() {
       setApps(publicData.apps ?? []);
       setSession(currentSession);
       if (currentSession) {
-        const installedRes = await fetch('/api/apps/installed', { cache: 'no-store' });
+        const installedRes = await fetch(`/api/apps/installed${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
         const installedData = await installedRes.json();
         setInstalledApps(installedData.installedApps ?? []);
       } else {
@@ -120,7 +123,7 @@ export default function AppstorePage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shell.activeWorkspaceId]);
 
   const loadDetail = useCallback(async (slug: string) => {
     setDetailLoading(true);
@@ -173,6 +176,12 @@ export default function AppstorePage() {
     }),
     [apps, category, search],
   );
+  const featuredApps = useMemo(() => apps.filter(app => app.verified).slice(0, 4), [apps]);
+  const developerProfiles = useMemo(() => [...new Map(
+    apps
+      .filter(app => app.publisherName)
+      .map(app => [app.publisherId || app.publisherName, { id: app.publisherId || app.publisherName, name: app.publisherName, apps: apps.filter(item => item.publisherName === app.publisherName).length }]),
+  ).values()].slice(0, 8), [apps]);
 
   const installedBySlug = useMemo(
     () => new Map(installedApps.map(app => [app.slug, app])),
@@ -208,6 +217,7 @@ export default function AppstorePage() {
         body: JSON.stringify({
           slug: detail.slug,
           permissionsApproved: requiredPermissions,
+          workspaceId: shell.activeWorkspaceId,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -313,8 +323,18 @@ export default function AppstorePage() {
         actions={session?.capabilities?.includes('create_app') ? <Button href="/developer/publish" variant="secondary">Publish app</Button> : undefined}
       >
         <div className="os-drawer-stack">
+          <Card>
+            <nav className="os-inline-actions" aria-label="App Store module">
+              <Link href="/appstore" className="btn-primary">Discovery</Link>
+              <a href="#installed-apps" className="btn-ghost">Installed Apps</a>
+              <a href="#app-categories" className="btn-ghost">Categories</a>
+              <a href="#featured-apps" className="btn-ghost">Featured Apps</a>
+              <a href="#developer-profiles" className="btn-ghost">Developer Profiles</a>
+            </nav>
+          </Card>
           {session ? (
             <Card>
+              <span id="installed-apps" />
               <div className="os-inline-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
                 <div className="os-entity-copy">{installedApps.length} installed</div>
                 <div className="os-inline-actions">
@@ -328,7 +348,25 @@ export default function AppstorePage() {
             </Card>
           ) : null}
           <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps" />
-          <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
+          <div id="app-categories">
+            <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
+          </div>
+          {featuredApps.length > 0 ? (
+            <Card>
+              <div id="featured-apps" className="os-entity-title">Featured Apps</div>
+              <div className="os-inline-actions">
+                {featuredApps.map(app => <Button key={app.id} variant="secondary" onClick={() => drawer.openDrawer('app-preview', app.slug)}>{app.name}</Button>)}
+              </div>
+            </Card>
+          ) : null}
+          {developerProfiles.length > 0 ? (
+            <Card>
+              <div id="developer-profiles" className="os-entity-title">Developer Profiles</div>
+              <div className="os-inline-actions">
+                {developerProfiles.map(profile => <Badge key={profile.id} tone="default">{profile.name} · {profile.apps}</Badge>)}
+              </div>
+            </Card>
+          ) : null}
         </div>
 
         {loading ? <LoadingState label="Loading App Store" /> : filtered.length === 0 ? (

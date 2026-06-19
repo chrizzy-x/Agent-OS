@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import {
   Button,
   DataTable,
@@ -40,6 +41,7 @@ export default function SubagentsPage({
   title = 'Subagents',
   subtitle = 'Create focused private agents for research, operations, testing, and vault-aware runtime work.',
 }: SubagentsPageProps) {
+  const shell = useApplicationShell();
   const [loading, setLoading] = useState(true);
   const [subagents, setSubagents] = useState<Subagent[]>([]);
   const [draft, setDraft] = useState({
@@ -56,19 +58,19 @@ export default function SubagentsPage({
     setLoading(true);
     try {
       const [subagentsRes, workspacesRes] = await Promise.all([
-        fetch('/api/subagents', { cache: 'no-store' }),
+        fetch(`/api/subagents${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
         fetch('/api/workspaces', { cache: 'no-store' }),
       ]);
       const subagentsData = await subagentsRes.json();
       const workspacesData = await workspacesRes.json();
       setSubagents(subagentsData.subagents ?? []);
-      setDraft(current => ({ ...current, workspaceId: current.workspaceId || workspacesData.workspaces?.[0]?.id || '' }));
+      setDraft(current => ({ ...current, workspaceId: shell.activeWorkspaceId || current.workspaceId || workspacesData.workspaces?.[0]?.id || '' }));
     } catch {
       setSubagents([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shell.activeWorkspaceId]);
 
   useEffect(() => {
     void load();
@@ -125,6 +127,14 @@ export default function SubagentsPage({
             />
           </div>
           <Textarea value={draft.instructions} onChange={event => setDraft(current => ({ ...current, instructions: event.target.value }))} placeholder="Instructions" />
+          <label className="os-inline-actions">
+            <input
+              type="checkbox"
+              checked={draft.visibility === 'private'}
+              onChange={event => setDraft(current => ({ ...current, visibility: event.target.checked ? 'private' : 'workspace' }))}
+            />
+            Private Mode
+          </label>
         </div>
 
         {loading ? <LoadingState label="Loading subagents" /> : subagents.length === 0 ? (

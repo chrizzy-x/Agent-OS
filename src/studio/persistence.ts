@@ -295,6 +295,7 @@ export async function createStudioSession(params: {
     updated_at: now,
   };
 
+  let persistenceFailure: { code?: string; message: string } | null = null;
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -304,8 +305,18 @@ export async function createStudioSession(params: {
       .single();
 
     if (!error && data) return mapSession(data as Record<string, unknown>);
-  } catch {
-    // Fall through to local state.
+    if (error) {
+      persistenceFailure = { code: error.code, message: error.message };
+    }
+  } catch (error) {
+    persistenceFailure = {
+      message: error instanceof Error ? error.message : 'Unknown Studio persistence failure',
+    };
+  }
+
+  if (process.env.NODE_ENV === 'production' && process.env.AGENTOS_ALLOW_LOCAL_STATE !== '1') {
+    console.error('Studio session persistence failed', persistenceFailure);
+    throw new Error('Studio session persistence failed');
   }
 
   return updateLocalRuntimeState(state => {

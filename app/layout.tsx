@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import { APP_URL } from '@/lib/config';
 import BrowserSessionFetchGuard from '@/components/os/BrowserSessionFetchGuard';
 import PanicButton from '@/components/os/PanicButton';
 import ThemeController from '@/components/os/ThemeController';
+import ApplicationShell from '@/components/os/application-shell';
 
 export const metadata: Metadata = {
   title: 'AgentOS',
@@ -56,7 +58,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans antialiased">
         <ThemeController />
         <BrowserSessionFetchGuard />
-        {children}
+        <Suspense
+          fallback={(
+            <div className="agentos-global-shell agentos-global-shell-loading">
+              <header className="agentos-global-header">AgentOS</header>
+              <aside className="agentos-global-left" />
+              <main className="agentos-global-main">{children}</main>
+              <aside className="agentos-global-right" />
+            </div>
+          )}
+        >
+          <ApplicationShell>{children}</ApplicationShell>
+        </Suspense>
         <PanicButton />
       </body>
     </html>

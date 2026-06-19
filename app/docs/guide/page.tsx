@@ -615,10 +615,10 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         {/* SECTION 9 */}
         <Section id="ffp" title="Step 8 — FFP temp">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            FFP is temporary in AgentOS V6.6.2. The page exposes only a workspace toggle and routing hook for future Fabric Furge Protocol support.
+            FFP is visible but disabled in AgentOS v6.6.3. Compatibility data remains available for future Fabric Furge Protocol support.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            When disabled, multi-agent activities route directly to the Unified Execution Engine. When enabled, multi-agent workflows, subagent collaboration, and multi-agent delegation pass through the FFP temporary abstraction layer before the Unified Execution Engine. Single-agent execution bypasses FFP temp.
+            All activities route directly to the Unified Execution Engine. FFP cannot be activated and PATCH requests return Method Not Allowed.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
             See the full setup guide: <Link href="/docs/ffp" style={{ color: 'var(--accent)' }}>FFP documentation →</Link>

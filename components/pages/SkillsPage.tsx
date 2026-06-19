@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import {
   Badge,
   Button,
@@ -41,6 +42,7 @@ type PublishedSkill = {
 };
 
 export default function SkillsPage() {
+  const shell = useApplicationShell();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [installed, setInstalled] = useState<InstalledSkill[]>([]);
   const [published, setPublished] = useState<PublishedSkill[]>([]);
@@ -59,7 +61,7 @@ export default function SkillsPage() {
       }
       const [installedRes, publishedRes] = await Promise.all([
         fetch('/api/skills/installed', { cache: 'no-store' }),
-        fetch('/api/skills?mine=1&sort=recent&limit=20', { cache: 'no-store' }),
+        fetch(`/api/skills?mine=1&sort=recent&limit=20${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
       ]);
       const installedData = await installedRes.json();
       const publishedData = await publishedRes.json();
@@ -71,7 +73,7 @@ export default function SkillsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shell.activeWorkspaceId]);
 
   useEffect(() => {
     void load();

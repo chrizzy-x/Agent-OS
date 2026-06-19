@@ -4,15 +4,15 @@ import { expectSourceContains } from './contract.js';
 describe('mobile-parity', () => {
   it('keeps desktop-critical actions available in mobile navigation', () => {
     expectSourceContains(
-      ['components', 'Nav.tsx'],
-      'MOBILE_MORE_LINKS',
+      ['components', 'os', 'application-shell.tsx'],
       'Library',
       'Universal MCP',
-      'FFP (temp)',
-      'Profile',
+      'FFP',
+      'Open navigation',
+      'Open context',
       'Logout',
     );
     expectSourceContains(['app', 'layout.tsx'], '<PanicButton />');
-    expectSourceContains(['app', 'globals.css'], '.panic-button', 'top: 8px', 'right: 12px');
+    expectSourceContains(['app', 'globals.css'], '.agentos-global-left', '.agentos-global-right', '@media (max-width: 767px)');
   });
 });

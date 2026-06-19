@@ -62,6 +62,7 @@ export async function buildStudioBootstrap(params: {
   ownerAgentId: string;
   sessionId?: string | null;
   projectId?: string | null;
+  workspaceId?: string | null;
   mode?: StudioMode;
 }): Promise<Record<string, unknown>> {
   await reconcileAgentOSProvisioning(params.ownerAgentId).catch(() => undefined);
@@ -71,12 +72,20 @@ export async function buildStudioBootstrap(params: {
     listStudioSessions(params.ownerAgentId, { status: 'active' }).catch(() => [] as StudioSessionRecord[]),
   ]);
 
-  const defaultWorkspace = workspaces[0] ?? await resolveDefaultWorkspaceForAgent(params.ownerAgentId);
+  const defaultWorkspace = workspaces.find(workspace => workspace.id === params.workspaceId)
+    ?? workspaces[0]
+    ?? await resolveDefaultWorkspaceForAgent(params.ownerAgentId);
+  const scopedSessions = params.workspaceId
+    ? sessions.filter(session => session.workspaceId === params.workspaceId)
+    : sessions;
   const preferredSession = params.sessionId
-    ? sessions.find(session => session.id === params.sessionId) ?? null
-    : sessions[0] ?? null;
+    ? scopedSessions.find(session => session.id === params.sessionId) ?? null
+    : params.mode === 'nl'
+      ? null
+      : scopedSessions[0] ?? null;
 
   let session: StudioSessionRecord | null = preferredSession;
+  let draftProjectId: string | null = null;
   if (!session && defaultWorkspace) {
     const project = await resolveProjectForWorkspace({
       ownerAgentId: params.ownerAgentId,
@@ -104,22 +113,27 @@ export async function buildStudioBootstrap(params: {
         memoryEntries: [],
       };
     }
-    const superAgent = await getSuperAgentProfile({
-      ownerAgentId: params.ownerAgentId,
-      workspaceId: defaultWorkspace.id,
-    }).catch(() => null);
-    session = await createStudioSession({
-      ownerAgentId: params.ownerAgentId,
-      workspaceId: defaultWorkspace.id,
-      projectId: project.id,
-      superAgentId: superAgent?.id ?? null,
-      title: project.name === 'Default Project' ? 'New Studio Session' : `${project.name} session`,
-      initialState: {
-        mode: params.mode === 'code' ? 'CODE_STUDIO' : params.mode === 'workflow' ? 'WORKFLOW_STUDIO' : 'NL_STUDIO',
-      },
-    }).catch(() => null);
-    if (session) {
-      sessions.unshift(session);
+    draftProjectId = project.id;
+    if (params.mode === 'nl' && !params.sessionId) {
+      session = null;
+    } else {
+      const superAgent = await getSuperAgentProfile({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: defaultWorkspace.id,
+      }).catch(() => null);
+      session = await createStudioSession({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: defaultWorkspace.id,
+        projectId: project.id,
+        superAgentId: superAgent?.id ?? null,
+        title: project.name === 'Default Project' ? 'New Studio Session' : `${project.name} session`,
+        initialState: {
+          mode: params.mode === 'code' ? 'CODE_STUDIO' : params.mode === 'workflow' ? 'WORKFLOW_STUDIO' : 'NL_STUDIO',
+        },
+      }).catch(() => null);
+      if (session) {
+        sessions.unshift(session);
+      }
     }
   }
 
@@ -131,7 +145,7 @@ export async function buildStudioBootstrap(params: {
       status: 'all',
     }).catch(() => [])
     : [];
-  const activeProjectId = session?.projectId ?? params.projectId ?? projects[0]?.id ?? null;
+  const activeProjectId = session?.projectId ?? params.projectId ?? draftProjectId ?? projects[0]?.id ?? null;
   const activeProject = activeProjectId
     ? projects.find(project => project.id === activeProjectId) ?? null
     : null;

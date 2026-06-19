@@ -1,144 +1,141 @@
 'use client';
 
-import Nav from '@/components/Nav';
-import { Drawer } from '@/components/os/overlays';
-import { Badge, Button } from '@/components/os/ui';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Button } from '@/components/os/ui';
 import CodeStudioPanel from '@/components/studio/CodeStudioPanel';
 import NLStudioPanel from '@/components/studio/NLStudioPanel';
 import StudioContextDrawer from '@/components/studio/StudioContextDrawer';
 import { useStudio } from '@/components/studio/StudioProvider';
-import StudioSidebar from '@/components/studio/StudioSidebar';
 import StudioTopbar from '@/components/studio/StudioTopbar';
 import WorkflowStudioPanel from '@/components/studio/WorkflowStudioPanel';
-import type { StudioContextSection } from '@/src/studio/types';
 
-function StudioContextPanel() {
+function ContextRow({ label, value }: { label: string; value: string | number }) {
+  return <div><span>{label}</span><strong>{value}</strong></div>;
+}
+
+function StudioRightPanel() {
   const {
-    installedApps,
+    mode,
+    session,
+    currentProject,
+    memoryEntries,
+    fileEntries,
     installedSkills,
+    installedApps,
     workflows,
     subagents,
-    memoryEntries,
-    vaultSecrets,
-    currentProject,
-    activeSubagent,
+    superAgent,
     executions,
+    notifications,
+    fileTree,
+    terminal,
+    lineage,
+    events,
     openContext,
   } = useStudio();
+  const running = executions.filter(item => ['QUEUED', 'RUNNING', 'PAUSED'].includes(item.status));
+  const workflowRuns = executions.filter(item => item.sourceType === 'workflow');
+  const runningAgents = subagents.filter(item => item.status === 'running' || running.some(run => run.sourceId === item.id));
+  const idleAgents = subagents.filter(item => !runningAgents.some(runningAgent => runningAgent.id === item.id));
 
   return (
-    <aside className="studio-context-desktop">
-      <div className="agentos-context-panel">
-        <div className="agentos-context-title">Context</div>
-        <div className="agentos-context-rows">
-          <div><span>Apps</span><strong>{installedApps.length}</strong></div>
-          <div><span>Skills</span><strong>{installedSkills.length}</strong></div>
-          <div><span>Workflows</span><strong>{workflows.length}</strong></div>
-          <div><span>Subagents</span><strong>{subagents.length}</strong></div>
-          <div><span>Memory</span><strong>{memoryEntries.length ? 'Active' : 'Idle'}</strong></div>
-          <div><span>Vault</span><strong>{vaultSecrets.length ? 'Secure' : 'Ready'}</strong></div>
-          <div><span>MCP</span><strong>8</strong></div>
-          <div><span>FFP</span><strong>Healthy</strong></div>
-        </div>
-        <div className="agentos-context-title">Active</div>
-        <div className="agentos-context-rows">
-          <div><span>Current Project</span><strong>{currentProject?.name ?? 'Default'}</strong></div>
-          <div><span>Current Workflow</span><strong>{workflows[0]?.name ?? 'None'}</strong></div>
-          <div><span>Current App</span><strong>{installedApps[0]?.name ?? 'None'}</strong></div>
-          <div><span>Current Skill</span><strong>{installedSkills[0]?.name ?? 'None'}</strong></div>
-          <div><span>Running Tasks</span><strong>{executions.filter(item => ['QUEUED', 'RUNNING', 'PAUSED'].includes(item.status)).length}</strong></div>
-        </div>
-        <div className="agentos-context-title">Open</div>
-        <div className="agentos-context-list">
-          {[
-            ['Apps', 'apps'],
-            ['Skills', 'skills'],
-            ['Workflows', 'workflows'],
-            ['Subagents', 'subagents'],
-            ['Memory', 'memory'],
-            ['Vault', 'vault'],
-            ['Logs', 'logs'],
-          ].map(([label, section]) => (
-            <button key={label} type="button" onClick={() => openContext(section as StudioContextSection)}>
-              <span>{label}</span>
-              <Badge tone="default">{activeSubagent ? activeSubagent.name : 'Super'}</Badge>
-            </button>
-          ))}
-        </div>
-      </div>
-    </aside>
+    <div className="studio-global-context">
+      {mode === 'nl' ? (
+        <>
+          <section>
+            <h2>NL Studio</h2>
+            <ContextRow label="Session" value={session?.title ?? 'New chat'} />
+            <ContextRow label="Memory" value={memoryEntries.length ? 'Active' : 'Idle'} />
+            <ContextRow label="Pinned Context" value={(session?.linkedMemoryRefs?.length ?? 0) + (session?.linkedFilePaths?.length ?? 0)} />
+            <ContextRow label="Uploaded Files" value={fileEntries.length} />
+            <ContextRow label="Connected Skills" value={installedSkills.length} />
+            <ContextRow label="Connected Apps" value={installedApps.length} />
+            <ContextRow label="Connected MCPs" value="Universal MCP" />
+            <ContextRow label="Running Tasks" value={running.length} />
+          </section>
+        </>
+      ) : mode === 'workflow' ? (
+        <section>
+          <h2>Workflow Studio</h2>
+          <ContextRow label="Nodes" value={workflows.length ? 'Available' : 0} />
+          <ContextRow label="Triggers" value={workflows.filter(item => item.status === 'active').length} />
+          <ContextRow label="Schedules" value={workflows.length} />
+          <ContextRow label="Execution Status" value={running.length ? 'Running' : 'Idle'} />
+          <ContextRow label="Recent Runs" value={workflowRuns.length} />
+          <ContextRow label="Logs" value={events.length} />
+        </section>
+      ) : (
+        <section>
+          <h2>Code Studio</h2>
+          <ContextRow label="Repository" value={currentProject?.name ?? 'No project'} />
+          <ContextRow label="Files" value={fileTree.length} />
+          <ContextRow label="Branches" value={lineage.children.length + (lineage.parent ? 1 : 0)} />
+          <ContextRow label="Terminal" value={terminal?.status ?? 'Not started'} />
+          <ContextRow label="Build Status" value="Not connected" />
+          <ContextRow label="Deployments" value="Not connected" />
+          <ContextRow label="Running Services" value={terminal?.status === 'running' ? 1 : 0} />
+        </section>
+      )}
+
+      <section>
+        <h2>Multi-Agent</h2>
+        <ContextRow label="Super AgentOS" value={superAgent?.status ?? 'Active'} />
+        <ContextRow label="Agentic Apps" value={installedApps.length} />
+        <ContextRow label="External Agents" value="Universal MCP" />
+        <ContextRow label="Workflow Agents" value={subagents.filter(item => session?.linkedWorkflowId && item.projectId === session.projectId).length} />
+        <ContextRow label="Running Agents" value={runningAgents.length} />
+        <ContextRow label="Idle Agents" value={idleAgents.length} />
+      </section>
+
+      <section>
+        <h2>Open</h2>
+        <button type="button" onClick={() => openContext('memory')}>Memory</button>
+        <button type="button" onClick={() => openContext('files')}>Files</button>
+        <button type="button" onClick={() => openContext('logs')}>Logs</button>
+        <button type="button" onClick={() => openContext('recovery')}>Recovery</button>
+        <button type="button" onClick={() => openContext('notifications')}>Notifications ({notifications.filter(item => item.status === 'unread').length})</button>
+      </section>
+    </div>
   );
 }
 
-export default function StudioShell() {
-  const { loading, browserSession, mode, sidebarOpen, setSidebarOpen } = useStudio();
+function StudioRightPortal() {
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setTarget(document.getElementById('agentos-right-panel-slot'));
+  }, []);
+  return target ? createPortal(<StudioRightPanel />, target) : null;
+}
 
-  if (!browserSession && !loading) {
-    return (
-      <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-        <Nav activePath="/studio" />
-        <div style={{ minHeight: 'calc(100vh - 52px)', display: 'grid', placeItems: 'center', padding: 24 }}>
-          <div style={{ maxWidth: 420, display: 'grid', gap: 14, textAlign: 'center' }}>
-            <h1 style={{ margin: 0 }}>Super AgentOS</h1>
-            <Button href="/signin">Sign in</Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+export default function StudioShell() {
+  const { loading, browserSession, mode } = useStudio();
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-      <Nav activePath="/studio" />
-      <div className="studio-shell">
-        <aside className="studio-sidebar-desktop">
-          <StudioSidebar />
-        </aside>
-        <section className="studio-main">
-          <StudioTopbar />
-          <div className="studio-mode-body">
-            {mode === 'code' ? <CodeStudioPanel /> : mode === 'workflow' ? <WorkflowStudioPanel /> : <NLStudioPanel />}
-          </div>
-        </section>
-        <StudioContextPanel />
-      </div>
-
-      <Drawer
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        title="AgentOS"
-        description="Chats, projects, Library, and more"
-        size="md"
-      >
-        <StudioSidebar />
-      </Drawer>
+    <div className="studio-shell-v663">
+      <section className="studio-main">
+        <StudioTopbar />
+        <div className="studio-mode-body">
+          {!browserSession && !loading ? (
+            <div className="studio-signed-out">
+              <h1>Super AgentOS</h1>
+              <Button href="/signin">Sign in</Button>
+            </div>
+          ) : mode === 'code' ? <CodeStudioPanel /> : mode === 'workflow' ? <WorkflowStudioPanel /> : <NLStudioPanel />}
+        </div>
+      </section>
+      <StudioRightPortal />
       <StudioContextDrawer />
-
       <style>{`
-        .studio-shell {
-          display: grid;
-          grid-template-columns: 18% 62% 20%;
-          overflow: hidden;
-        }
-
-        .studio-sidebar-desktop,
-        .studio-context-desktop {
-          min-width: 0;
+        .studio-shell-v663 {
+          height: calc(100vh - 56px);
+          height: calc(100dvh - 56px);
           min-height: 0;
-          border-color: var(--border);
-          background: rgba(255,255,255,0.012);
           overflow: hidden;
         }
 
-        .studio-sidebar-desktop {
-          border-right: 1px solid var(--border);
-        }
-
-        .studio-context-desktop {
-          border-left: 1px solid var(--border);
-        }
-
-        .studio-main {
+        .studio-main,
+        .studio-mode-body {
           min-width: 0;
           min-height: 0;
           height: 100%;
@@ -148,15 +145,71 @@ export default function StudioShell() {
         }
 
         .studio-mode-body {
-          min-height: 0;
           flex: 1;
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
         }
 
-        .studio-mobile-only {
-          display: none !important;
+        .studio-signed-out {
+          min-height: calc(100vh - 56px);
+          display: grid;
+          place-content: center;
+          justify-items: center;
+          gap: 14px;
+        }
+
+        .studio-global-context {
+          display: grid;
+          gap: 14px;
+          padding-top: 2px;
+        }
+
+        .studio-global-context section {
+          display: grid;
+          gap: 5px;
+        }
+
+        .studio-global-context h2 {
+          margin: 0 0 3px;
+          color: var(--text-tertiary);
+          font-family: var(--font-mono), monospace;
+          font-size: 0.63rem;
+          text-transform: uppercase;
+        }
+
+        .studio-global-context section > div {
+          min-height: 31px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 0 8px;
+          border-radius: 7px;
+          background: rgba(255,255,255,0.025);
+          color: var(--text-secondary);
+          font-size: 0.71rem;
+        }
+
+        .studio-global-context strong {
+          max-width: 150px;
+          overflow: hidden;
+          color: var(--text-primary);
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .studio-global-context button {
+          min-height: 31px;
+          padding: 0 8px;
+          border: 0;
+          border-radius: 7px;
+          background: rgba(255,255,255,0.025);
+          color: var(--text-secondary);
+          text-align: left;
+          cursor: pointer;
+        }
+
+        .studio-global-context button:hover {
+          color: var(--text-primary);
+          background: rgba(255,255,255,0.055);
         }
 
         .studio-code-layout {
@@ -202,38 +255,9 @@ export default function StudioShell() {
           overflow: auto;
         }
 
-        .agentos-context-list button {
-          min-height: 30px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          padding: 0 8px;
-          border: 0;
-          border-radius: 6px;
-          background: transparent;
-          color: var(--text-secondary);
-          font-size: 0.78rem;
-          cursor: pointer;
-        }
-
-        .agentos-context-list button:hover {
-          color: var(--text-primary);
-          background: rgba(255,255,255,0.035);
-        }
-
-        @media (max-width: 960px) {
-          .studio-shell {
-            grid-template-columns: minmax(0, 1fr);
-          }
-
-          .studio-sidebar-desktop,
-          .studio-context-desktop {
-            display: none;
-          }
-
-          .studio-mobile-only {
-            display: inline-flex !important;
+        @media (max-width: 767px) {
+          .studio-shell-v663 {
+            height: calc(100dvh - 52px);
           }
 
           .studio-code-layout {

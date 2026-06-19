@@ -1,11 +1,12 @@
 import { describe, it } from 'vitest';
 import { expectFfpTempRouting, expectMigrationContains, expectRoute, expectSourceContains } from './contract.js';
 
-describe('ffp-temp-routing', () => {
-  it('ships FFP as a temp toggle without consensus results', () => {
+describe('ffp-disabled-routing', () => {
+  it('keeps FFP compatibility data while forcing execution bypass', () => {
     expectFfpTempRouting();
     expectRoute('app', 'api', 'ffp', 'temp', 'route.ts');
     expectMigrationContains('ffp_temp_settings');
-    expectSourceContains(['components', 'pages', 'FfpPage.tsx'], 'FFP temp', 'No consensus engine');
+    expectSourceContains(['components', 'pages', 'FfpPage.tsx'], 'Coming Soon', 'FFP Disabled');
+    expectSourceContains(['app', 'api', 'ffp', 'temp', 'route.ts'], 'METHOD_NOT_ALLOWED');
   });
 });

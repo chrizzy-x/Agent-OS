@@ -5,7 +5,7 @@ import type { StudioMode } from '@/src/studio/types';
 const MODES: Array<{ key: StudioMode; label: string; short: string; icon: string; legacyLabel?: string }> = [
   { key: 'nl', label: 'NL Studio', short: 'NL', icon: 'N' },
   { key: 'workflow', label: 'Workflow Studio', short: 'Flow', icon: 'W' },
-  { key: 'code', label: 'Terminal', short: 'Term', icon: 'T', legacyLabel: 'Code Studio' },
+  { key: 'code', label: 'Code Studio', short: 'Code', icon: 'C' },
 ];
 
 export default function ModeSwitch(props: {

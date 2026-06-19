@@ -31,8 +31,21 @@ describe('GET /api/studio/bootstrap', () => {
       ownerAgentId: 'agent-1',
       sessionId: 's1',
       projectId: 'p1',
+      workspaceId: null,
       mode: 'code',
     });
     expect(body).toEqual({ ok: true });
+  });
+
+  it('preserves Workflow Studio mode', async () => {
+    await GET(new NextRequest('http://localhost/api/studio/bootstrap?mode=workflow'));
+
+    expect(buildStudioBootstrap).toHaveBeenCalledWith({
+      ownerAgentId: 'agent-1',
+      sessionId: null,
+      projectId: null,
+      workspaceId: null,
+      mode: 'workflow',
+    });
   });
 });

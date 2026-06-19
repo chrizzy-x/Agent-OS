@@ -50,15 +50,15 @@ Returns server status. No authentication required.
 ```json
 {
   "status": "ok",
-  "version": "6.6.2",
-  "timestamp": "2026-06-12T08:30:08.265Z",
+  "version": "6.6.3",
+  "timestamp": "2026-06-19T00:00:00.000Z",
   "tools": 44
 }
 ```
 
 > `tools` reflects the current number of registered MCP tools.
 
-Production verification for V6.6.2: `GET https://www.agentos.services/health` returned `200` with `version: 6.6.2` after the final production deployment on June 12, 2026.
+Production verification must confirm `GET https://www.agentos.services/health` returns `200` with `version: 6.6.3`.
 
 ### `GET /tools`
 Lists all available tool names. No authentication required.
@@ -95,7 +95,7 @@ Executes a tool call.
 
 ---
 
-## V6.6.2 Platform Endpoints
+## v6.6.3 Platform Endpoints
 
 ### Unified Execution
 
@@ -112,10 +112,11 @@ All task actions are persisted as executions with canonical statuses `QUEUED`, `
 
 Execution records include `{ id, userId, workspaceId, projectId, type, sourceType, sourceId, status, title, input, output, logs, error, metadata, startedAt, completedAt, pausedAt, cancelledAt, createdAt, updatedAt }` plus legacy-compatible source references and metrics.
 
-### Workspace, Library, App Install, and FFP Temp
+### Shell, Workspace, Library, App Install, and FFP
 
 | Endpoint | Purpose |
 |----------|---------|
+| `GET /api/shell/bootstrap` | Load workspace, session, project, notification, and external-agent summaries for the persistent shell |
 | `GET /api/library` | List the workspace Library source of truth: installed apps, installed skills, workflows, subagents, files, MCP connections, external connections, downloads, and recent activity |
 | `GET /api/bearer-tokens` | List named scoped bearer tokens with masked values |
 | `POST /api/bearer-tokens` | Create a one-time-revealed bearer token for API, workspace, project, app, workflow, MCP connector, or external agent/tool scope |
@@ -123,10 +124,10 @@ Execution records include `{ id, userId, workspaceId, projectId, type, sourceTyp
 | `DELETE /api/bearer-tokens` | Revoke a bearer token while preserving audit history |
 | `POST /api/apps/install` | Install an app into the workspace and Library, cache its package where applicable, and make it available to Super AgentOS, Studio, Projects, Workflows, and Subagents |
 | `POST /api/apps/[slug]/device-install` | Deploy a workspace-installed app to Android, iOS, Desktop, or PWA from Library using the cached package |
-| `GET /api/ffp/temp` | Read the workspace FFP temp toggle |
-| `PATCH /api/ffp/temp` | Enable or disable the temporary FFP routing abstraction for multi-agent workflows, subagent collaboration, and multi-agent delegation |
+| `GET /api/ffp/temp` | Read the disabled FFP compatibility status |
+| `PATCH /api/ffp/temp` | Return `405 Method Not Allowed` |
 
-FFP temp is only a future wiring point. It does not run consensus, vote, publish proposals, or create consensus success states.
+FFP is visible as Coming Soon, cannot be activated, and is bypassed by all runtime execution in v6.6.3.
 
 ### Files, Memory, Notifications
 

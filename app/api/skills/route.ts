@@ -88,6 +88,7 @@ export async function GET(request: NextRequest) {
     const authorId = searchParams.get('mine') === '1' || searchParams.get('mine') === 'true'
       ? viewerAgentId
       : searchParams.get('author');
+    const workspaceId = searchParams.get('workspaceId');
 
     try {
       const { data, count } = await fetchSupabaseSkills({ authorId, category, search, sort, page, limit });
@@ -110,6 +111,7 @@ export async function GET(request: NextRequest) {
       } else {
         skills = skills.filter(skill => skill.visibility === 'public' || skill.published === true);
       }
+      if (workspaceId) skills = skills.filter(skill => !skill.workspace_id || skill.workspace_id === workspaceId);
       return NextResponse.json({ skills: omitAgentIdentifierFields(skills), pagination: { page, limit, total: count ?? 0 } });
     } catch {
       // Fall back to local catalog below.
@@ -147,6 +149,7 @@ export async function GET(request: NextRequest) {
     } else {
       skills = skills.filter(skill => skill.visibility === 'public' || skill.published);
     }
+    if (workspaceId) skills = skills.filter(skill => !skill.workspace_id || skill.workspace_id === workspaceId);
 
     skills.sort((left, right) => compareBySort(sort, left as unknown as Record<string, unknown>, right as unknown as Record<string, unknown>));
     const total = skills.length;

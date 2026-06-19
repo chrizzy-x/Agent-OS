@@ -81,6 +81,14 @@ export default function SkillsMarketplacePage() {
       subtitle="Install capabilities your Super AgentOS can use."
       actions={session?.capabilities?.includes('create_skill') ? <Button href="/developer" variant="secondary">Publish skill</Button> : undefined}
     >
+      <Card style={{ marginBottom: 16 }}>
+        <nav className="os-inline-actions" aria-label="Skills module">
+          <Link href="/skills" className="btn-primary">Discovery</Link>
+          <Link href="/skills/installed" className="btn-ghost">Installed Skills</Link>
+          <a href="#skill-categories" className="btn-ghost">Categories</a>
+          <Link href="/developer" className="btn-ghost">Management</Link>
+        </nav>
+      </Card>
       {session ? (
         <Card style={{ marginBottom: 16 }}>
           <div className="os-inline-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -98,7 +106,9 @@ export default function SkillsMarketplacePage() {
       ) : null}
 
       <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search skills, categories, permissions..." />
-      <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
+      <div id="skill-categories">
+        <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
+      </div>
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>

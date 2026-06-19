@@ -13,7 +13,7 @@ const endpoints = [
     method: 'PATCH',
     path: '/api/ffp/temp',
     auth: 'Browser Session or Bearer',
-    desc: 'Enables or disables the workspace FFP temp abstraction for multi-agent workflows, subagent collaboration, and multi-agent delegation.',
+    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.3.',
   },
 ];
 
@@ -35,11 +35,11 @@ export default function FFPPage() {
       <div className="max-w-4xl mx-auto px-4 py-12 space-y-10">
         <section>
           <div className="inline-block bg-purple-50 text-purple-700 text-sm font-medium px-3 py-1 rounded-full mb-4">
-            FFP temp
+            Coming Soon
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">FFP temporary routing hook</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">FFP is disabled</h1>
           <p className="text-lg text-gray-500">
-            FFP is not live yet in AgentOS V6.6.2. The product exposes a workspace toggle and routing abstraction point only. No consensus engine, validator voting, proposal history, or fake consensus success state ships in this release.
+            AgentOS v6.6.3 retains FFP compatibility data, but all runtime execution bypasses FFP. No activation control, consensus engine, validator voting, or proposal history is available.
           </p>
         </section>
 
@@ -47,8 +47,8 @@ export default function FFPPage() {
           <h2 className="text-2xl font-bold mb-4">Routing behavior</h2>
           <div className="space-y-3 text-sm text-gray-600">
             <p><strong>FFP Disabled:</strong> multi-agent activities route directly to the Unified Execution Engine.</p>
-            <p><strong>FFP Enabled:</strong> multi-agent activities route through the FFP temporary abstraction layer, then to the Unified Execution Engine.</p>
-            <p>Single-agent chat, single workflow runs, app execution, skill execution, file execution, memory execution, and single MCP calls bypass FFP temp.</p>
+            <p><strong>FFP activation:</strong> unavailable. PATCH requests return Method Not Allowed.</p>
+            <p>All execution types bypass FFP in v6.6.3.</p>
           </div>
         </section>
 
@@ -86,7 +86,8 @@ curl -s ${APP_URL}/api/ffp/temp \\
   -X PATCH \\
   -H "Authorization: Bearer $TOKEN" \\
   -H "Content-Type: application/json" \\
-  -d '{"enabled":true}'`}</pre>
+  -d '{"enabled":true}'
+# HTTP 405 Method Not Allowed`}</pre>
         </section>
       </div>
 

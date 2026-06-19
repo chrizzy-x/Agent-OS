@@ -13,7 +13,12 @@ export async function GET(request: NextRequest) {
       ownerAgentId: ctx.agentId,
       sessionId: searchParams.get('session'),
       projectId: searchParams.get('project'),
-      mode: searchParams.get('mode') === 'code' ? 'code' : 'nl',
+      workspaceId: searchParams.get('workspace') ?? searchParams.get('workspaceId'),
+      mode: searchParams.get('mode') === 'code'
+        ? 'code'
+        : searchParams.get('mode') === 'workflow'
+          ? 'workflow'
+          : 'nl',
     });
     return NextResponse.json(payload);
   } catch (error: unknown) {

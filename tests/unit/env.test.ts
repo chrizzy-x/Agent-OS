@@ -91,9 +91,9 @@ describe('env helpers', () => {
     expect(hasGoogleOAuthConfig()).toBe(true);
   });
 
-  it('reports FFP mode from the environment', () => {
+  it('forces FFP mode off regardless of environment', () => {
     process.env.FFP_MODE = 'enabled';
-    expect(isFfpEnabled()).toBe(true);
+    expect(isFfpEnabled()).toBe(false);
     process.env.FFP_MODE = 'disabled';
     expect(isFfpEnabled()).toBe(false);
   });

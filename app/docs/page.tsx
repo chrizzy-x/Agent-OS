@@ -26,6 +26,12 @@ const sections = [
     badge: 'New',
   },
   {
+    title: 'NL Studio',
+    href: '/docs/studio',
+    desc: 'Chat lifecycle, SSE streaming, Markdown replies, cancellation, session history, search, mode switching, and mobile behavior.',
+    badge: 'Updated',
+  },
+  {
     title: 'API Reference',
     href: '/docs/api',
     desc: 'Live route contracts for signup, signin, Studio, Super AgentOS, MCP, skills, workflows, projects, and ops.',
@@ -50,16 +56,16 @@ const sections = [
     badge: null,
   },
   {
-    title: 'FFP (temp)',
+    title: 'FFP',
     href: '/docs/ffp',
-    desc: 'Workspace toggle and temporary multi-agent routing hook. Real Fabric Furge Protocol consensus is not live in V6.6.2.',
-    badge: 'Advanced',
+    desc: 'Visible for compatibility and marked Coming Soon. Runtime routing is disabled in v6.6.3.',
+    badge: 'Coming Soon',
   },
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'V6.6.2 launch notes for Studio-first Super AgentOS, persisted execution, recovery, governed memory/files, and release hardening.',
-    badge: 'V6.6.2',
+    desc: 'v6.6.3 Navigation & Workspace Recovery release notes.',
+    badge: 'v6.6.3',
   },
 ];
 
@@ -77,10 +83,11 @@ const sidebarLinks = [
   { label: 'Complete Guide', href: '/docs/guide' },
   { label: 'Quick Start', href: '/docs/sdk' },
   { label: 'Templates', href: '/docs/templates' },
+  { label: 'NL Studio', href: '/docs/studio' },
   { label: 'API Reference', href: '/docs/api' },
   { label: 'Primitives', href: '/docs/primitives' },
   { label: 'Skills', href: '/docs/skills' },
-  { label: 'FFP (temp)', href: '/docs/ffp' },
+  { label: 'FFP', href: '/docs/ffp' },
   { label: 'Audit Trail', href: '/docs/audit' },
   { label: 'Launch Notes', href: '/docs/launch' },
   { label: 'Features', href: '/docs/features' },

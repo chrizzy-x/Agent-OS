@@ -20,6 +20,8 @@ debug.log
 process-test.log
 .e2e-signup.html
 .playwright-mcp/
+test-results/
+playwright-report/
 .child-process-*.txt
 .node-child-test*.log
 .qa-*.log

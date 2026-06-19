@@ -5,6 +5,7 @@ import Nav from '@/components/Nav';
 import { ConfirmModal, Drawer } from '@/components/os/overlays';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import {
   Badge,
   Button,
@@ -85,6 +86,7 @@ function historySummary(entry: HistoryEntry): string {
 }
 
 export default function VaultPage() {
+  const shell = useApplicationShell();
   const drawer = useRouteDrawer<DrawerId>();
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -112,7 +114,7 @@ export default function VaultPage() {
   const loadSecrets = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/vault?search=${encodeURIComponent(search)}`, { cache: 'no-store' });
+      const response = await fetch(`/api/vault?search=${encodeURIComponent(search)}${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
       const payload = await response.json();
       setSecrets(payload.secrets ?? []);
     } catch {
@@ -120,7 +122,7 @@ export default function VaultPage() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, shell.activeWorkspaceId]);
 
   const loadSecretDetail = useCallback(async (secretId: string) => {
     setDetailLoading(true);
@@ -183,7 +185,7 @@ export default function VaultPage() {
       const response = await fetch('/api/vault', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: draftName, value: draftValue }),
+        body: JSON.stringify({ name: draftName, value: draftValue, workspaceId: shell.activeWorkspaceId }),
       });
       const payload = await response.json().catch(() => ({}));
       setMessage(response.ok ? 'Secret created.' : payload.error ?? 'Create failed');

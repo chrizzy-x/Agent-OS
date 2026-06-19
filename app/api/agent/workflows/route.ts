@@ -48,11 +48,14 @@ export async function GET(req: NextRequest) {
   try {
     const ctx = await requireRouteCapability(req.headers, 'workflows.manage');
     const supabase = getSupabaseAdmin();
+    const workspaceId = new URL(req.url).searchParams.get('workspaceId');
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('agent_workflows')
       .select('*')
       .order('created_at', { ascending: false });
+    if (workspaceId) query = query.eq('workspace_id', workspaceId);
+    const { data, error } = await query;
 
     if (error) throw error;
     const workflows = ((data ?? []) as Record<string, unknown>[]).map(mapWorkflow) as Array<Record<string, unknown> & {

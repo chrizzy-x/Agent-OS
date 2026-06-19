@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       total: 0,
       mode: 'temp',
       consensusAvailable: false,
-      message: 'FFP consensus is not live in V6.6.2.',
+      message: 'FFP consensus is Coming Soon in AgentOS v6.6.3.',
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

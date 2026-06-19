@@ -76,7 +76,7 @@ export function expectSourceContains(parts: string[], ...needles: string[]): voi
 }
 
 export function expectCanonicalExecutionContract(): void {
-  expect(APP_VERSION).toBe('6.6.2');
+  expect(APP_VERSION).toBe('6.6.3');
   expect(EXECUTION_TYPES.map(type => normalizeExecutionType(type))).toEqual(EXECUTION_TYPES);
   expect(EXECUTION_STATUSES.map(status => normalizeExecutionStatus(status))).toEqual(EXECUTION_STATUSES);
   expect(normalizeExecutionStatus('waiting_for_user')).toBe('PAUSED');
@@ -94,8 +94,8 @@ export function expectFfpTempRouting(): void {
     updatedAt: null,
   };
   const disabled = { ...enabled, enabled: false, status: 'FFP Disabled' as const };
-  expect(shouldUseFfpTemp(enabled, 'multi_agent_workflow')).toBe(true);
-  expect(shouldUseFfpTemp(enabled, 'subagent_collaboration')).toBe(true);
+  expect(shouldUseFfpTemp(enabled, 'multi_agent_workflow')).toBe(false);
+  expect(shouldUseFfpTemp(enabled, 'subagent_collaboration')).toBe(false);
   expect(shouldUseFfpTemp(enabled, 'single_agent_chat')).toBe(false);
   expect(shouldUseFfpTemp(disabled, 'multi_agent_workflow')).toBe(false);
 }

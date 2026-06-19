@@ -19,3 +19,5 @@ agentos-ui.err
 debug.log
 process-test.log
 .playwright-mcp
+test-results
+playwright-report

@@ -1,6 +1,6 @@
 {
     "name": "agent-os",
-    "version": "6.6.2",
+    "version": "6.6.3",
     "description": "AgentOS - the operating system for the agent economy: chat, route, install, publish, and operate agents, apps, skills, workflows, and MCP tools",
     "author": "riz",
     "homepage": "https://www.agentos.services",
@@ -12,7 +12,8 @@
         "test": "node scripts/run-vitest.mjs run",
         "test:watch": "node scripts/run-vitest.mjs watch",
         "test:coverage": "node scripts/run-vitest.mjs run --coverage",
-        "lint": "tsc --noEmit --incremental false -p tsconfig.lint.json"
+        "lint": "tsc --noEmit --incremental false -p tsconfig.lint.json",
+        "test:e2e": "playwright test"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.78.0",
@@ -23,9 +24,12 @@
         "next": "^15.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
+        "react-markdown": "^10.1.0",
+        "remark-gfm": "^4.0.1",
         "zod": "^3.22.4"
     },
     "devDependencies": {
+        "@playwright/test": "^1.52.0",
         "@types/jsonwebtoken": "^9.0.5",
         "@types/node": "^20.10.0",
         "@types/react": "^19.0.0",

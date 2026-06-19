@@ -14,6 +14,7 @@ const ctx = await startVitest(
     globals: true,
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
+    exclude: ['tests/playwright/**', 'node_modules/**'],
     testTimeout: 10_000,
     watch,
     run: !watch,

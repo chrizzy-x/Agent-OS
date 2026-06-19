@@ -70,8 +70,7 @@ class FFPClient {
    * Throws on timeout (30 s).
    */
   async consensus(_proposal: FFPProposal): Promise<boolean> {
-    if (!this.config.enabled || !this.config.requireConsensus) return true;
-    throw new Error('FFP consensus is not live in V6.6.2. Disable consensus mode or route multi-agent work through FFP temp.');
+    return true;
   }
 
   /** V6.6.2 does not gate single-agent network calls through FFP temp. */
@@ -133,18 +132,12 @@ class FFPClient {
 export function getFFPClient(): FFPClient {
   if (!instance) {
     instance = new FFPClient({
-      enabled: process.env.FFP_MODE === 'enabled',
+      enabled: false,
       chainId: process.env.FFP_CHAIN_ID ?? '',
       nodeUrl: (process.env.FFP_NODE_URL ?? '').replace(/\/$/, ''),
       agentId: process.env.FFP_PRIVATE_REF ?? process.env.FFP_AGENT_ID ?? '',
       requireConsensus: process.env.FFP_REQUIRE_CONSENSUS === 'true',
     });
-
-    if (instance.config.enabled) {
-      console.log(
-        `[ffp] mode=enabled chain=${instance.config.chainId} node=${instance.config.nodeUrl}`
-      );
-    }
   }
   return instance;
 }

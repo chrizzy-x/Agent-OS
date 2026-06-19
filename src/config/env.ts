@@ -163,5 +163,5 @@ export function getXOAuthScopes(): string[] {
 }
 
 export function isFfpEnabled(): boolean {
-  return getEnv('FFP_MODE') === 'enabled';
+  return false;
 }

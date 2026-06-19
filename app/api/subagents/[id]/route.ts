@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const subagent = await getPrivateSubagent(ctx.agentId, id);
 
-    const [skillsResult, assignmentsResult, activity, memory, grants, fileStats] = await Promise.all([
+    const [skillsResult, assignmentsResult, activity, memory, grants, fileStats, workflowsResult] = await Promise.all([
       getSupabaseAdmin()
         .from('skill_installations')
         .select(`
@@ -49,6 +49,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .from('agent_files')
         .select('id', { count: 'exact', head: true })
         .eq('subagent_id', id),
+      getSupabaseAdmin()
+        .from('agent_workflows')
+        .select('id,name,summary,status')
+        .eq('agent_id', ctx.agentId)
+        .eq('workspace_id', subagent.workspaceId)
+        .order('updated_at', { ascending: false }),
     ]);
 
     return NextResponse.json({
@@ -79,6 +85,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       grants,
       fileCount: fileStats.count ?? 0,
       activity,
+      workflows: workflowsResult.data ?? [],
     });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

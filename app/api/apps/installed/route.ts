@@ -10,7 +10,9 @@ export const runtime = 'nodejs';
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireRouteCapability(request.headers, 'apps.install');
-    const installed = await listInstalledAgentApps(ctx.agentId);
+    const workspaceId = new URL(request.url).searchParams.get('workspaceId');
+    const installed = (await listInstalledAgentApps(ctx.agentId))
+      .filter(entry => !workspaceId || !entry.installation.workspaceId || entry.installation.workspaceId === workspaceId);
     const viewerWorkspaceIds = (await listWorkspaces(ctx.agentId)).map(workspace => workspace.id);
     const installedApps = await Promise.all(installed.map(async entry => {
       const readiness = await getAgentAppReadiness({

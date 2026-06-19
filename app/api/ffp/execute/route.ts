@@ -11,7 +11,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       executed: false,
       mode: 'temp',
       consensusAvailable: false,
-      error: 'FFP execution is not live in V6.6.2. Multi-agent work routes through the temporary abstraction layer into the Unified Execution Engine.',
+      error: 'FFP execution is disabled and Coming Soon in AgentOS v6.6.3. Multi-agent work uses the Unified Execution Engine.',
     }, { status: 501 });
   } catch (error) {
     const err = toErrorResponse(error);

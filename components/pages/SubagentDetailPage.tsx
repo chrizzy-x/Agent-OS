@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { summarizeAgentResult } from '@/src/ui/presenters';
@@ -43,9 +44,10 @@ type SubagentPayload = {
   grants: Array<{ id: string; targetId: string; permission: string; revokedAt: string | null }>;
   fileCount: number;
   activity: Array<{ primitive: string; operation: string; success: boolean; created_at: string }>;
+  workflows: Array<{ id: string; name: string; summary: string | null; status: string }>;
 };
 
-const TABS = ['Configure', 'Instructions', 'Memory', 'Skills', 'Tools', 'Permissions', 'Activity'];
+const TABS = ['Configure', 'Instructions', 'Assignments', 'Memory', 'Skills', 'Tools', 'Permissions', 'Activity'];
 
 type SubagentDetailPageProps = {
   activePath?: string;
@@ -57,6 +59,7 @@ export default function SubagentDetailPage({
   activePath = '/subagents',
 }: SubagentDetailPageProps) {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = params?.id ?? '';
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<SubagentPayload | null>(null);
@@ -65,6 +68,8 @@ export default function SubagentDetailPage({
   const [result, setResult] = useState('');
   const [saving, setSaving] = useState(false);
   const [shareTarget, setShareTarget] = useState('');
+  const [workflowAssignment, setWorkflowAssignment] = useState('');
+  const [memoryAssignment, setMemoryAssignment] = useState('');
 
   async function load() {
     setLoading(true);
@@ -136,6 +141,31 @@ export default function SubagentDetailPage({
     await load();
   }
 
+  async function assignResource(targetType: 'workflow' | 'memory', targetId: string) {
+    if (!subagent || !targetId) return;
+    await fetch('/api/permissions/grants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourceType: 'subagent',
+        sourceId: subagent.id,
+        targetType,
+        targetId,
+        permission: `${targetType}:assigned`,
+        scope: 'assignment',
+      }),
+    });
+    setWorkflowAssignment('');
+    setMemoryAssignment('');
+    await load();
+  }
+
+  async function deleteSubagent() {
+    if (!subagent || !window.confirm(`Delete ${subagent.name}?`)) return;
+    const response = await fetch(`/api/subagents/${subagent.id}`, { method: 'DELETE' });
+    if (response.ok) router.push('/subagents');
+  }
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath={activePath} />
@@ -165,6 +195,7 @@ export default function SubagentDetailPage({
                   <Badge tone="success">{subagent.status}</Badge>
                   <Badge tone={subagent.visibility === 'public' ? 'success' : subagent.visibility === 'workspace' ? 'accent' : 'default'}>{subagent.visibility}</Badge>
                   <Button variant="secondary" onClick={() => void save()}>{saving ? 'Saving...' : 'Save'}</Button>
+                  <Button variant="danger" onClick={() => void deleteSubagent()}>Delete</Button>
                   <Button onClick={() => void testRun()}>Run test</Button>
                 </>
               )}
@@ -202,6 +233,17 @@ export default function SubagentDetailPage({
                   </div>
                   <div className="os-entity-copy">Model: {payload.profile.model} | Temperature: {payload.profile.temperature} | Behavior: {payload.profile.behavior}</div>
                   <div className="os-entity-copy">Memory: {payload.memory.length} | Files: {payload.fileCount} | Vault: {payload.vaultAssignments.length}</div>
+                  <label className="os-inline-actions">
+                    <input
+                      type="checkbox"
+                      checked={subagent.visibility === 'private'}
+                      onChange={event => setPayload(current => current ? {
+                        ...current,
+                        subagent: { ...current.subagent, visibility: event.target.checked ? 'private' : 'workspace' },
+                      } : current)}
+                    />
+                    Private Mode
+                  </label>
                 </div>
               </Card>
             ) : null}
@@ -226,6 +268,40 @@ export default function SubagentDetailPage({
                   )) : <div className="os-entity-copy">No memory entries yet.</div>}
                 </div>
               </Card>
+            ) : null}
+
+            {tab === 'Assignments' ? (
+              <div style={{ display: 'grid', gap: 12 }}>
+                <Card>
+                  <div style={{ width: '100%', display: 'grid', gap: 10 }}>
+                    <div className="os-entity-title">Workflow Assignment</div>
+                    <select className="os-select" value={workflowAssignment} onChange={event => setWorkflowAssignment(event.target.value)}>
+                      <option value="">Select workflow</option>
+                      {payload.workflows.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                    <Button onClick={() => void assignResource('workflow', workflowAssignment)} disabled={!workflowAssignment}>Assign workflow</Button>
+                  </div>
+                </Card>
+                <Card>
+                  <div style={{ width: '100%', display: 'grid', gap: 10 }}>
+                    <div className="os-entity-title">Memory Assignment</div>
+                    <select className="os-select" value={memoryAssignment} onChange={event => setMemoryAssignment(event.target.value)}>
+                      <option value="">Select memory</option>
+                      {payload.memory.map(item => <option key={item.id} value={item.id}>{item.key}</option>)}
+                    </select>
+                    <Button onClick={() => void assignResource('memory', memoryAssignment)} disabled={!memoryAssignment}>Assign memory</Button>
+                  </div>
+                </Card>
+                <Card>
+                  <div className="os-entity-title">Current Assignments</div>
+                  {payload.grants.filter(item => !item.revokedAt && item.permission.endsWith(':assigned')).map(item => (
+                    <div key={item.id} className="os-entity-head">
+                      <span className="os-entity-copy">{item.permission} · {item.targetId}</span>
+                      <Button variant="secondary" onClick={() => void revokeShare(item.id)}>Remove</Button>
+                    </div>
+                  ))}
+                </Card>
+              </div>
             ) : null}
 
             {tab === 'Skills' ? (

@@ -8,6 +8,8 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
+  'v6.6.3 - Restored the persistent AgentOS shell, complete module navigation, workspace/session/project context, desktop sidebars, mobile drawers, and mode-aware Studio context without removing v6.6.2 execution features.',
+  'June 18, 2026 - NL Studio now uses a rebuilt conversation-first layout with real SSE streaming, Markdown replies, safe stop/cancel, lazy chat creation, searchable history, and desktop/mobile parity.',
   'V6.6.2 - Super AgentOS is now the primary product surface with streaming chat, execution cards, files, memory, recovery, notifications, and panic stop.',
   'V6.6.2 - Unified execution records now persist Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, logs, failures, and recovery state.',
   'V6.6.2 - Files now support upload, preview, summarize, rename, search, and delete through production APIs and UI.',
@@ -30,6 +32,7 @@ const releaseHighlights = [
 ];
 
 const changelog = [
+  'Rebuilt NL Studio chat, composer, session sidebar, mode header, and streaming lifecycle; verified send, response, new chat, history reopen, mode switching, and mobile layout with Playwright.',
   'Added agent_executions, agent_execution_logs, and agent_notifications persistence for recoverable task state.',
   'Added /api/executions, /api/recovery, /api/panic, and /api/notifications route surfaces.',
   'Added file preview, summarize, rename, upload, delete, and search flows to /files and Super AgentOS context.',
@@ -92,17 +95,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">AgentOS V6.6.2 <span style={{ color: 'var(--accent)' }}>&ldquo;Unified Super AgentOS&rdquo;</span> is live</h1>
+          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.3 <span style={{ color: 'var(--accent)' }}>&ldquo;Navigation &amp; Workspace Recovery&rdquo;</span></h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            V6.6.2 makes Super AgentOS the primary operating surface with a Studio-first layout, persisted execution, recovery, panic stop, governed files, governed memory, apps, skills, workflows, MCP, and production truth alignment. Live at <code>{APP_URL}</code>.
+            v6.6.3 restores AgentOS as a persistent multi-module operating system while preserving Studio streaming, execution, recovery, files, memory, apps, skills, workflows, and MCP. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in V6.6.2</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.3</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS now keeps Super AgentOS at the center of the product. In V6.6.2, / and /studio open the conversation-first operating surface first, with Workflow Studio and Code Studio replacing the chat layout when selected.
+              AgentOS now keeps every first-class module one click away inside a shell that persists across navigation. Studio modes switch in place without resetting sessions, files, workflows, terminal state, or drafts.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

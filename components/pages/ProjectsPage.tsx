@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
@@ -15,6 +17,7 @@ import {
   LoadingState,
   PageHeader,
   SearchBar,
+  Input,
 } from '@/components/os/ui';
 
 type ProjectItem = {
@@ -28,6 +31,8 @@ type ProjectItem = {
   runs: number;
   users: number;
   href: string;
+  pinned: boolean;
+  metadata: Record<string, unknown>;
 };
 
 type ProjectsPayload = {
@@ -39,11 +44,15 @@ type ProjectsPayload = {
 const TABS = ['Recent', 'Pinned', 'All'];
 
 export default function ProjectsPage() {
+  const router = useRouter();
+  const shell = useApplicationShell();
   const [payload, setPayload] = useState<ProjectsPayload | null>(null);
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('Recent');
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState({ name: '', description: '', template: 'blank' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +63,7 @@ export default function ProjectsPage() {
         setPayload(null);
         return;
       }
-      const url = `/api/projects?type=all&search=${encodeURIComponent(search)}`;
+      const url = `/api/projects?type=all&search=${encodeURIComponent(search)}${shell.activeWorkspaceId ? `&workspace=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`;
       const { response, authState: nextAuthState } = await fetchWithBrowserSession(url, { cache: 'no-store' });
       setAuthState(nextAuthState);
       const data = await response.json();
@@ -64,7 +73,7 @@ export default function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, shell.activeWorkspaceId]);
 
   useEffect(() => {
     void load();
@@ -75,6 +84,36 @@ export default function ProjectsPage() {
     if (tab === 'Pinned') return payload.favorites ?? [];
     return payload.projects ?? [];
   }, [payload, tab]);
+
+  async function createProject() {
+    if (!shell.activeWorkspaceId || !draft.name.trim()) return;
+    const response = await fetchWithBrowserSession('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: shell.activeWorkspaceId,
+        name: draft.name,
+        description: draft.description,
+        metadata: { template: draft.template, pinned: false },
+      }),
+    });
+    if (!response.response.ok) return;
+    const result = await response.response.json() as { project?: { id: string } };
+    await shell.refreshShell();
+    if (result.project?.id) {
+      const prompt = draft.template === 'blank' ? '' : `&prompt=${encodeURIComponent(`Scaffold the ${draft.template} template for this project`)}`;
+      router.push(`/studio?mode=code&project=${encodeURIComponent(result.project.id)}&workspace=${encodeURIComponent(shell.activeWorkspaceId)}${prompt}`);
+    }
+  }
+
+  async function togglePin(item: ProjectItem) {
+    await fetchWithBrowserSession(`/api/projects/${encodeURIComponent(item.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metadata: { ...item.metadata, pinned: !item.pinned } }),
+    });
+    await Promise.all([load(), shell.refreshShell()]);
+  }
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -113,8 +152,32 @@ export default function ProjectsPage() {
           eyebrow="Projects"
           title="Projects"
           subtitle="Projects list, search, recent work, pinned context, and creation."
-          actions={<Button href="/studio?mode=nl&prompt=Create%20a%20project">Create Project</Button>}
+          actions={<Button onClick={() => setCreating(value => !value)}>Create Project</Button>}
         />
+
+        {creating ? (
+          <Card>
+            <div style={{ width: '100%', display: 'grid', gap: 10 }}>
+              <Input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} placeholder="Project name" />
+              <Input value={draft.description} onChange={event => setDraft(current => ({ ...current, description: event.target.value }))} placeholder="Description" />
+              <div className="os-inline-actions" aria-label="Project template">
+                {[
+                  ['blank', 'Blank'],
+                  ['research', 'Research'],
+                  ['automation', 'Automation'],
+                ].map(([key, label]) => (
+                  <button key={key} type="button" className={`os-chip${draft.template === key ? ' active' : ''}`} onClick={() => setDraft(current => ({ ...current, template: key }))}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="os-inline-actions">
+                <Button onClick={() => void createProject()}>Create</Button>
+                <Button variant="secondary" onClick={() => setCreating(false)}>Cancel</Button>
+              </div>
+            </div>
+          </Card>
+        ) : null}
 
         <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search projects" />
         <FilterChips items={TABS} active={tab} onChange={setTab} />
@@ -138,7 +201,10 @@ export default function ProjectsPage() {
               String(item.runs),
               String(item.users),
               new Date(item.updatedAt).toLocaleDateString(),
-              <Link key={`${item.id}-open`} href={item.href} className="btn-ghost">Open</Link>,
+              <div key={`${item.id}-actions`} className="os-inline-actions">
+                <button type="button" className="btn-ghost" onClick={() => void togglePin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
+                <Link href={item.href} className="btn-ghost">Open</Link>
+              </div>,
             ])}
           />
         )}

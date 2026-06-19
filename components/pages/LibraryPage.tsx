@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import { Badge, Button, Card, DataTable, EmptyState, FilterChips, LoadingState, PageHeader, SearchBar } from '@/components/os/ui';
 
@@ -45,12 +46,13 @@ const FILTERS = [
   { key: 'installed_app', label: 'Apps' },
   { key: 'installed_skill', label: 'Skills' },
   { key: 'saved_workflow', label: 'Workflows' },
+  { key: 'template', label: 'Templates' },
   { key: 'subagent', label: 'Subagents' },
   { key: 'file', label: 'Files' },
   { key: 'mcp_connection', label: 'MCP' },
   { key: 'external_connection', label: 'External' },
   { key: 'download', label: 'Downloads' },
-  { key: 'recent_activity', label: 'Activity' },
+  { key: 'recent_activity', label: 'Recent Assets' },
   { key: 'published_asset', label: 'Published' },
   { key: 'forked_asset', label: 'Forked' },
 ];
@@ -69,6 +71,7 @@ function formatDate(value: string | null): string {
 }
 
 export default function LibraryPage() {
+  const shell = useApplicationShell();
   const [payload, setPayload] = useState<LibraryPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
@@ -87,6 +90,7 @@ export default function LibraryPage() {
       }
       const params = new URLSearchParams();
       if (search.trim()) params.set('search', search.trim());
+      if (shell.activeWorkspaceId) params.set('workspaceId', shell.activeWorkspaceId);
       const { response, authState: nextAuthState } = await fetchWithBrowserSession(`/api/library?${params.toString()}`, { cache: 'no-store' });
       setAuthState(nextAuthState);
       const data = await response.json();
@@ -96,7 +100,7 @@ export default function LibraryPage() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, shell.activeWorkspaceId]);
 
   useEffect(() => {
     void load();

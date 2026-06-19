@@ -161,6 +161,8 @@ describe('storage migrations', () => {
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_memory_store');
     expect(sql).toContain("CHECK (visibility IN ('private', 'workspace', 'public'))");
     expect(sql).toContain("ALTER TABLE nl_studio_messages\n  ADD COLUMN IF NOT EXISTS search_text TEXT NOT NULL DEFAULT ''");
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS linked_workflow_id TEXT');
+    expect(sql).not.toContain('linked_workflow_id UUID REFERENCES agent_workflows');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS studio_messages_search_text_idx');
     expect(sql).toContain('ALTER TABLE agent_files');
     expect(sql).toContain('ALTER TABLE private_subagents');

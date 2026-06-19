@@ -28,7 +28,7 @@ describe('crew settings', () => {
     vi.clearAllMocks();
   });
 
-  it('enables consensus only for multi-agent mode when FFP is enabled', async () => {
+  it('rejects consensus mode even when FFP_MODE is set to enabled', async () => {
     process.env.FFP_MODE = 'enabled';
     const crewSettings = createCrewSettingsQuery({
       scope: 'global',
@@ -43,13 +43,10 @@ describe('crew settings', () => {
       throw new Error(`Unexpected table ${table}`);
     });
 
-    const settings = await updateCrewSettings({
+    await expect(updateCrewSettings({
       operationMode: 'multi_agent',
       consensusModeEnabled: true,
-    });
-
-    expect(settings.operation_mode).toBe('multi_agent');
-    expect(settings.consensus_mode_enabled).toBe(true);
+    })).rejects.toThrow(ValidationError);
   });
 
   it('rejects consensus mode when the requested operation mode is single-agent', async () => {

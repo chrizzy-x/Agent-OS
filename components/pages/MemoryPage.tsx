@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import {
   Badge,
   Button,
@@ -79,6 +80,7 @@ function classifyMemoryEntry(entry: MemoryEntry, viewerAgentId: string | null): 
 }
 
 export default function MemoryPage() {
+  const shell = useApplicationShell();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
@@ -94,8 +96,8 @@ export default function MemoryPage() {
     setLoading(true);
     try {
       const [memoryRes, filesRes] = await Promise.all([
-        fetch('/api/memory?limit=100', { cache: 'no-store' }),
-        fetch('/api/files?limit=100', { cache: 'no-store' }),
+        fetch(`/api/memory?limit=100${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
+        fetch(`/api/files?limit=100${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
       ]);
       const [memoryBody, filesBody] = await Promise.all([
         memoryRes.ok ? memoryRes.json() : Promise.resolve({}),
@@ -113,7 +115,7 @@ export default function MemoryPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shell.activeWorkspaceId]);
 
   useEffect(() => {
     void load();
@@ -182,6 +184,7 @@ export default function MemoryPage() {
           visibility: draft.visibility,
           namespaceType: draft.namespaceType,
           namespaceId: draft.namespaceId.trim() || undefined,
+          workspaceId: shell.activeWorkspaceId,
           shareTargetAgentId: draft.shareTargetAgentId.trim() || undefined,
         }),
       });

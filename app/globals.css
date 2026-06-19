@@ -1940,3 +1940,544 @@ nextjs-portal {
     justify-self: start;
   }
 }
+
+/* AgentOS v6.6.3 persistent operating-system shell */
+.agentos-global-shell {
+  --agentos-left-width: 280px;
+  --agentos-right-width: 360px;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--agentos-left-width) minmax(0, 1fr) var(--agentos-right-width);
+  grid-template-rows: 56px minmax(0, 1fr);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.agentos-global-shell[data-left-collapsed="true"] {
+  --agentos-left-width: 72px;
+}
+
+.agentos-global-shell[data-right-collapsed="true"] {
+  --agentos-right-width: 72px;
+}
+
+.agentos-global-header {
+  position: sticky;
+  top: 0;
+  z-index: 120;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
+  height: 56px;
+  display: grid;
+  grid-template-columns: minmax(180px, var(--agentos-left-width)) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-primary) 95%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.agentos-global-brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.agentos-global-brand img {
+  border-radius: 7px;
+}
+
+.agentos-global-breadcrumbs {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.agentos-global-breadcrumbs span {
+  min-width: 0;
+  max-width: 190px;
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.025);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-global-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.agentos-global-header-actions > a,
+.agentos-global-header-actions > button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.025);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.agentos-global-user span {
+  width: 23px;
+  height: 23px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(20,184,166,0.14);
+  color: var(--text-primary);
+  font-size: 0.68rem;
+}
+
+.agentos-global-left,
+.agentos-global-right {
+  position: sticky;
+  top: 56px;
+  z-index: 70;
+  grid-row: 2;
+  height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
+  min-height: 0;
+  background: color-mix(in srgb, var(--bg-primary) 97%, white 3%);
+}
+
+.agentos-global-left {
+  grid-column: 1;
+  border-right: 1px solid var(--border);
+}
+
+.agentos-global-right {
+  grid-column: 3;
+  border-left: 1px solid var(--border);
+}
+
+.agentos-global-main {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 16px;
+  overflow: auto;
+}
+
+.agentos-global-shell[data-studio="true"] .agentos-global-main {
+  padding: 0;
+  overflow: hidden;
+}
+
+.agentos-shell-collapse {
+  position: absolute;
+  top: 10px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.agentos-global-left .agentos-shell-collapse {
+  right: 8px;
+}
+
+.agentos-global-right .agentos-shell-collapse {
+  left: 8px;
+}
+
+.agentos-global-sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 10px 10px 76px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.agentos-global-workspace {
+  display: grid;
+  gap: 5px;
+  padding-right: 32px;
+}
+
+.agentos-global-workspace label,
+.agentos-global-sidebar h2,
+.agentos-global-sidebar h3,
+.agentos-global-context h2 {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.63rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.agentos-global-workspace select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.025);
+  color: var(--text-primary);
+  padding: 0 8px;
+}
+
+.agentos-global-nav {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.agentos-global-nav a,
+.agentos-global-nav > span {
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.agentos-global-nav a:hover,
+.agentos-global-nav a.active {
+  background: rgba(255,255,255,0.055);
+  color: var(--text-primary);
+}
+
+.agentos-global-nav a.active {
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.agentos-global-nav i {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.65rem;
+  font-style: normal;
+}
+
+.agentos-global-nav b {
+  overflow: hidden;
+  font-size: 0.78rem;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-global-nav .disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.agentos-global-nav small {
+  font-size: 0.58rem;
+}
+
+.agentos-global-quick,
+.agentos-global-history {
+  display: grid;
+  gap: 3px;
+}
+
+.agentos-global-quick button,
+.agentos-global-history button {
+  min-height: 29px;
+  overflow: hidden;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agentos-session-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 22px);
+  gap: 2px;
+}
+
+.agentos-session-row > button:not(:first-child) {
+  width: 22px;
+  padding: 0;
+  text-align: center;
+  opacity: 0;
+}
+
+.agentos-session-row:hover > button:not(:first-child),
+.agentos-session-row:focus-within > button:not(:first-child) {
+  opacity: 1;
+}
+
+.agentos-global-quick button:hover,
+.agentos-global-history button:hover,
+.agentos-global-history button.active {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-primary);
+}
+
+.agentos-global-history h3 {
+  margin-top: 7px;
+  padding-left: 8px;
+  font-size: 0.57rem;
+}
+
+.agentos-global-sidebar[data-collapsed="true"] {
+  align-items: center;
+  padding-inline: 8px;
+  overflow-x: hidden;
+}
+
+.agentos-global-sidebar[data-collapsed="true"] .agentos-global-workspace,
+.agentos-global-sidebar[data-collapsed="true"] .agentos-global-quick,
+.agentos-global-sidebar[data-collapsed="true"] .agentos-global-history,
+.agentos-global-sidebar[data-collapsed="true"] .agentos-global-nav b,
+.agentos-global-sidebar[data-collapsed="true"] .agentos-global-nav small {
+  display: none;
+}
+
+.agentos-global-sidebar[data-collapsed="true"] .agentos-global-nav a,
+.agentos-global-sidebar[data-collapsed="true"] .agentos-global-nav > span {
+  width: 42px;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 0;
+}
+
+.agentos-global-context {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 46px 12px 72px;
+  overflow-y: auto;
+}
+
+.agentos-global-context section {
+  display: grid;
+  gap: 5px;
+}
+
+.agentos-global-context section > div {
+  min-height: 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.025);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.agentos-global-context strong {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-global-shell[data-right-collapsed="true"] .agentos-global-context {
+  display: none;
+}
+
+.agentos-shell-mobile-button,
+.agentos-shell-drawer-close,
+.agentos-shell-backdrop {
+  display: none;
+}
+
+.agentos-global-shell :where(a, button, select, input, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.agentos-global-main > div[style*="min-height: 100vh"] {
+  min-height: 100% !important;
+}
+
+@media (max-width: 1279px) and (min-width: 768px) {
+  .agentos-global-shell:not([data-left-collapsed="false"]) {
+    --agentos-left-width: 72px;
+  }
+
+  .agentos-global-breadcrumbs span:nth-child(3),
+  .agentos-global-header-actions > button {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  body {
+    padding-bottom: 0;
+  }
+
+  .agentos-global-shell,
+  .agentos-global-shell[data-left-collapsed="true"],
+  .agentos-global-shell[data-right-collapsed="true"] {
+    --agentos-left-width: 0px;
+    --agentos-right-width: 0px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 52px minmax(0, 1fr);
+  }
+
+  .agentos-global-header {
+    height: 52px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 0 8px;
+  }
+
+  .agentos-global-brand {
+    justify-self: center;
+  }
+
+  .agentos-global-brand strong,
+  .agentos-global-breadcrumbs,
+  .agentos-global-header-actions {
+    display: none;
+  }
+
+  .agentos-shell-mobile-button {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.025);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .agentos-shell-mobile-button.left {
+    grid-column: 1;
+  }
+
+  .agentos-shell-mobile-button.right {
+    grid-column: 3;
+  }
+
+  .agentos-global-main {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .agentos-global-left,
+  .agentos-global-right {
+    position: fixed;
+    top: 52px;
+    bottom: 0;
+    z-index: 130;
+    width: min(88vw, 360px);
+    height: calc(100dvh - 52px);
+    transition: transform 160ms ease;
+  }
+
+  .agentos-global-left {
+    left: 0;
+    transform: translateX(-102%);
+  }
+
+  .agentos-global-right {
+    right: 0;
+    transform: translateX(102%);
+  }
+
+  .agentos-global-shell[data-left-open="true"] .agentos-global-left,
+  .agentos-global-shell[data-right-open="true"] .agentos-global-right {
+    transform: translateX(0);
+  }
+
+  .agentos-global-shell[data-right-collapsed="true"] .agentos-global-context {
+    display: flex;
+  }
+
+  .agentos-shell-collapse {
+    display: none;
+  }
+
+  .agentos-shell-drawer-close {
+    position: absolute;
+    top: 9px;
+    right: 10px;
+    z-index: 4;
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 9px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .agentos-shell-backdrop {
+    position: fixed;
+    inset: 52px 0 0;
+    z-index: 125;
+    display: block;
+    border: 0;
+    background: rgba(2,8,15,0.68);
+  }
+
+  .agentos-global-sidebar {
+    padding-bottom: 24px;
+  }
+
+  .agentos-global-context {
+    padding-bottom: 24px;
+  }
+
+  .agentos-mobile-bottom-nav {
+    display: none !important;
+  }
+
+  .panic-button {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+  }
+}

@@ -16,7 +16,7 @@ const AFFECTED = ['multi-agent workflows', 'subagent collaboration', 'multi-agen
 const BYPASSED = ['single-agent chat', 'single workflow run', 'single app execution', 'single skill execution', 'single MCP call'];
 
 function mapRow(row: Record<string, unknown> | null, workspaceId: string | null): FfpTempSettings {
-  const enabled = row?.enabled === true;
+  const enabled = false;
   return {
     workspaceId,
     enabled,
@@ -77,7 +77,7 @@ export async function updateFfpTempSettings(params: {
       .upsert({
         owner_agent_id: params.ownerAgentId,
         workspace_id: dbWorkspaceId(workspaceId),
-        enabled: params.enabled,
+        enabled: false,
         updated_at: now,
       }, { onConflict: 'owner_agent_id,workspace_id' })
       .select('*')
@@ -91,23 +91,22 @@ export async function updateFfpTempSettings(params: {
     const key = dbWorkspaceId(workspaceId);
     const existing = state.ffpTempSettings.find(item => item.ownerAgentId === params.ownerAgentId && item.workspaceId === key);
     if (existing) {
-      existing.enabled = params.enabled;
+      existing.enabled = false;
       existing.updatedAt = now;
       return;
     }
     state.ffpTempSettings.unshift({
       ownerAgentId: params.ownerAgentId,
       workspaceId: key,
-      enabled: params.enabled,
+      enabled: false,
       updatedAt: now,
     });
   });
-  return mapRow({ enabled: params.enabled, updatedAt: now }, workspaceId);
+  return mapRow({ enabled: false, updatedAt: now }, workspaceId);
 }
 
 export function shouldUseFfpTemp(settings: FfpTempSettings, executionKind: string): boolean {
-  if (!settings.enabled) return false;
-  return executionKind === 'multi_agent_workflow'
-    || executionKind === 'subagent_collaboration'
-    || executionKind === 'multi_agent_delegation';
+  void settings;
+  void executionKind;
+  return false;
 }

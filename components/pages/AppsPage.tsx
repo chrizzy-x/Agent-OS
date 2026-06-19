@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import { Badge, Button, Card, DataTable, EmptyState, LoadingState, PageHeader, SearchBar } from '@/components/os/ui';
 
@@ -25,6 +26,7 @@ type InstalledApp = {
 };
 
 export default function AppsPage() {
+  const shell = useApplicationShell();
   const [apps, setApps] = useState<InstalledApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
@@ -39,7 +41,7 @@ export default function AppsPage() {
         setApps([]);
         return;
       }
-      const { response, authState: nextAuthState } = await fetchWithBrowserSession('/api/apps/installed', { cache: 'no-store' });
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession(`/api/apps/installed${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
       setAuthState(nextAuthState);
       const data = await response.json();
       setApps(response.ok ? data.installedApps ?? [] : []);
@@ -48,7 +50,7 @@ export default function AppsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [shell.activeWorkspaceId]);
 
   useEffect(() => {
     void load();

@@ -6,6 +6,7 @@ import Nav from '@/components/Nav';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { Drawer } from '@/components/os/overlays';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import { summarizeValue, summarizeWorkflowRun } from '@/src/ui/presenters';
 import {
@@ -39,6 +40,7 @@ type Workflow = {
 type WorkflowDrawer = 'workflow-spec' | 'workflow-runtime';
 
 export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
+  const shell = useApplicationShell();
   const router = useRouter();
   const drawer = useRouteDrawer<WorkflowDrawer>();
   const [loading, setLoading] = useState(true);
@@ -58,7 +60,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         setWorkflows([]);
         return;
       }
-      const { response, authState: nextAuthState } = await fetchWithBrowserSession('/api/agent/workflows', { cache: 'no-store' });
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession(`/api/agent/workflows${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
       setAuthState(nextAuthState);
       const data = await response.json();
       const rows = data.workflows ?? [];
@@ -71,7 +73,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [activeId, selectedId]);
+  }, [activeId, selectedId, shell.activeWorkspaceId]);
 
   useEffect(() => {
     void load();

@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 're
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import SurfaceShell from '@/components/os/surface-shell';
+import { useApplicationShell } from '@/components/os/application-shell';
 import { Badge, Button, Card, EmptyState } from '@/components/os/ui';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
 type HomePayload = {
-  sessions: Array<{ id: string; title: string; updatedAt: string }>;
+  sessions: Array<{ id: string; workspaceId?: string; title: string; updatedAt: string }>;
   apps: Array<{ id: string; name: string; slug: string; description: string }>;
   skills: Array<{ id: string; name: string; slug: string; description: string }>;
   workflows: Array<{ id: string; name: string; summary: string | null; status: string; visibility?: string }>;
@@ -161,6 +162,7 @@ function PublicLanding() {
 }
 
 export default function HomePage() {
+  const shell = useApplicationShell();
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -202,14 +204,14 @@ export default function HomePage() {
 
       const [sessionsRes, appsRes, skillsRes, workflowsRes, projectsRes, superAgentRes, subagentsRes, memoryRes, filesRes] = await Promise.all([
         fetchWithBrowserSession('/api/studio/sessions?status=active', { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/apps/installed', { cache: 'no-store' }),
+        fetchWithBrowserSession(`/api/apps/installed${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
         fetchWithBrowserSession('/api/skills/installed', { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/agent/workflows', { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/projects', { cache: 'no-store' }),
+        fetchWithBrowserSession(`/api/agent/workflows${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
+        fetchWithBrowserSession(`/api/projects${shell.activeWorkspaceId ? `?workspace=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
         fetchWithBrowserSession('/api/super-agent', { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/subagents', { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/memory?limit=4', { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/files?limit=4', { cache: 'no-store' }),
+        fetchWithBrowserSession(`/api/subagents${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
+        fetchWithBrowserSession(`/api/memory?limit=4${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
+        fetchWithBrowserSession(`/api/files?limit=4${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
       ]);
 
       if (!active) return;
@@ -227,7 +229,7 @@ export default function HomePage() {
       ]);
 
       setPayload({
-        sessions: (sessionsBody.sessions ?? []).slice(0, 4),
+        sessions: (sessionsBody.sessions ?? []).filter((item: { workspaceId?: string }) => !shell.activeWorkspaceId || item.workspaceId === shell.activeWorkspaceId).slice(0, 4),
         apps: (appsBody.installedApps ?? []).slice(0, 4),
         skills: ((skillsBody.installed_skills ?? []) as Array<{ skill?: Record<string, unknown> }>)
           .map((item, index) => ({
@@ -261,7 +263,7 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [shell.activeWorkspaceId]);
 
   const greeting = useMemo(() => {
     const name = session?.agentName?.trim() || 'there';

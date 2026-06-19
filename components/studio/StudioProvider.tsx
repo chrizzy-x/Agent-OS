@@ -18,6 +18,8 @@ import {
   parseStudioAdvancedSession,
 } from '@/src/studio/client-state';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { useApplicationShell } from '@/components/os/application-shell';
+import { consumeStudioSseStream } from '@/src/studio/sse';
 import type {
   StudioContextSection,
   StudioEditorTab,
@@ -49,6 +51,7 @@ type StudioMessageRecord = {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: string;
+  state?: 'streaming' | 'complete' | 'stopped' | 'error';
 };
 
 type StudioEventRecord = {
@@ -174,6 +177,8 @@ type PendingApproval = {
 type StudioContextValue = {
   loading: boolean;
   sending: boolean;
+  streamingStatus: string | null;
+  activeExecutionId: string | null;
   browserSession: BrowserSession | null;
   mode: StudioMode;
   setMode: (mode: StudioMode) => void;
@@ -216,8 +221,15 @@ type StudioContextValue = {
   pendingApproval: PendingApproval | null;
   setComposerValue: (value: string) => void;
   composerValue: string;
+  composerAttachments: Array<{ id: string; name: string; path: string; contentType: string | null }>;
+  composerInvocations: Array<{ id: string; kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }>;
+  addComposerAttachment: (attachment: { id: string; name: string; path: string; contentType: string | null }) => void;
+  removeComposerAttachment: (id: string) => void;
+  addComposerInvocation: (invocation: { kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }) => void;
+  removeComposerInvocation: (id: string) => void;
   sendMessage: (message?: string) => Promise<void>;
   stopGeneration: () => Promise<void>;
+  startNewChat: () => Promise<void>;
   approvePending: () => Promise<void>;
   createSession: (options?: { linkedSubagentId?: string | null; title?: string }) => Promise<StudioSessionRecord | null>;
   focusSubagent: (subagentId: string) => Promise<void>;
@@ -231,7 +243,7 @@ type StudioContextValue = {
   pinSession: (sessionId: string, pinned: boolean) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
-  selectSession: (sessionId: string) => void;
+  selectSession: (sessionId: string) => Promise<void>;
   selectProject: (projectId: string) => void;
   openFile: (path: string) => Promise<void>;
   updateTabContent: (tabId: string, content: string) => void;
@@ -255,28 +267,14 @@ function buildStudioUrl(params: {
   mode: StudioMode;
   sessionId?: string | null;
   projectId?: string | null;
+  workspaceId?: string | null;
 }): string {
   const query = new URLSearchParams();
   query.set('mode', params.mode);
   if (params.sessionId) query.set('session', params.sessionId);
   if (params.projectId) query.set('project', params.projectId);
+  if (params.workspaceId) query.set('workspace', params.workspaceId);
   return `/studio?${query.toString()}`;
-}
-
-function parseStudioStreamPayload(raw: string): Record<string, unknown> {
-  let payload: Record<string, unknown> = {};
-  for (const block of raw.split('\n\n')) {
-    const lines = block.split('\n');
-    const event = lines.find(line => line.startsWith('event: '))?.slice('event: '.length).trim();
-    const data = lines.find(line => line.startsWith('data: '))?.slice('data: '.length);
-    if (!event || !data || (event !== 'reply' && event !== 'error')) continue;
-    try {
-      payload = JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      payload = { kind: 'error', reply: 'I could not read the execution result. Inspect Recovery for details.' };
-    }
-  }
-  return payload;
 }
 
 function flattenFiles(nodes: StudioFileNode[]): StudioFileNode[] {
@@ -312,15 +310,20 @@ export function StudioProvider(props: {
   initialMode?: StudioMode;
   children: ReactNode;
 }) {
+  const applicationShell = useApplicationShell();
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedMode = normalizeMode(searchParams.get('mode') ?? props.initialMode);
   const requestedSessionId = searchParams.get('session') ?? props.initialSessionId ?? null;
   const requestedProjectId = searchParams.get('project');
+  const requestedWorkspaceId = searchParams.get('workspace') ?? applicationShell.activeWorkspaceId;
   const advancedKey = getStudioAdvancedSessionKey('studio-shell');
+  const initialBootstrapModeRef = useRef(requestedMode);
 
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
+  const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
   const [browserSession, setBrowserSession] = useState<BrowserSession | null>(null);
   const [mode, setModeState] = useState<StudioMode>(requestedMode);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -354,7 +357,10 @@ export function StudioProvider(props: {
   const [advancedMode, setAdvancedMode] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [composerValue, setComposerValue] = useState(props.initialPrompt ?? '');
+  const [composerAttachments, setComposerAttachments] = useState<Array<{ id: string; name: string; path: string; contentType: string | null }>>([]);
+  const [composerInvocations, setComposerInvocations] = useState<Array<{ id: string; kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }>>([]);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const streamSettledRef = useRef<Promise<void> | null>(null);
   const activeStreamExecutionIdRef = useRef<string | null>(null);
 
   const currentWorkspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? workspaces[0]?.id ?? null;
@@ -366,10 +372,11 @@ export function StudioProvider(props: {
   const pushRoute = useCallback((nextMode: StudioMode, nextSessionId?: string | null, nextProjectId?: string | null) => {
     router.replace(buildStudioUrl({
       mode: nextMode,
-      sessionId: nextSessionId ?? session?.id ?? requestedSessionId,
-      projectId: nextProjectId ?? currentProject?.id ?? requestedProjectId,
+      sessionId: nextSessionId === undefined ? session?.id ?? requestedSessionId : nextSessionId,
+      projectId: nextProjectId === undefined ? currentProject?.id ?? requestedProjectId : nextProjectId,
+      workspaceId: session?.workspaceId ?? requestedWorkspaceId,
     }));
-  }, [currentProject?.id, requestedProjectId, requestedSessionId, router, session?.id]);
+  }, [currentProject?.id, requestedProjectId, requestedSessionId, requestedWorkspaceId, router, session?.id, session?.workspaceId]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -381,9 +388,10 @@ export function StudioProvider(props: {
     }
 
     const params = new URLSearchParams();
-    params.set('mode', requestedMode);
+    params.set('mode', initialBootstrapModeRef.current);
     if (requestedSessionId) params.set('session', requestedSessionId);
     if (requestedProjectId) params.set('project', requestedProjectId);
+    if (requestedWorkspaceId) params.set('workspace', requestedWorkspaceId);
     const response = await fetchWithBrowserSession(`/api/studio/bootstrap?${params.toString()}`, {
       cache: 'no-store',
     });
@@ -401,7 +409,6 @@ export function StudioProvider(props: {
       || nextProjects[0]
       || null;
 
-    setModeState(normalizeMode(String(payload.mode ?? requestedMode)));
     setSession(nextSession);
     setSessions((payload.sessions ?? []) as StudioSessionRecord[]);
     setLineage((payload.lineage ?? { parent: null, children: [] }) as StudioLineage);
@@ -418,8 +425,13 @@ export function StudioProvider(props: {
     setSubagents((payload.subagents ?? []) as SubagentRecord[]);
     setMemoryEntries((payload.memoryEntries ?? []) as MemoryEntryRecord[]);
     setFileTree((payload.fileTree ?? []) as StudioFileNode[]);
+    applicationShell.syncContext({
+      workspaceId: nextSession?.workspaceId ?? nextCurrentProject?.workspaceId ?? requestedWorkspaceId,
+      projectId: nextCurrentProject?.id ?? null,
+      sessionId: nextSession?.id ?? null,
+    });
     setLoading(false);
-  }, [requestedMode, requestedProjectId, requestedSessionId]);
+  }, [applicationShell.syncContext, requestedProjectId, requestedSessionId, requestedWorkspaceId]);
 
   const refreshLinkedFiles = useCallback(async () => {
     const search = new URLSearchParams();
@@ -436,6 +448,28 @@ export function StudioProvider(props: {
     const payload = await response.response.json() as { entries?: FileEntryRecord[] };
     setFileEntries(payload.entries ?? []);
   }, [currentWorkspaceId, session?.id]);
+
+  const loadSessionBundle = useCallback(async (sessionId: string) => {
+    const response = await fetchWithBrowserSession(`/api/studio/sessions/${sessionId}`, { cache: 'no-store' });
+    if (!response.response.ok) return null;
+    const payload = await response.response.json() as {
+      session?: StudioSessionRecord;
+      messages?: StudioMessageRecord[];
+      events?: StudioEventRecord[];
+      lineage?: StudioLineage;
+    };
+    if (payload.session) {
+      setSession(payload.session);
+      setSessions(current => [
+        payload.session as StudioSessionRecord,
+        ...current.filter(item => item.id !== payload.session?.id),
+      ]);
+    }
+    if (payload.messages) setMessages(payload.messages.map(message => ({ ...message, state: 'complete' })));
+    if (payload.events) setEvents(payload.events);
+    if (payload.lineage) setLineage(payload.lineage);
+    return payload;
+  }, []);
 
   const refreshRuntimeState = useCallback(async () => {
     if (!currentWorkspaceId && !session?.id) {
@@ -552,6 +586,23 @@ export function StudioProvider(props: {
 
   const closeContext = useCallback(() => {
     setContextOpen(false);
+  }, []);
+
+  const addComposerAttachment = useCallback((attachment: { id: string; name: string; path: string; contentType: string | null }) => {
+    setComposerAttachments(current => [attachment, ...current.filter(item => item.id !== attachment.id)]);
+  }, []);
+
+  const removeComposerAttachment = useCallback((id: string) => {
+    setComposerAttachments(current => current.filter(item => item.id !== id));
+  }, []);
+
+  const addComposerInvocation = useCallback((invocation: { kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }) => {
+    const id = `${invocation.kind}:${invocation.ref}`;
+    setComposerInvocations(current => [{ ...invocation, id }, ...current.filter(item => item.id !== id)]);
+  }, []);
+
+  const removeComposerInvocation = useCallback((id: string) => {
+    setComposerInvocations(current => current.filter(item => item.id !== id));
   }, []);
 
   const createSession = useCallback(async (options?: { linkedSubagentId?: string | null; title?: string }) => {
@@ -672,11 +723,6 @@ export function StudioProvider(props: {
     await refresh();
   }, [currentProject?.id, mode, pushRoute, refresh, session?.id]);
 
-  const selectSession = useCallback((sessionId: string) => {
-    pushRoute(mode, sessionId, currentProject?.id ?? null);
-    setSidebarOpen(false);
-  }, [currentProject?.id, mode, pushRoute]);
-
   const selectProject = useCallback((projectId: string) => {
     pushRoute(mode, session?.id ?? requestedSessionId, projectId);
     setSidebarOpen(false);
@@ -698,14 +744,24 @@ export function StudioProvider(props: {
             title: nextMessage.slice(0, 80) || 'New chat',
           }),
         });
-        if (response.response.ok) {
-          const payload = await response.response.json() as { session?: StudioSessionRecord };
-          activeSession = payload.session ?? null;
-          createdSession = activeSession;
-          if (activeSession) {
-            setSession(activeSession);
-            setSessions(current => [activeSession as StudioSessionRecord, ...current.filter(item => item.id !== activeSession?.id)]);
-          }
+        if (!response.response.ok) {
+          setMessages(current => [...current, {
+            id: `session-error-${Date.now()}`,
+            role: 'assistant',
+            content: response.response.status === 401
+              ? 'Your browser session expired. Sign in again, then retry.'
+              : 'Chat storage is temporarily unavailable. Please retry.',
+            createdAt: new Date().toISOString(),
+            state: 'error',
+          }]);
+          return;
+        }
+        const payload = await response.response.json() as { session?: StudioSessionRecord };
+        activeSession = payload.session ?? null;
+        createdSession = activeSession;
+        if (activeSession) {
+          setSession(activeSession);
+          setSessions(current => [activeSession as StudioSessionRecord, ...current.filter(item => item.id !== activeSession?.id)]);
         }
       }
     }
@@ -713,28 +769,44 @@ export function StudioProvider(props: {
       setMessages(current => [...current, {
         id: `session-error-${Date.now()}`,
         role: 'assistant',
-        content: 'I could not create a chat session. Sign in again or check workspace access.',
+        content: 'No workspace is available for this chat. Refresh Studio, then retry.',
         createdAt: new Date().toISOString(),
+        state: 'error',
       }]);
       return;
     }
     const executionSession = activeSession;
     setSending(true);
+    setStreamingStatus('Generating…');
     setPendingApproval(null);
     const assistantMessageId = `streaming-assistant-${Date.now()}`;
     const abortController = new AbortController();
+    let settleStream: () => void = () => undefined;
+    const streamSettled = new Promise<void>(resolve => {
+      settleStream = resolve;
+    });
     streamAbortRef.current = abortController;
+    streamSettledRef.current = streamSettled;
     activeStreamExecutionIdRef.current = null;
+    const createdAt = new Date().toISOString();
     setMessages(current => [...current, {
       id: `optimistic-user-${Date.now()}`,
       role: 'user',
       content: nextMessage,
-      createdAt: new Date().toISOString(),
+      createdAt,
+      state: 'complete',
+    }, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      createdAt,
+      state: 'streaming',
     }]);
     setComposerValue('');
-
-    async function runNonStreamingFallback() {
-      const fallback = await fetchWithBrowserSession('/api/studio/intent/stream', {
+    let finalState: StudioMessageRecord['state'] = 'complete';
+    let receivedTerminalEvent = false;
+    try {
+      const response = await fetchWithBrowserSession('/api/studio/intent/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -742,65 +814,157 @@ export function StudioProvider(props: {
           sessionId: executionSession.id,
           workspaceId: executionSession.workspaceId,
           projectId: currentProject?.id,
+          attachments: composerAttachments,
+          invocations: composerInvocations,
         }),
+        signal: abortController.signal,
       });
-      const payload = parseStudioStreamPayload(await fallback.response.text());
-      const reply = typeof payload.reply === 'string'
-        ? payload.reply
-        : fallback.response.ok
-          ? 'Done.'
-          : 'I could not complete that request. Try again or inspect Recovery.';
-      setMessages(current => [...current, {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: reply,
-        createdAt: new Date().toISOString(),
-      }]);
-      if (typeof payload.confirmToken === 'string') {
-        setPendingApproval({ confirmToken: payload.confirmToken, reply });
+      if (!response.response.ok || !response.response.body) {
+        throw new Error('Stream unavailable');
       }
-      if (typeof payload.navigateTo === 'string') {
-        router.push(payload.navigateTo);
-      }
-    }
 
-    try {
-      await runNonStreamingFallback();
+      await consumeStudioSseStream(response.response.body, event => {
+        if (event.event === 'execution' && typeof event.data.executionId === 'string') {
+          activeStreamExecutionIdRef.current = event.data.executionId;
+          setActiveExecutionId(event.data.executionId);
+          return;
+        }
+        if (event.event === 'status' && typeof event.data.text === 'string') {
+          setStreamingStatus(event.data.text);
+          return;
+        }
+        if (event.event === 'delta' && typeof event.data.text === 'string') {
+          setMessages(current => current.map(item => item.id === assistantMessageId
+            ? { ...item, content: `${item.content}${event.data.text}`, state: 'streaming' }
+            : item));
+          return;
+        }
+        if (event.event === 'approval' && typeof event.data.confirmToken === 'string') {
+          setPendingApproval({
+            confirmToken: event.data.confirmToken,
+            reply: typeof event.data.reply === 'string' ? event.data.reply : '',
+          });
+          return;
+        }
+        if (event.event === 'error') {
+          finalState = 'error';
+          setMessages(current => current.map(item => item.id === assistantMessageId
+            ? { ...item, content: 'I couldn’t complete that response. Try again.', state: 'error' }
+            : item));
+          return;
+        }
+        if (event.event === 'done') {
+          receivedTerminalEvent = true;
+          const status = event.data.status;
+          finalState = status === 'CANCELLED' ? 'stopped' : status === 'FAILED' ? 'error' : 'complete';
+          if (typeof event.data.navigateTo === 'string') router.push(event.data.navigateTo);
+        }
+      });
+      if (!receivedTerminalEvent) {
+        throw new Error('Stream ended before completion');
+      }
+      setMessages(current => current.map(item => item.id === assistantMessageId
+        ? {
+          ...item,
+          content: item.content || (finalState === 'error' ? 'I couldn’t complete that response. Try again.' : ''),
+          state: finalState,
+        }
+        : item));
     } catch (error) {
-      const stopped = error instanceof DOMException && error.name === 'AbortError';
-      setMessages(current => [...current, {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: stopped ? 'Stopped.' : 'I could not complete that request. Try again or inspect Recovery.',
-        createdAt: new Date().toISOString(),
-      }]);
+      const stopped = abortController.signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
+      finalState = stopped ? 'stopped' : 'error';
+      setMessages(current => current.map(item => item.id === assistantMessageId
+        ? {
+          ...item,
+          content: item.content || (stopped ? '' : 'I couldn’t complete that response. Try again.'),
+          state: finalState,
+        }
+        : item));
     } finally {
       streamAbortRef.current = null;
       activeStreamExecutionIdRef.current = null;
-      setSending(false);
-      if (createdSession) {
-        pushRoute(mode, createdSession.id, createdSession.projectId ?? currentProject?.id ?? null);
+      setActiveExecutionId(null);
+      try {
+        if (createdSession) {
+          pushRoute(mode, createdSession.id, createdSession.projectId ?? currentProject?.id ?? null);
+        }
+        if (finalState === 'complete') {
+          await loadSessionBundle(executionSession.id);
+        } else if (finalState === 'stopped') {
+          await new Promise(resolve => setTimeout(resolve, 150));
+          const bundle = await fetchWithBrowserSession(`/api/studio/sessions/${executionSession.id}`, { cache: 'no-store' });
+          if (bundle.response.ok) {
+            const payload = await bundle.response.json() as { messages?: StudioMessageRecord[] };
+            const persisted = payload.messages ?? [];
+            if (persisted.some(item => item.role === 'assistant' && item.content.trim())) {
+              setMessages(persisted.map(item => ({ ...item, state: 'complete' })));
+            }
+          }
+        }
         await refreshRuntimeState();
-        return;
+      } catch {
+        // Keep the completed client response when background refresh fails.
+      } finally {
+        setStreamingStatus(null);
+        setSending(false);
+        setComposerAttachments([]);
+        setComposerInvocations([]);
+        settleStream();
+        if (streamSettledRef.current === streamSettled) {
+          streamSettledRef.current = null;
+        }
       }
-      await refresh();
-      await refreshRuntimeState();
     }
-  }, [composerValue, currentProject?.id, currentWorkspaceId, mode, pushRoute, refresh, refreshRuntimeState, requestedProjectId, router, sending, session]);
+  }, [composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, mode, pushRoute, refreshRuntimeState, requestedProjectId, router, sending, session]);
 
   const stopGeneration = useCallback(async () => {
-    streamAbortRef.current?.abort();
+    const abortController = streamAbortRef.current;
+    const streamSettled = streamSettledRef.current;
+    abortController?.abort();
+    setMessages(current => current.map(item => item.state === 'streaming' ? { ...item, state: 'stopped' } : item));
     const executionId = activeStreamExecutionIdRef.current;
+    activeStreamExecutionIdRef.current = null;
     if (executionId) {
       await fetchWithBrowserSession(`/api/executions/${executionId}/actions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'cancel' }),
       }).catch(() => undefined);
-      await refreshRuntimeState();
     }
-    setSending(false);
-  }, [refreshRuntimeState]);
+    setActiveExecutionId(null);
+    setStreamingStatus('Stopping…');
+    await streamSettled;
+  }, []);
+
+  useEffect(() => {
+    const handleWorkspaceChange = () => {
+      if (streamAbortRef.current || streamSettledRef.current) void stopGeneration();
+    };
+    window.addEventListener('agentos:workspace-change', handleWorkspaceChange);
+    return () => window.removeEventListener('agentos:workspace-change', handleWorkspaceChange);
+  }, [stopGeneration]);
+
+  const startNewChat = useCallback(async () => {
+    if (streamAbortRef.current || streamSettledRef.current) await stopGeneration();
+    setSession(null);
+    setMessages([]);
+    setEvents([]);
+    setLineage({ parent: null, children: [] });
+    setComposerValue('');
+    setComposerAttachments([]);
+    setComposerInvocations([]);
+    setPendingApproval(null);
+    setSidebarOpen(false);
+    pushRoute('nl', null, currentProject?.id ?? null);
+  }, [currentProject?.id, pushRoute, stopGeneration]);
+
+  const selectSession = useCallback(async (sessionId: string) => {
+    if (streamAbortRef.current || streamSettledRef.current) await stopGeneration();
+    const payload = await loadSessionBundle(sessionId);
+    if (!payload?.session) return;
+    pushRoute(mode, sessionId, payload.session.projectId ?? null);
+    setSidebarOpen(false);
+  }, [loadSessionBundle, mode, pushRoute, stopGeneration]);
 
   const approvePending = useCallback(async () => {
     if (!pendingApproval || !session) return;
@@ -958,6 +1122,8 @@ export function StudioProvider(props: {
   const value = useMemo<StudioContextValue>(() => ({
     loading,
     sending,
+    streamingStatus,
+    activeExecutionId,
     browserSession,
     mode,
     setMode,
@@ -1000,8 +1166,15 @@ export function StudioProvider(props: {
     pendingApproval,
     setComposerValue,
     composerValue,
+    composerAttachments,
+    composerInvocations,
+    addComposerAttachment,
+    removeComposerAttachment,
+    addComposerInvocation,
+    removeComposerInvocation,
     sendMessage,
     stopGeneration,
+    startNewChat,
     approvePending,
     createSession,
     focusSubagent,
@@ -1025,9 +1198,12 @@ export function StudioProvider(props: {
   }), [
     activeTabId,
     activeSubagent,
+    activeExecutionId,
     advancedMode,
     browserSession,
     closeContext,
+    composerAttachments,
+    composerInvocations,
     composerValue,
     contextOpen,
     contextSection,
@@ -1056,6 +1232,8 @@ export function StudioProvider(props: {
     selectSession,
     sendMessage,
     stopGeneration,
+    startNewChat,
+    streamingStatus,
     sending,
     session,
     sessions,
@@ -1072,6 +1250,10 @@ export function StudioProvider(props: {
     vaultSecrets,
     workflows,
     workspaces,
+    addComposerAttachment,
+    removeComposerAttachment,
+    addComposerInvocation,
+    removeComposerInvocation,
     createSession,
     renameSession,
     pinSession,
