@@ -8,7 +8,7 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
-  'v6.6.4 - Rebuilt non-Studio authenticated surfaces around the Workspace -> Projects -> Assets -> Workflows -> App Store -> Library hierarchy without changing Studio chat, streaming, or Super AgentOS execution.',
+  'v6.6.3 - Restored the persistent AgentOS shell, complete module navigation, workspace/session/project context, desktop sidebars, mobile drawers, and mode-aware Studio context without removing v6.6.2 execution features.',
   'June 18, 2026 - NL Studio now uses a rebuilt conversation-first layout with real SSE streaming, Markdown replies, safe stop/cancel, lazy chat creation, searchable history, and desktop/mobile parity.',
   'V6.6.2 - Super AgentOS is now the primary product surface with streaming chat, execution cards, files, memory, recovery, notifications, and panic stop.',
   'V6.6.2 - Unified execution records now persist Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, logs, failures, and recovery state.',
@@ -70,7 +70,7 @@ const startLinks = [
   { label: 'Create AgentOS account', href: '/signup' },
   { label: 'Sign in', href: '/signin' },
   { label: 'Open Super AgentOS', href: '/studio' },
-  { label: 'Browse skills', href: '/library?section=skills' },
+  { label: 'Browse skills', href: '/skills' },
   { label: 'Browse apps', href: '/appstore' },
   { label: 'Quick Start', href: '/docs/sdk' },
   { label: 'API reference', href: '/docs/api' },
@@ -95,14 +95,14 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.4 <span style={{ color: 'var(--accent)' }}>&ldquo;Workspace Architecture &amp; Asset System&rdquo;</span></h1>
+          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.3 <span style={{ color: 'var(--accent)' }}>&ldquo;Navigation &amp; Workspace Recovery&rdquo;</span></h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.6.4 makes AgentOS a workspace operating system for projects, assets, workflows, App Store discovery, and Library ownership while preserving Studio streaming and execution. Live at <code>{APP_URL}</code>.
+            v6.6.3 restores AgentOS as a persistent multi-module operating system while preserving Studio streaming, execution, recovery, files, memory, apps, skills, workflows, and MCP. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.4</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.3</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
               AgentOS now keeps every first-class module one click away inside a shell that persists across navigation. Studio modes switch in place without resetting sessions, files, workflows, terminal state, or drafts.

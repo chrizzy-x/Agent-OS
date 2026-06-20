@@ -14,7 +14,7 @@ const MARKETPLACE_LAYERS = [
   {
     title: 'Skill Store',
     body: 'Focused installable capabilities for research, browser work, code execution, retrieval, and domain-specific actions.',
-    href: '/library?section=skills',
+    href: '/skills',
     cta: 'Browse skills',
   },
 ];

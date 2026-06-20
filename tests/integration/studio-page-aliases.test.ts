@@ -1,20 +1,26 @@
-import { describe, expect, it } from 'vitest';
-import { NextRequest } from 'next/server';
-import { middleware } from '../../middleware.js';
+import { describe, expect, it, vi } from 'vitest';
+
+const redirect = vi.fn((target: string) => {
+  throw new Error(`REDIRECT:${target}`);
+});
+
+vi.mock('next/navigation', () => ({
+  redirect,
+}));
 
 describe('studio route aliases', () => {
-  it('redirects /workspace to /', () => {
-    const response = middleware(new NextRequest('http://localhost/workspace', { method: 'GET' }));
-    expect(response?.headers.get('location')).toBe('http://localhost/');
+  it('renders /workspace as the workspace surface', async () => {
+    const module = await import('../../app/workspace/page.js');
+    expect(() => module.default()).not.toThrow();
   });
 
-  it('redirects /dashboard to /', () => {
-    const response = middleware(new NextRequest('http://localhost/dashboard', { method: 'GET' }));
-    expect(response?.headers.get('location')).toBe('http://localhost/');
+  it('redirects /dashboard to /', async () => {
+    const module = await import('../../app/dashboard/page.js');
+    expect(() => module.default()).toThrow('REDIRECT:/');
   });
 
-  it('redirects /workspaces to /', () => {
-    const response = middleware(new NextRequest('http://localhost/workspaces', { method: 'GET' }));
-    expect(response?.headers.get('location')).toBe('http://localhost/');
+  it('redirects /workspaces to /', async () => {
+    const module = await import('../../app/workspaces/page.js');
+    expect(() => module.default()).toThrow('REDIRECT:/');
   });
 });

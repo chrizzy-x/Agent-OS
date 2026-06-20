@@ -76,7 +76,7 @@ export function expectSourceContains(parts: string[], ...needles: string[]): voi
 }
 
 export function expectCanonicalExecutionContract(): void {
-  expect(APP_VERSION).toBe('6.6.4');
+  expect(APP_VERSION).toBe('6.6.3');
   expect(EXECUTION_TYPES.map(type => normalizeExecutionType(type))).toEqual(EXECUTION_TYPES);
   expect(EXECUTION_STATUSES.map(status => normalizeExecutionStatus(status))).toEqual(EXECUTION_STATUSES);
   expect(normalizeExecutionStatus('waiting_for_user')).toBe('PAUSED');

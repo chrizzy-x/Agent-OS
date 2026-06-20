@@ -1,10 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { NextRequest } from 'next/server';
-import { middleware } from '../../middleware.js';
+import { describe, expect, it, vi } from 'vitest';
+
+const navigationMocks = vi.hoisted(() => ({
+  redirect: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  redirect: navigationMocks.redirect,
+}));
+
+import Page from '../../app/marketplace/[slug]/page.js';
 
 describe('marketplace slug page', () => {
-  it('redirects marketplace URLs into the App Store', () => {
-    const response = middleware(new NextRequest('http://localhost/marketplace/research-notes', { method: 'GET' }));
-    expect(response?.headers.get('location')).toBe('http://localhost/appstore');
+  it('redirects marketplace skill slugs into the public Skill Store', async () => {
+    await Page({ params: Promise.resolve({ slug: 'research-notes' }) });
+    expect(navigationMocks.redirect).toHaveBeenCalledWith('/skills/research-notes');
   });
 });

@@ -229,11 +229,11 @@ function deepLinkForAction(action: AgentOSActionType, result: unknown, payload: 
   const navigateTo = getStringField(result, 'navigateTo');
   if (navigateTo) return navigateTo;
   if (action.includes('app') && typeof payload.slug === 'string') return `/appstore/${encodeURIComponent(payload.slug)}`;
-  if (action.includes('skill')) return '/library?section=skills';
+  if (action.includes('skill') && typeof payload.skillId === 'string') return `/skills/${encodeURIComponent(payload.skillId)}`;
   if (action.includes('workflow')) return typeof payload.workflowId === 'string' ? `/workflows/${encodeURIComponent(payload.workflowId)}` : '/workflows';
   if (action.includes('project')) return typeof payload.projectId === 'string' ? `/projects/${encodeURIComponent(payload.projectId)}` : '/projects';
-  if (action.includes('subagent')) return '/library?section=subagents';
-  if (action.startsWith('panic')) return '/workflows';
+  if (action.includes('subagent')) return '/subagents';
+  if (action.startsWith('panic')) return '/mcp';
   return null;
 }
 

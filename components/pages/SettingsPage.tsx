@@ -14,7 +14,6 @@ import {
   Input,
   LoadingState,
   PageHeader,
-  Tabs,
   Textarea,
 } from '@/components/os/ui';
 
@@ -42,7 +41,6 @@ type BearerToken = {
 };
 
 type ThemePreference = 'system' | 'light' | 'dark';
-const SETTINGS_TABS = ['Profile', 'Workspace', 'Appearance', 'Devices', 'Sessions', 'Privacy', 'Billing', 'Developer'];
 
 function planLabel(plan: string | undefined): string {
   return plan && plan in PLAN_LABELS ? PLAN_LABELS[plan as AgentPlan] : plan ?? 'Free';
@@ -76,7 +74,6 @@ export default function SettingsPage() {
   const [oneTimeToken, setOneTimeToken] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('Profile');
 
   const currentPlan = workspaces[0]?.plan ? String(workspaces[0].plan) : 'retail_free';
   const currentPlanLabel = planLabel(currentPlan);
@@ -225,15 +222,15 @@ export default function SettingsPage() {
 
   return (
     <div style={{ minHeight: '100vh' }}>
-      <Nav activePath="/settings" />
-      <WorkspaceShell activePath="/settings">
+      <Nav activePath="/profile" />
+      <WorkspaceShell activePath="/profile">
         <PageHeader
-          eyebrow="Settings"
-          title="Settings"
-          subtitle="Profile, workspace, appearance, devices, sessions, privacy, billing, and developer access."
+          eyebrow="Profile"
+          title="Account center"
+          subtitle="Account, plan, billing, usage, security, sessions, tokens, Developer/SDK access, and logout."
           actions={(
             <div className="os-inline-actions">
-              <Button href="/settings?tab=billing" variant="secondary">Upgrade Plan</Button>
+              <Button href="/billing" variant="secondary">Upgrade Plan</Button>
               <Button onClick={() => void save()}>{saving ? 'Saving...' : 'Save changes'}</Button>
             </div>
           )}
@@ -247,7 +244,6 @@ export default function SettingsPage() {
           />
         ) : (
           <div className="os-drawer-stack">
-            <Tabs tabs={SETTINGS_TABS.map(item => ({ key: item, label: item }))} active={activeTab} onChange={setActiveTab} />
             {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
 
             <Section title="Account Info">
@@ -274,7 +270,7 @@ export default function SettingsPage() {
               </div>
             </Section>
 
-            <Section title="Current Plan" action={<Button href="/settings?tab=billing" variant="secondary">Upgrade Plan</Button>}>
+            <Section title="Current Plan" action={<Button href="/billing" variant="secondary">Upgrade Plan</Button>}>
               <div className="os-inline-actions">
                 <Badge tone="accent">{currentPlanLabel}</Badge>
               </div>
@@ -295,11 +291,11 @@ export default function SettingsPage() {
               </div>
             </Section>
 
-            <Section title="Billing" action={<Button href="/settings?tab=billing" variant="secondary">Upgrade Plan</Button>}>
+            <Section title="Billing" action={<Button href="/billing" variant="secondary">Upgrade Plan</Button>}>
               <div className="os-entity-copy">Beta billing is $0. Plan changes are enforced by backend capability checks.</div>
             </Section>
 
-            <Section title="Subscription" action={<Button href="/settings?tab=billing" variant="secondary">Upgrade Plan</Button>}>
+            <Section title="Subscription" action={<Button href="/billing" variant="secondary">Upgrade Plan</Button>}>
               <div className="os-entity-copy">Active subscription: {currentPlanLabel}. Workspace: {workspaces[0]?.name ?? 'Default workspace'}.</div>
             </Section>
 

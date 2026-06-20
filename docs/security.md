@@ -187,7 +187,7 @@ Audit writes are fire-and-forget (failures do not block operations) but are logg
 
 Audit logs are immutable — agents have no tools to delete or modify them. Row Level Security with `DENY ALL` policies prevents any direct client access.
 
-## V6.6.4 Unified Execution Controls
+## V6.6.2 Unified Execution Controls
 
 Super AgentOS, apps, skills, workflows, MCP-facing tools, files, and memory actions write durable records to `agent_executions` and `agent_execution_logs`.
 
@@ -202,7 +202,7 @@ The Panic Button cancels active queued/running/waiting/paused executions in scop
 
 Production skill execution must run real installed skill source code. Generic local fallback execution is only available in non-production environments when explicitly enabled with `AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK=1`.
 
-V6.6.4 keeps those execution controls and adds the unified workspace shell, Library-owned asset management, project-scoped asset ownership, and Connectors naming for normal users. The required persistence migration remains `src/storage/migrations/026_v651_unified_execution_release.sql`.
+Production verification on June 12, 2026 confirmed the deployed V6.6.2 health endpoint at https://www.agentos.services returned `200` with `version: 6.6.2`. The required persistence migration is `src/storage/migrations/026_v651_unified_execution_release.sql`.
 
 ---
 

@@ -47,9 +47,9 @@ type AppOpenTarget = 'web' | 'android' | 'ios';
 
 function runtimeLabel(app: AppDetails | null): string {
   if (!app) return 'App';
-  if (app.source === 'external_sdk' || app.kernelProduct) return 'SDK App';
-  if (app.source === 'internal' || app.runtimeType === 'agentos-app' || app.runtimeType === 'workspace-app') return 'Native App';
-  return 'External App';
+  if (app.source === 'external_sdk') return 'External SDK';
+  if (app.runtimeType === 'workspace-app') return 'Workspace App';
+  return 'Internal App';
 }
 
 function formatTargets(values: string[]): string {
@@ -463,7 +463,7 @@ export default function AppDetailPage({
                     <div className="os-entity-copy" style={{ marginBottom: 12 }}>
                       Missing: {missingSecrets.join(', ')}
                     </div>
-                    <Button href="/library?section=vault" variant="secondary">Open Vault</Button>
+                    <Button href="/vault" variant="secondary">Open Vault</Button>
                   </Card>
                 ) : null}
 
@@ -473,7 +473,7 @@ export default function AppDetailPage({
                     <div className="os-entity-copy" style={{ marginBottom: 12 }}>
                       Missing: {missingSkills.join(', ')}
                     </div>
-                    <Button href="/library?section=skills" variant="secondary">Open Skills</Button>
+                    <Button href="/skills" variant="secondary">Open Skills</Button>
                   </Card>
                 ) : null}
 

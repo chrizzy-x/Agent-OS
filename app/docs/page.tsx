@@ -34,13 +34,13 @@ const sections = [
   {
     title: 'API Reference',
     href: '/docs/api',
-    desc: 'Live route contracts for signup, signin, Studio, projects, workflows, Library, App Store, connectors, and ops.',
+    desc: 'Live route contracts for signup, signin, Studio, Super AgentOS, MCP, skills, workflows, projects, and ops.',
     badge: null,
   },
   {
     title: 'Connect Your Agent',
-    href: '/library?section=connectors',
-    desc: 'Register any external agent, capture its bearer token once, and manage it as a connector.',
+    href: '/connectors',
+    desc: 'Register any external agent, capture its bearer token once, and test the universal MCP endpoint live.',
     badge: null,
   },
   {
@@ -58,14 +58,14 @@ const sections = [
   {
     title: 'FFP',
     href: '/docs/ffp',
-    desc: 'Visible for compatibility and marked Coming Soon. Runtime routing is disabled in v6.6.4.',
+    desc: 'Visible for compatibility and marked Coming Soon. Runtime routing is disabled in v6.6.3.',
     badge: 'Coming Soon',
   },
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'v6.6.4 Workspace Architecture & Asset System release notes.',
-    badge: 'v6.6.4',
+    desc: 'v6.6.3 Navigation & Workspace Recovery release notes.',
+    badge: 'v6.6.3',
   },
 ];
 
@@ -191,7 +191,7 @@ export default function DocsPage() {
                 color: 'var(--text-secondary)',
                 maxWidth: '560px',
               }}>
-                Live docs for the operating system for the agent economy: Studio, projects, workflows, Library ownership, App Store discovery, connectors, and SDK registration.
+                Live docs for the operating system for the agent economy: Studio, Super AgentOS, stores, SDK registration, workflows, apps, skills, and MCP runtime surfaces.
               </p>
             </div>
 

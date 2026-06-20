@@ -4,9 +4,9 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> V6.6.4
+> V6.6.3
 
-AgentOS is an AI operating system. Every workspace organizes projects for context, assets for capability, workflows for execution, App Store discovery, and Library ownership.
+AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, and activity.
 
 Live:
 - [agentos.services](https://agentos.services)
@@ -15,20 +15,15 @@ Live:
 Supporting message:
 - talk to it, build with it, and install what it needs
 
-## V6.6.4 status
+## V6.6.3 status
 
-V6.6.4 rebuilds all non-Studio authenticated surfaces around one workspace hierarchy: Home, Studio, Projects, Workflows, Library, App Store, Developer, FFP, and Settings. Studio chat, streaming, and Super AgentOS execution internals remain unchanged.
+V6.6.3 restores the persistent AgentOS operating-system shell, complete top-level navigation, workspace/session/project access, desktop sidebars, mobile drawers, mode-aware Studio context, structured composer tools, Community, and read-only FFP Coming Soon behavior without removing v6.6.2 streaming or execution functionality.
 
-See [Workspace Architecture & Asset System release notes](RELEASE_NOTES_v6.6.4.md).
+See [Navigation & Workspace Recovery release notes](RELEASE_NOTES_v6.6.3.md).
 
-Production deployment:
-- URL: [https://www.agentos.services](https://www.agentos.services)
-- Deploy date: June 20, 2026
-- Build: Vercel production build passed for `agent-os@6.6.4`
+## V6.6.2 status
 
-## Historical V6.6.2 status
-
-V6.6.2 shipped:
+V6.6.2 ships:
 - `/studio` as the primary Super AgentOS operating surface with persisted chat, streaming replies, execution cards, files, memory, apps, skills, workflows, MCP context, recovery, notifications, and panic stop controls
 - unified persisted executions for Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, MCP-facing runtime paths, logs, failures, recovery state, duration, tokens, and estimated cost fields
 - `/files` for governed upload, preview, summarize, rename, search, and delete flows
@@ -51,7 +46,7 @@ V6.6.2 shipped:
 - `/vault` with assignment-aware secret validation and runtime grants
 - hardened Vault runtime injection with temporary secret access, runtime cleanup, access audit events, and shared output redaction
 - `/mcp` with advanced tool discovery, connector diagnostics, and runtime execution visibility
-- `/ffp` retained as disabled Coming Soon compatibility surface in V6.6.4
+- `/ffp` retained as disabled Coming Soon compatibility surface in V6.6.3
 - `/billing` with self-serve plan transitions across Free, Pro, Enterprise, and Enterprise Max
 - SDK app registration into factual public listings when an Enterprise SDK app is explicitly registered
 - global search across apps, skills, workflows, sessions, projects, agents, and Vault secret names only
@@ -63,7 +58,7 @@ V6.6.2 shipped:
 - session create, rename, pin, archive, soft-delete, search, and persistence with server-backed ownership enforcement
 - structured Studio intent outcomes for chat replies, previews, approvals, forbidden states, unsupported actions, and completed actions
 
-V6.6.2 production verification:
+Production verification:
 - URL: [https://www.agentos.services](https://www.agentos.services)
 - Deployment alias: [https://www.agentos.services](https://www.agentos.services)
 - Final deploy date: June 18, 2026
@@ -240,7 +235,7 @@ vercel deploy --prod
 Before deploying:
 - keep `main` fast-forwarded with `origin/main`
 - confirm `.vercel/project.json` points at the intended project
-- verify `/`, `/studio`, `/projects`, `/workflows`, `/library`, `/appstore`, `/appstore/[slug]`, `/search`, `/developer`, `/ffp`, and `/settings`, plus redirect aliases for legacy UI URLs
+- verify `/`, `/studio`, `/appstore`, `/appstore/[slug]`, `/skills`, `/skills/[slug]`, `/files`, `/memory`, `/workflows`, `/agents`, `/vault`, `/search`, `/ffp`, `/mcp`, `/developer`, `/sdk`, and redirect aliases for `/workspace`, `/workspaces`, and `/dashboard`
 - after production deployment, update release notes with the production URL, deployment alias, migration status, and quality-gate result
 
 ## Project layout

@@ -55,8 +55,8 @@ export default function Button({
 
   if (href) {
     return (
-      <Link href={href} className={cls} style={combinedStyle} aria-busy={loading || undefined} aria-label={loading ? 'Loading' : undefined}>
-        {loading ? <span className="button-loading-skeleton" aria-hidden="true" /> : children}
+      <Link href={href} className={cls} style={combinedStyle}>
+        {loading ? 'Loading...' : children}
       </Link>
     );
   }
@@ -68,10 +68,8 @@ export default function Button({
       style={combinedStyle}
       onClick={onClick}
       disabled={disabled || loading}
-      aria-busy={loading || undefined}
-      aria-label={loading ? 'Loading' : undefined}
     >
-      {loading ? <span className="button-loading-skeleton" aria-hidden="true" /> : children}
+      {loading ? 'Loading...' : children}
     </button>
   );
 }

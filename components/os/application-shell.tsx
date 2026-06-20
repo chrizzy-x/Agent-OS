@@ -13,12 +13,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  destroyBrowserSession,
-  fetchBrowserSessionState,
-  fetchWithBrowserSession,
-  type BrowserSession,
-} from '@/src/auth/browser-session';
+import { destroyBrowserSession, fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 
 type WorkspaceRef = { id: string; name: string; slug: string; plan: string };
 type SessionRef = {
@@ -78,24 +73,23 @@ const ApplicationShellContext = createContext<ApplicationShellContextValue>({
   setLeftCollapsed: () => undefined,
   setRightCollapsed: () => undefined,
 });
-
 let shellInstanceCounter = 0;
-
 const EXCLUDED_PREFIXES = ['/signin', '/signup', '/login', '/forgot-password', '/onboarding'];
 const NAV_ITEMS = [
   { href: '/', label: 'Home', icon: 'H' },
   { href: '/studio', label: 'Studio', icon: 'S' },
   { href: '/projects', label: 'Projects', icon: 'P' },
-  { href: '/workflows', label: 'Workflows', icon: 'W' },
   { href: '/library', label: 'Library', icon: 'L' },
+  { href: '/skills', label: 'Skills', icon: 'K' },
   { href: '/appstore', label: 'App Store', icon: 'A' },
-  { href: '/developer', label: 'Developer', icon: 'D' },
-  { href: '/ffp', label: 'FFP', icon: 'F' },
-  { href: '/settings', label: 'Settings', icon: 'T' },
+  { href: '/subagents', label: 'Subagents', icon: 'G', aliases: ['/agents'] },
+  { href: '/mcp', label: 'Universal MCP', icon: 'U', aliases: ['/connectors'] },
+  { href: '/vault', label: 'Vault', icon: 'V' },
+  { href: '/community', label: 'Community', icon: 'C' },
+  { href: '/docs', label: 'Docs', icon: 'D' },
+  { href: '/ffp', label: 'FFP', icon: 'F', disabled: true },
+  { href: '/settings', label: 'Settings', icon: 'T', aliases: ['/profile', '/billing'] },
 ] as const;
-const MOBILE_NAV_ITEMS = NAV_ITEMS.filter(item => ['Home', 'Studio', 'Library', 'Workflows', 'Settings'].includes(item.label));
-const WORKSPACE_LABELS = ['Personal Workspace', 'AgentOS Workspace', 'deZypher Workspace', 'Derek Workspace'];
-const NEW_WORKSPACE_VALUE = '__new_workspace__';
 
 function readStored(key: string): string | null {
   try {
@@ -123,9 +117,11 @@ function beginNavigationMetric() {
   }
 }
 
-function isActive(pathname: string, href: string) {
-  if (href === '/') return pathname === '/';
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActive(pathname: string, item: (typeof NAV_ITEMS)[number]) {
+  if (item.href === '/') return pathname === '/';
+  return pathname === item.href
+    || pathname.startsWith(`${item.href}/`)
+    || ('aliases' in item && item.aliases.some(alias => pathname === alias || pathname.startsWith(`${alias}/`)));
 }
 
 function initials(session: BrowserSession | null) {
@@ -147,20 +143,6 @@ function tabletDefaultCollapsed() {
   return window.matchMedia('(min-width: 768px) and (max-width: 1279px)').matches;
 }
 
-function workspaceOptions(workspaces: WorkspaceRef[]) {
-  const byName = new Map(workspaces.map(item => [item.name.toLowerCase(), item]));
-  const listed = new Set<string>();
-  const options = WORKSPACE_LABELS.map(label => {
-    const match = byName.get(label.toLowerCase()) ?? workspaces.find(item => item.name.toLowerCase().includes(label.replace(' Workspace', '').toLowerCase()));
-    if (match) listed.add(match.id);
-    return { label, id: match?.id ?? null };
-  });
-  for (const workspace of workspaces) {
-    if (!listed.has(workspace.id)) options.push({ label: workspace.name, id: workspace.id });
-  }
-  return options;
-}
-
 function DefaultRightPanel(props: {
   workspace: WorkspaceRef | null;
   project: ProjectRef | null;
@@ -176,15 +158,9 @@ function DefaultRightPanel(props: {
         <div><span>Session</span><strong>{props.session?.title ?? 'None'}</strong></div>
       </section>
       <section>
-        <h2>Hierarchy</h2>
-        <div><span>Projects</span><strong>Context</strong></div>
-        <div><span>Assets</span><strong>Capability</strong></div>
-        <div><span>Workflows</span><strong>Execution</strong></div>
-      </section>
-      <section>
         <h2>Status</h2>
         <div><span>Unread</span><strong>{props.payload.notifications.unread}</strong></div>
-        <div><span>Subagents</span><strong>{props.payload.agents.connected}</strong></div>
+        <div><span>External agents</span><strong>{props.payload.agents.connected}</strong></div>
         <div><span>FFP</span><strong>Coming Soon</strong></div>
       </section>
       <div id="agentos-right-panel-slot" />
@@ -196,11 +172,30 @@ function LeftSidebar(props: {
   payload: ShellPayload;
   pathname: string;
   activeWorkspaceId: string | null;
+  activeProjectId: string | null;
+  activeSessionId: string | null;
   collapsed: boolean;
   onWorkspace: (id: string) => void;
-  onCreateWorkspace: () => void;
+  onProject: (id: string) => void;
+  onSession: (id: string) => void;
+  onSessionAction: (session: SessionRef, action: 'rename' | 'pin' | 'archive' | 'delete' | 'continue') => void;
   onCloseMobile: () => void;
 }) {
+  const router = useRouter();
+  const workspaceProjects = props.payload.projects.filter(item => item.workspaceId === props.activeWorkspaceId);
+  const workspaceSessions = props.payload.sessions.filter(item => item.workspaceId === props.activeWorkspaceId);
+  const pinnedSessions = workspaceSessions.filter(item => item.pinnedAt && !item.archivedAt);
+  const recentSessions = workspaceSessions.filter(item => !item.pinnedAt && !item.archivedAt).slice(0, 8);
+  const archivedSessions = workspaceSessions.filter(item => item.archivedAt).slice(0, 5);
+  const pinnedProjects = workspaceProjects.filter(item => item.pinned);
+  const recentProjects = workspaceProjects.filter(item => !item.pinned).slice(0, 5);
+
+  function navigate(href: string) {
+    props.onCloseMobile();
+    beginNavigationMetric();
+    router.push(href);
+  }
+
   return (
     <div className="agentos-global-sidebar" data-collapsed={props.collapsed ? 'true' : 'false'}>
       <section className="agentos-global-workspace">
@@ -208,27 +203,23 @@ function LeftSidebar(props: {
         <select
           id="agentos-workspace-select"
           value={props.activeWorkspaceId ?? ''}
-          onChange={event => {
-            if (event.target.value === NEW_WORKSPACE_VALUE) props.onCreateWorkspace();
-            else props.onWorkspace(event.target.value);
-          }}
+          onChange={event => props.onWorkspace(event.target.value)}
           aria-label="Current workspace"
         >
-          {workspaceOptions(props.payload.workspaces).map(item => (
-            <option key={item.label} value={item.id ?? item.label} disabled={!item.id}>
-              {item.label}
-            </option>
-          ))}
-          <option value={NEW_WORKSPACE_VALUE}>+ New Workspace</option>
+          {props.payload.workspaces.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </section>
 
       <nav className="agentos-global-nav" aria-label="AgentOS modules">
-        {NAV_ITEMS.map(item => (
+        {NAV_ITEMS.map(item => 'disabled' in item && item.disabled ? (
+          <span key={item.href} className="disabled" aria-disabled="true" title="Coming Soon">
+            <i aria-hidden="true">{item.icon}</i><b>{item.label}</b><small>Soon</small>
+          </span>
+        ) : (
           <Link
             key={item.href}
             href={item.href}
-            className={isActive(props.pathname, item.href) ? 'active' : ''}
+            className={isActive(props.pathname, item) ? 'active' : ''}
             onClick={() => {
               beginNavigationMetric();
               props.onCloseMobile();
@@ -238,6 +229,56 @@ function LeftSidebar(props: {
           </Link>
         ))}
       </nav>
+
+      <section className="agentos-global-quick">
+        <h2>Quick Actions</h2>
+        <button type="button" onClick={() => navigate('/studio?mode=nl')}>New Chat</button>
+        <button type="button" onClick={() => navigate('/studio?mode=workflow&new=1')}>New Workflow</button>
+        <button type="button" onClick={() => navigate('/projects?create=1')}>New Project</button>
+        <button type="button" onClick={() => navigate('/subagents?create=1')}>New Subagent</button>
+      </section>
+
+      <section className="agentos-global-history">
+        <h2>Chats</h2>
+        {pinnedSessions.length > 0 ? <h3>Pinned Sessions</h3> : null}
+        {pinnedSessions.map(item => (
+          <div key={item.id} className="agentos-session-row">
+            <button type="button" className={item.id === props.activeSessionId ? 'active' : ''} onClick={() => props.onSession(item.id)}>{item.title}</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'rename')} aria-label={`Rename ${item.title}`}>R</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'pin')} aria-label={`Unpin ${item.title}`}>U</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'archive')} aria-label={`Archive ${item.title}`}>A</button>
+          </div>
+        ))}
+        <h3>Recent Sessions</h3>
+        {recentSessions.map(item => (
+          <div key={item.id} className="agentos-session-row">
+            <button type="button" className={item.id === props.activeSessionId ? 'active' : ''} onClick={() => props.onSession(item.id)}>{item.title}</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'rename')} aria-label={`Rename ${item.title}`}>R</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'pin')} aria-label={`Pin ${item.title}`}>P</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'archive')} aria-label={`Archive ${item.title}`}>A</button>
+          </div>
+        ))}
+        {archivedSessions.length > 0 ? <h3>Archived Sessions</h3> : null}
+        {archivedSessions.map(item => (
+          <div key={item.id} className="agentos-session-row">
+            <button type="button" onClick={() => props.onSession(item.id)}>{item.title}</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'continue')} aria-label={`Continue ${item.title}`}>C</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'delete')} aria-label={`Delete ${item.title}`}>D</button>
+          </div>
+        ))}
+      </section>
+
+      <section className="agentos-global-history">
+        <h2>Projects</h2>
+        {pinnedProjects.length > 0 ? <h3>Pinned Projects</h3> : null}
+        {pinnedProjects.map(item => (
+          <button key={item.id} type="button" className={item.id === props.activeProjectId ? 'active' : ''} onClick={() => props.onProject(item.id)}>{item.name}</button>
+        ))}
+        <h3>Recent Projects</h3>
+        {recentProjects.map(item => (
+          <button key={item.id} type="button" className={item.id === props.activeProjectId ? 'active' : ''} onClick={() => props.onProject(item.id)}>{item.name}</button>
+        ))}
+      </section>
     </div>
   );
 }
@@ -359,26 +400,6 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     router.replace(`${pathname}?${query.toString()}`);
   }, [pathname, payload.projects, payload.sessions, payload.workspaces, router, searchParams]);
 
-  const createWorkspace = useCallback(async () => {
-    const name = window.prompt('Workspace name', 'New Workspace')?.trim();
-    if (!name) return;
-    const result = await fetchWithBrowserSession('/api/workspaces', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    if (!result.response.ok) return;
-    const body = await result.response.json().catch(() => ({})) as { workspace?: WorkspaceRef };
-    if (body.workspace?.id) {
-      writeStored('agentos.shell.workspace', body.workspace.id);
-      setActiveWorkspaceId(body.workspace.id);
-      setActiveProjectId(null);
-      setActiveSessionId(null);
-      window.dispatchEvent(new CustomEvent('agentos:workspace-change', { detail: { workspaceId: body.workspace.id, projectId: null } }));
-    }
-    await refreshShell();
-  }, [refreshShell]);
-
   const setActiveProject = useCallback((projectId: string | null) => {
     setActiveProjectId(projectId);
     if (activeWorkspaceId) writeStored(`agentos.shell.project.${activeWorkspaceId}`, projectId);
@@ -405,6 +426,36 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     }
     setLeftDrawerOpen(false);
   }, [payload.sessions, router]);
+
+  const manageSession = useCallback(async (target: SessionRef, action: 'rename' | 'pin' | 'archive' | 'delete' | 'continue') => {
+    if (action === 'rename') {
+      const title = window.prompt('Rename session', target.title)?.trim();
+      if (!title) return;
+      await fetchWithBrowserSession(`/api/studio/sessions/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+    } else if (action === 'pin') {
+      await fetchWithBrowserSession(`/api/studio/sessions/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned: !target.pinnedAt }),
+      });
+    } else if (action === 'continue') {
+      await fetchWithBrowserSession(`/api/studio/sessions/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      });
+      setActiveSession(target.id);
+    } else {
+      if (action === 'delete' && !window.confirm(`Delete ${target.title}?`)) return;
+      await fetchWithBrowserSession(`/api/studio/sessions/${target.id}?mode=${action === 'delete' ? 'delete' : 'archive'}`, { method: 'DELETE' });
+      if (target.id === activeSessionId) setActiveSessionId(null);
+    }
+    await refreshShell();
+  }, [activeSessionId, refreshShell, setActiveSession]);
 
   const syncContext = useCallback((context: { workspaceId?: string | null; projectId?: string | null; sessionId?: string | null }) => {
     if (context.workspaceId !== undefined) {
@@ -486,10 +537,10 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             <span>{project?.name ?? 'No project'}</span>
             <span>{activeSession?.title ?? 'No session'}</span>
             {pathname === '/studio' ? <span>{formatMode(mode)}</span> : null}
+            {pathname === '/studio' ? <span>{process.env.NEXT_PUBLIC_AGENTOS_MODEL ?? 'Default model'}</span> : null}
           </div>
           <div className="agentos-global-header-actions">
-            <Link href="/search">Search</Link>
-            <Link href="/settings?sessions=1" aria-label={`${payload.notifications.unread} unread notifications`}>Alerts {payload.notifications.unread}</Link>
+            <Link href="/notifications" aria-label={`${payload.notifications.unread} unread notifications`}>Alerts {payload.notifications.unread}</Link>
             <Link href="/settings" className="agentos-global-user">
               <span>{initials(session)}</span>
               <b>{session?.agentName ?? 'Account'}</b>
@@ -502,15 +553,19 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
         <aside className="agentos-global-left" aria-label="Navigation sidebar">
           <button type="button" className="agentos-shell-drawer-close" onClick={() => setLeftDrawerOpen(false)} aria-label="Close navigation">Close</button>
           <button type="button" className="agentos-shell-collapse" onClick={() => setLeftCollapsed(!leftCollapsed)} aria-label={leftCollapsed ? 'Expand navigation sidebar' : 'Collapse navigation sidebar'}>
-            {leftCollapsed ? '>' : '<'}
+            {leftCollapsed ? '›' : '‹'}
           </button>
           <LeftSidebar
             payload={payload}
             pathname={pathname}
             activeWorkspaceId={activeWorkspaceId}
+            activeProjectId={activeProjectId}
+            activeSessionId={activeSessionId}
             collapsed={leftCollapsed}
             onWorkspace={setActiveWorkspace}
-            onCreateWorkspace={() => void createWorkspace()}
+            onProject={setActiveProject}
+            onSession={setActiveSession}
+            onSessionAction={(target, action) => void manageSession(target, action)}
             onCloseMobile={() => setLeftDrawerOpen(false)}
           />
         </aside>
@@ -520,24 +575,10 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
         <aside className="agentos-global-right" aria-label="Context sidebar">
           <button type="button" className="agentos-shell-drawer-close" onClick={() => setRightDrawerOpen(false)} aria-label="Close context">Close</button>
           <button type="button" className="agentos-shell-collapse" onClick={() => setRightCollapsed(!rightCollapsed)} aria-label={rightCollapsed ? 'Expand context sidebar' : 'Collapse context sidebar'}>
-            {rightCollapsed ? '<' : '>'}
+            {rightCollapsed ? '‹' : '›'}
           </button>
           <DefaultRightPanel workspace={workspace} project={project} session={activeSession} payload={payload} />
         </aside>
-
-        <nav className="agentos-mobile-primary-nav" aria-label="Mobile primary navigation">
-          {MOBILE_NAV_ITEMS.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={isActive(pathname, item.href) ? 'active' : ''}
-              onClick={beginNavigationMetric}
-            >
-              <i aria-hidden="true">{item.icon}</i>
-              <span>{item.label}</span>
-            </Link>
-          ))}
-        </nav>
 
         {(leftDrawerOpen || rightDrawerOpen) ? (
           <button

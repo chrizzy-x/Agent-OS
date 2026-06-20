@@ -801,14 +801,14 @@ export async function POST(req: NextRequest) {
     const projectId = typeof body.projectId === 'string' ? body.projectId : sessionContext.projectId;
 
     if (isStoreNavigationRequest(trimmedMessage, 'marketplace')) {
-      const reply = 'Opening the App Store discovery center.';
+      const reply = 'Opening the marketplace discovery layer.';
       await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
       return NextResponse.json({
         kind: 'completed',
         intent,
         statusText: 'Done.',
         reply,
-        navigateTo: '/appstore',
+        navigateTo: '/marketplace',
       });
     }
 
@@ -825,14 +825,14 @@ export async function POST(req: NextRequest) {
     }
 
     if (isStoreNavigationRequest(trimmedMessage, 'skillstore')) {
-      const reply = 'Opening Library Skills.';
+      const reply = 'Opening the Skill Store.';
       await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
       return NextResponse.json({
         kind: 'completed',
         intent,
         statusText: 'Done.',
         reply,
-        navigateTo: '/library?section=skills',
+        navigateTo: '/skills',
       });
     }
 

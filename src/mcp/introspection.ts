@@ -215,7 +215,7 @@ function skillLink(row: Record<string, unknown>): RuntimeSubjectLink {
   return {
     id: String(row.id),
     name: typeof row.name === 'string' ? row.name : slug,
-    href: '/library?section=skills',
+    href: `/skills/${slug}`,
     updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
   };
 }

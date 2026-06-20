@@ -24,7 +24,7 @@ describe('social platform catalog', () => {
     expect(xPlatform).toMatchObject({
       status: 'live',
       connectedCount: 3,
-      dashboardHref: '/',
+      dashboardHref: '/dashboard/x',
     });
   });
 

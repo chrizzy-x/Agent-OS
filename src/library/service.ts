@@ -1,10 +1,8 @@
 import { getAgentAppPackageCacheStatus, listInstalledAgentApps, resolveSupportedDeviceTargets } from '../appstore/service.js';
 import { listAccessibleFiles } from '../files/service.js';
-import { listAccessibleMemoryEntries } from '../memory/service.js';
 import { listAccessibleSubagents } from '../subagents/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
-import { listVaultSecrets } from '../vault/service.js';
 
 export type LibraryItemKind =
   | 'installed_app'
@@ -15,9 +13,6 @@ export type LibraryItemKind =
   | 'file'
   | 'published_asset'
   | 'forked_asset'
-  | 'memory'
-  | 'vault_secret'
-  | 'connector'
   | 'mcp_connection'
   | 'external_connection'
   | 'download'
@@ -65,9 +60,6 @@ function groupItems(items: LibraryItem[]): LibraryPayload {
     file: [],
     published_asset: [],
     forked_asset: [],
-    memory: [],
-    vault_secret: [],
-    connector: [],
     mcp_connection: [],
     external_connection: [],
     download: [],
@@ -102,7 +94,7 @@ async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
           kind: 'installed_skill' as const,
           name: String(skill.name ?? 'Skill'),
           description: String(skill.description ?? skill.category ?? 'Installed skill'),
-          href: '/library?section=skills',
+          href: `/skills/${slug}`,
           workspaceId: null,
           projectId: null,
           visibility: normalizeVisibility(skill.visibility ?? (skill.published === true ? 'public' : 'private')),
@@ -124,7 +116,7 @@ async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
       kind: 'installed_skill' as const,
       name: skill.name,
       description: skill.description,
-      href: '/library?section=skills',
+      href: `/skills/${skill.slug}`,
       workspaceId: skill.workspace_id ?? null,
       projectId: null,
       visibility: normalizeVisibility((skill as { visibility?: unknown }).visibility ?? (skill.published ? 'public' : 'private')),
@@ -174,7 +166,7 @@ async function listPublishedAssets(agentId: string): Promise<LibraryItem[]> {
         kind: 'published_asset',
         name: String(row.name ?? 'Skill'),
         description: String(row.description ?? row.category ?? 'Published skill'),
-        href: '/library?section=skills',
+        href: `/skills/${String(row.slug ?? row.id)}`,
         workspaceId: null,
         projectId: null,
         visibility: normalizeVisibility(row.visibility ?? 'public'),
@@ -257,83 +249,6 @@ async function listRecentActivity(agentId: string): Promise<LibraryItem[]> {
   }
 }
 
-async function listMemoryItems(agentId: string, workspaceId?: string | null): Promise<LibraryItem[]> {
-  const entries = await listAccessibleMemoryEntries({
-    viewerAgentId: agentId,
-    ownerAgentId: agentId,
-    workspaceId,
-    visibility: 'all',
-    limit: 100,
-  }).catch(() => []);
-  return entries.map(entry => ({
-    id: entry.id,
-    kind: 'memory' as const,
-    name: entry.key,
-    description: `${entry.namespaceType} memory`,
-    href: '/library?section=memory',
-    workspaceId: entry.workspaceId,
-    projectId: null,
-    visibility: entry.visibility,
-    updatedAt: entry.updatedAt,
-    metadata: {
-      scope: entry.namespaceType,
-      namespaceId: entry.namespaceId,
-      status: 'active',
-      tags: entry.tags,
-    },
-  }));
-}
-
-async function listVaultItems(agentId: string, workspaceId?: string | null): Promise<LibraryItem[]> {
-  const results = await Promise.all([listVaultSecrets({ ownerAgentId: agentId, workspaceId: workspaceId ?? undefined }).catch(() => ({ secrets: [] }))]);
-  return results.flatMap(result => result.secrets.map(secret => ({
-    id: secret.id,
-    kind: 'vault_secret' as const,
-    name: secret.name,
-    description: 'Vault secret',
-    href: '/library?section=vault',
-    workspaceId: secret.workspaceId,
-    projectId: null,
-    visibility: 'private' as const,
-    updatedAt: secret.updatedAt,
-    metadata: {
-      provider: 'Vault',
-      status: secret.status,
-      assignedAssets: 0,
-      lastUsedAt: secret.lastAccessedAt,
-    },
-  })));
-}
-
-async function listConnectorItems(): Promise<LibraryItem[]> {
-  try {
-    const { data, error } = await getSupabaseAdmin()
-      .from('mcp_servers')
-      .select('id,name,description,category,tools,active,created_at')
-      .eq('active', true)
-      .order('name', { ascending: true });
-    if (error) return [];
-    return ((data ?? []) as Array<Record<string, unknown>>).map(row => ({
-      id: String(row.id ?? row.name),
-      kind: 'connector' as const,
-      name: String(row.name ?? 'Connector'),
-      description: String(row.description ?? row.category ?? 'Connector'),
-      href: '/library?section=connectors',
-      workspaceId: null,
-      projectId: null,
-      visibility: 'workspace' as const,
-      updatedAt: String(row.created_at ?? ''),
-      metadata: {
-        provider: row.category ?? 'Connector',
-        status: row.active === false ? 'disabled' : 'active',
-        permissions: Array.isArray(row.tools) ? row.tools.length : 0,
-      },
-    }));
-  } catch {
-    return [];
-  }
-}
-
 export async function listLibrary(params: {
   ownerAgentId: string;
   workspaceId?: string | null;
@@ -341,15 +256,12 @@ export async function listLibrary(params: {
   search?: string | null;
   limit?: number;
 }): Promise<LibraryPayload> {
-  const [installedApps, installedSkills, workflows, subagents, files, memory, vault, connectors, publishedAssets, explicit, recentActivity] = await Promise.all([
+  const [installedApps, installedSkills, workflows, subagents, files, publishedAssets, explicit, recentActivity] = await Promise.all([
     listInstalledAgentApps(params.ownerAgentId).catch(() => []),
     listInstalledSkills(params.ownerAgentId),
     listWorkflows(params.ownerAgentId),
     listAccessibleSubagents({ viewerAgentId: params.ownerAgentId, workspaceId: params.workspaceId, projectId: params.projectId }).catch(() => []),
     listAccessibleFiles({ viewerAgentId: params.ownerAgentId, workspaceId: params.workspaceId ?? undefined, limit: 100 }).catch(() => []),
-    listMemoryItems(params.ownerAgentId, params.workspaceId),
-    listVaultItems(params.ownerAgentId, params.workspaceId),
-    listConnectorItems(),
     listPublishedAssets(params.ownerAgentId),
     listExplicitLibraryItems(params.ownerAgentId),
     listRecentActivity(params.ownerAgentId),
@@ -379,7 +291,6 @@ export async function listLibrary(params: {
         appId: entry.app.id,
         slug: entry.app.slug,
         status: entry.installation.status,
-        installedVersion,
         supportedDeviceTargets,
         packageCachedForOfflineInstall: cache.cached,
         packageRef: cache.packageRef,
@@ -391,7 +302,7 @@ export async function listLibrary(params: {
     kind: 'subagent',
     name: item.name,
     description: item.description ?? 'Specialist worker',
-    href: '/library?section=subagents',
+    href: `/agents/${item.id}`,
     workspaceId: item.workspaceId,
     projectId: item.projectId,
     visibility: item.visibility,
@@ -413,7 +324,7 @@ export async function listLibrary(params: {
 
   const search = params.search?.trim().toLowerCase() ?? '';
   const limit = Math.max(1, Math.min(params.limit ?? 100, 250));
-  const items = [...explicit, ...appItems, ...installedSkills, ...workflows, ...subagentItems, ...fileItems, ...memory, ...vault, ...connectors, ...publishedAssets, ...recentActivity]
+  const items = [...explicit, ...appItems, ...installedSkills, ...workflows, ...subagentItems, ...fileItems, ...publishedAssets, ...recentActivity]
     .filter(item => !params.workspaceId || !item.workspaceId || item.workspaceId === params.workspaceId)
     .filter(item => !params.projectId || !item.projectId || item.projectId === params.projectId)
     .filter(item => matchesSearch(item, search))

@@ -10,7 +10,7 @@ export function buildSessionNavLinks(_session: BrowserSession | null): Array<{ h
   return [
     { href: '/search', label: 'Search' },
     { href: '/notifications', label: 'Notifications' },
-    { href: '/settings?tab=profile', label: 'Profile' },
+    { href: '/profile', label: 'Profile' },
   ];
 }
 

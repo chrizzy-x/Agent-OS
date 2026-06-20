@@ -13,7 +13,7 @@ const endpoints = [
     method: 'PATCH',
     path: '/api/ffp/temp',
     auth: 'Browser Session or Bearer',
-    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.4.',
+    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.3.',
   },
 ];
 
@@ -39,7 +39,7 @@ export default function FFPPage() {
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-3">FFP is disabled</h1>
           <p className="text-lg text-gray-500">
-            AgentOS v6.6.4 retains FFP compatibility data, but all runtime execution bypasses FFP. No activation control, consensus engine, validator voting, or proposal history is available.
+            AgentOS v6.6.3 retains FFP compatibility data, but all runtime execution bypasses FFP. No activation control, consensus engine, validator voting, or proposal history is available.
           </p>
         </section>
 
@@ -48,7 +48,7 @@ export default function FFPPage() {
           <div className="space-y-3 text-sm text-gray-600">
             <p><strong>FFP Disabled:</strong> multi-agent activities route directly to the Unified Execution Engine.</p>
             <p><strong>FFP activation:</strong> unavailable. PATCH requests return Method Not Allowed.</p>
-            <p>All execution types bypass FFP in v6.6.4.</p>
+            <p>All execution types bypass FFP in v6.6.3.</p>
           </div>
         </section>
 

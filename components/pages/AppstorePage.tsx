@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import SurfaceShell from '@/components/os/surface-shell';
-import GlobalSearch from '@/components/os/global-search';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { ConfirmModal, Drawer } from '@/components/os/overlays';
@@ -20,7 +19,7 @@ import {
   SearchBar,
 } from '@/components/os/ui';
 
-const CATEGORY_CHIPS = ['All', 'AI', 'Finance', 'Productivity', 'Research', 'Developer', 'Data', 'Social', 'Utilities'];
+const CATEGORY_CHIPS = ['All', 'Featured', 'External SDK', 'Internal Apps', 'Finance', 'Productivity', 'Dev Tools', 'Data', 'Research'];
 
 type AppOpenTarget = 'web' | 'android' | 'ios';
 
@@ -50,16 +49,16 @@ type AppDetails = InstalledAppCard & {
 
 function runtimeLabel(app: AgentAppListing | null): string {
   if (!app) return 'App';
-  if (app.source === 'external_sdk' || app.kernelProduct) return 'SDK App';
-  if (app.source === 'internal' || app.runtimeType === 'agentos-app' || app.runtimeType === 'workspace-app') return 'Native App';
-  return 'External App';
+  if (app.source === 'external_sdk') return 'External SDK';
+  if (app.runtimeType === 'workspace-app') return 'Workspace App';
+  return 'Internal App';
 }
 
 function matchCategory(app: AgentAppListing, category: string): boolean {
   if (category === 'All') return true;
-  if (category === 'AI') return `${app.category} ${app.description}`.toLowerCase().includes('ai');
-  if (category === 'Developer') return `${app.category} ${app.description}`.toLowerCase().includes('dev');
-  if (category === 'Utilities') return `${app.category} ${app.description}`.toLowerCase().includes('util');
+  if (category === 'Featured') return app.verified;
+  if (category === 'External SDK') return app.source === 'external_sdk';
+  if (category === 'Internal Apps') return app.source === 'internal';
   return `${app.category} ${app.description}`.toLowerCase().includes(category.toLowerCase());
 }
 
@@ -319,18 +318,11 @@ export default function AppstorePage() {
     <>
       <SurfaceShell
         activePath="/appstore"
-        title="App Store"
-        subtitle="Discovery center for apps your workspace can install and use."
+        title="Apps"
+        subtitle="Install products your Super AgentOS can open and use."
         actions={session?.capabilities?.includes('create_app') ? <Button href="/developer/publish" variant="secondary">Publish app</Button> : undefined}
       >
         <div className="os-drawer-stack">
-          <Card style={{ minHeight: 180, display: 'grid', alignContent: 'center', gap: 12 }}>
-            <div className="os-entity-title">Featured Apps</div>
-            <div className="os-entity-copy">Discover SDK, Native, and External apps for AgentOS workspaces.</div>
-            <div className="os-inline-actions">
-              {featuredApps.slice(0, 3).map(app => <Button key={app.id} variant="secondary" onClick={() => drawer.openDrawer('app-preview', app.slug)}>{app.name}</Button>)}
-            </div>
-          </Card>
           <Card>
             <nav className="os-inline-actions" aria-label="App Store module">
               <Link href="/appstore" className="btn-primary">Discovery</Link>
@@ -355,8 +347,7 @@ export default function AppstorePage() {
               </div>
             </Card>
           ) : null}
-          <GlobalSearch />
-          <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search anything..." />
+          <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search apps" />
           <div id="app-categories">
             <FilterChips items={CATEGORY_CHIPS} active={category} onChange={setCategory} />
           </div>
@@ -500,8 +491,8 @@ export default function AppstorePage() {
             {detail.installation && detail.readiness?.ready && platformBadges(detail).includes('Web') ? <Button onClick={() => void openTarget('web')} disabled={working}>{working ? 'Working...' : 'Open App'}</Button> : null}
             {detail.installation ? <Button variant="secondary" onClick={() => void toggleFavorite()} disabled={working}>{detail.installation.favorite ? 'Unfavorite' : 'Favorite'}</Button> : null}
             {detail.installation ? <Button variant="danger" onClick={() => setConfirmRemove(true)} disabled={working}>Remove</Button> : null}
-            {detail.readiness?.missingSecrets.length ? <Button href="/library?section=vault" variant="secondary">Add secret</Button> : null}
-            {detail.readiness?.missingSkills.length ? <Button href="/library?section=skills" variant="secondary">Install required skill</Button> : null}
+            {detail.readiness?.missingSecrets.length ? <Button href="/vault" variant="secondary">Add secret</Button> : null}
+            {detail.readiness?.missingSkills.length ? <Button href="/skills" variant="secondary">Install required skill</Button> : null}
           </div>
         ) : undefined}
       >

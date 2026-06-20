@@ -68,7 +68,7 @@ export function buildXAuthorizationUrl(params: {
     state,
     codeVerifier,
     ownerAgentId: params.ownerAgentId,
-    redirectTo: params.redirectTo ?? '/',
+    redirectTo: params.redirectTo ?? '/dashboard',
     issuedAt: new Date().toISOString(),
   };
 

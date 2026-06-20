@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.6.4", "timestamp": "...", "tools": 44 }',
+    response: '{ "status": "ok", "version": "6.6.3", "timestamp": "...", "tools": 44 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -211,12 +211,12 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Read the disabled FFP compatibility status. All runtime execution bypasses FFP in v6.6.4.',
+    desc: 'Read the disabled FFP compatibility status. All runtime execution bypasses FFP in v6.6.3.',
     response: '{ "enabled": false, "status": "FFP Disabled", "route": "Multi-agent activities -> Unified Execution Engine" }',
   },
   {
     method: 'PATCH', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.4.',
+    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.3.',
     body: [
       { field: 'enabled', type: 'boolean', required: true, desc: 'Workspace-level FFP temp toggle' },
       { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace scope' },

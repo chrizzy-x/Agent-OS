@@ -6,22 +6,19 @@ function source(...parts: string[]) {
   return readFileSync(join(process.cwd(), ...parts), 'utf8');
 }
 
-describe('v6.6.4 workspace architecture and navigation', () => {
+describe('v6.6.3 navigation and workspace recovery', () => {
   it('mounts one persistent shell with required navigation and persisted sidebars', () => {
     const layout = source('app', 'layout.tsx');
     const shell = source('components', 'os', 'application-shell.tsx');
     expect(layout).toContain('<ApplicationShell>{children}</ApplicationShell>');
-    for (const label of ['Home', 'Studio', 'Projects', 'Workflows', 'Library', 'App Store', 'Developer', 'FFP', 'Settings']) {
+    for (const label of ['Home', 'Studio', 'Projects', 'Library', 'Skills', 'App Store', 'Subagents', 'Universal MCP', 'Vault', 'Community', 'Docs', 'FFP', 'Settings']) {
       expect(shell).toContain(`label: '${label}'`);
     }
-    expect(shell).toContain('Personal Workspace');
-    expect(shell).toContain('AgentOS Workspace');
-    expect(shell).toContain('deZypher Workspace');
-    expect(shell).toContain('Derek Workspace');
-    expect(shell).toContain('+ New Workspace');
     expect(shell).toContain('agentos.shell.leftCollapsed');
     expect(shell).toContain('agentos.shell.rightCollapsed');
-    expect(shell).toContain('agentos-mobile-primary-nav');
+    expect(shell).toContain('Pinned Sessions');
+    expect(shell).toContain('Archived Sessions');
+    expect(shell).toContain('Pinned Projects');
   });
 
   it('keeps Studio mode switching client-side and supports structured composer inputs', () => {
@@ -35,9 +32,9 @@ describe('v6.6.4 workspace architecture and navigation', () => {
     expect(composer).toContain('SLASH_COMMANDS');
   });
 
-  it('keeps SDK apps discoverable and external connections inside Library Connectors', () => {
+  it('keeps SDK apps and external MCP agents separate', () => {
     expect(source('src', 'appstore', 'catalog.ts')).toContain("export type AgentAppSource = 'internal' | 'external_sdk'");
-    expect(source('components', 'pages', 'LibraryPage.tsx')).toContain('Connectors');
+    expect(source('components', 'pages', 'McpDiagnosticsPage.tsx')).toContain('External MCP Registry');
     expect(source('app', 'api', 'agents', 'route.ts')).toContain('listExternalAgents');
   });
 

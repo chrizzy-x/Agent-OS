@@ -9,20 +9,6 @@ This file is the canonical inventory for Agent OS brand assets, logos, and graph
    - Purpose: canonical Agent OS icon used for browser tab icon, shortcut icon, and Apple touch icon metadata.
    - Visual spec: dark rounded square, purple-to-cyan gradient border, stylized `A` glyph.
 
-## NL Studio Live Verification
-
-1. Desktop streamed conversation
-   - File: `agentos-artifacts/nl-studio-live-test/desktop-stream-complete.png`
-   - Purpose: Playwright verification of chat creation, user message rendering, streamed assistant completion, Markdown surface, and message actions.
-
-2. Mobile conversation
-   - File: `agentos-artifacts/nl-studio-live-test/mobile-conversation.png`
-   - Purpose: Playwright verification of responsive NL Studio navigation, conversation layout, and composer behavior.
-
-3. Machine-readable result
-   - File: `agentos-artifacts/nl-studio-live-test/report.json`
-   - Purpose: records the passed end-to-end flow and final local route used during verification.
-
 ## Brand Wiring
 
 1. Metadata wiring

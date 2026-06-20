@@ -10,11 +10,10 @@ describe('middleware /mcp compatibility rewrite', () => {
     expect(response?.headers.get('x-middleware-rewrite')).toBe('http://localhost/api/mcp/execute');
   });
 
-  it('redirects GET /mcp to Library Connectors', () => {
+  it('does not rewrite GET /mcp', () => {
     const request = new NextRequest('http://localhost/mcp', { method: 'GET' });
     const response = middleware(request);
 
     expect(response?.headers.get('x-middleware-rewrite')).toBeNull();
-    expect(response?.headers.get('location')).toBe('http://localhost/library?section=connectors');
   });
 });
