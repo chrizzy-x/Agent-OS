@@ -117,14 +117,28 @@ export type LocalSkillRecord = {
   verified: boolean;
   permissions_required?: string[];
   required_secrets?: string[];
+  developer_handle?: string | null;
+  required_skills?: string[];
+  optional_skills?: string[];
+  compatibility?: string[];
+  examples?: Array<Record<string, unknown>>;
+  inputs?: Array<Record<string, unknown>>;
+  outputs?: Array<Record<string, unknown>>;
+  dependencies?: Record<string, unknown>;
   created_at: string;
+  updated_at?: string;
   source_code: string | null;
 };
 
 export type LocalSkillInstallationRecord = {
   id: string;
   skill_id: string;
+  workspace_id?: string | null;
+  status?: 'active' | 'disabled' | 'removed';
+  permissions_approved?: string[];
+  dependency_install?: boolean;
   installed_at: string;
+  updated_at?: string;
 };
 
 export type LocalExternalAgentRegistrationRecord = {
@@ -255,6 +269,36 @@ export type LocalLibraryItemRecord = {
   updatedAt: string;
 };
 
+export type LocalMarketplaceOwnershipRecord = {
+  id: string;
+  ownerAgentId: string;
+  workspaceId: string | null;
+  assetType: 'app' | 'skill';
+  assetId: string;
+  sourceSlug: string;
+  status: 'owned' | 'revoked';
+  metadata: Record<string, unknown>;
+  acquiredAt: string;
+  updatedAt: string;
+};
+
+export type LocalWorkspaceAssetRegistryRecord = {
+  id: string;
+  ownerAgentId: string;
+  workspaceId: string | null;
+  assetType: 'app' | 'skill' | 'workflow' | 'subagent' | 'vault_asset' | 'memory_asset' | 'mcp_connection';
+  assetId: string;
+  sourceId: string | null;
+  name: string;
+  description: string | null;
+  href: string | null;
+  status: 'active' | 'disabled' | 'removed';
+  searchText: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type LocalStudioSessionRow = Record<string, unknown>;
 export type LocalStudioMessageRow = Record<string, unknown>;
 export type LocalStudioEventRow = Record<string, unknown>;
@@ -348,6 +392,8 @@ export type LocalRuntimeState = {
   sessionAuditLogs: Record<string, LocalSessionAuditLogRecord[]>;
   vaultRuntimeGrants: LocalVaultRuntimeGrantRecord[];
   libraryItems: LocalLibraryItemRecord[];
+  marketplaceOwnership: LocalMarketplaceOwnershipRecord[];
+  workspaceAssetRegistry: LocalWorkspaceAssetRegistryRecord[];
 };
 
 const DEFAULT_STATE_FILE = join(tmpdir(), 'agentos-runtime-state.json');
@@ -402,6 +448,8 @@ function createDefaultState(): LocalRuntimeState {
     sessionAuditLogs: {},
     vaultRuntimeGrants: [],
     libraryItems: [],
+    marketplaceOwnership: [],
+    workspaceAssetRegistry: [],
   };
 }
 
@@ -449,6 +497,8 @@ function normalizeState(value: unknown): LocalRuntimeState {
     sessionAuditLogs: state.sessionAuditLogs ?? defaults.sessionAuditLogs,
     vaultRuntimeGrants: state.vaultRuntimeGrants ?? defaults.vaultRuntimeGrants,
     libraryItems: state.libraryItems ?? defaults.libraryItems,
+    marketplaceOwnership: state.marketplaceOwnership ?? defaults.marketplaceOwnership,
+    workspaceAssetRegistry: state.workspaceAssetRegistry ?? defaults.workspaceAssetRegistry,
   };
 }
 

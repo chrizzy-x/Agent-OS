@@ -4,9 +4,9 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> V6.6.3
+> V6.6.4
 
-AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, and activity.
+AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, workspace assets, and activity.
 
 Live:
 - [agentos.services](https://agentos.services)
@@ -14,6 +14,12 @@ Live:
 
 Supporting message:
 - talk to it, build with it, and install what it needs
+
+## V6.6.4 status
+
+V6.6.4 ships the Marketplace & Capability Layer: App Store discovery, Skill Store capability registry, permanent ownership, device install separation, update center, developer profiles, skill dependencies, permission management, and workspace asset registry synchronization without redesigning Studio, Workspace, Library, Vault, Memory, or MCP.
+
+See [Marketplace & Capability Layer release notes](RELEASE_NOTES_v6.6.4.md).
 
 ## V6.6.3 status
 

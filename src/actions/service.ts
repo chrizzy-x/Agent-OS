@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { assertCapability, type Capability } from '../auth/capabilities.js';
 import type { AgentContext } from '../auth/permissions.js';
 import {
@@ -9,6 +8,7 @@ import {
   type AgentAppOpenTarget,
 } from '../appstore/service.js';
 import { executeUniversalToolCall } from '../mcp/registry.js';
+import { installSkillWithDependencies } from '../skills/marketplace.js';
 import { runTrackedExecution, updateExecution } from '../execution/service.js';
 import { createNotification } from '../notifications/service.js';
 import { executePanicAction, type PanicAction } from '../panic/service.js';
@@ -16,10 +16,9 @@ import { createProject, updateProject } from '../projects/service.js';
 import { logOperation } from '../runtime/audit.js';
 import { createPrivateSubagent } from '../subagents/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
-import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
+import { updateLocalRuntimeState } from '../storage/local-state.js';
 import { appendStudioEvent } from '../studio/persistence.js';
 import { withStudioDefaultAllowedDomains } from '../studio/domains.js';
-import { validateRequiredSecrets } from '../vault/service.js';
 import { assertWorkspaceMembership, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
 import { hydrateWorkflowDocument, syncWorkflowDocument, type WorkflowAuthoringMode } from '../workflows/canonical.js';
 import { ValidationError } from '../utils/errors.js';
@@ -312,90 +311,52 @@ async function installSkill(params: {
   ctx: AgentContext;
   workspaceId?: string | null;
   sessionId?: string | null;
-  skillId: string;
+  skillId?: string | null;
+  slug?: string | null;
+  permissionsApproved?: string[];
+  installDependencies?: boolean;
+  optionalDependencies?: string[];
 }) {
+  const target = params.skillId || params.slug || '';
   const tracked = await runTrackedExecution({
     agentId: params.ctx.agentId,
     workspaceId: params.workspaceId,
     sessionId: params.sessionId,
     sourceType: 'skill',
-    sourceId: params.skillId,
-    skillId: params.skillId,
-    title: `Install skill ${params.skillId}`,
-    input: { skillId: params.skillId },
+    sourceId: target,
+    skillId: params.skillId ?? undefined,
+    title: `Install skill ${target}`,
+    input: {
+      skillId: params.skillId,
+      slug: params.slug,
+      permissionsApproved: params.permissionsApproved ?? [],
+      installDependencies: params.installDependencies !== false,
+      optionalDependencies: params.optionalDependencies ?? [],
+    },
     run: async () => {
-      try {
-        const supabase = getSupabaseAdmin();
-        const { data: skill, error: skillErr } = await supabase
-          .from('skills')
-          .select('id, name, total_installs, required_secrets')
-          .eq('id', params.skillId)
-          .eq('published', true)
-          .single();
-
-        if (!skillErr && skill) {
-          const requiredSecrets = stringArray(skill.required_secrets);
-          if (requiredSecrets.length > 0) {
-            const validation = await validateRequiredSecrets({
-              ownerAgentId: params.ctx.agentId,
-              workspaceId: params.workspaceId ?? undefined,
-              names: requiredSecrets,
-            });
-            if (validation.missing.length > 0) {
-              if (params.sessionId) {
-                await appendStudioEvent({
-                  ownerAgentId: params.ctx.agentId,
-                  sessionId: params.sessionId,
-                  type: 'secret_required',
-                  payload: { skillId: params.skillId, missing: validation.missing },
-                });
-              }
-              throw new ValidationError(`Missing required secrets: ${validation.missing.join(', ')}`);
-            }
-          }
-
-          const { data, error } = await supabase
-            .from('skill_installations')
-            .insert({ agent_id: params.ctx.agentId, skill_id: params.skillId })
-            .select()
-            .single();
-
-          if (!error) {
-            await supabase.from('skills').update({ total_installs: (skill.total_installs ?? 0) + 1 }).eq('id', params.skillId);
-            if (params.sessionId) {
-              await appendStudioEvent({
-                ownerAgentId: params.ctx.agentId,
-                sessionId: params.sessionId,
-                type: 'skill_installed',
-                payload: { skillId: params.skillId, name: skill.name ?? null },
-              });
-            }
-            return { success: true, installation: data };
-          }
-
-          if (error.code === '23505') throw new ValidationError('Skill already installed');
-        }
-      } catch (error) {
-        if (error instanceof ValidationError) throw error;
-      }
-
-      const state = await readLocalRuntimeState();
-      const skill = state.skills.catalog.find(item => item.id === params.skillId && item.published);
-      if (!skill) throw new ValidationError('Skill not found or not published');
-      const existing = (state.skills.installations[params.ctx.agentId] ?? []).find(item => item.skill_id === params.skillId);
-      if (existing) throw new ValidationError('Skill already installed');
-      const installation = {
-        id: randomUUID(),
-        skill_id: params.skillId,
-        installed_at: new Date().toISOString(),
-      };
-      await updateLocalRuntimeState(nextState => {
-        nextState.skills.installations[params.ctx.agentId] ??= [];
-        nextState.skills.installations[params.ctx.agentId].push(installation);
-        const installedSkill = nextState.skills.catalog.find(item => item.id === params.skillId);
-        if (installedSkill) installedSkill.total_installs += 1;
+      const result = await installSkillWithDependencies({
+        agentId: params.ctx.agentId,
+        workspaceId: params.workspaceId,
+        skillId: params.skillId,
+        slug: params.slug,
+        permissionsApproved: params.permissionsApproved ?? [],
+        installDependencies: params.installDependencies,
+        optionalDependencies: params.optionalDependencies,
       });
-      return { success: true, installation };
+      if (params.sessionId) {
+        await appendStudioEvent({
+          ownerAgentId: params.ctx.agentId,
+          sessionId: params.sessionId,
+          type: 'skill_installed',
+          payload: {
+            skillId: result.skill.id,
+            slug: result.skill.slug,
+            name: result.skill.name,
+            dependenciesInstalled: result.dependenciesInstalled,
+          },
+        });
+      }
+      return result;
     },
   });
   return { result: tracked.result, execution: tracked.execution };
@@ -582,7 +543,11 @@ export async function executeAgentOSAction(ctx: AgentContext, input: AgentOSActi
       ctx,
       workspaceId: input.workspaceId,
       sessionId: input.sessionId,
-      skillId: requireString(payload, 'skillId'),
+      skillId: typeof payload.skillId === 'string' ? payload.skillId : typeof payload.skill_id === 'string' ? payload.skill_id : null,
+      slug: typeof payload.slug === 'string' ? payload.slug : null,
+      permissionsApproved: stringArray(payload.permissionsApproved),
+      installDependencies: payload.installDependencies !== false,
+      optionalDependencies: stringArray(payload.optionalDependencies),
     });
   } else if (input.action === 'uninstall_skill') {
     output = await uninstallSkill({

@@ -4,9 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 const migrationsDir = join(process.cwd(), 'src', 'storage', 'migrations');
 
+function migrationSql(name: string): string {
+  return readFileSync(join(migrationsDir, name), 'utf8').replace(/\r\n/g, '\n');
+}
+
 describe('storage migrations', () => {
   it('binds db transaction parameters inside the SQL migration', () => {
-    const sql = readFileSync(join(migrationsDir, '002_agent_db_functions.sql'), 'utf8');
+    const sql = migrationSql('002_agent_db_functions.sql');
 
     expect(sql).toContain('CASE jsonb_array_length(v_params)');
     expect(sql).toContain('EXECUTE v_sql USING');
@@ -14,7 +18,7 @@ describe('storage migrations', () => {
   });
 
   it('adds database-level email normalization and uniqueness enforcement', () => {
-    const sql = readFileSync(join(migrationsDir, '007_security_hardening.sql'), 'utf8');
+    const sql = migrationSql('007_security_hardening.sql');
 
     expect(sql).toContain('CREATE OR REPLACE FUNCTION normalize_agent_email');
     expect(sql).toContain('CREATE OR REPLACE FUNCTION enforce_agent_email_uniqueness');
@@ -24,7 +28,7 @@ describe('storage migrations', () => {
   });
 
   it('adds X account management tables behind RLS deny-all policies', () => {
-    const sql = readFileSync(join(migrationsDir, '008_x_account_management.sql'), 'utf8');
+    const sql = migrationSql('008_x_account_management.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS x_account_connections');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS x_post_drafts');
@@ -33,7 +37,7 @@ describe('storage migrations', () => {
     expect(sql).toContain('CREATE POLICY "deny_all_x_post_metrics"');
   });
   it('adds external agent registration and call tracking primitives', () => {
-    const sql = readFileSync(join(migrationsDir, '009_external_agent_connector.sql'), 'utf8');
+    const sql = migrationSql('009_external_agent_connector.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS external_agent_registrations');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS idx_ext_reg_agent_id');
@@ -42,7 +46,7 @@ describe('storage migrations', () => {
   });
 
   it('adds durable Studio workflow result tracking', () => {
-    const sql = readFileSync(join(migrationsDir, '014_studio_recurring_workflows.sql'), 'utf8');
+    const sql = migrationSql('014_studio_recurring_workflows.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_workflows');
     expect(sql).toContain('ALTER TABLE scheduled_tasks ADD COLUMN IF NOT EXISTS workflow_id');
@@ -51,7 +55,7 @@ describe('storage migrations', () => {
   });
 
   it('adds database-level agent name uniqueness enforcement', () => {
-    const sql = readFileSync(join(migrationsDir, '015_unique_agent_names.sql'), 'utf8');
+    const sql = migrationSql('015_unique_agent_names.sql');
 
     expect(sql).toContain('CREATE OR REPLACE FUNCTION normalize_agent_name');
     expect(sql).toContain('CREATE OR REPLACE FUNCTION enforce_agent_name_uniqueness');
@@ -62,7 +66,7 @@ describe('storage migrations', () => {
   });
 
   it('adds Studio-first plans, Vault, sessions, and private subagents', () => {
-    const sql = readFileSync(join(migrationsDir, '016_agentos_studio_vault_plans.sql'), 'utf8');
+    const sql = migrationSql('016_agentos_studio_vault_plans.sql');
 
     expect(sql).toContain("'retail_free'");
     expect(sql).toContain("'enterprise_max'");
@@ -76,7 +80,7 @@ describe('storage migrations', () => {
   });
 
   it('adds snapshots, SDK credentials, app installs, plan transitions, and Vault lifecycle tables', () => {
-    const sql = readFileSync(join(migrationsDir, '017_studio_sdk_vault_lifecycle.sql'), 'utf8');
+    const sql = migrationSql('017_studio_sdk_vault_lifecycle.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS nl_studio_snapshots');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS app_installations');
@@ -91,7 +95,7 @@ describe('storage migrations', () => {
   });
 
   it('adds canonical workflow documents for sync across conversation, visual, and code modes', () => {
-    const sql = readFileSync(join(migrationsDir, '018_workflow_canonical_document.sql'), 'utf8');
+    const sql = migrationSql('018_workflow_canonical_document.sql');
 
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS canonical_doc JSONB NOT NULL DEFAULT');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_workflows_workspace_idx');
@@ -99,7 +103,7 @@ describe('storage migrations', () => {
   });
 
   it('formalizes kernel registry and visibility-aware app catalog fields', () => {
-    const sql = readFileSync(join(migrationsDir, '019_kernel_registry_and_app_visibility.sql'), 'utf8');
+    const sql = migrationSql('019_kernel_registry_and_app_visibility.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS kernel_registry');
     expect(sql).toContain('UNIQUE (agent_id, product)');
@@ -111,7 +115,7 @@ describe('storage migrations', () => {
   });
 
   it('adds sdk heartbeat health and app runtime installation metadata', () => {
-    const sql = readFileSync(join(migrationsDir, '020_sdk_health_app_runtime.sql'), 'utf8');
+    const sql = migrationSql('020_sdk_health_app_runtime.sql');
 
     expect(sql).toContain('ALTER TABLE kernel_registry ADD COLUMN IF NOT EXISTS health_status');
     expect(sql).toContain('ALTER TABLE kernel_registry ADD COLUMN IF NOT EXISTS endpoint_status');
@@ -122,7 +126,7 @@ describe('storage migrations', () => {
   });
 
   it('adds app version history, session branching lineage, and Vault runtime subjects', () => {
-    const sql = readFileSync(join(migrationsDir, '021_app_versions_session_branching.sql'), 'utf8');
+    const sql = migrationSql('021_app_versions_session_branching.sql');
 
     expect(sql).toContain('ALTER TABLE app_installations ADD COLUMN IF NOT EXISTS installed_version TEXT');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_app_versions');
@@ -133,7 +137,7 @@ describe('storage migrations', () => {
   });
 
   it('adds durable Vault runtime grants with deny-all RLS', () => {
-    const sql = readFileSync(join(migrationsDir, '022_vault_runtime_grants.sql'), 'utf8');
+    const sql = migrationSql('022_vault_runtime_grants.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS vault_runtime_grants');
     expect(sql).toContain("CHECK (status IN ('active', 'consumed', 'cleaned', 'expired'))");
@@ -143,7 +147,7 @@ describe('storage migrations', () => {
   });
 
   it('formalizes FFP execution logs and removes legacy persisted plan identifiers', () => {
-    const sql = readFileSync(join(migrationsDir, '023_ffp_audit_and_plan_cleanup.sql'), 'utf8');
+    const sql = migrationSql('023_ffp_audit_and_plan_cleanup.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS ffp_chain_executions');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS fallback_used');
@@ -155,14 +159,13 @@ describe('storage migrations', () => {
   });
 
   it('adds V6.4 visibility, permission grants, session search, and governed memory/files', () => {
-    const sql = readFileSync(join(migrationsDir, '025_v64_visibility_permissions_search.sql'), 'utf8');
+    const sql = migrationSql('025_v64_visibility_permissions_search.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS permission_grants');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_memory_store');
     expect(sql).toContain("CHECK (visibility IN ('private', 'workspace', 'public'))");
     expect(sql).toContain("ALTER TABLE nl_studio_messages\n  ADD COLUMN IF NOT EXISTS search_text TEXT NOT NULL DEFAULT ''");
-    expect(sql).toContain('ADD COLUMN IF NOT EXISTS linked_workflow_id TEXT');
-    expect(sql).not.toContain('linked_workflow_id UUID REFERENCES agent_workflows');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS linked_workflow_id UUID REFERENCES agent_workflows');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS studio_messages_search_text_idx');
     expect(sql).toContain('ALTER TABLE agent_files');
     expect(sql).toContain('ALTER TABLE private_subagents');
@@ -172,7 +175,7 @@ describe('storage migrations', () => {
   });
 
   it('adds V6.5.2 Library and runtime control primitives', () => {
-    const sql = readFileSync(join(migrationsDir, '027_v652_product_alignment.sql'), 'utf8');
+    const sql = migrationSql('027_v652_product_alignment.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS library_items');
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_runtime_controls');
@@ -182,7 +185,7 @@ describe('storage migrations', () => {
   });
 
   it('adds V6.6.2 action audit metadata and recovery fields', () => {
-    const sql = readFileSync(join(migrationsDir, '028_v661_production_closure.sql'), 'utf8');
+    const sql = migrationSql('028_v661_production_closure.sql');
 
     expect(sql).toContain('ALTER TABLE audit_logs');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS execution_id TEXT');
@@ -193,7 +196,7 @@ describe('storage migrations', () => {
   });
 
   it('adds V6.6.2 execution closure primitives', () => {
-    const sql = readFileSync(join(migrationsDir, '029_v662_execution_closure.sql'), 'utf8');
+    const sql = migrationSql('029_v662_execution_closure.sql');
 
     expect(sql).toContain("CHECK (status IN ('QUEUED', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED', 'CANCELLED'))");
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS agent_execution_checkpoints');

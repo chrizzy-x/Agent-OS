@@ -1,151 +1,209 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import SurfaceShell from '@/components/os/surface-shell';
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  FilterChips,
-  LoadingState,
-  SearchBar,
-  SkillCard,
-} from '@/components/os/ui';
+import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import type { SkillMarketplaceRecord } from '@/src/skills/marketplace';
 
-type Skill = {
-  id: string;
-  name: string;
-  slug: string;
-  category: string;
-  description: string;
-  total_installs: number;
-  rating: number;
-  verified: boolean;
+type SkillDiscovery = {
+  skills: SkillMarketplaceRecord[];
+  categories: string[];
+  installedSlugs: string[];
+  sections: Array<{ id: string; title: string; skills: SkillMarketplaceRecord[] }>;
 };
 
-const CATEGORIES = ['All', 'AI Search', 'Data Analysis', 'Code Interpreter', 'File Analysis', 'Browser Automation', 'Database Query', 'Email Sender', 'Image Generator', 'Research', 'Dev Tools'];
+const EMPTY_DISCOVERY: SkillDiscovery = {
+  skills: [],
+  categories: [],
+  installedSlugs: [],
+  sections: [],
+};
+
+function formatCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toLocaleString();
+}
+
+function SkillRegistryCard(props: {
+  skill: SkillMarketplaceRecord;
+  installed: boolean;
+  working: boolean;
+  onInstall: (skill: SkillMarketplaceRecord) => void;
+}) {
+  const { skill, installed, working } = props;
+  return (
+    <article className="market-skill-card">
+      <Link href={`/skills/${skill.slug}`} className="market-skill-main">
+        <div>
+          <h3>{skill.name}</h3>
+          <p>{skill.description}</p>
+        </div>
+        <span>{skill.category}</span>
+      </Link>
+      <div className="market-skill-meta">
+        <span>{formatCount(skill.total_installs)} installs</span>
+        <span>{skill.rating > 0 ? skill.rating.toFixed(1) : 'New'} rating</span>
+        <span>{skill.capabilities.length} capabilities</span>
+      </div>
+      <div className="market-skill-tags">
+        {[skill.category, ...skill.tags].slice(0, 4).map(tag => <span key={tag}>{tag}</span>)}
+      </div>
+      <button
+        type="button"
+        className={installed ? 'market-secondary-action' : 'market-primary-action'}
+        disabled={working || installed}
+        onClick={() => props.onInstall(skill)}
+      >
+        {working ? 'Installing' : installed ? 'Installed' : 'Install'}
+      </button>
+    </article>
+  );
+}
+
+function SkillSection(props: {
+  title: string;
+  skills: SkillMarketplaceRecord[];
+  installed: Set<string>;
+  workingSlug: string;
+  onInstall: (skill: SkillMarketplaceRecord) => void;
+}) {
+  if (props.skills.length === 0) return null;
+  return (
+    <section className="market-section">
+      <div className="market-section-head"><h2>{props.title}</h2></div>
+      <div className="market-skill-grid">
+        {props.skills.map(skill => (
+          <SkillRegistryCard
+            key={skill.id}
+            skill={skill}
+            installed={props.installed.has(skill.slug)}
+            working={props.workingSlug === skill.slug}
+            onInstall={props.onInstall}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function SkillsMarketplacePage() {
+  const cache = useRef(new Map<string, SkillDiscovery>());
   const [session, setSession] = useState<BrowserSession | null>(null);
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [installed, setInstalled] = useState<Array<{ skill: Skill }>>([]);
+  const [discovery, setDiscovery] = useState<SkillDiscovery>(EMPTY_DISCOVERY);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [workingSlug, setWorkingSlug] = useState('');
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
+    const key = `${search.trim()}::${category}`;
+    const cached = cache.current.get(key);
+    if (cached) {
+      setDiscovery(cached);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const [skillsRes, currentSession] = await Promise.all([
-        fetch('/api/skills?sort=popular&limit=50', { cache: 'no-store' }),
+      const query = new URLSearchParams();
+      if (search.trim()) query.set('search', search.trim());
+      if (category !== 'All') query.set('category', category);
+      const [res, currentSession] = await Promise.all([
+        fetch(`/api/skills/discovery?${query.toString()}`, { cache: 'no-store' }),
         fetchBrowserSession().catch(() => null),
       ]);
-      const skillsData = await skillsRes.json();
-      setSkills(skillsData.skills ?? []);
+      const payload = res.ok ? await res.json() as SkillDiscovery : EMPTY_DISCOVERY;
+      cache.current.set(key, payload);
+      setDiscovery(payload);
       setSession(currentSession);
-      if (currentSession) {
-        const installedRes = await fetch('/api/skills/installed', { cache: 'no-store' });
-        const installedData = await installedRes.json();
-        setInstalled(installedData.installed_skills ?? []);
-      } else {
-        setInstalled([]);
-      }
     } catch {
-      setSkills([]);
-      setInstalled([]);
+      setDiscovery(EMPTY_DISCOVERY);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [category, search]);
 
   useEffect(() => {
-    void load();
+    const id = window.setTimeout(() => void load(), 120);
+    return () => window.clearTimeout(id);
   }, [load]);
 
-  const filtered = useMemo(
-    () => skills.filter(skill => {
-      const categoryMatch = category === 'All' || `${skill.category} ${skill.description}`.toLowerCase().includes(category.toLowerCase());
-      const searchMatch = !search || `${skill.name} ${skill.description} ${skill.category}`.toLowerCase().includes(search.toLowerCase());
-      return categoryMatch && searchMatch;
-    }),
-    [category, search, skills],
-  );
+  const categories = useMemo(() => ['All', ...discovery.categories], [discovery.categories]);
+  const installed = useMemo(() => new Set(discovery.installedSlugs), [discovery.installedSlugs]);
+
+  async function installSkill(skill: SkillMarketplaceRecord) {
+    setWorkingSlug(skill.slug);
+    setNotice('');
+    try {
+      const response = await fetch('/api/skills/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug: skill.slug,
+          permissionsApproved: skill.permissions_required,
+          installDependencies: true,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setNotice(payload.error ?? payload.message ?? 'Install failed');
+        return;
+      }
+      cache.current.clear();
+      setNotice(`${skill.name} installed and available to Super AgentOS, workflows, subagents, and apps.`);
+      await load();
+    } finally {
+      setWorkingSlug('');
+    }
+  }
 
   return (
     <SurfaceShell
       activePath="/skills"
-      title="Skills"
-      subtitle="Install capabilities your Super AgentOS can use."
-      actions={session?.capabilities?.includes('create_skill') ? <Button href="/developer" variant="secondary">Publish skill</Button> : undefined}
+      title="Skill Store"
+      subtitle="Discover and install capabilities for agents, workflows, apps, and Super AgentOS."
+      actions={session?.capabilities?.includes('create_skill') ? <Link href="/developer" className="market-secondary-action">Publish Skill</Link> : undefined}
     >
-      <Card style={{ marginBottom: 16 }}>
-        <nav className="os-inline-actions" aria-label="Skills module">
-          <Link href="/skills" className="btn-primary">Discovery</Link>
-          <Link href="/skills/installed" className="btn-ghost">Installed Skills</Link>
-          <a href="#skill-categories" className="btn-ghost">Categories</a>
-          <Link href="/developer" className="btn-ghost">Management</Link>
-        </nav>
-      </Card>
-      {session ? (
-        <Card style={{ marginBottom: 16 }}>
-          <div className="os-inline-actions" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <div className="os-entity-copy">{installed.length} installed</div>
-            <div className="os-inline-actions">
-              {installed.slice(0, 4).map(entry => (
-                <Button key={entry.skill.slug} href={`/skills/${entry.skill.slug}`} variant="secondary">
-                  {entry.skill.name}
-                </Button>
-              ))}
-              <Button href="/skills/installed" variant="secondary">Manage</Button>
-            </div>
+      <div className="market-shell" data-surface="skills">
+        <div className="market-search-panel">
+          <input
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Search skills, tags, developers, capabilities, categories"
+            aria-label="Search skills"
+          />
+        </div>
+
+        <div className="market-chip-row" aria-label="Skill categories">
+          {categories.map(item => (
+            <button key={item} type="button" className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+
+        {notice ? <div className="market-notice">{notice}</div> : null}
+
+        {loading ? (
+          <div className="market-skeleton-grid">
+            {Array.from({ length: 6 }).map((_, index) => <div key={index} className="market-skeleton" />)}
           </div>
-        </Card>
-      ) : null}
-
-      <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search skills, categories, permissions..." />
-      <div id="skill-categories">
-        <FilterChips items={CATEGORIES} active={category} onChange={setCategory} />
+        ) : discovery.skills.length === 0 ? (
+          <div className="market-empty">
+            <h2>No skills found</h2>
+            <p>No accessible capabilities matched this search.</p>
+          </div>
+        ) : search.trim() ? (
+          <SkillSection title="Search Results" skills={discovery.skills} installed={installed} workingSlug={workingSlug} onInstall={skill => void installSkill(skill)} />
+        ) : (
+          discovery.sections.map(section => (
+            <SkillSection key={section.id} title={section.title} skills={section.skills} installed={installed} workingSlug={workingSlug} onInstall={skill => void installSkill(skill)} />
+          ))
+        )}
       </div>
-
-      {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-          {[0, 1, 2].map(item => <LoadingState key={item} label="Loading skills" />)}
-        </div>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          title={skills.length === 0 ? 'No published skills yet' : 'No skills found'}
-          body={skills.length === 0 ? 'This store stays empty until a real skill is published.' : 'Try another search or category.'}
-        />
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-          {filtered.map(skill => {
-            const installedMatch = installed.some(entry => entry.skill.slug === skill.slug);
-            return (
-              <SkillCard
-                key={skill.id}
-                href={`/skills/${skill.slug}`}
-                title={skill.name}
-                description={skill.description}
-                category={skill.category}
-                installs={skill.total_installs}
-                rating={skill.rating > 0 ? skill.rating : undefined}
-                footer={(
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {skill.verified ? <Badge tone="success">Verified</Badge> : null}
-                      <Badge tone="default">{installedMatch ? 'Installed' : 'Available'}</Badge>
-                    </div>
-                    <Link href={`/skills/${skill.slug}`} className="btn-primary">{installedMatch ? 'Open' : 'Install'}</Link>
-                  </div>
-                )}
-              />
-            );
-          })}
-        </div>
-      )}
     </SurfaceShell>
   );
 }

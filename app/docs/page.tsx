@@ -58,14 +58,14 @@ const sections = [
   {
     title: 'FFP',
     href: '/docs/ffp',
-    desc: 'Visible for compatibility and marked Coming Soon. Runtime routing is disabled in v6.6.3.',
+    desc: 'Visible for compatibility and marked Coming Soon. Runtime routing is disabled in v6.6.4.',
     badge: 'Coming Soon',
   },
   {
     title: 'Launch Notes',
     href: '/docs/launch',
-    desc: 'v6.6.3 Navigation & Workspace Recovery release notes.',
-    badge: 'v6.6.3',
+    desc: 'v6.6.4 Marketplace & Capability Layer release notes.',
+    badge: 'v6.6.4',
   },
 ];
 

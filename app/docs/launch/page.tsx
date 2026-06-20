@@ -8,6 +8,7 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
+  'v6.6.4 - Marketplace & Capability Layer ships App Store discovery, Skill Store capability registry, permanent ownership, update center, developer profiles, skill dependencies, permission management, and workspace asset registry sync.',
   'v6.6.3 - Restored the persistent AgentOS shell, complete module navigation, workspace/session/project context, desktop sidebars, mobile drawers, and mode-aware Studio context without removing v6.6.2 execution features.',
   'June 18, 2026 - NL Studio now uses a rebuilt conversation-first layout with real SSE streaming, Markdown replies, safe stop/cancel, lazy chat creation, searchable history, and desktop/mobile parity.',
   'V6.6.2 - Super AgentOS is now the primary product surface with streaming chat, execution cards, files, memory, recovery, notifications, and panic stop.',
@@ -95,17 +96,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.3 <span style={{ color: 'var(--accent)' }}>&ldquo;Navigation &amp; Workspace Recovery&rdquo;</span></h1>
+          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.4 <span style={{ color: 'var(--accent)' }}>&ldquo;Marketplace &amp; Capability Layer&rdquo;</span></h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.6.3 restores AgentOS as a persistent multi-module operating system while preserving Studio streaming, execution, recovery, files, memory, apps, skills, workflows, and MCP. Live at <code>{APP_URL}</code>.
+            v6.6.4 makes App Store and Skill Store first-class operating-system primitives while preserving Studio, Workspace, Library, Vault, Memory, and MCP layouts. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.3</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.4</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              AgentOS now keeps every first-class module one click away inside a shell that persists across navigation. Studio modes switch in place without resetting sessions, files, workflows, terminal state, or drafts.
+              App Store now handles app discovery, install, launch, update, rollback, device install, and ownership. Skill Store now handles compact capability discovery, execution preview, dependency resolution, compatibility, and permission management.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

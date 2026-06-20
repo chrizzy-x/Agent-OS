@@ -38,11 +38,20 @@ export async function runInstalledSkill(params: {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data: skill, error: skillError } = await supabase
+    const primarySkill = await supabase
       .from('skills')
-      .select('id,slug,source_code,capabilities,price_per_call,total_calls,published,required_secrets')
+      .select('id,slug,source_code,capabilities,price_per_call,total_calls,published,required_secrets,permissions_required')
       .eq('slug', skillSlug)
       .single();
+    const legacySkill = primarySkill.error
+      ? await supabase
+        .from('skills')
+        .select('id,slug,source_code,capabilities,price_per_call,total_calls,published,required_secrets')
+        .eq('slug', skillSlug)
+        .single()
+      : primarySkill;
+    const skill = legacySkill.data;
+    const skillError = legacySkill.error;
 
     if (skillError || !skill) {
       throw new NotFoundError(`Skill '${skillSlug}' not found`);
@@ -52,15 +61,38 @@ export async function runInstalledSkill(params: {
       throw new PermissionError(`Skill '${skillSlug}' is not published`);
     }
 
-    const { data: installation, error: installationError } = await supabase
+    const primaryInstallation = await supabase
       .from('skill_installations')
-      .select('id')
+      .select('id,status,permissions_approved')
       .eq('agent_id', agentId)
       .eq('skill_id', skill.id)
       .single();
+    const legacyInstallation = primaryInstallation.error
+      ? await supabase
+        .from('skill_installations')
+        .select('id')
+        .eq('agent_id', agentId)
+        .eq('skill_id', skill.id)
+        .single()
+      : primaryInstallation;
+    const installation = legacyInstallation.data as Record<string, unknown> | null;
+    const installationError = legacyInstallation.error;
 
     if (installationError || !installation) {
       throw new PermissionError(`Skill '${skillSlug}' is not installed. Call POST /api/skills/install first.`);
+    }
+    if (installation.status === 'disabled' || installation.status === 'removed') {
+      throw new PermissionError(`Skill '${skillSlug}' is not active.`);
+    }
+    const requiredPermissions = Array.isArray((skill as Record<string, unknown>).permissions_required)
+      ? ((skill as Record<string, unknown>).permissions_required as unknown[]).filter((item): item is string => typeof item === 'string')
+      : [];
+    const approvedPermissions = new Set(Array.isArray(installation.permissions_approved)
+      ? (installation.permissions_approved as unknown[]).filter((item): item is string => typeof item === 'string')
+      : []);
+    const missingPermissions = requiredPermissions.filter(permission => !approvedPermissions.has(permission));
+    if (missingPermissions.length > 0) {
+      throw new PermissionError(`Skill permission approval required: ${missingPermissions.join(', ')}`);
     }
 
     const runtimeSecrets = Array.isArray(skill.required_secrets)
@@ -120,9 +152,15 @@ export async function runInstalledSkill(params: {
       throw new NotFoundError(`Skill '${skillSlug}' not found`);
     }
 
-    const installation = (state.skills.installations[agentId] ?? []).find(item => item.skill_id === skill.id);
+    const installation = (state.skills.installations[agentId] ?? []).find(item => item.skill_id === skill.id && item.status !== 'disabled' && item.status !== 'removed');
     if (!installation) {
       throw new PermissionError(`Skill '${skillSlug}' is not installed. Call POST /api/skills/install first.`);
+    }
+    const requiredPermissions = Array.isArray(skill.permissions_required) ? skill.permissions_required : [];
+    const approvedPermissions = new Set(installation.permissions_approved ?? []);
+    const missingPermissions = requiredPermissions.filter(permission => !approvedPermissions.has(permission));
+    if (missingPermissions.length > 0) {
+      throw new PermissionError(`Skill permission approval required: ${missingPermissions.join(', ')}`);
     }
 
     const execution = buildGenericExecution(skill.slug, capability, input, startedAt);

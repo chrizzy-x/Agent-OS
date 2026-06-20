@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { getPlanDescriptor } from '../auth/capabilities.js';
 import { isValidPlan, normalizePersistedPlan, normalizePlan } from '../auth/tiers.js';
+import { recordMarketplaceInstallEvent } from '../marketplace/install-events.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { AppUnavailableError, PermissionError, ValidationError } from '../utils/errors.js';
 import { validateRequiredSecrets } from '../vault/service.js';
@@ -46,6 +47,8 @@ export type PublishAgentAppInput = {
   category?: string;
   description?: string;
   longDescription?: string;
+  logoUrl?: string | null;
+  developerHandle?: string | null;
   publisherId: string;
   publisherName?: string;
   workspaceId?: string | null;
@@ -75,6 +78,14 @@ export type PublishAgentAppInput = {
   permissionsRequired?: unknown;
   requiredSecrets?: unknown;
   screenshots?: unknown;
+  keywords?: unknown;
+  tags?: unknown;
+  features?: unknown;
+  platforms?: unknown;
+  rating?: unknown;
+  reviewCount?: unknown;
+  downloadCount?: unknown;
+  activeUserCount?: unknown;
   publishState?: string;
 };
 
@@ -118,8 +129,10 @@ type DbAgentAppRow = {
   category?: unknown;
   description?: unknown;
   long_description?: unknown;
+  logo_url?: unknown;
   publisher_id?: unknown;
   publisher_name?: unknown;
+  developer_handle?: unknown;
   app_url?: unknown;
   repository_url?: unknown;
   device_targets?: unknown;
@@ -128,6 +141,10 @@ type DbAgentAppRow = {
   permissions_required?: unknown;
   required_secrets?: unknown;
   screenshots?: unknown;
+  keywords?: unknown;
+  tags?: unknown;
+  features?: unknown;
+  platforms?: unknown;
   publish_state?: unknown;
   source?: unknown;
   visibility?: unknown;
@@ -147,6 +164,10 @@ type DbAgentAppRow = {
   android_download_count?: unknown;
   ios_download_count?: unknown;
   install_count?: unknown;
+  download_count?: unknown;
+  active_user_count?: unknown;
+  rating?: unknown;
+  review_count?: unknown;
   verified?: unknown;
   published?: unknown;
   created_at?: unknown;
@@ -199,7 +220,7 @@ type SaveAgentAppInput = PublishAgentAppInput & {
   slugFallback?: string;
 };
 
-const APP_SELECT = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,last_command_at,last_error,health_status,endpoint_status,disabled,heartbeat_count,open_count,web_open_count,android_download_count,ios_download_count,install_count,verified,published,created_at,updated_at';
+const APP_SELECT = 'id,workspace_id,name,slug,category,description,long_description,logo_url,publisher_id,publisher_name,developer_handle,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,keywords,tags,features,platforms,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,last_command_at,last_error,health_status,endpoint_status,disabled,heartbeat_count,open_count,web_open_count,android_download_count,ios_download_count,install_count,download_count,active_user_count,rating,review_count,verified,published,created_at,updated_at';
 const APP_SELECT_LEGACY = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,install_count,verified,published,created_at,updated_at';
 const APP_SELECT_PRE_019 = 'id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,publish_state,permissions_required,required_secrets,install_count,verified,published,created_at,updated_at';
 const APP_INSTALLATION_SELECT = 'id,app_id,agent_id,workspace_id,status,favorite,permissions_approved,open_count,last_opened_at,installed_at,updated_at,installed_version';
@@ -237,6 +258,11 @@ function titleCaseSlug(value: string): string {
     .filter(Boolean)
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function publicHandle(value: string): string {
+  const normalized = normalizeAgentAppSlug(value);
+  return normalized || `developer-${randomUUID().slice(0, 8)}`;
 }
 
 function buildSdkFallbackDescription(product: string): string {
@@ -286,6 +312,15 @@ function normalizeDistribution(value: unknown, appUrl: string | null): { webUrl:
     androidUrl: nullableString(input.androidUrl ?? input.android_url),
     iosUrl: nullableString(input.iosUrl ?? input.ios_url),
   };
+}
+
+function derivePlatforms(distribution: AgentAppListing['distribution'], deviceTargets: string[], explicit?: unknown): string[] {
+  const values = new Set<string>(stringArray(explicit, []));
+  for (const target of deviceTargets) values.add(target);
+  if (distribution.webUrl) values.add('Web');
+  if (distribution.androidUrl) values.add('Android');
+  if (distribution.iosUrl) values.add('iOS');
+  return [...values].filter(Boolean);
 }
 
 function publishedFromVisibility(visibility: AgentAppVisibility): boolean {
@@ -375,16 +410,22 @@ function normalizeLocalApp(row: Partial<AgentAppListing>): AgentAppListing {
     category: String(row.category ?? 'Operations'),
     description: String(row.description ?? ''),
     longDescription: String(row.longDescription ?? row.description ?? ''),
+    logoUrl: row.logoUrl ?? null,
     publisherId: String(row.publisherId ?? ''),
     publisherName: String(row.publisherName ?? row.publisherId ?? 'Unknown'),
+    developerHandle: row.developerHandle ?? publicHandle(String(row.publisherName ?? row.publisherId ?? slug)),
     appUrl,
     repositoryUrl: row.repositoryUrl ?? null,
     deviceTargets: Array.isArray(row.deviceTargets) ? row.deviceTargets : ['AgentOS Cloud'],
+    platforms: derivePlatforms(distribution, Array.isArray(row.deviceTargets) ? row.deviceTargets : ['AgentOS Cloud'], row.platforms),
     manifest,
     defaultConfig: normalizeDefaultConfig(row.defaultConfig),
     permissionsRequired: Array.isArray(row.permissionsRequired) ? row.permissionsRequired : [],
     requiredSecrets: Array.isArray(row.requiredSecrets) ? row.requiredSecrets : manifest.requiredSecrets,
     screenshots: Array.isArray(row.screenshots) ? row.screenshots : [],
+    keywords: Array.isArray(row.keywords) ? row.keywords : [],
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    features: Array.isArray(row.features) ? row.features : [],
     source: normalizeSource(row.source),
     visibility,
     runtimeType,
@@ -404,6 +445,10 @@ function normalizeLocalApp(row: Partial<AgentAppListing>): AgentAppListing {
     androidDownloadCount: Number(row.androidDownloadCount ?? 0),
     iosDownloadCount: Number(row.iosDownloadCount ?? 0),
     installCount: Number(row.installCount ?? 0),
+    downloadCount: Number(row.downloadCount ?? 0),
+    activeUserCount: Number(row.activeUserCount ?? 0),
+    rating: Number(row.rating ?? 0),
+    reviewCount: Number(row.reviewCount ?? 0),
     verified: row.verified === true,
     published: publishedFromVisibility(visibility),
     createdAt: String(row.createdAt ?? new Date().toISOString()),
@@ -437,16 +482,22 @@ function fromDbRow(row: DbAgentAppRow): AgentAppListing {
     category: stringValue(row.category, 'Operations'),
     description,
     longDescription: stringValue(row.long_description, description),
+    logoUrl: nullableString(row.logo_url),
     publisherId: stringValue(row.publisher_id),
     publisherName: stringValue(row.publisher_name, stringValue(row.publisher_id, 'Unknown')),
+    developerHandle: nullableString(row.developer_handle) ?? publicHandle(stringValue(row.publisher_name, stringValue(row.publisher_id, slug))),
     appUrl,
     repositoryUrl: nullableString(row.repository_url),
     deviceTargets: stringArray(row.device_targets, ['AgentOS Cloud']),
+    platforms: derivePlatforms(distribution, stringArray(row.device_targets, ['AgentOS Cloud']), row.platforms),
     manifest,
     defaultConfig: normalizeDefaultConfig(row.default_config),
     permissionsRequired: stringArray(row.permissions_required, []),
     requiredSecrets: stringArray(row.required_secrets, manifest.requiredSecrets),
     screenshots: stringArray(row.screenshots, []),
+    keywords: stringArray(row.keywords, []),
+    tags: stringArray(row.tags, []),
+    features: stringArray(row.features, []),
     source,
     visibility,
     runtimeType,
@@ -466,6 +517,10 @@ function fromDbRow(row: DbAgentAppRow): AgentAppListing {
     androidDownloadCount: Number(row.android_download_count ?? 0),
     iosDownloadCount: Number(row.ios_download_count ?? 0),
     installCount: Number(row.install_count ?? 0),
+    downloadCount: Number(row.download_count ?? row.android_download_count ?? 0) + Number(row.ios_download_count ?? 0),
+    activeUserCount: Number(row.active_user_count ?? 0),
+    rating: Number(row.rating ?? 0),
+    reviewCount: Number(row.review_count ?? 0),
     verified: row.verified === true,
     published: publishedFromVisibility(visibility),
     createdAt,
@@ -483,8 +538,10 @@ function toDbPayload(app: AgentAppListing, publishState = 'draft'): Record<strin
     category: app.category,
     description: app.description,
     long_description: app.longDescription,
+    logo_url: app.logoUrl,
     publisher_id: app.publisherId,
     publisher_name: app.publisherName,
+    developer_handle: app.developerHandle,
     app_url: app.appUrl,
     repository_url: app.repositoryUrl,
     device_targets: app.deviceTargets,
@@ -493,6 +550,10 @@ function toDbPayload(app: AgentAppListing, publishState = 'draft'): Record<strin
     permissions_required: app.permissionsRequired,
     required_secrets: app.requiredSecrets,
     screenshots: app.screenshots,
+    keywords: app.keywords,
+    tags: app.tags,
+    features: app.features,
+    platforms: app.platforms,
     publish_state: publishState,
     source: app.source,
     visibility: app.visibility,
@@ -512,6 +573,10 @@ function toDbPayload(app: AgentAppListing, publishState = 'draft'): Record<strin
     android_download_count: app.androidDownloadCount,
     ios_download_count: app.iosDownloadCount,
     install_count: app.installCount,
+    download_count: app.downloadCount,
+    active_user_count: app.activeUserCount,
+    rating: app.rating,
+    review_count: app.reviewCount,
     verified: app.verified,
     published: app.published,
     created_at: app.createdAt,
@@ -653,10 +718,15 @@ function appMatchesSearch(app: AgentAppListing, search: string): boolean {
     app.longDescription,
     app.category,
     app.publisherName,
+    app.developerHandle,
     app.source,
     app.visibility,
     app.runtimeType,
     app.kernelProduct ?? '',
+    ...app.keywords,
+    ...app.tags,
+    ...app.features,
+    ...app.platforms,
     ...app.deviceTargets,
     ...app.manifest.primitives,
     ...app.manifest.skills,
@@ -863,6 +933,7 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
   }
   const appUrl = nullableString(input.appUrl) ?? existing?.appUrl ?? null;
   const distribution = normalizeDistribution(manifest.distribution, appUrl);
+  const deviceTargets = stringArray(input.deviceTargets, existing?.deviceTargets ?? AGENT_APP_DEVICE_TARGETS.slice(0, 2));
   const versionChanged = !existing || existing.manifest.version !== manifest.version;
 
   const app: AgentAppListing = {
@@ -873,11 +944,14 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
     category: AGENT_APP_CATEGORIES.includes(category) && category !== 'All' ? category : category,
     description,
     longDescription: input.longDescription?.trim() || existing?.longDescription || description,
+    logoUrl: nullableString(input.logoUrl) ?? existing?.logoUrl ?? null,
     publisherId,
     publisherName: input.publisherName?.trim() || existing?.publisherName || publisherId,
+    developerHandle: nullableString(input.developerHandle) ?? existing?.developerHandle ?? publicHandle(input.publisherName?.trim() || publisherId),
     appUrl,
     repositoryUrl: nullableString(input.repositoryUrl) ?? existing?.repositoryUrl ?? null,
-    deviceTargets: stringArray(input.deviceTargets, existing?.deviceTargets ?? AGENT_APP_DEVICE_TARGETS.slice(0, 2)),
+    deviceTargets,
+    platforms: derivePlatforms(distribution, deviceTargets, input.platforms ?? existing?.platforms),
     manifest: {
       ...manifest,
       commands: manifest.commands.length > 0 ? manifest.commands : existing?.manifest.commands ?? [],
@@ -887,6 +961,9 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
     permissionsRequired: stringArray(input.permissionsRequired, existing?.permissionsRequired ?? []),
     requiredSecrets: stringArray(input.requiredSecrets, manifest.requiredSecrets),
     screenshots: stringArray(input.screenshots, existing?.screenshots ?? []),
+    keywords: stringArray(input.keywords, existing?.keywords ?? []),
+    tags: stringArray(input.tags, existing?.tags ?? []),
+    features: stringArray(input.features, existing?.features ?? []),
     source,
     visibility,
     runtimeType,
@@ -906,6 +983,10 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
     androidDownloadCount: Number(input.androidDownloadCount ?? existing?.androidDownloadCount ?? 0),
     iosDownloadCount: Number(input.iosDownloadCount ?? existing?.iosDownloadCount ?? 0),
     installCount: existing?.installCount ?? 0,
+    downloadCount: Number(input.downloadCount ?? existing?.downloadCount ?? 0),
+    activeUserCount: Number(input.activeUserCount ?? existing?.activeUserCount ?? 0),
+    rating: Number(input.rating ?? existing?.rating ?? 0),
+    reviewCount: Number(input.reviewCount ?? existing?.reviewCount ?? 0),
     verified: existing?.verified ?? false,
     published: publishedFromVisibility(visibility),
     createdAt: existing?.createdAt ?? now,
@@ -1571,6 +1652,22 @@ export async function installAgentApp(params: {
       app: readiness.app,
       appPackage: buildAgentAppPackage(readiness.app),
     }).catch(() => undefined);
+    await recordMarketplaceInstallEvent({
+      ownerAgentId: params.agentId,
+      workspaceId: installation.workspaceId ?? params.workspaceId ?? readiness.app.workspaceId ?? null,
+      assetType: 'app',
+      assetId: readiness.app.id,
+      sourceSlug: readiness.app.slug,
+      name: readiness.app.name,
+      description: readiness.app.description,
+      href: `/appstore/${readiness.app.slug}`,
+      visibility: readiness.app.visibility === 'public' ? 'public' : readiness.app.visibility === 'workspace' ? 'workspace' : 'private',
+      metadata: {
+        installedVersion: installation.installedVersion ?? readiness.app.manifest.version,
+        packageCachedForOfflineInstall: true,
+        platforms: readiness.app.platforms,
+      },
+    }).catch(() => undefined);
     return {
       app: readiness.app,
       installation,
@@ -1624,6 +1721,22 @@ export async function installAgentApp(params: {
       workspaceId: installation.workspaceId ?? params.workspaceId ?? readiness.app.workspaceId ?? null,
       app: readiness.app,
       appPackage: buildAgentAppPackage(readiness.app),
+    }).catch(() => undefined);
+    await recordMarketplaceInstallEvent({
+      ownerAgentId: params.agentId,
+      workspaceId: installation.workspaceId ?? params.workspaceId ?? readiness.app.workspaceId ?? null,
+      assetType: 'app',
+      assetId: readiness.app.id,
+      sourceSlug: readiness.app.slug,
+      name: readiness.app.name,
+      description: readiness.app.description,
+      href: `/appstore/${readiness.app.slug}`,
+      visibility: readiness.app.visibility === 'public' ? 'public' : readiness.app.visibility === 'workspace' ? 'workspace' : 'private',
+      metadata: {
+        installedVersion: installation.installedVersion ?? readiness.app.manifest.version,
+        packageCachedForOfflineInstall: true,
+        platforms: readiness.app.platforms,
+      },
     }).catch(() => undefined);
     return {
       app: readiness.app,
@@ -2095,5 +2208,45 @@ export async function installAgentAppToDevice(params: {
     packageRef: cache.packageRef,
     app: entry.app,
     installation: entry.installation,
+  };
+}
+
+export async function removeAgentAppFromDevice(params: {
+  agentId: string;
+  slug: string;
+  target: unknown;
+}): Promise<{ removed: true; target: AgentAppDeviceInstallTarget; app: AgentAppListing; ownershipPreserved: true }> {
+  const target = normalizeDeviceTarget(params.target);
+  const entry = await getInstalledAgentApp(params.agentId, params.slug);
+  if (!entry) throw new PermissionError('App ownership is required before device management.');
+  const now = new Date().toISOString();
+
+  try {
+    const { error } = await getSupabaseAdmin()
+      .from('app_device_installations')
+      .update({ status: 'removed', updated_at: now })
+      .eq('owner_agent_id', params.agentId)
+      .eq('app_id', entry.app.id)
+      .eq('target', target);
+    if (error) throw new Error(error.message);
+  } catch {
+    await updateLocalRuntimeState(state => {
+      const existing = state.appDeviceInstallations.find(item =>
+        item.ownerAgentId === params.agentId
+        && item.appId === entry.app.id
+        && item.target === target
+      );
+      if (existing) {
+        existing.status = 'removed';
+        existing.updatedAt = now;
+      }
+    });
+  }
+
+  return {
+    removed: true,
+    target,
+    app: entry.app,
+    ownershipPreserved: true,
   };
 }

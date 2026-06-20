@@ -1,6 +1,6 @@
-# AgentOS V6.6.3 Technical Overview
+# AgentOS V6.6.4 Technical Overview
 
-V6.6.3 mounts one persistent application shell around product and documentation routes. The shell owns workspace, project, session, navigation, responsive sidebars, context, and interaction telemetry while Studio remains one stateful module inside the operating system.
+V6.6.4 adds the Marketplace & Capability Layer on top of the persistent operating shell. App Store and Skill Store are first-class AgentOS primitives with ownership, Library sync, workspace asset registry sync, updates, developer profiles, dependencies, permissions, and discovery.
 
 > Super AgentOS-first AI operating system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
 
@@ -29,7 +29,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 
 ---
 
-## V6.6.2 Product Layers
+## V6.6.4 Product Layers
 
 | Layer | What it provides |
 |-------|------------------|
@@ -38,6 +38,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 | **Recovery** | Panic stop, pause/resume/retry/cancel/rollback, failure inspection, and notifications |
 | **Files** | Upload, delete, rename, preview, summarize, search, and permission-aware access |
 | **Memory** | User, session, project, agent, workflow, app, and skill memory with CRUD, search, export, and grants |
+| **Marketplace** | Consumer App Store for products, compact Skill Store for capabilities, developer profiles, update center, ownership, device install separation, and recommendations |
 | **Builder** | AppStore, Skills, Workflows, SDK, MCP, Vault, FFP, Developer, and Audit surfaces |
 
 ---
@@ -323,11 +324,11 @@ For technical support, API reference, and community resources, visit the [Agent 
 
 ## FFP Temp
 
-FFP is disabled in V6.6.3. The route and compatibility records remain visible as a future wiring point for Fabric Furge Protocol.
+FFP is disabled in V6.6.4. The route and compatibility records remain visible as a future wiring point for Fabric Furge Protocol.
 
 | State | Route |
 |-------|-------|
 | **FFP Disabled** | Multi-agent activities -> Unified Execution Engine |
 | **FFP Enabled** | Multi-agent activities -> FFP temporary abstraction layer -> Unified Execution Engine |
 
-All execution bypasses FFP in V6.6.3. No consensus engine, proposal voting, activation control, or fake consensus result is exposed.
+All execution bypasses FFP in V6.6.4. No consensus engine, proposal voting, activation control, or fake consensus result is exposed.

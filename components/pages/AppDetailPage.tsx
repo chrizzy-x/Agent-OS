@@ -4,27 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import SurfaceShell from '@/components/os/surface-shell';
-import type { AgentAppListing } from '@/src/appstore/catalog';
+import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
-import {
-  Badge,
-  Button,
-  Card,
-  CommandCard,
-  EmptyState,
-  LoadingState,
-  MetricCard,
-  PermissionCard,
-  Tabs,
-} from '@/components/os/ui';
+import type { AgentAppListing } from '@/src/appstore/catalog';
 
-type AppDetails = AgentAppListing & {
-  longDescription?: string;
+export type AppDetailRecord = AgentAppListing & {
+  reviews?: Array<{ id?: string; rating?: number; reviewTitle?: string; reviewText?: string; createdAt?: string }>;
 };
-export type AppDetailRecord = AppDetails;
 
 type Installation = {
-  favorite?: boolean;
   permissionsApproved?: string[];
   installedVersion?: string | null;
   updateAvailable?: boolean;
@@ -37,197 +25,117 @@ type AppReadiness = {
   missingPermissions: string[];
   missingSecrets: string[];
   missingSkills: string[];
-  appUnavailableReason?: string | null;
   ready: boolean;
   updateAvailable: boolean;
-  targets: Array<{ target: AppOpenTarget; url: string }>;
+  targets: Array<{ target: 'web' | 'android' | 'ios'; url: string }>;
+  appUnavailableReason?: string | null;
 };
 
-type AppOpenTarget = 'web' | 'android' | 'ios';
-
-function runtimeLabel(app: AppDetails | null): string {
-  if (!app) return 'App';
-  if (app.source === 'external_sdk') return 'External SDK';
-  if (app.runtimeType === 'workspace-app') return 'Workspace App';
-  return 'Internal App';
+function formatCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toLocaleString();
 }
 
-function formatTargets(values: string[]): string {
-  return values.join(' / ') || 'AgentOS Cloud';
+function logo(app: AppDetailRecord) {
+  if (app.logoUrl) return <img src={app.logoUrl} alt="" />;
+  return <span>{app.name.slice(0, 2).toUpperCase()}</span>;
 }
 
-function deriveTargets(app: AppDetails | null): Array<'web' | 'android' | 'ios'> {
-  if (!app) return [];
-  const targets: Array<'web' | 'android' | 'ios'> = [];
-  if (app.distribution.webUrl || app.appUrl) targets.push('web');
-  if (app.distribution.androidUrl) targets.push('android');
-  if (app.distribution.iosUrl) targets.push('ios');
-  return targets;
+function uniqueList(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
 }
 
-function getReadinessBadge(readiness: AppReadiness | null, installation: Installation | null): { label: string; tone: 'default' | 'accent' | 'success' | 'warning' | 'danger' } | null {
-  if (!installation) return null;
-  if (readiness?.appUnavailableReason) return { label: 'Unavailable', tone: 'danger' };
-  if (installation.status === 'disabled') return { label: 'Disabled', tone: 'warning' };
-  if (readiness?.updateAvailable) return { label: 'Update available', tone: 'accent' };
-  if (readiness && !readiness.ready) {
-    if (readiness.missingPermissions.length > 0) return { label: 'Needs approval', tone: 'warning' };
-    if (readiness.missingSecrets.length > 0) return { label: 'Missing secrets', tone: 'danger' };
-    if (readiness.missingSkills.length > 0) return { label: 'Missing skills', tone: 'warning' };
-    return { label: 'Not ready', tone: 'warning' };
-  }
-  return { label: 'Ready', tone: 'success' };
+function targetForDevice(app: AppDetailRecord): string {
+  const platforms = app.platforms.map(item => item.toLowerCase());
+  if (platforms.includes('desktop')) return 'desktop';
+  if (platforms.includes('android')) return 'android';
+  if (platforms.includes('ios')) return 'ios';
+  return 'pwa';
 }
 
 export default function AppDetailPage({
   initialApp = null,
-  initialViewerOwnsApp = false,
 }: {
   initialApp?: AppDetailRecord | null;
   initialViewerOwnsApp?: boolean;
 }) {
   const params = useParams<{ slug: string }>();
+  const shell = useApplicationShell();
   const slug = params?.slug ?? '';
-  const [tab, setTab] = useState('Overview');
   const [session, setSession] = useState<BrowserSession | null>(null);
-  const [app, setApp] = useState<AppDetails | null>(initialApp);
+  const [app, setApp] = useState<AppDetailRecord | null>(initialApp);
   const [readiness, setReadiness] = useState<AppReadiness | null>(null);
-  const [viewerOwnsApp, setViewerOwnsApp] = useState(initialViewerOwnsApp);
+  const [similar, setSimilar] = useState<AppDetailRecord[]>([]);
   const [loading, setLoading] = useState(initialApp === null);
-  const [installing, setInstalling] = useState(false);
-  const [working, setWorking] = useState(false);
+  const [working, setWorking] = useState('');
   const [notice, setNotice] = useState('');
 
-  const load = useCallback(async (currentSession?: BrowserSession | null, withLoading = true) => {
+  const load = useCallback(async (withLoading = true) => {
     if (!slug) return;
     if (withLoading) setLoading(true);
     try {
-      const nextSession = currentSession !== undefined ? currentSession : await fetchBrowserSession().catch(() => null);
-      const [appRes, readinessRes] = await Promise.all([
+      const currentSession = await fetchBrowserSession().catch(() => null);
+      const [appRes, readinessRes, discoveryRes] = await Promise.all([
         fetch(`/api/apps/${slug}`, { cache: 'no-store' }),
-        nextSession ? fetch(`/api/apps/${slug}/readiness`, { cache: 'no-store' }).catch(() => null) : Promise.resolve(null),
+        currentSession ? fetch(`/api/apps/${slug}/readiness`, { cache: 'no-store' }).catch(() => null) : Promise.resolve(null),
+        fetch('/api/apps/discovery', { cache: 'no-store' }).catch(() => null),
       ]);
       const appData = await appRes.json().catch(() => ({}));
+      const nextApp = appData.app ?? null;
       const readinessData = readinessRes ? await readinessRes.json().catch(() => ({})) : null;
-
-      setSession(nextSession ?? null);
-      setApp(appData.app ?? null);
-      setViewerOwnsApp(appData.viewerOwnsApp === true);
+      const discoveryData = discoveryRes ? await discoveryRes.json().catch(() => ({})) : {};
+      setSession(currentSession);
+      setApp(nextApp);
       setReadiness(readinessData ? {
         installation: readinessData.installation ?? null,
         requiredPermissions: readinessData.requiredPermissions ?? [],
         missingPermissions: readinessData.missingPermissions ?? [],
         missingSecrets: readinessData.missingSecrets ?? [],
         missingSkills: readinessData.missingSkills ?? [],
-        appUnavailableReason: typeof readinessData.appUnavailableReason === 'string' ? readinessData.appUnavailableReason : null,
         ready: readinessData.ready === true,
         updateAvailable: readinessData.updateAvailable === true,
         targets: readinessData.targets ?? [],
+        appUnavailableReason: typeof readinessData.appUnavailableReason === 'string' ? readinessData.appUnavailableReason : null,
       } : null);
+      const allApps = Array.isArray(discoveryData.apps) ? discoveryData.apps as AppDetailRecord[] : [];
+      setSimilar(nextApp ? allApps.filter(item => item.slug !== nextApp.slug && item.category === nextApp.category).slice(0, 6) : []);
     } catch {
       setApp(null);
       setReadiness(null);
-      setViewerOwnsApp(false);
+      setSimilar([]);
     } finally {
       if (withLoading) setLoading(false);
     }
   }, [slug]);
 
   useEffect(() => {
-    let active = true;
-    async function run() {
-      const currentSession = await fetchBrowserSession().catch(() => null);
-      if (!active) return;
-      if (initialApp && initialApp.slug === slug) {
-        setSession(currentSession);
-        setApp(initialApp);
-        setViewerOwnsApp(initialViewerOwnsApp);
-        setLoading(false);
-        if (currentSession) {
-          await load(currentSession, false);
-        }
-        return;
-      }
-      await load(currentSession, true);
+    if (initialApp && initialApp.slug === slug) {
+      setApp(initialApp);
+      setLoading(false);
+      void load(false);
+      return;
     }
-    void run();
-    return () => { active = false; };
-  }, [initialApp, initialViewerOwnsApp, load, slug]);
+    void load(true);
+  }, [initialApp, load, slug]);
 
-  const installation = readiness?.installation ?? null;
-  const commands = useMemo(() => app?.manifest.commands ?? [], [app]);
-  const requiredPermissions = useMemo(
-    () => readiness?.requiredPermissions.length
-      ? readiness.requiredPermissions
-      : app
-        ? (app.permissionsRequired.length > 0 ? app.permissionsRequired : app.manifest.permissions)
-        : [],
-    [app, readiness],
+  const installed = Boolean(readiness?.installation && readiness.installation.status !== 'removed');
+  const permissions = useMemo(
+    () => uniqueList(readiness?.requiredPermissions.length ? readiness.requiredPermissions : app ? [...app.permissionsRequired, ...app.manifest.permissions] : []),
+    [app, readiness?.requiredPermissions],
   );
-  const requiredSkills = useMemo(
-    () => app ? (app.manifest.requiredSkills.length > 0 ? app.manifest.requiredSkills : app.manifest.skills) : [],
-    [app],
-  );
-  const requiredSecrets = useMemo(
-    () => app ? (app.requiredSecrets.length > 0 ? app.requiredSecrets : app.manifest.requiredSecrets) : [],
-    [app],
-  );
-  const approvedPermissions = useMemo(
-    () => new Set((installation?.permissionsApproved ?? []).map(item => item.toLowerCase())),
-    [installation?.permissionsApproved],
-  );
-  const missingPermissionApprovals = useMemo(
-    () => readiness?.missingPermissions ?? requiredPermissions.filter(permission => !approvedPermissions.has(permission.toLowerCase())),
-    [approvedPermissions, readiness?.missingPermissions, requiredPermissions],
-  );
-  const missingSecrets = readiness?.missingSecrets ?? [];
-  const missingSkills = readiness?.missingSkills ?? [];
-  const currentVersion = app?.manifest.version || '1.0.0';
-  const versionHistory = useMemo(
-    () => app ? (app.versionHistory.length > 0 ? app.versionHistory : [{
-      id: `${app.id}-current`,
-      version: currentVersion,
-      changeSummary: null,
-      createdAt: app.updatedAt,
-    }]) : [],
-    [app, currentVersion],
-  );
-  const availableTargets = readiness?.targets.length ? readiness.targets.map(item => item.target) : deriveTargets(app);
-  const readinessBadge = getReadinessBadge(readiness, installation);
-  const updateAvailable = readiness?.updateAvailable === true || installation?.updateAvailable === true;
-  const appUnavailable = app?.disabled === true || Boolean(readiness?.appUnavailableReason);
-  const tabs = useMemo(() => {
-    const items = ['Overview', 'Commands', 'Permissions', 'Secrets', 'Health'];
-    if (viewerOwnsApp) items.push('Analytics');
-    if ((app?.screenshots.length ?? 0) > 0) items.push('Screenshots');
-    items.push('Changelog');
-    return items;
-  }, [app, viewerOwnsApp]);
-  const installCta = appUnavailable
-    ? 'Unavailable'
-    : updateAvailable
-      ? 'Update'
-      : installation
-        ? 'Reinstall'
-        : missingPermissionApprovals.length > 0
-          ? 'Approve & Install'
-          : 'Install';
+  const platforms = app ? uniqueList(app.platforms.length ? app.platforms : app.deviceTargets) : [];
+  const features = app ? (app.features.length ? app.features : app.manifest.commands.map(command => command.description).filter(Boolean)) : [];
+  const versionHistory = app ? (app.versionHistory.length ? app.versionHistory : [{
+    id: `${app.id}-current`,
+    version: app.manifest.version,
+    changeSummary: 'Current production release.',
+    createdAt: app.updatedAt,
+  }]) : [];
 
-  function applyFailureReadiness(payload: Record<string, unknown>) {
-      setReadiness(current => current ? {
-        ...current,
-        missingPermissions: Array.isArray(payload.missingPermissions) ? payload.missingPermissions.filter((item): item is string => typeof item === 'string') : current.missingPermissions,
-        missingSecrets: Array.isArray(payload.missingSecrets) ? payload.missingSecrets.filter((item): item is string => typeof item === 'string') : current.missingSecrets,
-        missingSkills: Array.isArray(payload.missingSkills) ? payload.missingSkills.filter((item): item is string => typeof item === 'string') : current.missingSkills,
-        requiredPermissions: Array.isArray(payload.requiredPermissions) ? payload.requiredPermissions.filter((item): item is string => typeof item === 'string') : current.requiredPermissions,
-        appUnavailableReason: typeof payload.appUnavailableReason === 'string' ? payload.appUnavailableReason : current.appUnavailableReason,
-        ready: false,
-      } : current);
-  }
-
-  async function install(permissionsApproved: string[] = requiredPermissions) {
+  async function installToWorkspace() {
     if (!app) return;
-    setInstalling(true);
+    setWorking('workspace');
     setNotice('');
     try {
       const response = await fetch('/api/apps/install', {
@@ -235,376 +143,195 @@ export default function AppDetailPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           slug: app.slug,
-          permissionsApproved,
+          workspaceId: shell.activeWorkspaceId,
+          permissionsApproved: permissions,
         }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        applyFailureReadiness(payload);
         setNotice(payload.error ?? payload.message ?? 'Install failed');
         return;
       }
-      await load(session, false);
-      setNotice(`${updateAvailable ? 'Updated' : installation ? 'Reinstalled' : 'Installed'} ${app.name}.`);
+      setNotice('Installed to workspace.');
+      await load(false);
     } finally {
-      setInstalling(false);
+      setWorking('');
     }
   }
 
-  async function approvePermissions() {
+  async function installToDevice() {
     if (!app) return;
-    if (!installation) {
-      await install(requiredPermissions);
-      return;
-    }
-    setWorking(true);
+    setWorking('device');
     setNotice('');
     try {
-      const response = await fetch(`/api/apps/${app.slug}/installation`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/apps/${app.slug}/device-install`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissionsApproved: requiredPermissions }),
+        body: JSON.stringify({
+          target: targetForDevice(app),
+          workspaceId: shell.activeWorkspaceId,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setNotice(payload.error ?? payload.message ?? 'Permission approval failed');
-        return;
-      }
-      await load(session, false);
-      setNotice('Permissions approved.');
+      setNotice(response.ok ? 'Installed to device. Offline reinstall remains available from workspace package cache.' : payload.error ?? payload.message ?? 'Device install failed');
     } finally {
-      setWorking(false);
+      setWorking('');
     }
   }
 
-  async function openApp(target: AppOpenTarget) {
-    if (!app || !session) return;
-    setWorking(true);
+  async function launch() {
+    if (!app) return;
+    setWorking('launch');
     setNotice('');
     try {
       const response = await fetch(`/api/apps/${app.slug}/open`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target }),
+        body: JSON.stringify({ target: 'web' }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        applyFailureReadiness(payload);
-        setNotice(payload.error ?? payload.message ?? 'Open failed');
+        setNotice(payload.error ?? payload.message ?? 'Launch failed');
         return;
       }
-      await load(session, false);
-      if (typeof payload.openUrl === 'string' && payload.openUrl.length > 0) {
-        window.open(payload.openUrl, '_blank', 'noopener,noreferrer');
-      }
-      setNotice(`Opened ${app.name} on ${target}.`);
+      if (typeof payload.openUrl === 'string') window.open(payload.openUrl, '_blank', 'noopener,noreferrer');
+      setNotice('Launched.');
     } finally {
-      setWorking(false);
-    }
-  }
-
-  async function uninstallApp() {
-    if (!app) return;
-    setWorking(true);
-    setNotice('');
-    try {
-      const response = await fetch(`/api/apps/${app.slug}/installation`, { method: 'DELETE' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setNotice(payload.error ?? payload.message ?? 'Uninstall failed');
-        return;
-      }
-      await load(session, false);
-      setNotice(`Uninstalled ${app.name}.`);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function toggleFavorite() {
-    if (!app || !installation) return;
-    setWorking(true);
-    try {
-      const response = await fetch(`/api/apps/${app.slug}/installation`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ favorite: !(installation.favorite === true) }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (response.ok) {
-        await load(session, false);
-        setNotice(installation.favorite ? 'Removed pin.' : 'Pinned app.');
-      } else {
-        setNotice(payload.error ?? payload.message ?? 'Pin update failed');
-      }
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function setInstallStatus(status: 'active' | 'disabled') {
-    if (!app || !installation) return;
-    setWorking(true);
-    try {
-      const response = await fetch(`/api/apps/${app.slug}/installation`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (response.ok) {
-        await load(session, false);
-        setNotice(status === 'active' ? 'App enabled.' : 'App disabled.');
-      } else {
-        setNotice(payload.error ?? payload.message ?? 'Status update failed');
-      }
-    } finally {
-      setWorking(false);
+      setWorking('');
     }
   }
 
   return (
-    <SurfaceShell
-        activePath="/appstore"
-        title={app?.name ?? 'App'}
-        subtitle={app ? (app.longDescription || app.description) : undefined}
-        actions={app ? (
-          <>
-            <Badge tone="accent">{runtimeLabel(app)}</Badge>
-            {app.verified ? <Badge tone="success">Verified</Badge> : null}
-            {readinessBadge ? <Badge tone={readinessBadge.tone}>{readinessBadge.label}</Badge> : null}
-            {installation ? <Button onClick={() => void openApp('web')} disabled={working || !availableTargets.includes('web') || !readiness?.ready || appUnavailable}>{working ? 'Opening...' : 'Open'}</Button> : <Button onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Installing...' : installCta}</Button>}
-          </>
-        ) : undefined}
-      >
-        {loading ? <LoadingState label="Loading app details" /> : !app ? (
-          <EmptyState title="App not found" body="This app is private, unavailable, or the slug does not exist." action={<Button href="/appstore">Back to Apps</Button>} />
+    <SurfaceShell activePath="/appstore" title={app?.name ?? 'App'} subtitle={app?.description}>
+      <div className="market-shell" data-surface="app-detail">
+        {loading ? (
+          <div className="market-skeleton market-detail-skeleton" />
+        ) : !app ? (
+          <div className="market-empty">
+            <h2>App not found</h2>
+            <p>This app is private, unavailable, or unpublished.</p>
+            <Link href="/appstore" className="market-secondary-action">Back to App Store</Link>
+          </div>
         ) : (
           <>
-            <Card>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                  <Badge tone="default">{app.installCount.toLocaleString()} installs</Badge>
-                  <Badge tone="default">{app.publisherName || 'Unknown publisher'}</Badge>
-                  <Badge tone="default">Updated {new Date(app.updatedAt).toLocaleDateString()}</Badge>
-                  <Badge tone="default">Version {currentVersion}</Badge>
-                  {appUnavailable ? <Badge tone="danger">{readiness?.appUnavailableReason ?? 'App disabled'}</Badge> : null}
-                  {installation ? <Badge tone="accent">Installed {installation.installedVersion || currentVersion}</Badge> : null}
+            <section className="market-detail-hero">
+              <div className="market-detail-logo">{logo(app)}</div>
+              <div className="market-detail-copy">
+                <Link href={`/developer/${app.developerHandle}`} className="market-developer-link">{app.publisherName || 'AgentOS Developer'}</Link>
+                <h2>{app.name}</h2>
+                <p>{app.longDescription || app.description}</p>
+                <div className="market-hero-meta">
+                  <span>Version {app.manifest.version}</span>
+                  <span>Updated {new Date(app.updatedAt).toLocaleDateString()}</span>
+                  <span>{platforms.join(' / ') || 'AgentOS'}</span>
                 </div>
-              <div className="os-inline-actions" style={{ marginBottom: 12 }}>
-                {updateAvailable ? <Button variant="secondary" onClick={() => void install()} disabled={installing || appUnavailable}>{installing ? 'Updating...' : 'Update'}</Button> : null}
-                {installation ? (
-                  <Button variant="secondary" onClick={() => void setInstallStatus(installation.status === 'disabled' ? 'active' : 'disabled')} disabled={working}>
-                    {working ? 'Working...' : installation.status === 'disabled' ? 'Enable' : 'Disable'}
-                  </Button>
-                ) : null}
-                {installation ? <Button variant="secondary" onClick={() => void uninstallApp()} disabled={working}>{working ? 'Working...' : 'Remove'}</Button> : null}
-                {installation ? <Button variant="secondary" onClick={() => void toggleFavorite()} disabled={working}>{installation.favorite === true ? 'Unpin' : 'Pin'}</Button> : null}
-                <Button href={`/api/apps/${app.slug}/download`} variant="secondary">Download</Button>
               </div>
-              {notice ? <div className="os-entity-copy" style={{ marginBottom: 12 }}>{notice}</div> : null}
-              <Tabs tabs={tabs.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
-            </Card>
-
-            {tab === 'Overview' ? (
-              <div style={{ display: 'grid', gap: 16 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-                  <MetricCard label="Health" value={app.healthStatus} />
-                  <MetricCard label="Permissions" value={requiredPermissions.length} hint={missingPermissionApprovals.length > 0 ? `${missingPermissionApprovals.length} missing approval` : 'Approved'} />
-                  <MetricCard label="Required secrets" value={requiredSecrets.length} hint={missingSecrets.length > 0 ? `${missingSecrets.length} missing` : 'Ready'} />
-                  <MetricCard label="Required skills" value={requiredSkills.length} hint={missingSkills.length > 0 ? `${missingSkills.length} missing` : 'Ready'} />
-                  <MetricCard label="Targets" value={availableTargets.length} hint={availableTargets.join(' / ') || 'None'} />
-                </div>
-
-                <Card>
-                  <div className="os-entity-title" style={{ marginBottom: 12 }}>Details</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                    <Card>
-                      <div className="os-sidebar-title">Publisher</div>
-                      <div className="os-entity-copy">{app.publisherName || 'Unknown publisher'}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Version</div>
-                      <div className="os-entity-copy">{currentVersion}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Permissions</div>
-                      <div className="os-entity-copy">{requiredPermissions.join(', ') || 'None declared'}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Required secrets</div>
-                      <div className="os-entity-copy">{requiredSecrets.join(', ') || 'None required'}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Required skills</div>
-                      <div className="os-entity-copy">{requiredSkills.join(', ') || 'None required'}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Device targets</div>
-                      <div className="os-entity-copy">{formatTargets(app.deviceTargets)}</div>
-                    </Card>
-                  </div>
-                </Card>
-
-                {missingPermissionApprovals.length > 0 ? (
-                  <Card>
-                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Approval needed</div>
-                    <div className="os-entity-copy" style={{ marginBottom: 12 }}>
-                      Approve: {missingPermissionApprovals.join(', ')}
-                    </div>
-                    <Button variant="secondary" onClick={() => void approvePermissions()} disabled={working || installing}>
-                      {installation ? 'Approve permissions' : 'Approve & Install'}
-                    </Button>
-                  </Card>
-                ) : null}
-
-                {missingSecrets.length > 0 ? (
-                  <Card>
-                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Secrets missing</div>
-                    <div className="os-entity-copy" style={{ marginBottom: 12 }}>
-                      Missing: {missingSecrets.join(', ')}
-                    </div>
-                    <Button href="/vault" variant="secondary">Open Vault</Button>
-                  </Card>
-                ) : null}
-
-                {missingSkills.length > 0 ? (
-                  <Card>
-                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Skills missing</div>
-                    <div className="os-entity-copy" style={{ marginBottom: 12 }}>
-                      Missing: {missingSkills.join(', ')}
-                    </div>
-                    <Button href="/skills" variant="secondary">Open Skills</Button>
-                  </Card>
-                ) : null}
-
-                <Card>
-                  <div className="os-entity-copy" style={{ marginBottom: 16 }}>{app.longDescription || app.description}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                    <Card>
-                      <div className="os-sidebar-title">Runtime</div>
-                      <div className="os-entity-title">{runtimeLabel(app)}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Entrypoint</div>
-                      <div className="os-entity-copy">{app.manifest.entrypoint}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Health</div>
-                      <div className="os-entity-copy">{app.healthStatus}</div>
-                    </Card>
-                    <Card>
-                      <div className="os-sidebar-title">Open targets</div>
-                      <div className="os-entity-copy">{availableTargets.join(', ') || 'No targets published'}</div>
-                    </Card>
-                  </div>
-                </Card>
+              <div className="market-detail-actions">
+                <button type="button" className="market-primary-action" disabled={working === 'workspace'} onClick={() => void installToWorkspace()}>
+                  {working === 'workspace' ? 'Working' : installed ? 'Reinstall To Workspace' : 'Install To Workspace'}
+                </button>
+                <button type="button" className="market-secondary-action" disabled={working === 'device'} onClick={() => void installToDevice()}>
+                  {working === 'device' ? 'Working' : 'Install To Device'}
+                </button>
+                <button type="button" className="market-secondary-action" disabled={!installed || working === 'launch'} onClick={() => void launch()}>
+                  {working === 'launch' ? 'Opening' : 'Launch'}
+                </button>
               </div>
-            ) : null}
+            </section>
 
-            {tab === 'Commands' ? (
-              commands.length === 0 ? <EmptyState title="No commands declared" body="This app has not exposed callable commands yet." /> : (
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {commands.map(command => (
-                    <CommandCard key={command.name} name={command.name} description={command.description} />
-                  ))}
-                </div>
-              )
-            ) : null}
+            {notice ? <div className="market-notice">{notice}</div> : null}
 
-            {tab === 'Permissions' ? (
-              <div style={{ display: 'grid', gap: 12 }}>
-                {(requiredPermissions.length > 0 ? requiredPermissions : ['No special permissions declared']).map(permission => (
-                  <PermissionCard
-                    key={permission}
-                    title={permission}
-                    description={missingPermissionApprovals.includes(permission)
-                      ? 'Approval is still required before this app can run.'
-                      : 'Review this access before the app runs.'}
-                    required={permission !== 'No special permissions declared'}
-                  />
-                ))}
+            <section className="market-metric-grid" aria-label="App analytics">
+              <div><span>Downloads</span><strong>{formatCount(app.downloadCount || app.installCount)}</strong></div>
+              <div><span>Active Users</span><strong>{formatCount(app.activeUserCount)}</strong></div>
+              <div><span>Rating</span><strong>{app.rating > 0 ? app.rating.toFixed(1) : 'New'}</strong></div>
+              <div><span>Reviews</span><strong>{formatCount(app.reviewCount)}</strong></div>
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Overview</h2></div>
+              <div className="market-info-grid">
+                <div><span>Developer</span><strong>{app.publisherName || 'AgentOS Developer'}</strong></div>
+                <div><span>Platforms</span><strong>{platforms.join(', ') || 'AgentOS'}</strong></div>
+                <div><span>Last Updated</span><strong>{new Date(app.updatedAt).toLocaleDateString()}</strong></div>
+                <div><span>Status</span><strong>{readiness?.appUnavailableReason ?? (installed ? 'Installed' : 'Available')}</strong></div>
               </div>
-            ) : null}
+            </section>
 
-            {tab === 'Secrets' ? (
-              <div style={{ display: 'grid', gap: 12 }}>
-                {(requiredSecrets.length > 0 ? requiredSecrets : ['No required secrets']).map(secret => (
-                  <PermissionCard
-                    key={secret}
-                    title={secret}
-                    description={missingSecrets.includes(secret)
-                      ? 'Add this secret in Vault before the app can run.'
-                      : 'Ready for this installation.'}
-                    required={secret !== 'No required secrets'}
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {tab === 'Health' ? (
-              <Card>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-                  <Card>
-                    <div className="os-sidebar-title">Health status</div>
-                    <div className="os-entity-copy">{app.healthStatus}</div>
-                  </Card>
-                  <Card>
-                    <div className="os-sidebar-title">Heartbeat count</div>
-                    <div className="os-entity-copy">{app.heartbeatCount}</div>
-                  </Card>
-                  <Card>
-                    <div className="os-sidebar-title">Last heartbeat</div>
-                    <div className="os-entity-copy">{app.lastHeartbeatAt ? new Date(app.lastHeartbeatAt).toLocaleString() : 'None recorded'}</div>
-                  </Card>
-                  <Card>
-                    <div className="os-sidebar-title">Last command</div>
-                    <div className="os-entity-copy">{app.lastCommandAt ? new Date(app.lastCommandAt).toLocaleString() : 'None recorded'}</div>
-                  </Card>
+            <section className="market-section">
+              <div className="market-section-head"><h2>Screenshots</h2></div>
+              {app.screenshots.length ? (
+                <div className="market-screenshot-row">
+                  {app.screenshots.map(src => <img key={src} src={src} alt={`${app.name} screenshot`} loading="lazy" />)}
                 </div>
-                {app.lastError ? <div className="os-entity-copy" style={{ marginTop: 16 }}>Last error: {app.lastError}</div> : null}
-              </Card>
-            ) : null}
+              ) : (
+                <div className="market-empty compact"><p>No screenshots published.</p></div>
+              )}
+            </section>
 
-            {tab === 'Analytics' ? (
-              <Card>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-                  <MetricCard label="Installs" value={app.installCount} />
-                  <MetricCard label="Opens" value={app.openCount} />
-                  <MetricCard label="Web opens" value={app.webOpenCount} />
-                  <MetricCard label="Android opens" value={app.androidDownloadCount} />
-                  <MetricCard label="iOS opens" value={app.iosDownloadCount} />
-                  <MetricCard label="Heartbeats" value={app.heartbeatCount} />
+            <section className="market-section">
+              <div className="market-section-head"><h2>Features</h2></div>
+              {features.length ? (
+                <div className="market-feature-grid">
+                  {features.map(feature => <div key={feature}>{feature}</div>)}
                 </div>
-              </Card>
-            ) : null}
+              ) : (
+                <div className="market-empty compact"><p>No feature breakdown published.</p></div>
+              )}
+            </section>
 
-            {tab === 'Screenshots' ? (
-              app.screenshots.length === 0 ? <EmptyState title="No screenshots" body="This app has not published screenshots." /> : (
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {app.screenshots.map(path => (
-                    <Card key={path}>
-                      <a href={path} target="_blank" rel="noreferrer" className="os-entity-copy">{path}</a>
-                    </Card>
-                  ))}
-                </div>
-              )
-            ) : null}
-
-            {tab === 'Changelog' ? (
-              <div style={{ display: 'grid', gap: 12 }}>
+            <section className="market-section">
+              <div className="market-section-head"><h2>Changelog</h2></div>
+              <div className="market-timeline">
                 {versionHistory.map(entry => (
-                  <Card key={entry.id}>
-                    <div className="os-entity-title" style={{ marginBottom: 8 }}>Version {entry.version}</div>
-                    <div className="os-entity-copy" style={{ marginBottom: 8 }}>
-                      {entry.changeSummary || 'Version record published without release notes.'}
-                    </div>
-                    <div className="os-entity-meta">{new Date(entry.createdAt).toLocaleString()}</div>
-                  </Card>
+                  <article key={entry.id}>
+                    <strong>Version {entry.version}</strong>
+                    <p>{entry.changeSummary || 'Release notes not provided.'}</p>
+                    <span>{new Date(entry.createdAt).toLocaleDateString()}</span>
+                  </article>
                 ))}
               </div>
-            ) : null}
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Reviews</h2></div>
+              {app.reviews?.length ? (
+                <div className="market-review-grid">
+                  {app.reviews.map((review, index) => (
+                    <article key={review.id ?? index}>
+                      <strong>{review.rating ? `${review.rating}/5` : 'Review'}</strong>
+                      <p>{review.reviewText || review.reviewTitle || 'No review text.'}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No public reviews yet.</p></div>
+              )}
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Similar Apps</h2></div>
+              {similar.length ? (
+                <div className="market-app-grid">
+                  {similar.map(item => (
+                    <article key={item.id} className="market-app-card">
+                      <Link href={`/appstore/${item.slug}`} className="market-app-card-main">
+                        <div className="market-app-logo">{logo(item)}</div>
+                        <div className="market-app-copy">
+                          <h3>{item.name}</h3>
+                          <p>{item.description}</p>
+                        </div>
+                      </Link>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No similar apps published.</p></div>
+              )}
+            </section>
           </>
         )}
+      </div>
     </SurfaceShell>
   );
 }

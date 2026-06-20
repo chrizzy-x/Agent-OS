@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.6.3", "timestamp": "...", "tools": 44 }',
+    response: '{ "status": "ok", "version": "6.6.4", "timestamp": "...", "tools": 44 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -211,12 +211,12 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Read the disabled FFP compatibility status. All runtime execution bypasses FFP in v6.6.3.',
+    desc: 'Read the disabled FFP compatibility status. All runtime execution bypasses FFP in v6.6.4.',
     response: '{ "enabled": false, "status": "FFP Disabled", "route": "Multi-agent activities -> Unified Execution Engine" }',
   },
   {
     method: 'PATCH', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.3.',
+    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.4.',
     body: [
       { field: 'enabled', type: 'boolean', required: true, desc: 'Workspace-level FFP temp toggle' },
       { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace scope' },
@@ -306,9 +306,24 @@ const endpoints: Endpoint[] = [
     response: '{ "skills": [...], "pagination": { "page": 1, "limit": 50, "total": 54 } }',
   },
   {
+    method: 'GET', path: '/api/skills/discovery', auth: 'None',
+    desc: 'Browse the v6.6.4 Skill Store capability registry with ranked search, categories, installed state, and grouped discovery sections.',
+    response: '{ "skills": [...], "categories": ["AI", "Research"], "installedSlugs": [], "sections": [...] }',
+  },
+  {
+    method: 'GET', path: '/api/skills/{id}/preview', auth: 'None',
+    desc: 'Preview input, output, execution example, and expected result before installing a capability.',
+    response: '{ "skill": {...}, "preview": { "inputExample": {...}, "outputExample": {...}, "executionExample": {...}, "expectedResults": {...} } }',
+  },
+  {
     method: 'GET', path: '/api/apps', auth: 'None',
     desc: 'Browse published App Store listings. Supports category, search, and sort query params.',
     response: '{ "apps": [...], "categories": ["All", "Research", "..."], "pagination": { "total": 6 } }',
+  },
+  {
+    method: 'GET', path: '/api/apps/discovery', auth: 'None',
+    desc: 'Browse the v6.6.4 App Store with ranked search, installed priority, hero apps, featured, trending, recommended, new releases, recently updated, top installed, and category rows.',
+    response: '{ "apps": [...], "installedSlugs": [], "categories": ["Finance", "Trading"], "sections": [...], "hero": [...] }',
   },
   {
     method: 'GET', path: '/api/apps/{slug}', auth: 'None',
@@ -351,6 +366,26 @@ const endpoints: Endpoint[] = [
       { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace that owns the app installation' },
     ],
     response: '{ "workspaceInstalled": true, "deviceInstalled": true, "target": "pwa", "packageCachedForOfflineInstall": true, "execution": {...} }',
+  },
+  {
+    method: 'DELETE', path: '/api/apps/{slug}/device-install', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Remove only a local device install. Permanent marketplace ownership remains attached to the account.',
+    response: '{ "removed": true, "ownershipPreserved": true, "target": "desktop" }',
+  },
+  {
+    method: 'GET', path: '/api/apps/updates', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'List installed apps with available updates, release notes, current version, and installed version.',
+    response: '{ "updates": [{ "app": {...}, "currentVersion": "1.2.0", "installedVersion": "1.1.0", "releaseNotes": "..." }], "total": 1 }',
+  },
+  {
+    method: 'POST', path: '/api/apps/updates', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Update all available app updates for the current account.',
+    response: '{ "updated": [...], "total": 2 }',
+  },
+  {
+    method: 'POST', path: '/api/apps/{slug}/rollback', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Roll back an installed app to a prior recorded version while preserving ownership.',
+    response: '{ "app": {...}, "installation": {...}, "rolledBackTo": "1.1.0" }',
   },
   {
     method: 'GET', path: '/api/apps/installed', auth: 'Browser Session or Bearer (Agent)',
@@ -409,11 +444,29 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'POST', path: '/api/skills/install', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Install a published skill for the authenticated agent.',
+    desc: 'Install a published skill for the authenticated agent, approve permissions, and auto-resolve required dependencies.',
     body: [
-      { field: 'skill_id', type: 'string', required: true, desc: 'Skill UUID from the Skill Store listing' },
+      { field: 'skill_id', type: 'string', required: false, desc: 'Skill UUID from the Skill Store listing' },
+      { field: 'slug', type: 'string', required: false, desc: 'Skill slug from the Skill Store listing' },
+      { field: 'permissionsApproved', type: 'string[]', required: false, desc: 'Approved permissions required before execution' },
+      { field: 'installDependencies', type: 'boolean', required: false, desc: 'Auto-install required skills. Defaults to true.' },
+      { field: 'optionalDependencies', type: 'string[]', required: false, desc: 'Optional skill dependency slugs to install' },
     ],
-    response: '{ "success": true, "installation": { "id": "...", "installed_at": "..." } }',
+    response: '{ "success": true, "installation": {...}, "skill": {...}, "dependenciesInstalled": [...] }',
+  },
+  {
+    method: 'PATCH', path: '/api/skills/{id}/installation', auth: 'Browser Session or Bearer (Agent)',
+    desc: 'Review, modify, or revoke installed skill permissions. Revoked required permissions block execution.',
+    body: [
+      { field: 'permissionsApproved', type: 'string[]', required: false, desc: 'Next approved permission set' },
+      { field: 'status', type: 'active | disabled | removed', required: false, desc: 'Installation status' },
+    ],
+    response: '{ "skill": {...}, "installation": {...} }',
+  },
+  {
+    method: 'GET', path: '/api/developers/{handle}', auth: 'None',
+    desc: 'Load a public developer profile by safe public handle with published apps, skills, followers, downloads, and active users.',
+    response: '{ "developer": { "handle": "research-labs", "appsPublished": 2, "skillsPublished": 3, "apps": [...], "skills": [...] } }',
   },
   {
     method: 'GET', path: '/api/skills/installed', auth: 'Browser Session or Bearer (Agent)',

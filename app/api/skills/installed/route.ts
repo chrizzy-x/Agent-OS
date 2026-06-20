@@ -16,14 +16,32 @@ export async function GET(request: NextRequest) {
         .from('skill_installations')
         .select(`
           id,
+          workspace_id,
+          status,
+          permissions_approved,
+          dependency_install,
           installed_at,
-          skill:skills(id,name,slug,category,description,icon,pricing_model,price_per_call,capabilities,primitives_required,total_calls,rating,verified)
+          updated_at,
+          skill:skills(id,name,slug,version,category,description,icon,pricing_model,price_per_call,capabilities,primitives_required,permissions_required,required_secrets,required_skills,optional_skills,compatibility,total_calls,rating,verified)
         `)
         .eq('agent_id', agentCtx.agentId)
         .order('installed_at', { ascending: false });
 
       if (!error) {
         return NextResponse.json({ installed_skills: data ?? [] });
+      }
+
+      const legacy = await supabase
+        .from('skill_installations')
+        .select(`
+          id,
+          installed_at,
+          skill:skills(id,name,slug,category,description,icon,pricing_model,price_per_call,capabilities,primitives_required,total_calls,rating,verified)
+        `)
+        .eq('agent_id', agentCtx.agentId)
+        .order('installed_at', { ascending: false });
+      if (!legacy.error) {
+        return NextResponse.json({ installed_skills: legacy.data ?? [] });
       }
     } catch {
       // Fall back to local state below.
