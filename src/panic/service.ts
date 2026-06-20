@@ -5,7 +5,7 @@ import {
   requestExecutionAction,
   type ExecutionRecord,
 } from '../execution/service.js';
-import { PermissionError } from '../utils/errors.js';
+import { PermissionError, ValidationError } from '../utils/errors.js';
 
 export type PanicState = 'healthy' | 'warning' | 'heavy_activity' | 'emergency';
 export type PanicAction = 'pause' | 'stop_all' | 'lockdown';
@@ -151,12 +151,21 @@ export async function executePanicAction(params: {
   const status = await getPanicStatus(params);
   const nextAction = params.action === 'pause' ? 'pause' : 'cancel';
   const affected: ExecutionRecord[] = [];
+  const skipped: string[] = [];
   for (const execution of status.executions) {
-    affected.push(await requestExecutionAction({
-      agentId: params.agentId,
-      executionId: execution.id,
-      action: nextAction,
-    }));
+    try {
+      affected.push(await requestExecutionAction({
+        agentId: params.agentId,
+        executionId: execution.id,
+        action: nextAction,
+      }));
+    } catch {
+      skipped.push(execution.id);
+    }
+  }
+
+  if (status.executions.length > 0 && affected.length === 0) {
+    throw new ValidationError('No active executions could be changed. Refresh the workspace and retry panic control.');
   }
 
   let vaultRuntimeGrantsRevoked = 0;
@@ -175,6 +184,7 @@ export async function executePanicAction(params: {
       metadata: {
         sessionId: params.sessionId ?? null,
         stoppedExecutions: affected.length,
+        skippedExecutions: skipped,
         vaultRuntimeGrantsRevoked,
       },
     });
@@ -193,6 +203,7 @@ export async function executePanicAction(params: {
       metadata: {
         sessionId: params.sessionId ?? null,
         affectedExecutions: affected.length,
+        skippedExecutions: skipped,
       },
     });
   }

@@ -2,15 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { executePanicAction, getPanicStatus, type PanicAction } from '@/src/panic/service';
 import { createNotification } from '@/src/notifications/service';
+import { assertWorkspaceMembership, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
+
+async function resolvePanicWorkspace(agentId: string, requestedWorkspaceId: string | null): Promise<string | null> {
+  if (requestedWorkspaceId) {
+    return (await assertWorkspaceMembership(requestedWorkspaceId, agentId)).workspace.id;
+  }
+  return (await resolveDefaultWorkspaceForAgent(agentId))?.id ?? null;
+}
 
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.read');
     const url = new URL(request.url);
-    const workspaceId = url.searchParams.get('workspaceId');
+    const workspaceId = await resolvePanicWorkspace(ctx.agentId, url.searchParams.get('workspaceId'));
     const sessionId = url.searchParams.get('sessionId');
     const status = await getPanicStatus({
       agentId: ctx.agentId,
@@ -28,7 +36,7 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.update');
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : null;
+    const workspaceId = await resolvePanicWorkspace(ctx.agentId, typeof body.workspaceId === 'string' ? body.workspaceId : null);
     const sessionId = typeof body.sessionId === 'string' ? body.sessionId : null;
     const action: PanicAction = body.action === 'pause' || body.action === 'lockdown' ? body.action : 'stop_all';
     const result = await executePanicAction({

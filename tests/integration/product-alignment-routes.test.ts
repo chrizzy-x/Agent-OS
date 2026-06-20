@@ -20,6 +20,8 @@ const routeMocks = vi.hoisted(() => ({
   listAccessibleMemoryEntries: vi.fn(),
   listAccessibleSubagents: vi.fn(),
   listVaultSecrets: vi.fn(),
+  assertWorkspaceMembership: vi.fn(),
+  resolveDefaultWorkspaceForAgent: vi.fn(),
 }));
 
 vi.mock('../../src/auth/request.js', () => ({
@@ -72,6 +74,11 @@ vi.mock('../../src/vault/service.js', () => ({
   listVaultSecrets: routeMocks.listVaultSecrets,
 }));
 
+vi.mock('../../src/workspaces/service.js', () => ({
+  assertWorkspaceMembership: routeMocks.assertWorkspaceMembership,
+  resolveDefaultWorkspaceForAgent: routeMocks.resolveDefaultWorkspaceForAgent,
+}));
+
 import { POST as postAction } from '../../app/api/actions/route.js';
 import { GET as getLibrary } from '../../app/api/library/route.js';
 import { GET as getProjectDetail } from '../../app/api/projects/[id]/route.js';
@@ -102,6 +109,8 @@ describe('v6.5.2 product alignment routes', () => {
     routeMocks.requireAgentContextWithTier.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_free' });
     routeMocks.requireRouteCapability.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_free' });
     routeMocks.hasAdminAccess.mockReturnValue(false);
+    routeMocks.assertWorkspaceMembership.mockResolvedValue({ workspace: { id: 'workspace-1' }, role: 'owner' });
+    routeMocks.resolveDefaultWorkspaceForAgent.mockResolvedValue({ id: 'workspace-1' });
     routeMocks.createNotification.mockResolvedValue({});
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === 'nl_studio_sessions') return chain([{ id: 'chat-1', title: 'Chat', status: 'active' }]);

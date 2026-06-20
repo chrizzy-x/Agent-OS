@@ -119,4 +119,26 @@ describe('panic service', () => {
     expect(db.tables.vault_runtime_grants[0].status).toBe('cleaned');
     await expect(assertMcpRuntimeAllowed('agent-1')).rejects.toThrow('MCP is disabled');
   });
+
+  it('skips stale executions but still applies panic to reachable active executions', async () => {
+    panicMocks.listExecutions
+      .mockResolvedValueOnce([{ id: 'stale-exec', status: 'running' }, { id: 'exec-1', status: 'running' }])
+      .mockResolvedValueOnce([]);
+    panicMocks.requestExecutionAction.mockImplementation(async ({ executionId, action }) => {
+      if (executionId === 'stale-exec') throw new Error('Execution not found');
+      return { id: executionId, status: action === 'pause' ? 'paused' : 'cancelled' };
+    });
+
+    const result = await executePanicAction({ agentId: 'agent-1', action: 'stop_all' });
+
+    expect(panicMocks.requestExecutionAction).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ state: 'healthy', affected: 1 });
+  });
+
+  it('returns a clear validation error when no listed active execution can be changed', async () => {
+    panicMocks.listExecutions.mockResolvedValueOnce([{ id: 'stale-exec', status: 'running' }]);
+    panicMocks.requestExecutionAction.mockRejectedValue(new Error('Execution not found'));
+
+    await expect(executePanicAction({ agentId: 'agent-1', action: 'stop_all' })).rejects.toThrow('No active executions could be changed');
+  });
 });

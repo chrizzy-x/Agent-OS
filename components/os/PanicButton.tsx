@@ -13,6 +13,22 @@ type PanicStatus = {
   requireReauth: boolean;
 };
 
+type PanicContext = {
+  workspaceId: string | null;
+  sessionId: string | null;
+};
+
+function readStoredContext(): PanicContext {
+  if (typeof window === 'undefined') return { workspaceId: null, sessionId: null };
+  try {
+    const workspaceId = window.localStorage.getItem('agentos.shell.workspace');
+    const sessionId = workspaceId ? window.localStorage.getItem(`agentos.shell.session.${workspaceId}`) : null;
+    return { workspaceId, sessionId };
+  } catch {
+    return { workspaceId: null, sessionId: null };
+  }
+}
+
 function tone(state: PanicStatus['state']): 'success' | 'warning' | 'danger' | 'accent' {
   if (state === 'healthy') return 'success';
   if (state === 'warning') return 'warning';
@@ -24,11 +40,35 @@ function label(state: PanicStatus['state']): string {
   return state === 'heavy_activity' ? 'Heavy Activity' : state.replace(/^\w/, char => char.toUpperCase());
 }
 
-export default function PanicButton() {
+export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: string | null; sessionId?: string | null }) {
   const [status, setStatus] = useState<PanicStatus | null>(null);
+  const [context, setContext] = useState<PanicContext>({ workspaceId: workspaceId ?? null, sessionId: sessionId ?? null });
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    setContext({
+      workspaceId: workspaceId ?? readStoredContext().workspaceId,
+      sessionId: sessionId ?? readStoredContext().sessionId,
+    });
+  }, [sessionId, workspaceId]);
+
+  useEffect(() => {
+    function syncStoredContext() {
+      setContext({
+        workspaceId: workspaceId ?? readStoredContext().workspaceId,
+        sessionId: sessionId ?? readStoredContext().sessionId,
+      });
+    }
+
+    window.addEventListener('agentos:workspace-change', syncStoredContext);
+    window.addEventListener('storage', syncStoredContext);
+    return () => {
+      window.removeEventListener('agentos:workspace-change', syncStoredContext);
+      window.removeEventListener('storage', syncStoredContext);
+    };
+  }, [sessionId, workspaceId]);
 
   const refresh = useCallback(async () => {
     const session = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
@@ -36,13 +76,17 @@ export default function PanicButton() {
       setStatus(null);
       return;
     }
-    const response = await fetchWithBrowserSession('/api/panic', { cache: 'no-store' }).catch(() => null);
+    const query = new URLSearchParams();
+    if (context.workspaceId) query.set('workspaceId', context.workspaceId);
+    if (context.sessionId) query.set('sessionId', context.sessionId);
+    const queryString = query.toString();
+    const response = await fetchWithBrowserSession(`/api/panic${queryString ? `?${queryString}` : ''}`, { cache: 'no-store' }).catch(() => null);
     if (!response?.response.ok) {
       setStatus(null);
       return;
     }
     setStatus(await response.response.json() as PanicStatus);
-  }, []);
+  }, [context.sessionId, context.workspaceId]);
 
   useEffect(() => {
     void refresh();
@@ -66,9 +110,14 @@ export default function PanicButton() {
     const result = await fetchWithBrowserSession('/api/panic', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action, workspaceId: context.workspaceId, sessionId: context.sessionId }),
     }).catch(() => null);
-    if (!result?.response.ok) setMessage('Panic action unavailable until sign-in and workspace permissions are active.');
+    if (!result?.response.ok) {
+      const payload = await result?.response.json().catch(() => null) as { message?: string; error?: string } | null;
+      setMessage(payload?.message ?? payload?.error ?? 'Panic action unavailable. Refresh sign-in and workspace access, then retry.');
+    } else {
+      setMessage(action === 'lockdown' ? 'Lockdown enabled.' : action === 'pause' ? 'Active runs paused.' : 'Active runs stopped.');
+    }
     await refresh();
     setWorking(false);
   }
