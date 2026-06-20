@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 
-const artifactDir = 'agentos-artifacts/v663-browser';
+const artifactDir = 'agentos-artifacts/v664-browser';
 
 test('desktop shell navigation, collapse, persistence, and FFP state', async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile');
@@ -12,7 +12,7 @@ test('desktop shell navigation, collapse, persistence, and FFP state', async ({ 
   await expect(right).toBeVisible();
 
   const labels = await page.locator('.agentos-global-nav b').allTextContents();
-  expect(labels).toEqual(['Home', 'Studio', 'Projects', 'Library', 'Skills', 'App Store', 'Subagents', 'Universal MCP', 'Vault', 'Community', 'Docs', 'FFP', 'Settings']);
+  expect(labels).toEqual(['Home', 'Studio', 'Projects', 'Workflows', 'Library', 'App Store', 'Developer', 'FFP', 'Settings']);
 
   if (await page.locator('.agentos-global-shell').getAttribute('data-left-collapsed') === 'true') {
     await page.getByLabel('Expand navigation sidebar').click();
@@ -32,7 +32,7 @@ test('desktop shell navigation, collapse, persistence, and FFP state', async ({ 
 });
 
 test('every first-class module renders inside the persistent shell', async ({ page }) => {
-  const routes = ['/', '/studio', '/projects', '/library', '/skills', '/appstore', '/subagents', '/mcp', '/vault', '/community', '/docs', '/ffp', '/settings'];
+  const routes = ['/', '/studio', '/projects', '/workflows', '/library', '/appstore', '/developer', '/ffp', '/settings'];
   for (const route of routes) {
     await page.goto(route, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.agentos-global-shell')).toBeVisible();
@@ -42,25 +42,26 @@ test('every first-class module renders inside the persistent shell', async ({ pa
 
 test('Studio modes retain the global shell', async ({ page }, testInfo) => {
   await page.goto('/studio?mode=nl');
-  const shellInstance = await page.locator('.agentos-global-shell').getAttribute('data-shell-instance');
+  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-studio', 'true');
   await page.getByRole('tab', { name: 'Workflow Studio' }).click();
-  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-shell-instance', shellInstance ?? '');
+  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-studio', 'true');
+  await expect(page.locator('.agentos-global-header')).toBeVisible();
   await page.getByRole('tab', { name: 'Code Studio' }).click();
-  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-shell-instance', shellInstance ?? '');
+  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-studio', 'true');
+  await expect(page.locator('.agentos-global-header')).toBeVisible();
   await mkdir(artifactDir, { recursive: true });
   await page.screenshot({ path: `${artifactDir}/${testInfo.project.name}-studio-code.png`, fullPage: true });
 });
 
-test('mobile uses left and right drawers', async ({ page }, testInfo) => {
+test('mobile uses the five-item bottom navigation', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile');
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open navigation' }).click();
-  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-left-open', 'true');
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-left-open', 'false');
-  await page.getByRole('button', { name: 'Open context' }).click();
-  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-right-open', 'true');
-  await expect(page.getByText('More', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.agentos-mobile-primary-nav a')).toHaveCount(5);
+  await expect(page.locator('.agentos-mobile-primary-nav')).toContainText('Home');
+  await expect(page.locator('.agentos-mobile-primary-nav')).toContainText('Studio');
+  await expect(page.locator('.agentos-mobile-primary-nav')).toContainText('Library');
+  await expect(page.locator('.agentos-mobile-primary-nav')).toContainText('Workflows');
+  await expect(page.locator('.agentos-mobile-primary-nav')).toContainText('Settings');
   await mkdir(artifactDir, { recursive: true });
-  await page.screenshot({ path: `${artifactDir}/mobile-context.png`, fullPage: true });
+  await page.screenshot({ path: `${artifactDir}/mobile-bottom-nav.png`, fullPage: true });
 });

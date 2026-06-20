@@ -1,4 +1,4 @@
-# AgentOS v6.6.3 Feature-Parity Audit
+# AgentOS v6.6.4 Feature-Parity Audit
 
 | Surface | Existing capability preserved | Recovery action |
 | --- | --- | --- |

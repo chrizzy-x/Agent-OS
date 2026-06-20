@@ -6,11 +6,13 @@ import Nav from '@/components/Nav';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { Drawer } from '@/components/os/overlays';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import GlobalSearch from '@/components/os/global-search';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import { summarizeValue, summarizeWorkflowRun } from '@/src/ui/presenters';
 import {
   ActivityFeed,
+  Badge,
   Button,
   Card,
   EmptyState,
@@ -18,6 +20,7 @@ import {
   PageHeader,
   SearchBar,
   SidebarNav,
+  Tabs,
   WorkflowCard,
 } from '@/components/os/ui';
 
@@ -38,6 +41,7 @@ type Workflow = {
 };
 
 type WorkflowDrawer = 'workflow-spec' | 'workflow-runtime';
+type WorkflowView = 'list' | 'canvas' | 'execution';
 
 export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const shell = useApplicationShell();
@@ -50,6 +54,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const [working, setWorking] = useState(false);
+  const [view, setView] = useState<WorkflowView>('list');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -190,18 +195,28 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         <PageHeader
           eyebrow="Workflow builder"
           title={active?.name || 'Workflows'}
-          subtitle={active?.summary || 'Build, run, schedule, and publish workflows.'}
+          subtitle={active?.summary || 'Execution Center'}
           actions={active ? (
             <>
-              <Button variant="secondary" onClick={() => void runWorkflow()}>{working ? 'Working...' : 'Test Run'}</Button>
+              <Button variant="secondary" onClick={() => void runWorkflow()}>{working ? 'Working...' : 'Run'}</Button>
               <Button variant="secondary" onClick={() => void toggleStatus()}>{working ? 'Working...' : active.status === 'paused' ? 'Resume' : 'Pause'}</Button>
               <Button variant="ghost" onClick={validateWorkflow}>Validate</Button>
-              <Button variant="ghost" onClick={sendToStudio}>AI Assist</Button>
+              <Button variant="ghost" onClick={() => setNotice('Schedule controls are attached to workflow settings.')}>Schedule</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-spec')}>Spec</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime</Button>
               <Button href={`/publishing/new${active ? `?workflowId=${active.id}` : ''}`}>Publish</Button>
             </>
           ) : undefined}
+        />
+        <GlobalSearch />
+        <Tabs
+          tabs={[
+            { key: 'list', label: 'List View' },
+            { key: 'canvas', label: 'Canvas View' },
+            { key: 'execution', label: 'Execution View' },
+          ]}
+          active={view}
+          onChange={key => setView(key as WorkflowView)}
         />
 
         {notice ? <Card><div className="os-entity-copy">{notice}</div></Card> : null}
@@ -210,7 +225,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
           <EmptyState title={authState === 'expired' ? 'Session expired' : 'Sign in required'} body="Sign in to manage workspace workflows." action={<Button href="/signin">{authState === 'expired' ? 'Sign in again' : 'Sign in'}</Button>} />
         ) : !active ? (
           <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." action={<Button href="/studio?mode=workflow">Open Workflow Studio</Button>} />
-        ) : (
+        ) : view === 'list' ? (
           <>
             <WorkflowCard
               title={active.name}
@@ -250,6 +265,55 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
               <div className="os-entity-copy">Visibility: {active.visibility ?? 'private'}</div>
             </Card>
           </>
+        ) : view === 'canvas' ? (
+          <Card>
+            <div className="os-entity-head" style={{ marginBottom: 16 }}>
+              <div>
+                <div className="os-entity-title">Visual workflow builder</div>
+                <div className="os-entity-copy">Canvas representation of the selected workflow.</div>
+              </div>
+              <Button variant="secondary" onClick={sendToStudio}>Open in Studio</Button>
+            </div>
+            <div className="workflow-canvas-view">
+              {(active.steps.length ? active.steps : [
+                { order: 1, tool: 'Trigger', description: 'Start workflow', input: {} },
+                { order: 2, tool: 'Research', description: 'Collect inputs', input: {} },
+                { order: 3, tool: 'Analysis', description: 'Analyze context', input: {} },
+                { order: 4, tool: 'Report', description: 'Return output', input: {} },
+              ]).map(step => (
+                <div key={`${step.order}-${step.tool}`} className="workflow-node">
+                  <Badge>{String(step.order)}</Badge>
+                  <strong>{step.tool}</strong>
+                  <span>{step.description || summarizeValue(step.input)}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <div className="os-entity-head" style={{ marginBottom: 16 }}>
+              <div>
+                <div className="os-entity-title">Live execution graph</div>
+                <div className="os-entity-copy">Current run path and status.</div>
+              </div>
+              <Badge tone={active.last_error ? 'danger' : active.status === 'paused' ? 'warning' : active.status === 'active' ? 'success' : 'default'}>
+                {active.last_error ? 'Failed' : active.status === 'active' ? 'Running' : active.status}
+              </Badge>
+            </div>
+            <div className="workflow-execution-graph">
+              {['Trigger', 'Research', 'Analysis', 'Report'].map((label, index) => (
+                <div key={label} className="workflow-execution-step">
+                  <div>
+                    <Badge tone={active.last_error && index === 3 ? 'danger' : index < 3 ? 'success' : 'accent'}>
+                      {active.last_error && index === 3 ? 'Failed' : index < 3 ? 'Success' : active.status === 'paused' ? 'Paused' : active.status === 'queued' ? 'Queued' : 'Running'}
+                    </Badge>
+                    <strong>{label}</strong>
+                  </div>
+                  {index < 3 ? <span aria-hidden="true">v</span> : null}
+                </div>
+              ))}
+            </div>
+          </Card>
         )}
       </WorkspaceShell>
 

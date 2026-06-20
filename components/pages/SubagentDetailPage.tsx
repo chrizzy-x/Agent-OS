@@ -56,7 +56,7 @@ type SubagentDetailPageProps = {
 };
 
 export default function SubagentDetailPage({
-  activePath = '/subagents',
+  activePath = '/library?section=subagents',
 }: SubagentDetailPageProps) {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -163,7 +163,7 @@ export default function SubagentDetailPage({
   async function deleteSubagent() {
     if (!subagent || !window.confirm(`Delete ${subagent.name}?`)) return;
     const response = await fetch(`/api/subagents/${subagent.id}`, { method: 'DELETE' });
-    if (response.ok) router.push('/subagents');
+    if (response.ok) router.push('/library?section=subagents');
   }
 
   return (

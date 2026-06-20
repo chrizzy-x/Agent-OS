@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const redirectTo = typeof body.redirectTo === 'string' && body.redirectTo.trim().startsWith('/')
       ? body.redirectTo.trim()
-      : '/dashboard';
+      : '/';
 
     const { authorizationUrl, cookieValue } = buildXAuthorizationUrl({
       ownerAgentId: agentContext.agentId,

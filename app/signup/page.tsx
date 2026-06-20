@@ -201,7 +201,7 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
           { href: '/studio', label: 'Open Studio', primary: true },
           { href: '/', label: 'Home', primary: false },
           { href: '/docs', label: 'Docs', primary: false },
-          { href: '/skills', label: 'Skills', primary: false },
+          { href: '/library?section=skills', label: 'Skills', primary: false },
           { href: '/appstore', label: 'Apps', primary: false },
         ].map(btn => (
           <Link

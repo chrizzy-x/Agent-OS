@@ -41,7 +41,7 @@ export function buildSocialPlatformCatalog(options?: {
       connectedCount: xConnectedCount,
       authMode: 'oauth_user',
       accountType: 'profile',
-      dashboardHref: '/dashboard/x',
+      dashboardHref: '/',
       summary: 'Live connector with approval-first drafts, queue management, cron sync, and child-agent isolation.',
       requirements: [
         'Configure X OAuth credentials and redirect URI.',

@@ -5,11 +5,13 @@ describe('mobile-parity', () => {
   it('keeps desktop-critical actions available in mobile navigation', () => {
     expectSourceContains(
       ['components', 'os', 'application-shell.tsx'],
+      'Home',
+      'Studio',
       'Library',
-      'Universal MCP',
+      'Workflows',
+      'Settings',
       'FFP',
-      'Open navigation',
-      'Open context',
+      'agentos-mobile-primary-nav',
       'Logout',
     );
     expectSourceContains(['app', 'layout.tsx'], '<PanicButton />');

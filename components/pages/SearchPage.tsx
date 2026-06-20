@@ -215,7 +215,7 @@ export default function SearchPage() {
       <SurfaceShell
         activePath="/search"
         title="Search"
-        subtitle="Search chats, projects, Library assets, installed apps, installed skills, workflows, files, memory, Vault, MCP, FFP, and docs."
+        subtitle="Search projects, apps, skills, subagents, workflows, chats, memory, Library, connectors, and Vault names."
       >
         <div className="os-drawer-stack">
           <Card>
@@ -224,7 +224,7 @@ export default function SearchPage() {
               <div className="os-inline-actions">
                 <Button href="/studio">Open Studio</Button>
                 <Button href="/appstore" variant="secondary">Browse Apps</Button>
-                <Button href="/skills" variant="secondary">Browse Skills</Button>
+                <Button href="/library?section=skills" variant="secondary">Browse Skills</Button>
               </div>
             </div>
           </Card>
@@ -238,7 +238,7 @@ export default function SearchPage() {
             onKeyDown={event => {
               if (event.key === 'Enter') commit(query, type);
             }}
-            placeholder="Search chats, projects, apps, skills, workflows, agents, Vault items, connectors, or docs"
+            placeholder="Search anything..."
           />
           <FilterChips
             items={FILTERS.map(item => item === 'all' ? 'All' : LABELS[item])}

@@ -1,5 +1,10 @@
+import { Suspense } from 'react';
 import LibraryPage from '@/components/pages/LibraryPage';
 
 export default function Page() {
-  return <LibraryPage />;
+  return (
+    <Suspense fallback={null}>
+      <LibraryPage />
+    </Suspense>
+  );
 }

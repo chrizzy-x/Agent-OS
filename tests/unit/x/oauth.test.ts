@@ -13,7 +13,7 @@ describe('X OAuth helpers', () => {
   it('builds an authorization URL and encrypted state cookie', () => {
     const { authorizationUrl, cookieValue, state } = buildXAuthorizationUrl({
       ownerAgentId: 'agent-owner',
-      redirectTo: '/dashboard/x',
+      redirectTo: '/',
     });
 
     const url = new URL(authorizationUrl);
@@ -24,7 +24,7 @@ describe('X OAuth helpers', () => {
 
     const payload = parseXOAuthStateCookie(cookieValue);
     expect(payload?.ownerAgentId).toBe('agent-owner');
-    expect(payload?.redirectTo).toBe('/dashboard/x');
+    expect(payload?.redirectTo).toBe('/');
     expect(payload?.state).toBe(state);
   });
 

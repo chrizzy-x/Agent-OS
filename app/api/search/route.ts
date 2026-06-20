@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
             kind: 'vault',
             title: secret.name,
             subtitle: `${workspace.name} vault secret`,
-            href: '/vault',
+            href: '/library?section=vault',
             actionLabel: 'Open Vault',
             updatedAt: secret.updatedAt,
           }, workspace.name, secret.name);
@@ -175,12 +175,12 @@ export async function GET(request: NextRequest) {
       const title = String(row.name ?? 'Skill');
       const subtitle = [row.category, row.description].filter(item => typeof item === 'string' && item).join(' - ');
       const ranked = rankResult(search, {
-        id: String(row.id),
-        kind: 'skill',
-        title,
-        subtitle: subtitle || 'Skill',
-        href: `/skills/${String(row.slug ?? row.id)}`,
-        actionLabel: 'Open Skill',
+            id: String(row.id),
+            kind: 'skill',
+            title,
+            subtitle: subtitle || 'Skill',
+            href: '/library?section=skills',
+            actionLabel: 'Open Skill',
         updatedAt: String(row.updated_at ?? row.created_at ?? ''),
       }, String(row.slug ?? ''), title, subtitle);
       if (ranked && shouldIncludeKind(type, 'skill')) {
@@ -214,7 +214,7 @@ export async function GET(request: NextRequest) {
             kind: 'installed_app',
             title: entry.app.name,
             subtitle: `${entry.installation.status} app - ${entry.app.description}`,
-            href: `/apps`,
+            href: '/library?section=apps',
             actionLabel: 'Manage App',
             updatedAt: entry.installation.updatedAt,
           }, entry.app.slug, entry.app.category, entry.app.description);
@@ -243,7 +243,7 @@ export async function GET(request: NextRequest) {
             kind: 'installed_skill',
             title: item.name,
             subtitle: item.description,
-            href: item.href,
+            href: '/library?section=skills',
             actionLabel: 'Open Skill',
             updatedAt: item.updatedAt,
           }, item.name, item.description, String(item.metadata.slug ?? ''));
@@ -315,7 +315,7 @@ export async function GET(request: NextRequest) {
             kind: 'subagent',
             title: item.name,
             subtitle: item.description ?? `${item.visibility} subagent`,
-            href: `/agents/${item.id}`,
+            href: '/library?section=subagents',
             actionLabel: 'Open Subagent',
             updatedAt: item.updatedAt,
           }, item.name, item.description ?? '', item.instructions, item.visibility, item.exposedCapabilities.join(' '));
@@ -343,7 +343,7 @@ export async function GET(request: NextRequest) {
             kind: 'memory',
             title: item.key,
             subtitle: `${item.namespaceType} memory`,
-            href: '/memory',
+            href: '/library?section=memory',
             actionLabel: 'Open Memory',
             updatedAt: item.updatedAt,
           }, item.key, item.content, item.tags.join(' '));
@@ -358,7 +358,7 @@ export async function GET(request: NextRequest) {
             kind: 'connector',
             title: String(row.name ?? 'Connector'),
             subtitle: `${String(row.category ?? 'Connector')} - ${summarizeConnectorTools(row.tools)}`,
-            href: `/connectors?drawer=connector-detail&item=${encodeURIComponent(String(row.name ?? ''))}`,
+            href: '/library?section=connectors',
             actionLabel: 'Inspect Connector',
             updatedAt: typeof row.created_at === 'string' ? row.created_at : null,
           }, String(row.name ?? ''), String(row.description ?? ''), String(row.category ?? ''), summarizeConnectorTools(row.tools));

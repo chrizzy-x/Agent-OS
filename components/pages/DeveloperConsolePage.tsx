@@ -19,6 +19,7 @@ import {
   PageHeader,
   SearchBar,
   StatusPill,
+  Tabs,
 } from '@/components/os/ui';
 
 type DeveloperAnalytics = {
@@ -79,6 +80,7 @@ type AppDetail = DeveloperApp & {
 };
 
 type DrawerId = 'published-app' | 'registry-entry';
+const DEVELOPER_TABS = ['My Apps', 'My Skills', 'Publishing', 'SDK', 'Analytics', 'Revenue', 'Logs', 'Recovery'];
 
 function formatDate(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString() : 'Not recorded';
@@ -95,6 +97,7 @@ export default function DeveloperConsolePage() {
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [detailLoading, setDetailLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('My Apps');
 
   const canUseDeveloperConsole = session?.capabilities?.includes('access_developer_console') === true;
   const accessState = resolveBrowserAccessState(session, loading, 'access_developer_console', authState);
@@ -210,10 +213,10 @@ export default function DeveloperConsolePage() {
       >
         {accessState === 'allowed' ? (
           <PageHeader
-            eyebrow="Developer Console"
-            title="Published apps and SDK runtime"
-            subtitle="Inspect published apps, SDK registrations, health, installs, manifest coverage, errors, and recovery blockers in drawers."
-            actions={<Button href="/sdk">Open SDK</Button>}
+            eyebrow="Developer"
+            title="Developer"
+            subtitle="Enterprise publishing, SDK, analytics, revenue, logs, and recovery."
+            actions={<Button href="/developer?tab=sdk">Open SDK</Button>}
           />
         ) : accessState === 'signed_out' ? (
           <PageHeader eyebrow="Developer Access" title="Sign in required" subtitle="Developer Console is available only after sign-in and plan validation." />
@@ -228,9 +231,10 @@ export default function DeveloperConsolePage() {
             ? <EmptyState title="Session expired" body="Sign in again to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in again</Button>} />
             : <EmptyState title="Sign in required" body="Sign in to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in</Button>} />
         ) : !canUseDeveloperConsole ? (
-          <EmptyState title="Enterprise access required" body="Developer Console stays gated to enterprise-capable workspaces." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState title="Upgrade required" body="Developer is available for Enterprise workspaces." action={<Button href="/settings?tab=billing">Upgrade</Button>} />
         ) : (
           <div className="os-drawer-stack">
+            <Tabs tabs={DEVELOPER_TABS.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
               <MetricCard label="Apps" value={apps.length} />
               <MetricCard label="Installs" value={analytics?.app_totals?.installs ?? apps.reduce((sum, app) => sum + app.installCount, 0)} />
@@ -384,7 +388,7 @@ export default function DeveloperConsolePage() {
               <div className="os-entity-copy">{selectedRegistry.discoveryError ?? 'This SDK registration is indexed and healthy.'}</div>
               <div className="os-inline-actions" style={{ marginTop: 12 }}>
                 <Button href="/developer/publish" variant="secondary">Open publishing</Button>
-                <Button href="/sdk">Open SDK keys</Button>
+                <Button href="/developer?tab=sdk">Open SDK keys</Button>
               </div>
             </Card>
           </div>

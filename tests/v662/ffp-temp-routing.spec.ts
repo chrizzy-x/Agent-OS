@@ -6,7 +6,7 @@ describe('ffp-disabled-routing', () => {
     expectFfpTempRouting();
     expectRoute('app', 'api', 'ffp', 'temp', 'route.ts');
     expectMigrationContains('ffp_temp_settings');
-    expectSourceContains(['components', 'pages', 'FfpPage.tsx'], 'Coming Soon', 'FFP Disabled');
+    expectSourceContains(['components', 'pages', 'FfpPage.tsx'], 'FFP', 'The AgentOS Computer Layer', 'Coming Soon');
     expectSourceContains(['app', 'api', 'ffp', 'temp', 'route.ts'], 'METHOD_NOT_ALLOWED');
   });
 });

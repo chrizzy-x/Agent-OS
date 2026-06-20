@@ -615,7 +615,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         {/* SECTION 9 */}
         <Section id="ffp" title="Step 8 — FFP temp">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            FFP is visible but disabled in AgentOS v6.6.3. Compatibility data remains available for future Fabric Furge Protocol support.
+            FFP is visible but disabled in AgentOS v6.6.4. Compatibility data remains available for future Fabric Furge Protocol support.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
             All activities route directly to the Unified Execution Engine. FFP cannot be activated and PATCH requests return Method Not Allowed.

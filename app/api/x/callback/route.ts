@@ -39,13 +39,13 @@ export async function GET(request: NextRequest) {
   const oauthState = parseXOAuthStateCookie(cookieState);
 
   if (!code || !state || !oauthState || oauthState.state !== state) {
-    return redirectWithParams('/dashboard', { x_oauth: 'error', reason: 'state_mismatch' });
+    return redirectWithParams('/', { x_oauth: 'error', reason: 'state_mismatch' });
   }
 
   try {
     const ownerContext = requireAgentContext(request.headers);
     if (ownerContext.agentId !== oauthState.ownerAgentId) {
-      return redirectWithParams('/dashboard', { x_oauth: 'error', reason: 'session_mismatch' });
+      return redirectWithParams('/', { x_oauth: 'error', reason: 'session_mismatch' });
     }
 
     const account = await connectXAccountFromOAuth({
@@ -54,14 +54,14 @@ export async function GET(request: NextRequest) {
       codeVerifier: oauthState.codeVerifier,
     });
 
-    const response = redirectWithParams(oauthState.redirectTo || '/dashboard', {
+    const response = redirectWithParams(oauthState.redirectTo || '/', {
       x_oauth: 'success',
       username: String(account.username ?? ''),
     });
     return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'x_oauth_failed';
-    return redirectWithParams(oauthState.redirectTo || '/dashboard', {
+    return redirectWithParams(oauthState.redirectTo || '/', {
       x_oauth: 'error',
       reason: message.slice(0, 120),
     });

@@ -193,10 +193,14 @@ export function EmptyState(props: { title: string; body: string; action?: ReactN
 
 export function LoadingState(props: { label?: string }) {
   return (
-    <Card className="os-loading-state">
+    <Card className="os-loading-state" aria-label={props.label ?? 'Loading'} aria-busy="true">
       <div className="os-loading-bar" />
       <div className="os-loading-bar short" />
-      <div className="os-loading-copy">{props.label ?? 'Loading'}</div>
+      <div className="os-loading-grid">
+        <span />
+        <span />
+        <span />
+      </div>
     </Card>
   );
 }

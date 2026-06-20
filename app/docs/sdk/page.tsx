@@ -239,7 +239,7 @@ console.log('AgentOS:', loginUrl);`}</Code>
           <div className="grid sm:grid-cols-3 gap-4">
             {[
               { href: '/docs/primitives', icon: '⚡', title: 'All 30 tools', desc: 'Complete reference for every primitive and its parameters' },
-              { href: '/skills', icon: '📦', title: 'Browse Skills', desc: 'Install community skills to extend your agent instantly' },
+              { href: '/library?section=skills', icon: '📦', title: 'Browse Skills', desc: 'Install community skills to extend your agent instantly' },
               { href: '/docs/skills', icon: '🛠️', title: 'Build a Skill', desc: 'Publish your own skill with SDK validation' },
             ].map(c => (
               <Link key={c.href} href={c.href}

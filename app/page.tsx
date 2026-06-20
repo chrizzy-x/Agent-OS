@@ -1,10 +1,5 @@
-import StudioPage from '@/components/pages/StudioPage';
-import { Suspense } from 'react';
+import HomePage from '@/components/pages/HomePage';
 
 export default function Page() {
-  return (
-    <Suspense fallback={null}>
-      <StudioPage initialMode="nl" />
-    </Suspense>
-  );
+  return <HomePage />;
 }

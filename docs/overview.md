@@ -1,6 +1,6 @@
-# AgentOS V6.6.3 Technical Overview
+# AgentOS V6.6.4 Technical Overview
 
-V6.6.3 mounts one persistent application shell around product and documentation routes. The shell owns workspace, project, session, navigation, responsive sidebars, context, and interaction telemetry while Studio remains one stateful module inside the operating system.
+V6.6.4 mounts one persistent workspace shell around authenticated product routes. Projects create context, assets provide capability, workflows provide execution, App Store provides discovery, and Library provides ownership while Studio remains one stable stateful module inside the operating system.
 
 > Super AgentOS-first AI operating system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
 
@@ -12,7 +12,7 @@ AgentOS is a consumer-facing AI operating system with Super AgentOS as the prima
 
 Builders still get the underlying operating system: apps, skills, workflows, SDK, MCP, files, memory, Vault, audit, and primitives.
 
-V6.6.2 unifies those layers through persisted executions, recovery, panic stop, notifications, governed files, governed memory, workspace Library ownership, bearer-token connectivity, offline-capable app package cache, and production diagnostic errors.
+V6.6.4 keeps those execution foundations and adds one workspace shell, one navigation model, project asset ownership, workflow execution views, App Store discovery, and Library ownership for apps, skills, subagents, memory, Vault, and Connectors.
 
 AgentOS also provides six fundamental primitives that autonomous agents need to operate:
 
@@ -29,7 +29,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 
 ---
 
-## V6.6.2 Product Layers
+## V6.6.4 Product Layers
 
 | Layer | What it provides |
 |-------|------------------|
@@ -38,7 +38,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 | **Recovery** | Panic stop, pause/resume/retry/cancel/rollback, failure inspection, and notifications |
 | **Files** | Upload, delete, rename, preview, summarize, search, and permission-aware access |
 | **Memory** | User, session, project, agent, workflow, app, and skill memory with CRUD, search, export, and grants |
-| **Builder** | AppStore, Skills, Workflows, SDK, MCP, Vault, FFP, Developer, and Audit surfaces |
+| **Builder** | App Store, Library, Workflows, SDK, Connectors, Vault, FFP, Developer, and Audit surfaces |
 
 ---
 
@@ -323,11 +323,11 @@ For technical support, API reference, and community resources, visit the [Agent 
 
 ## FFP Temp
 
-FFP is disabled in V6.6.3. The route and compatibility records remain visible as a future wiring point for Fabric Furge Protocol.
+FFP is disabled in V6.6.4. The route and compatibility records remain visible as a future wiring point for Fabric Furge Protocol.
 
 | State | Route |
 |-------|-------|
 | **FFP Disabled** | Multi-agent activities -> Unified Execution Engine |
 | **FFP Enabled** | Multi-agent activities -> FFP temporary abstraction layer -> Unified Execution Engine |
 
-All execution bypasses FFP in V6.6.3. No consensus engine, proposal voting, activation control, or fake consensus result is exposed.
+All execution bypasses FFP in V6.6.4. No consensus engine, proposal voting, activation control, or fake consensus result is exposed.

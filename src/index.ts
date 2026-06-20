@@ -357,7 +357,7 @@ async function handleFFPConsensus(req: IncomingMessage, res: ServerResponse, pri
     total: 0,
     mode: 'temp',
     consensusAvailable: false,
-    message: `FFP consensus history is disabled and Coming Soon in v6.6.3 for ${privateRef}.`,
+    message: `FFP consensus history is disabled and Coming Soon in v6.6.4 for ${privateRef}.`,
   });
 }
 
@@ -369,7 +369,7 @@ function handleFFPStatus(_req: IncomingMessage, res: ServerResponse): void {
     nodeUrl: null,
     requireConsensus: false,
     consensusAvailable: false,
-    message: 'FFP is disabled and Coming Soon in v6.6.3. All runtime execution bypasses FFP.',
+    message: 'FFP is disabled and Coming Soon in v6.6.4. All runtime execution bypasses FFP.',
   });
 }
 

@@ -10,8 +10,8 @@ import ApplicationShell from '@/components/os/application-shell';
 export const metadata: Metadata = {
   title: 'AgentOS',
   description:
-    'AgentOS is your AI operating system for Studio, projects, apps, skills, memory, and Vault.',
-  keywords: 'AI operating system, AgentOS, Studio, projects, apps, skills, memory, Vault',
+    'AgentOS v6.6.4 is a workspace operating system for projects, assets, workflows, app discovery, and library ownership.',
+  keywords: 'AI operating system, AgentOS, Studio, projects, workflows, library, app store, connectors',
   metadataBase: new URL(APP_URL),
   manifest: '/manifest.json',
   appleWebApp: {
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'AgentOS',
-    description: 'The AI operating system for Studio, projects, apps, skills, memory, and Vault.',
+    description: 'AgentOS v6.6.4 organizes projects, assets, workflows, App Store discovery, and Library ownership.',
     url: APP_URL,
     type: 'website',
     images: [{ url: '/logo.png', width: 512, height: 512, alt: 'AgentOS' }],
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'AgentOS',
-    description: 'The AI operating system for Studio, projects, apps, skills, memory, and Vault.',
+    description: 'AgentOS v6.6.4 organizes projects, assets, workflows, App Store discovery, and Library ownership.',
     images: ['/logo.png'],
   },
 };

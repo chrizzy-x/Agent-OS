@@ -54,7 +54,7 @@ The June 18, 2026 production refresh passed:
 - new chat and history reopening
 - Workflow/Code/NL mode navigation
 - mobile conversation layout
-# AgentOS v6.6.3 Studio
+# AgentOS v6.6.4 Studio
 
 Studio remains a single `/studio` route inside the persistent AgentOS shell. NL Studio, Workflow Studio, and Code Studio are client-side modes and retain session, project, files, workflow, terminal, composer, and execution state while switching.
 

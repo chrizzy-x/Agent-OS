@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
+import GlobalSearch from '@/components/os/global-search';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
+  Badge,
   Button,
   Card,
   DataTable,
@@ -42,6 +44,7 @@ type ProjectsPayload = {
 };
 
 const TABS = ['Recent', 'Pinned', 'All'];
+type ViewMode = 'grid' | 'list';
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -51,6 +54,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('Recent');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ name: '', description: '', template: 'blank' });
 
@@ -151,8 +155,13 @@ export default function ProjectsPage() {
         <PageHeader
           eyebrow="Projects"
           title="Projects"
-          subtitle="Projects list, search, recent work, pinned context, and creation."
-          actions={<Button onClick={() => setCreating(value => !value)}>Create Project</Button>}
+          subtitle="Containers for context, assets, workflows, memory, and files."
+          actions={(
+            <div className="os-inline-actions">
+              <Button onClick={() => setCreating(value => !value)}>Create Project</Button>
+              <Button variant="secondary" onClick={() => setCreating(true)}>Import Project</Button>
+            </div>
+          )}
         />
 
         {creating ? (
@@ -179,7 +188,12 @@ export default function ProjectsPage() {
           </Card>
         ) : null}
 
-        <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search projects" />
+        <GlobalSearch />
+        <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search anything..." />
+        <div className="os-segmented-control" role="group" aria-label="Project view">
+          <button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')}>Grid</button>
+          <button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')}>List</button>
+        </div>
         <FilterChips items={TABS} active={tab} onChange={setTab} />
 
         {loading ? <LoadingState label="Loading projects" /> : !payload ? (
@@ -188,19 +202,43 @@ export default function ProjectsPage() {
             : <EmptyState title="Sign in required" body="Sign in to inspect workspace projects." action={<Button href="/signin">Sign in</Button>} />
         ) : items.length === 0 ? (
           <EmptyState title="No projects found" body="Create or pin a project to populate this list." action={<Button href="/studio?mode=nl&prompt=Create%20a%20project">Create Project</Button>} />
+        ) : viewMode === 'grid' ? (
+          <div className="library-card-grid">
+            {items.map(item => (
+              <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
+                <Card style={{ minHeight: 190, padding: 18 }}>
+                  <div className="os-entity-head">
+                    <div>
+                      <div className="os-entity-title">{item.name}</div>
+                      <div className="os-entity-copy">{item.description}</div>
+                    </div>
+                    <Badge tone={item.status === 'active' ? 'success' : 'warning'}>{item.status}</Badge>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 18 }}>
+                    <div><div className="os-entity-meta">Assets</div><strong>{item.runs + item.users}</strong></div>
+                    <div><div className="os-entity-meta">Members</div><strong>{Math.max(1, item.users)}</strong></div>
+                    <div><div className="os-entity-meta">Last Activity</div><strong>{new Date(item.updatedAt).toLocaleDateString()}</strong></div>
+                  </div>
+                  <div className="os-inline-actions" style={{ marginTop: 18 }}>
+                    <button type="button" className="btn-ghost" onClick={event => { event.preventDefault(); void togglePin(item); }}>{item.pinned ? 'Unpin' : 'Pin'}</button>
+                    <span className="btn-ghost">Open</span>
+                  </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
         ) : (
           <DataTable
-            columns={['Project', 'Kind', 'Status', 'Runs', 'Users', 'Updated', '']}
+            columns={['Project', 'Assets', 'Members', 'Last Activity', 'Status', '']}
             rows={items.map(item => [
               <div key={`${item.id}-project`}>
                 <div className="os-entity-title">{item.name}</div>
                 <div className="os-entity-copy">{item.description}</div>
               </div>,
-              item.kind,
-              item.status,
-              String(item.runs),
-              String(item.users),
+              String(item.runs + item.users),
+              String(Math.max(1, item.users)),
               new Date(item.updatedAt).toLocaleDateString(),
+              item.status,
               <div key={`${item.id}-actions`} className="os-inline-actions">
                 <button type="button" className="btn-ghost" onClick={() => void togglePin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
                 <Link href={item.href} className="btn-ghost">Open</Link>

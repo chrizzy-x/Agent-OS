@@ -2,27 +2,23 @@
 
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
-import { Badge, Card, PageHeader } from '@/components/os/ui';
+import { Button, Card } from '@/components/os/ui';
 
 export default function FfpPage() {
   return (
     <div style={{ minHeight: '100%' }}>
       <Nav activePath="/ffp" />
       <WorkspaceShell activePath="/ffp">
-        <PageHeader
-          eyebrow="FFP"
-          title="Coming Soon"
-          subtitle="Fabric Furge Protocol is visible in AgentOS but disabled. No routing, consensus, validator voting, proposal history, or activation control is available."
-          actions={<Badge tone="default">Disabled</Badge>}
-        />
-        <Card>
-          <div style={{ display: 'grid', gap: 10 }}>
-            <div className="os-entity-title">FFP Disabled</div>
-            <div className="os-entity-copy">
-              Multi-agent work continues through the Unified Execution Engine. Existing compatibility records are retained but ignored.
+        <div style={{ minHeight: 'calc(100vh - 140px)', display: 'grid', placeItems: 'center' }}>
+          <Card style={{ width: 'min(520px, 100%)', padding: 32, textAlign: 'center' }}>
+            <div style={{ display: 'grid', gap: 14 }}>
+              <div className="os-page-title">FFP</div>
+              <div className="os-entity-title">The AgentOS Computer Layer</div>
+              <h2 className="os-entity-title" style={{ margin: 0 }}>Coming Soon</h2>
+              <Button disabled>Coming Soon</Button>
             </div>
-          </div>
-        </Card>
+          </Card>
+        </div>
       </WorkspaceShell>
     </div>
   );

@@ -153,7 +153,7 @@ CREATE INDEX IF NOT EXISTS agent_files_subagent_idx
 ALTER TABLE nl_studio_sessions
   ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private',
   ADD COLUMN IF NOT EXISTS linked_subagent_id UUID REFERENCES private_subagents(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS linked_workflow_id UUID REFERENCES agent_workflows(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS linked_workflow_id TEXT,
   ADD COLUMN IF NOT EXISTS linked_app_id TEXT,
   ADD COLUMN IF NOT EXISTS linked_file_paths JSONB NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS linked_memory_refs JSONB NOT NULL DEFAULT '[]'::jsonb;

@@ -35,8 +35,8 @@ type SubagentsPageProps = {
 };
 
 export default function SubagentsPage({
-  activePath = '/subagents',
-  basePath = '/subagents',
+  activePath = '/library?section=subagents',
+  basePath = '/library?section=subagents',
   eyebrow = 'Subagents',
   title = 'Subagents',
   subtitle = 'Create focused private agents for research, operations, testing, and vault-aware runtime work.',
@@ -150,7 +150,7 @@ export default function SubagentsPage({
               subagent.visibility,
               subagent.status,
               subagent.exposedCapabilities?.join(', ') || 'None',
-              <Link key={`${subagent.id}-open`} href={`${basePath}/${subagent.id}`} className="btn-ghost">Open</Link>,
+              <Link key={`${subagent.id}-open`} href={basePath} className="btn-ghost">Open</Link>,
             ])}
           />
         )}
