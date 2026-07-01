@@ -500,6 +500,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     setPayload(next);
     const storedWorkspace = readStored('agentos.shell.workspace');
     const workspaceId = next.workspaces.some(item => item.id === storedWorkspace) ? storedWorkspace : next.workspaces[0]?.id ?? null;
+    writeStored('agentos.shell.workspace', workspaceId);
     setActiveWorkspaceId(workspaceId);
     if (!workspaceId) return;
     const storedProject = readStored(`agentos.shell.project.${workspaceId}`);
@@ -510,8 +511,11 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     const sessionId = next.sessions.some(item => item.workspaceId === workspaceId && item.id === storedSession)
       ? storedSession
       : null;
+    writeStored(`agentos.shell.project.${workspaceId}`, projectId);
+    writeStored(`agentos.shell.session.${workspaceId}`, sessionId);
     setActiveProjectId(projectId);
     setActiveSessionId(sessionId);
+    window.dispatchEvent(new CustomEvent('agentos:workspace-change', { detail: { workspaceId, projectId, sessionId } }));
   }, []);
 
   useEffect(() => {

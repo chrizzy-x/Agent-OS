@@ -49,16 +49,27 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
 
   useEffect(() => {
     setContext({
-      workspaceId: workspaceId ?? readStoredContext().workspaceId,
-      sessionId: sessionId ?? readStoredContext().sessionId,
+      workspaceId: workspaceId ?? null,
+      sessionId: sessionId ?? null,
     });
   }, [sessionId, workspaceId]);
 
   useEffect(() => {
-    function syncStoredContext() {
+    function syncStoredContext(event?: Event) {
+      const detail = event instanceof CustomEvent && event.detail && typeof event.detail === 'object'
+        ? event.detail as { workspaceId?: string | null; sessionId?: string | null }
+        : null;
+      if (detail) {
+        setContext({
+          workspaceId: workspaceId ?? detail.workspaceId ?? null,
+          sessionId: sessionId ?? detail.sessionId ?? null,
+        });
+        return;
+      }
+      const stored = readStoredContext();
       setContext({
-        workspaceId: workspaceId ?? readStoredContext().workspaceId,
-        sessionId: sessionId ?? readStoredContext().sessionId,
+        workspaceId: workspaceId ?? stored.workspaceId,
+        sessionId: sessionId ?? stored.sessionId,
       });
     }
 
