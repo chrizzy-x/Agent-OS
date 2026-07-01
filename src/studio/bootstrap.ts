@@ -1,6 +1,7 @@
 import { getSuperAgentProfile } from '../agentos/super-agent.js';
 import { reconcileAgentOSProvisioning } from '../agentos/provisioning.js';
 import { listInstalledAgentApps } from '../appstore/service.js';
+import { listLibrary } from '../library/service.js';
 import { listAccessibleMemoryEntries } from '../memory/service.js';
 import { resolveProjectForWorkspace, listProjects } from '../projects/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
@@ -150,7 +151,7 @@ export async function buildStudioBootstrap(params: {
     ? projects.find(project => project.id === activeProjectId) ?? null
     : null;
 
-  const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries] = await Promise.all([
+  const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries, workspaceAssets] = await Promise.all([
     session ? getStudioSessionBundle(params.ownerAgentId, session.id).catch(() => null) : Promise.resolve(null),
     loadBootstrapWorkflows(params.ownerAgentId).catch(() => []),
     loadBootstrapInstalledSkills(params.ownerAgentId).catch(() => []),
@@ -175,6 +176,12 @@ export async function buildStudioBootstrap(params: {
       workspaceId: activeWorkspaceId ?? undefined,
       limit: 24,
     }).catch(() => []),
+    listLibrary({
+      ownerAgentId: params.ownerAgentId,
+      workspaceId: activeWorkspaceId,
+      projectId: activeProjectId,
+      limit: 120,
+    }).catch(() => ({ items: [], groups: {}, summary: {} })),
   ]);
 
   const filteredWorkflows = workflows
@@ -215,5 +222,6 @@ export async function buildStudioBootstrap(params: {
     fileTree,
     subagents,
     memoryEntries,
+    workspaceAssets: workspaceAssets.items,
   };
 }

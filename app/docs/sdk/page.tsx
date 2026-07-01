@@ -49,7 +49,7 @@ export default async function SdkPage() {
           <p className="text-gray-600 mb-4">
             Go to <Link href="/signup" className="text-blue-600 hover:underline">/signup</Link>, choose a beta plan, and create your account with email and password.
             <strong> Pro</strong>, <strong>Enterprise</strong>, and <strong>Enterprise Max</strong> return a bearer token immediately.
-            <strong> Free</strong> stays browser-session only until you upgrade at <Link href="/billing" className="text-blue-600 hover:underline">/billing</Link>.
+            <strong> Free</strong> stays browser-session only until you upgrade in <Link href="/settings?section=billing" className="text-blue-600 hover:underline">Settings billing</Link>.
           </p>
           <p className="text-sm text-gray-500">
             Or use the API directly:
@@ -239,7 +239,7 @@ console.log('AgentOS:', loginUrl);`}</Code>
           <div className="grid sm:grid-cols-3 gap-4">
             {[
               { href: '/docs/primitives', icon: '⚡', title: 'All 30 tools', desc: 'Complete reference for every primitive and its parameters' },
-              { href: '/skills', icon: '📦', title: 'Browse Skills', desc: 'Install community skills to extend your agent instantly' },
+              { href: '/skillstore', icon: '📦', title: 'Browse Skills', desc: 'Install community skills to extend your agent instantly' },
               { href: '/docs/skills', icon: '🛠️', title: 'Build a Skill', desc: 'Publish your own skill with SDK validation' },
             ].map(c => (
               <Link key={c.href} href={c.href}

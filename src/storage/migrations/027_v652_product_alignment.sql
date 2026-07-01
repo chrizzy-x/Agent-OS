@@ -1,4 +1,4 @@
--- AgentOS Migration 027: v6.5.2 product alignment, Library, and runtime controls.
+-- AgentOS Migration 027: product alignment, Library, and runtime controls.
 
 CREATE TABLE IF NOT EXISTS library_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

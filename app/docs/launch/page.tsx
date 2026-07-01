@@ -8,6 +8,7 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
+  'v6.6.7 - Marketplace Intelligence, Discovery & Publishing Layer ships consumer App Store and Skill Store discovery, publishing flows, developer profiles, ownership history, permissions, recommendations, and workspace asset synchronization.',
   'v6.6.4 - Marketplace & Capability Layer ships App Store discovery, Skill Store capability registry, permanent ownership, update center, developer profiles, skill dependencies, permission management, and workspace asset registry sync.',
   'v6.6.3 - Restored the persistent AgentOS shell, complete module navigation, workspace/session/project context, desktop sidebars, mobile drawers, and mode-aware Studio context without removing v6.6.2 execution features.',
   'June 18, 2026 - NL Studio now uses a rebuilt conversation-first layout with real SSE streaming, Markdown replies, safe stop/cancel, lazy chat creation, searchable history, and desktop/mobile parity.',
@@ -15,9 +16,9 @@ const releaseHighlights = [
   'V6.6.2 - Unified execution records now persist Super AgentOS requests, app lifecycle actions, skill calls, workflow runs, file actions, memory actions, logs, failures, and recovery state.',
   'V6.6.2 - Files now support upload, preview, summarize, rename, search, and delete through production APIs and UI.',
   'V6.6.2 - Memory now supports governed CRUD, search, export, namespace scopes, and permission-aware retrieval.',
-  'v6.5 - Studio now supports in-place multi-agent discovery, creation, switching, and agent-linked sessions without page resets.',
-  'v6.5 - Search now exposes keyword, full-text, and fuzzy matching across apps, skills, workflows, sessions, projects, subagents, Vault names, docs, connectors, and FFP records.',
-  'v6.5 - Memory is now editable in-product with governed create, update, delete, and grant-aware audit visibility.',
+  'v6.6.7 - Studio now supports in-place multi-agent discovery, creation, switching, and agent-linked sessions without page resets.',
+  'v6.6.7 - Search now exposes keyword, full-text, and fuzzy matching across apps, skills, workflows, sessions, projects, subagents, Vault names, docs, connectors, and FFP records.',
+  'v6.6.7 - Memory is now editable in-product with governed create, update, delete, and grant-aware audit visibility.',
   'V6.6.2 - Release truth alignment standardizes the canonical production host on https://www.agentos.services and aligns public version surfaces on 6.6.2.',
   'V6.6.2 - Studio-first UI lock makes / and /studio open Super AgentOS before every store, dashboard, or admin-style surface.',
   'v6.2 - beta readiness hardening for Vault runtime injection, output redaction, disabled-app gating, developer access shells, and production lifecycle flows.',
@@ -51,7 +52,7 @@ const changelog = [
   'Added persisted Vault runtime grants, consume and cleanup flows, assignment and permission checks, and secret redaction in Studio persistence.',
   'Kept Studio chat sessions focused on create, continue, rename, archive, delete, search, export, and refresh persistence.',
   'Locked NL Studio, Workflow Studio, and Code Studio as distinct center workspaces with compact side navigation, context rows, and mobile ChatGPT-style navigation.',
-  'Enabled free-beta self-serve plan transitions in /billing and POST /api/plans/transition across Free, Pro, Enterprise, and Enterprise Max.',
+  'Enabled free-beta self-serve plan transitions in Settings billing and POST /api/plans/transition across Free, Pro, Enterprise, and Enterprise Max.',
   'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
   'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
   'Changed /api/session to return only authenticated session display fields; no private agent ID leaves the browser session endpoint.',
@@ -71,7 +72,7 @@ const startLinks = [
   { label: 'Create AgentOS account', href: '/signup' },
   { label: 'Sign in', href: '/signin' },
   { label: 'Open Super AgentOS', href: '/studio' },
-  { label: 'Browse skills', href: '/skills' },
+  { label: 'Browse skills', href: '/skillstore' },
   { label: 'Browse apps', href: '/appstore' },
   { label: 'Quick Start', href: '/docs/sdk' },
   { label: 'API reference', href: '/docs/api' },
@@ -96,17 +97,17 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.4 <span style={{ color: 'var(--accent)' }}>&ldquo;Marketplace &amp; Capability Layer&rdquo;</span></h1>
+          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.7 <span style={{ color: 'var(--accent)' }}>&ldquo;Marketplace Intelligence, Discovery &amp; Publishing Layer&rdquo;</span></h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.6.4 makes App Store and Skill Store first-class operating-system primitives while preserving Studio, Workspace, Library, Vault, Memory, and MCP layouts. Live at <code>{APP_URL}</code>.
+            v6.6.7 makes App Store and Skill Store consumer marketplace experiences while adding official publishing, developer profiles, recommendations, ownership history, and workspace asset intelligence. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.4</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.7</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              App Store now handles app discovery, install, launch, update, rollback, device install, and ownership. Skill Store now handles compact capability discovery, execution preview, dependency resolution, compatibility, and permission management.
+              App Store now handles consumer discovery, store listings, install, launch, update, rollback, device install, ownership, and recommendations. Skill Store now uses the same marketplace language for installable capabilities, execution preview, dependency review, compatibility, and permission management.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

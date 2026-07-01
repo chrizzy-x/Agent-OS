@@ -4,7 +4,7 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> V6.6.4
+> V6.6.7
 
 AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, workspace assets, and activity.
 
@@ -15,11 +15,15 @@ Live:
 Supporting message:
 - talk to it, build with it, and install what it needs
 
+## V6.6.7 status
+
+V6.6.7 makes Super AgentOS the primary product surface. Apps, skills, workflows, subagents, MCP tools, Vault metadata, memory, projects, and Library assets are exposed as workspace capabilities behind one conversational interface.
+
+See [Super AgentOS release notes](RELEASE_NOTES_v6.6.7.md).
+
 ## V6.6.4 status
 
-V6.6.4 ships the Marketplace & Capability Layer: App Store discovery, Skill Store capability registry, permanent ownership, device install separation, update center, developer profiles, skill dependencies, permission management, and workspace asset registry synchronization without redesigning Studio, Workspace, Library, Vault, Memory, or MCP.
-
-See [Marketplace & Capability Layer release notes](RELEASE_NOTES_v6.6.4.md).
+V6.6.4 shipped the Marketplace & Capability Layer: App Store discovery, Skill Store capability registry, permanent ownership, device install separation, update center, developer profiles, skill dependencies, permission management, and workspace asset registry synchronization without redesigning Studio, Workspace, Library, Vault, Memory, or MCP.
 
 ## V6.6.3 status
 
@@ -44,16 +48,18 @@ V6.6.2 ships:
 - current-chat search and permission-filtered cross-session chat search
 - `/memory` for governed user, session, project, agent, workflow, app, and skill memory records with search, edit, delete, sharing, and export
 - `/marketplace` as a lightweight discovery layer
-- `/appstore` with real app install, open, update, uninstall, and pin flows
-- `/skills` as the public Skill Store for installable capabilities
-- `/appstore/[slug]` with readiness, permissions, secrets, skills, targets, health, and owner analytics
+- `/appstore` with consumer marketplace discovery, app install, open, update, uninstall, and pin flows
+- `/skillstore` as the public Skill Store for installable capabilities
+- `/skills` as the installed skills management surface
+- `/publish/app` and `/publish/skill` as official publishing workflows
+- `/appstore/[slug]` with listing media, readiness, permissions, secrets, skills, targets, health, offline package cache, and owner analytics
 - `/agents` as the canonical private-agent runtime surface
 - `/subagents` as an alias to the same private-agent runtime surface
 - `/vault` with assignment-aware secret validation and runtime grants
 - hardened Vault runtime injection with temporary secret access, runtime cleanup, access audit events, and shared output redaction
 - `/mcp` with advanced tool discovery, connector diagnostics, and runtime execution visibility
 - `/ffp` retained as disabled Coming Soon compatibility surface in V6.6.3
-- `/billing` with self-serve plan transitions across Free, Pro, Enterprise, and Enterprise Max
+- `/settings?section=billing` with self-serve plan transitions across Free, Pro, Enterprise, and Enterprise Max
 - SDK app registration into factual public listings when an Enterprise SDK app is explicitly registered
 - global search across apps, skills, workflows, sessions, projects, agents, and Vault secret names only
 - governed memory, governed files, and permission grants exposed through typed APIs and V6.6.2 SDK helpers
@@ -66,10 +72,11 @@ V6.6.2 ships:
 
 Production verification:
 - URL: [https://www.agentos.services](https://www.agentos.services)
+- Deployment URL: [https://agent-7ilh0ftpw-prime-labs.vercel.app](https://agent-7ilh0ftpw-prime-labs.vercel.app)
 - Deployment alias: [https://www.agentos.services](https://www.agentos.services)
-- Final deploy date: June 18, 2026
-- `GET /health`: `200`, `version: 6.6.2`, `tools: 44`
-- Quality gates: `npm run lint`, all 370 tests, `npm run build`, and Playwright desktop/mobile NL Studio flows passed before final deployment
+- Final deploy date: June 22, 2026
+- Quality gates: `npm run lint`, 382 unit/integration tests, `npm run build`, and Playwright desktop/tablet/mobile OS acceptance passed before final deployment
+- Screenshot artifacts: `agentos-artifacts/v666-qa/`
 - Migrations: apply `src/storage/migrations/026_v651_unified_execution_release.sql`, `src/storage/migrations/027_v652_product_alignment.sql`, and `src/storage/migrations/028_v661_production_closure.sql` for unified executions, logs, notifications, Library, runtime controls, action audit metadata, and recovery fields
 - browser session refresh and expired-session handling across protected routes
 - enterprise-only SDK, developer, and publishing shells with signed-out and blocked states
@@ -145,7 +152,7 @@ Public beta plans:
 
 Self-serve plan transitions are live in free beta mode:
 - `POST /api/plans/transition`
-- `/billing`
+- `/settings?section=billing`
 
 ## FFP
 
@@ -235,14 +242,14 @@ Production deploy:
 
 ```bash
 vercel pull
-vercel deploy --prod
+vercel deploy --prod -y
 ```
 
 Before deploying:
 - keep `main` fast-forwarded with `origin/main`
 - confirm `.vercel/project.json` points at the intended project
-- verify `/`, `/studio`, `/appstore`, `/appstore/[slug]`, `/skills`, `/skills/[slug]`, `/files`, `/memory`, `/workflows`, `/agents`, `/vault`, `/search`, `/ffp`, `/mcp`, `/developer`, `/sdk`, and redirect aliases for `/workspace`, `/workspaces`, and `/dashboard`
-- after production deployment, update release notes with the production URL, deployment alias, migration status, and quality-gate result
+- verify `/`, `/studio`, `/appstore`, `/appstore/[slug]`, `/skillstore`, `/skills`, `/skills/[slug]`, `/apps`, `/publish/app`, `/publish/skill`, `/files`, `/memory`, `/workflows`, `/agents`, `/vault`, `/search`, `/ffp`, `/mcp`, `/developer`, `/developer/[handle]`, `/sdk`, `/settings?section=billing`, and redirect aliases for `/workspace`, `/workspaces`, `/dashboard`, `/profile`, `/billing`, and `/developer/publish`
+- after production deployment, update release notes with the production URL, deployment alias, screenshot artifacts, migration status, and quality-gate result
 
 ## Project layout
 

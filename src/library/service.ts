@@ -1,14 +1,17 @@
 import { getAgentAppPackageCacheStatus, listInstalledAgentApps, resolveSupportedDeviceTargets } from '../appstore/service.js';
 import { listAccessibleFiles } from '../files/service.js';
+import { listAccessibleMemoryEntries } from '../memory/service.js';
 import { listAccessibleSubagents } from '../subagents/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
+import { recordMarketplaceInstallEvent, type MarketplaceAssetType } from '../marketplace/install-events.js';
 
 export type LibraryItemKind =
   | 'installed_app'
   | 'installed_skill'
   | 'saved_workflow'
   | 'subagent'
+  | 'memory_collection'
   | 'template'
   | 'file'
   | 'published_asset'
@@ -56,6 +59,7 @@ function groupItems(items: LibraryItem[]): LibraryPayload {
     installed_skill: [],
     saved_workflow: [],
     subagent: [],
+    memory_collection: [],
     template: [],
     file: [],
     published_asset: [],
@@ -71,6 +75,43 @@ function groupItems(items: LibraryItem[]): LibraryPayload {
     groups,
     summary: Object.fromEntries(Object.entries(groups).map(([key, value]) => [key, value.length])) as Record<LibraryItemKind, number>,
   };
+}
+
+function assetTypeForLibraryItem(item: LibraryItem): MarketplaceAssetType | null {
+  if (item.kind === 'installed_app') return 'app';
+  if (item.kind === 'installed_skill') return 'skill';
+  if (item.kind === 'published_asset' && item.metadata.sourceType === 'skill') return 'skill';
+  if (item.kind === 'published_asset' && item.metadata.sourceType === 'app') return 'app';
+  if (item.kind === 'saved_workflow' || item.kind === 'published_asset') return 'workflow';
+  if (item.kind === 'subagent') return 'subagent';
+  if (item.kind === 'memory_collection') return 'memory_asset';
+  if (item.kind === 'file') return 'file';
+  if (item.kind === 'mcp_connection') return 'mcp_connection';
+  return null;
+}
+
+async function syncItemsToWorkspaceAssetRegistry(ownerAgentId: string, items: LibraryItem[]): Promise<void> {
+  await Promise.all(items.map(item => {
+    const assetType = assetTypeForLibraryItem(item);
+    if (!assetType) return Promise.resolve();
+    const sourceSlug = typeof item.metadata.slug === 'string'
+      ? item.metadata.slug
+      : typeof item.metadata.path === 'string'
+        ? item.metadata.path
+        : item.id;
+    return recordMarketplaceInstallEvent({
+      ownerAgentId,
+      workspaceId: item.workspaceId,
+      assetType,
+      assetId: item.id,
+      sourceSlug,
+      name: item.name,
+      description: item.description,
+      href: item.href,
+      visibility: item.visibility,
+      metadata: { ...item.metadata, libraryKind: item.kind },
+    });
+  })).catch(() => undefined);
 }
 
 async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
@@ -256,11 +297,12 @@ export async function listLibrary(params: {
   search?: string | null;
   limit?: number;
 }): Promise<LibraryPayload> {
-  const [installedApps, installedSkills, workflows, subagents, files, publishedAssets, explicit, recentActivity] = await Promise.all([
+  const [installedApps, installedSkills, workflows, subagents, memory, files, publishedAssets, explicit, recentActivity] = await Promise.all([
     listInstalledAgentApps(params.ownerAgentId).catch(() => []),
     listInstalledSkills(params.ownerAgentId),
     listWorkflows(params.ownerAgentId),
     listAccessibleSubagents({ viewerAgentId: params.ownerAgentId, workspaceId: params.workspaceId, projectId: params.projectId }).catch(() => []),
+    listAccessibleMemoryEntries({ viewerAgentId: params.ownerAgentId, ownerAgentId: params.ownerAgentId, workspaceId: params.workspaceId ?? null, limit: 100 }).catch(() => []),
     listAccessibleFiles({ viewerAgentId: params.ownerAgentId, workspaceId: params.workspaceId ?? undefined, limit: 100 }).catch(() => []),
     listPublishedAssets(params.ownerAgentId),
     listExplicitLibraryItems(params.ownerAgentId),
@@ -321,15 +363,28 @@ export async function listLibrary(params: {
     updatedAt: item.updatedAt,
     metadata: { path: item.path, sizeBytes: item.sizeBytes, ...item.metadata },
   }));
+  const memoryItems: LibraryItem[] = memory.map(item => ({
+    id: item.id,
+    kind: 'memory_collection',
+    name: item.key,
+    description: item.content,
+    href: `/memory?key=${encodeURIComponent(item.key)}`,
+    workspaceId: item.workspaceId,
+    projectId: item.namespaceType === 'workspace' ? null : item.namespaceId || null,
+    visibility: item.visibility,
+    updatedAt: item.updatedAt,
+    metadata: { namespaceType: item.namespaceType, namespaceId: item.namespaceId, tags: item.tags },
+  }));
 
   const search = params.search?.trim().toLowerCase() ?? '';
   const limit = Math.max(1, Math.min(params.limit ?? 100, 250));
-  const items = [...explicit, ...appItems, ...installedSkills, ...workflows, ...subagentItems, ...fileItems, ...publishedAssets, ...recentActivity]
+  const items = [...explicit, ...appItems, ...installedSkills, ...workflows, ...subagentItems, ...memoryItems, ...fileItems, ...publishedAssets, ...recentActivity]
     .filter(item => !params.workspaceId || !item.workspaceId || item.workspaceId === params.workspaceId)
     .filter(item => !params.projectId || !item.projectId || item.projectId === params.projectId)
     .filter(item => matchesSearch(item, search))
     .sort((left, right) => String(right.updatedAt ?? '').localeCompare(String(left.updatedAt ?? '')))
     .slice(0, limit);
 
+  await syncItemsToWorkspaceAssetRegistry(params.ownerAgentId, items);
   return groupItems(items);
 }

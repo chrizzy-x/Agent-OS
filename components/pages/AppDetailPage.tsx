@@ -7,6 +7,7 @@ import SurfaceShell from '@/components/os/surface-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import type { AgentAppListing } from '@/src/appstore/catalog';
+import { ListingBanner, ListingMark } from '@/components/marketplace/MarketplacePrimitives';
 
 export type AppDetailRecord = AgentAppListing & {
   reviews?: Array<{ id?: string; rating?: number; reviewTitle?: string; reviewText?: string; createdAt?: string }>;
@@ -38,8 +39,7 @@ function formatCount(value: number): string {
 }
 
 function logo(app: AppDetailRecord) {
-  if (app.logoUrl) return <img src={app.logoUrl} alt="" />;
-  return <span>{app.name.slice(0, 2).toUpperCase()}</span>;
+  return <ListingMark name={app.name} imageUrl={app.logoUrl} className="market-detail-logo" />;
 }
 
 function uniqueList(values: string[]): string[] {
@@ -215,7 +215,8 @@ export default function AppDetailPage({
         ) : (
           <>
             <section className="market-detail-hero">
-              <div className="market-detail-logo">{logo(app)}</div>
+              <ListingBanner name={app.name} imageUrl={app.bannerUrl ?? app.screenshots[0] ?? null} className="market-detail-backdrop" />
+              {logo(app)}
               <div className="market-detail-copy">
                 <Link href={`/developer/${app.developerHandle}`} className="market-developer-link">{app.publisherName || 'AgentOS Developer'}</Link>
                 <h2>{app.name}</h2>
@@ -234,8 +235,9 @@ export default function AppDetailPage({
                   {working === 'device' ? 'Working' : 'Install To Device'}
                 </button>
                 <button type="button" className="market-secondary-action" disabled={!installed || working === 'launch'} onClick={() => void launch()}>
-                  {working === 'launch' ? 'Opening' : 'Launch'}
+                  {working === 'launch' ? 'Opening' : 'Open'}
                 </button>
+                {installed ? <Link href="/apps" className="market-secondary-action">Manage</Link> : null}
               </div>
             </section>
 
@@ -255,8 +257,46 @@ export default function AppDetailPage({
                 <div><span>Platforms</span><strong>{platforms.join(', ') || 'AgentOS'}</strong></div>
                 <div><span>Last Updated</span><strong>{new Date(app.updatedAt).toLocaleDateString()}</strong></div>
                 <div><span>Status</span><strong>{readiness?.appUnavailableReason ?? (installed ? 'Installed' : 'Available')}</strong></div>
+                <div><span>Website</span><strong>{app.websiteUrl ? <a href={app.websiteUrl} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
+                <div><span>Documentation</span><strong>{app.documentationUrl ? <a href={app.documentationUrl} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
               </div>
             </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Description</h2></div>
+              <div className="market-release-panel">
+                <p>{app.longDescription || app.description}</p>
+              </div>
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Developer</h2></div>
+              <div className="market-info-grid">
+                <div><span>Name</span><strong>{app.publisherName || 'AgentOS Developer'}</strong></div>
+                <div><span>Handle</span><strong>{app.developerHandle}</strong></div>
+                <div><span>Website</span><strong>{app.websiteUrl ? <a href={app.websiteUrl} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
+                <div><span>Repository</span><strong>{app.repositoryUrl ? <a href={app.repositoryUrl} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
+              </div>
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Ratings</h2></div>
+              <div className="market-metric-grid">
+                <div><span>Average</span><strong>{app.rating > 0 ? app.rating.toFixed(1) : 'New'}</strong></div>
+                <div><span>Reviews</span><strong>{formatCount(app.reviewCount)}</strong></div>
+                <div><span>Installs</span><strong>{formatCount(app.installCount)}</strong></div>
+                <div><span>Downloads</span><strong>{formatCount(app.downloadCount)}</strong></div>
+              </div>
+            </section>
+
+            {app.videoUrl ? (
+              <section className="market-section">
+                <div className="market-section-head"><h2>Video</h2></div>
+                <div className="market-video-frame">
+                  <a href={app.videoUrl} target="_blank" rel="noreferrer">Open product video</a>
+                </div>
+              </section>
+            ) : null}
 
             <section className="market-section">
               <div className="market-section-head"><h2>Screenshots</h2></div>
@@ -281,9 +321,42 @@ export default function AppDetailPage({
             </section>
 
             <section className="market-section">
-              <div className="market-section-head"><h2>Changelog</h2></div>
+              <div className="market-section-head"><h2>Permissions</h2></div>
+              {permissions.length ? (
+                <div className="market-skill-tags">
+                  {permissions.map(permission => <span key={permission}>{permission}</span>)}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No permissions requested.</p></div>
+              )}
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Compatibility</h2></div>
+              <div className="market-info-grid">
+                <div><span>Platforms</span><strong>{platforms.join(', ') || 'AgentOS'}</strong></div>
+                <div><span>Device Targets</span><strong>{app.deviceTargets.join(', ') || 'Web'}</strong></div>
+                <div><span>Runtime</span><strong>{app.runtimeType}</strong></div>
+                <div><span>Version</span><strong>{app.manifest.version}</strong></div>
+              </div>
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Release Notes</h2></div>
+              <div className="market-release-panel">
+                <p>{app.releaseNotes || versionHistory[0]?.changeSummary || 'Release notes not provided.'}</p>
+              </div>
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Version History</h2></div>
               <div className="market-timeline">
-                {versionHistory.map(entry => (
+                {((app.changelog ?? []).length ? (app.changelog ?? []).map((item, index) => ({
+                  id: `${app.id}-changelog-${index}`,
+                  version: app.manifest.version,
+                  changeSummary: item,
+                  createdAt: app.updatedAt,
+                })) : versionHistory).map(entry => (
                   <article key={entry.id}>
                     <strong>Version {entry.version}</strong>
                     <p>{entry.changeSummary || 'Release notes not provided.'}</p>
@@ -316,7 +389,7 @@ export default function AppDetailPage({
                   {similar.map(item => (
                     <article key={item.id} className="market-app-card">
                       <Link href={`/appstore/${item.slug}`} className="market-app-card-main">
-                        <div className="market-app-logo">{logo(item)}</div>
+                        <ListingMark name={item.name} imageUrl={item.logoUrl} className="market-app-logo" />
                         <div className="market-app-copy">
                           <h3>{item.name}</h3>
                           <p>{item.description}</p>

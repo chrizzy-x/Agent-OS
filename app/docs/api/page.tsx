@@ -15,7 +15,7 @@ const endpoints: Endpoint[] = [
   {
     method: 'GET', path: '/health', auth: 'None',
     desc: 'Liveness check for the production app and tool registry.',
-    response: '{ "status": "ok", "version": "6.6.4", "timestamp": "...", "tools": 44 }',
+    response: '{ "status": "ok", "version": "6.6.7", "timestamp": "...", "tools": 44 }',
   },
   {
     method: 'GET', path: '/tools', auth: 'None',
@@ -211,12 +211,12 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Read the disabled FFP compatibility status. All runtime execution bypasses FFP in v6.6.4.',
+    desc: 'Read the disabled FFP compatibility status. All runtime execution bypasses FFP in v6.6.7.',
     response: '{ "enabled": false, "status": "FFP Disabled", "route": "Multi-agent activities -> Unified Execution Engine" }',
   },
   {
     method: 'PATCH', path: '/api/ffp/temp', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.4.',
+    desc: 'Returns 405 Method Not Allowed. FFP cannot be activated in v6.6.7.',
     body: [
       { field: 'enabled', type: 'boolean', required: true, desc: 'Workspace-level FFP temp toggle' },
       { field: 'workspaceId', type: 'string', required: false, desc: 'Workspace scope' },
@@ -307,7 +307,7 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/skills/discovery', auth: 'None',
-    desc: 'Browse the v6.6.4 Skill Store capability registry with ranked search, categories, installed state, and grouped discovery sections.',
+    desc: 'Browse the v6.6.7 Skill Store marketplace with ranked search, categories, installed state, grouped discovery rows, recommendations, and developer spotlight.',
     response: '{ "skills": [...], "categories": ["AI", "Research"], "installedSlugs": [], "sections": [...] }',
   },
   {
@@ -322,7 +322,7 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/apps/discovery', auth: 'None',
-    desc: 'Browse the v6.6.4 App Store with ranked search, installed priority, hero apps, featured, trending, recommended, new releases, recently updated, top installed, and category rows.',
+    desc: 'Browse the v6.6.7 App Store with ranked search, installed priority, hero apps, featured, trending, recommended, new releases, recently updated, top installed, category rows, and developer spotlight.',
     response: '{ "apps": [...], "installedSlugs": [], "categories": ["Finance", "Trading"], "sections": [...], "hero": [...] }',
   },
   {

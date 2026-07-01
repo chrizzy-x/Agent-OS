@@ -8,28 +8,17 @@ export default function SurfaceShell(props: {
   children: ReactNode;
 }) {
   return (
-    <div style={{ minHeight: '100%', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-      <main className="container" style={{ paddingTop: 32, paddingBottom: 48 }}>
+    <div className="surface-shell" data-active-path={props.activePath}>
+      <main className="surface-shell-main">
         {props.title ? (
-          <header
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'flex-end',
-              justifyContent: 'space-between',
-              gap: 16,
-              marginBottom: 28,
-            }}
-          >
-            <div style={{ maxWidth: 720 }}>
-              <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 40px)', letterSpacing: '-0.04em' }}>{props.title}</h1>
+          <header className="surface-shell-header">
+            <div>
+              <h1>{props.title}</h1>
               {props.subtitle ? (
-                <p style={{ margin: '10px 0 0', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                  {props.subtitle}
-                </p>
+                <p>{props.subtitle}</p>
               ) : null}
             </div>
-            {props.actions ? <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{props.actions}</div> : null}
+            {props.actions ? <div className="surface-shell-actions">{props.actions}</div> : null}
           </header>
         ) : null}
         {props.children}

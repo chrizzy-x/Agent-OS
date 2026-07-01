@@ -14,11 +14,11 @@ describe('studio-first navigation links', () => {
     };
 
     const links = buildSessionNavLinks(retailSession);
-    expect(links.map(item => item.label)).toEqual(['Search', 'Notifications', 'Profile']);
+    expect(links.map(item => item.label)).toEqual(['Search', 'Notifications']);
   });
 
   it('shows the same minimal unauthenticated navigation', () => {
     const links = buildSessionNavLinks(null);
-    expect(links.map(item => item.label)).toEqual(['Search', 'Notifications', 'Profile']);
+    expect(links.map(item => item.label)).toEqual(['Search', 'Notifications']);
   });
 });

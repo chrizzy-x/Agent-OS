@@ -88,6 +88,26 @@ export default function NLStudioPanel() {
     void sendMessage(nextMessage);
   }
 
+  async function branchConversation() {
+    if (!session?.id) return;
+    const response = await fetchWithBrowserSession(`/api/studio/sessions/${encodeURIComponent(session.id)}/branch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: `${session.title ?? 'Session'} Branch` }),
+    });
+    if (!response.response.ok) return;
+    const payload = await response.response.json() as { session?: { id: string; projectId?: string | null } };
+    if (payload.session?.id) {
+      window.location.assign(`/studio?mode=nl&session=${encodeURIComponent(payload.session.id)}${payload.session.projectId ? `&project=${encodeURIComponent(payload.session.projectId)}` : ''}`);
+    }
+  }
+
+  function searchConversation(message: string) {
+    const query = message.trim().slice(0, 120);
+    if (!query) return;
+    window.location.assign(`/search?q=${encodeURIComponent(query)}`);
+  }
+
   async function uploadFiles(files: FileList | null) {
     if (!files?.length) return;
     setUploading(true);
@@ -190,8 +210,17 @@ export default function NLStudioPanel() {
                       {message.role === 'user' ? (
                         <button type="button" onClick={() => setComposerValue(message.content)}>Edit</button>
                       ) : null}
-                      {message.role === 'assistant' && message.state === 'error' && lastUserMessage ? (
-                        <button type="button" onClick={() => void sendMessage(lastUserMessage)}>Retry</button>
+                      {message.role === 'assistant' && lastUserMessage ? (
+                        <button type="button" onClick={() => void sendMessage(lastUserMessage)}>{message.state === 'error' ? 'Retry' : 'Regenerate'}</button>
+                      ) : null}
+                      {message.role === 'assistant' ? (
+                        <button type="button" onClick={() => void sendMessage('Continue')}>Continue</button>
+                      ) : null}
+                      {message.role === 'assistant' && session ? (
+                        <button type="button" onClick={() => void branchConversation()}>Branch</button>
+                      ) : null}
+                      {message.role === 'assistant' || message.role === 'user' ? (
+                        <button type="button" onClick={() => searchConversation(message.content)}>Search</button>
                       ) : null}
                     </div>
                   ) : null}

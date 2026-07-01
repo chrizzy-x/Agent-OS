@@ -1,5 +1,7 @@
-import SkillsPage from '@/components/pages/SkillsPage';
+import { redirect } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 
 export default function Page() {
-  return <SkillsPage />;
+  redirect('/skills');
 }

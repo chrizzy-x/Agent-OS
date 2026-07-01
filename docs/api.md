@@ -50,15 +50,15 @@ Returns server status. No authentication required.
 ```json
 {
   "status": "ok",
-  "version": "6.6.4",
-  "timestamp": "2026-06-20T00:00:00.000Z",
+  "version": "6.6.7",
+  "timestamp": "2026-06-21T00:00:00.000Z",
   "tools": 44
 }
 ```
 
 > `tools` reflects the current number of registered MCP tools.
 
-Production verification must confirm `GET https://www.agentos.services/health` returns `200` with `version: 6.6.4`.
+Production verification must confirm `GET https://www.agentos.services/health` returns `200` with `version: 6.6.7`.
 
 ### `GET /tools`
 Lists all available tool names. No authentication required.
@@ -95,22 +95,24 @@ Executes a tool call.
 
 ---
 
-## v6.6.4 Platform Endpoints
+## v6.6.7 Platform Endpoints
 
 ### Marketplace & Capability Layer
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/apps/discovery` | Ranked App Store discovery with featured, trending, recommended, new, updated, top installed, and category sections |
+| `GET /api/apps/discovery` | Ranked App Store discovery with hero listings, featured rows, trending, recommended, new, updated, top installed, categories, and developer spotlight |
 | `GET /api/apps/updates` | List available updates for installed apps |
 | `POST /api/apps/updates` | Update all available app updates |
 | `POST /api/apps/[slug]/rollback` | Roll back an installed app to a prior recorded version |
 | `DELETE /api/apps/[slug]/device-install` | Remove only the local device install while preserving account ownership |
-| `GET /api/skills/discovery` | Ranked Skill Store discovery for capabilities |
+| `GET /api/skills/discovery` | Ranked Skill Store discovery with hero skills, featured rows, popular, recommended, new skills, categories, and developer spotlight |
 | `GET /api/skills/[id]/preview` | Return input, output, execution, and expected-result preview before install |
 | `PATCH /api/skills/[id]/installation` | Modify or revoke installed skill permissions |
 | `GET /api/developers/[handle]` | Load public developer profile by safe public handle |
 | `POST /api/skills/install` | Install by `skill_id` or `slug`, approve permissions, and auto-resolve dependencies |
+| `POST /api/apps` | Publish or update an app store listing from `/publish/app` |
+| `POST /api/skills` | Publish or update a skill store listing from `/publish/skill` |
 
 ### Unified Execution
 
@@ -142,7 +144,7 @@ Execution records include `{ id, userId, workspaceId, projectId, type, sourceTyp
 | `GET /api/ffp/temp` | Read the disabled FFP compatibility status |
 | `PATCH /api/ffp/temp` | Return `405 Method Not Allowed` |
 
-FFP is visible as Coming Soon, cannot be activated, and is bypassed by all runtime execution in v6.6.4.
+FFP is visible as Coming Soon, cannot be activated, and is bypassed by all runtime execution in v6.6.7.
 
 ### Files, Memory, Notifications
 
@@ -158,7 +160,11 @@ FFP is visible as Coming Soon, cannot be activated, and is bypassed by all runti
 | `POST /api/memory` | Create or update governed memory |
 | `DELETE /api/memory` | Delete governed memory |
 | `GET /api/notifications` | List task, approval, workflow, and recovery notifications |
-| `POST /api/notifications` | Create a notification or mark one `read`, `unread`, or `archived` |
+| `POST /api/notifications` | Create a notification, mark one `read`, `unread`, or `archived`, or batch mark all unread notifications read with `action: "mark_all_read"` |
+| `GET /api/developer/webhooks` | List developer webhooks and recent delivery logs |
+| `POST /api/developer/webhooks` | Create a developer webhook callback |
+| `PATCH /api/developer/webhooks` | Edit webhook name, callback URL, events, or status |
+| `DELETE /api/developer/webhooks?id=...` | Delete a developer webhook |
 
 ---
 

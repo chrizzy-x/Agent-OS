@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
-import { createNotification, listNotifications, updateNotification } from '@/src/notifications/service';
+import { createNotification, listNotifications, markAllNotificationsRead, updateNotification } from '@/src/notifications/service';
 import { toErrorResponse, ValidationError } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.update');
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.action === 'mark_all_read') {
+      const result = await markAllNotificationsRead({ agentId: ctx.agentId });
+      return NextResponse.json(result);
+    }
+
     if (typeof body.notificationId === 'string') {
       const status = typeof body.status === 'string' ? body.status : '';
       if (status !== 'read' && status !== 'unread' && status !== 'archived') {

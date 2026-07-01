@@ -11,7 +11,7 @@ describe('v6.6.3 navigation and workspace recovery', () => {
     const layout = source('app', 'layout.tsx');
     const shell = source('components', 'os', 'application-shell.tsx');
     expect(layout).toContain('<ApplicationShell>{children}</ApplicationShell>');
-    for (const label of ['Home', 'Studio', 'Projects', 'Library', 'Skills', 'App Store', 'Subagents', 'Universal MCP', 'Vault', 'Community', 'Docs', 'FFP', 'Settings']) {
+    for (const label of ['Home', 'Studio', 'Search', 'Tasks', 'Projects', 'Library', 'App Store', 'Skill Store', 'Subagents', 'Workflows', 'Memory', 'Vault', 'MCP', 'Developer', 'Community', 'FFP', 'Resources', 'Settings']) {
       expect(shell).toContain(`label: '${label}'`);
     }
     expect(shell).toContain('agentos.shell.leftCollapsed');

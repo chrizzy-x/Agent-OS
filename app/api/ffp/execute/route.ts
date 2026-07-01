@@ -11,7 +11,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       executed: false,
       mode: 'temp',
       consensusAvailable: false,
-      error: 'FFP execution is disabled and Coming Soon in AgentOS v6.6.4. Multi-agent work uses the Unified Execution Engine.',
+      error: 'FFP execution is disabled and Coming Soon in AgentOS v6.6.7. Multi-agent work uses the Unified Execution Engine.',
     }, { status: 501 });
   } catch (error) {
     const err = toErrorResponse(error);

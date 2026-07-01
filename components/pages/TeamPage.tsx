@@ -222,7 +222,7 @@ export default function TeamPage() {
             {tab === 'SSO & Security' ? (
               <Card>
                 <div className="os-entity-copy" style={{ marginBottom: 12 }}>Workspace roles are active today. Enterprise SAML and SCIM rollout is handled through the billing and support flow.</div>
-                <Button href="/billing" variant="secondary">Request enterprise access</Button>
+                <Button href="/settings?section=billing" variant="secondary">Request enterprise access</Button>
               </Card>
             ) : null}
 

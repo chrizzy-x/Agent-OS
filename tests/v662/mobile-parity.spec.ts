@@ -10,7 +10,7 @@ describe('mobile-parity', () => {
       'FFP',
       'Open navigation',
       'Open context',
-      'Logout',
+      'Sign Out',
     );
     expectSourceContains(['app', 'layout.tsx'], '<PanicButton />');
     expectSourceContains(['app', 'globals.css'], '.agentos-global-left', '.agentos-global-right', '@media (max-width: 767px)');

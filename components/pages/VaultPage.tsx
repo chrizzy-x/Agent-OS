@@ -61,6 +61,7 @@ type VersionEntry = {
 type DrawerId = 'secret-details' | 'secret-history' | 'secret-assign';
 
 type SubjectType = 'app' | 'subagent' | 'workflow' | 'skill' | 'session' | 'sdk_credential' | 'super_agentos';
+type VaultView = 'secrets' | 'apiKeys' | 'credentials' | 'wallets' | 'audit';
 
 const SUBJECT_OPTIONS: Array<{ value: SubjectType; label: string }> = [
   { value: 'app', label: 'App' },
@@ -98,6 +99,7 @@ export default function VaultPage() {
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState('');
   const [historyTab, setHistoryTab] = useState('Access');
+  const [vaultView, setVaultView] = useState<VaultView>('secrets');
   const [createOpen, setCreateOpen] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
   const [disableConfirm, setDisableConfirm] = useState(false);
@@ -302,13 +304,24 @@ export default function VaultPage() {
       >
         <PageHeader
           eyebrow="Vault"
-          title="Secrets"
-          subtitle="Keep the main list calm: names, status, last use, and assignment coverage. Edit, rotate, assign, and audit in drawers."
+          title="Enterprise Credential Manager"
+          subtitle="Wallets, API keys, credentials, secrets, and audit logs stay masked by default."
           actions={<Button onClick={() => setCreateOpen(true)}>Create secret</Button>}
         />
 
         <div className="os-drawer-stack">
           <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search secret names" />
+          <Tabs
+            tabs={[
+              { key: 'secrets', label: 'Secrets' },
+              { key: 'apiKeys', label: 'API Keys' },
+              { key: 'credentials', label: 'Credentials' },
+              { key: 'wallets', label: 'Wallets' },
+              { key: 'audit', label: 'Audit Logs' },
+            ]}
+            active={vaultView}
+            onChange={key => setVaultView(key as VaultView)}
+          />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
             <MetricCard label="Total secrets" value={summary.total} />
             <MetricCard label="Active" value={summary.active} />
@@ -317,7 +330,26 @@ export default function VaultPage() {
           </div>
         </div>
 
-        {loading ? <LoadingState label="Loading vault" /> : secrets.length === 0 ? (
+        {vaultView !== 'secrets' && vaultView !== 'audit' ? (
+          <Card>
+            <EmptyState
+              title={`${vaultView === 'apiKeys' ? 'API keys' : vaultView} coming soon`}
+              body="This credential type is disabled in v6.6.7. Use Secrets for live encrypted values."
+            />
+          </Card>
+        ) : vaultView === 'audit' ? (
+          <Card>
+            <DataTable
+              columns={['Action', 'Metadata', 'Created']}
+              rows={history.map(entry => [
+                entry.action,
+                historySummary(entry),
+                formatDate(entry.createdAt),
+              ])}
+            />
+            {history.length === 0 ? <EmptyState title="No audit log selected" body="Open a secret first to inspect its masked audit history." /> : null}
+          </Card>
+        ) : loading ? <LoadingState label="Loading vault" /> : secrets.length === 0 ? (
           <EmptyState title="No secrets stored" body="Create a secret, then assign it to apps, subagents, workflows, skills, or sessions." action={<Button onClick={() => setCreateOpen(true)}>Create secret</Button>} />
         ) : (
           <Card>

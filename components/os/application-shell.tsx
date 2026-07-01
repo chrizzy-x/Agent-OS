@@ -9,8 +9,8 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
+  type FormEvent,
   type ReactNode,
 } from 'react';
 import { destroyBrowserSession, fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
@@ -33,6 +33,19 @@ type ProjectRef = {
   status: string;
   pinned: boolean;
   updatedAt: string;
+};
+type NotificationRef = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  status: 'unread' | 'read' | 'archived';
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  readAt: string | null;
+  workspaceId?: string | null;
+  sessionId?: string | null;
+  executionId?: string | null;
 };
 type ShellPayload = {
   workspaces: WorkspaceRef[];
@@ -73,22 +86,87 @@ const ApplicationShellContext = createContext<ApplicationShellContextValue>({
   setLeftCollapsed: () => undefined,
   setRightCollapsed: () => undefined,
 });
-let shellInstanceCounter = 0;
+const SHELL_INSTANCE_ID = 'agentos-global-shell-root';
 const EXCLUDED_PREFIXES = ['/signin', '/signup', '/login', '/forgot-password', '/onboarding'];
 const NAV_ITEMS = [
   { href: '/', label: 'Home', icon: 'H' },
   { href: '/studio', label: 'Studio', icon: 'S' },
+  { href: '/search', label: 'Search', icon: 'Q' },
+  { href: '/tasks', label: 'Tasks', icon: 'J' },
   { href: '/projects', label: 'Projects', icon: 'P' },
   { href: '/library', label: 'Library', icon: 'L' },
-  { href: '/skills', label: 'Skills', icon: 'K' },
   { href: '/appstore', label: 'App Store', icon: 'A' },
+  { href: '/skillstore', label: 'Skill Store', icon: 'K', aliases: ['/skills'] },
   { href: '/subagents', label: 'Subagents', icon: 'G', aliases: ['/agents'] },
-  { href: '/mcp', label: 'Universal MCP', icon: 'U', aliases: ['/connectors'] },
+  { href: '/workflows', label: 'Workflows', icon: 'W' },
+  { href: '/memory', label: 'Memory', icon: 'M' },
   { href: '/vault', label: 'Vault', icon: 'V' },
+  { href: '/mcp', label: 'MCP', icon: 'U', aliases: ['/connectors'] },
+  { href: '/developer', label: 'Developer', icon: 'D', aliases: ['/publish'] },
   { href: '/community', label: 'Community', icon: 'C' },
-  { href: '/docs', label: 'Docs', icon: 'D' },
-  { href: '/ffp', label: 'FFP', icon: 'F', disabled: true },
+  { href: '/ffp', label: 'FFP', icon: 'F' },
+  { href: '/resources', label: 'Resources', icon: 'R', aliases: ['/docs'] },
   { href: '/settings', label: 'Settings', icon: 'T', aliases: ['/profile', '/billing'] },
+] as const;
+
+const ACCOUNT_MENU_LINKS = [
+  { label: 'Profile', href: '/settings?section=account' },
+  { label: 'Account', href: '/settings?section=account' },
+  { label: 'Subscription & Billing', href: '/settings?section=billing' },
+  { label: 'Appearance', href: '/settings?section=appearance' },
+  { label: 'Notifications', href: '/settings?section=notifications' },
+  { label: 'Resources', href: '/resources' },
+  { label: 'Download Desktop', href: '/settings?section=general#downloads' },
+  { label: 'Download Mobile', href: '/settings?section=general#downloads' },
+  { label: 'Switch Workspace', href: '/settings?section=general#workspaces' },
+  { label: 'Switch Organization', href: '/settings?section=general#organizations' },
+  { label: 'Create Workspace', href: '/settings?section=general#workspaces' },
+] as const;
+
+const PAGE_TITLES: Array<{ prefix: string; title: string }> = [
+  { prefix: '/studio', title: 'Studio' },
+  { prefix: '/search', title: 'Search' },
+  { prefix: '/tasks', title: 'Tasks' },
+  { prefix: '/library', title: 'Library' },
+  { prefix: '/appstore', title: 'App Store' },
+  { prefix: '/skillstore', title: 'Skill Store' },
+  { prefix: '/skills', title: 'Skills' },
+  { prefix: '/developer', title: 'Developer' },
+  { prefix: '/projects', title: 'Projects' },
+  { prefix: '/subagents', title: 'Subagents' },
+  { prefix: '/agents', title: 'Subagents' },
+  { prefix: '/workflows', title: 'Workflows' },
+  { prefix: '/memory', title: 'Memory' },
+  { prefix: '/vault', title: 'Vault' },
+  { prefix: '/mcp', title: 'Universal MCP' },
+  { prefix: '/community', title: 'Community' },
+  { prefix: '/ffp', title: 'FFP' },
+  { prefix: '/resources', title: 'Resources' },
+  { prefix: '/settings', title: 'Settings' },
+];
+
+const PRIMARY_ACTIONS: Array<{ prefix: string; label: string; href: string }> = [
+  { prefix: '/studio', label: 'Create', href: '/studio?mode=nl' },
+  { prefix: '/tasks', label: 'New Chat', href: '/studio?mode=nl' },
+  { prefix: '/appstore', label: 'Install', href: '/appstore' },
+  { prefix: '/skillstore', label: 'Install', href: '/skillstore' },
+  { prefix: '/developer', label: 'Publish', href: '/publish/app' },
+  { prefix: '/projects', label: 'Create', href: '/projects?create=1' },
+  { prefix: '/subagents', label: 'Create', href: '/subagents?create=1' },
+  { prefix: '/agents', label: 'Create', href: '/subagents?create=1' },
+  { prefix: '/workflows', label: 'Create', href: '/studio?mode=workflow&new=1' },
+  { prefix: '/vault', label: 'Save', href: '/vault?create=secret' },
+  { prefix: '/settings', label: 'Save', href: '/settings' },
+];
+
+const NOTIFICATION_GROUPS = [
+  'Unread',
+  'Recent',
+  'System',
+  'Workflow',
+  'Billing',
+  'Security',
+  'Community',
 ] as const;
 
 function readStored(key: string): string | null {
@@ -138,6 +216,45 @@ function formatMode(value: string | null) {
   return 'NL Studio';
 }
 
+function pageTitleForPath(pathname: string): string {
+  if (pathname === '/') return 'Home';
+  return PAGE_TITLES.find(item => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`))?.title ?? 'AgentOS';
+}
+
+function primaryActionForPath(pathname: string) {
+  return PRIMARY_ACTIONS.find(item => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`)) ?? null;
+}
+
+function badgeCount(value: number): string {
+  if (value <= 0) return '';
+  return value > 99 ? '99+' : String(value);
+}
+
+function notificationHref(item: NotificationRef): string {
+  const deepLink = item.metadata.deepLink ?? item.metadata.href ?? item.metadata.navigateTo ?? item.metadata.actionHref;
+  if (typeof deepLink === 'string' && deepLink.startsWith('/')) return deepLink;
+  if (item.sessionId) return `/studio?mode=nl&session=${encodeURIComponent(item.sessionId)}`;
+  if (item.executionId) return `/studio?mode=nl&execution=${encodeURIComponent(item.executionId)}`;
+  return '/settings#notifications';
+}
+
+function notificationGroup(type: string): typeof NOTIFICATION_GROUPS[number] {
+  const normalized = type.toLowerCase();
+  if (normalized.includes('workflow') || normalized.includes('execution') || normalized.includes('studio')) return 'Workflow';
+  if (normalized.includes('billing') || normalized.includes('payment') || normalized.includes('subscription')) return 'Billing';
+  if (normalized.includes('security') || normalized.includes('auth') || normalized.includes('token') || normalized.includes('session')) return 'Security';
+  if (normalized.includes('community') || normalized.includes('follow') || normalized.includes('review')) return 'Community';
+  return 'System';
+}
+
+function formatNotificationTime(value: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+  } catch {
+    return 'Recent';
+  }
+}
+
 function tabletDefaultCollapsed() {
   if (typeof window === 'undefined') return false;
   return window.matchMedia('(min-width: 768px) and (max-width: 1279px)').matches;
@@ -165,6 +282,71 @@ function DefaultRightPanel(props: {
       </section>
       <div id="agentos-right-panel-slot" />
     </div>
+  );
+}
+
+function NotificationDrawer(props: {
+  open: boolean;
+  notifications: NotificationRef[];
+  loading: boolean;
+  unread: number;
+  onClose: () => void;
+  onOpen: (item: NotificationRef) => void;
+  onMark: (item: NotificationRef, status: NotificationRef['status']) => void;
+  onMarkAllRead: () => void;
+}) {
+  if (!props.open) return null;
+  const grouped = new Map<typeof NOTIFICATION_GROUPS[number], NotificationRef[]>();
+  for (const group of NOTIFICATION_GROUPS) grouped.set(group, []);
+  for (const item of props.notifications) {
+    if (item.status === 'archived') continue;
+    if (item.status === 'unread') grouped.get('Unread')?.push(item);
+    grouped.get('Recent')?.push(item);
+    grouped.get(notificationGroup(item.type))?.push(item);
+  }
+
+  return (
+    <aside className="agentos-notification-drawer" aria-label="Notification drawer">
+      <div className="agentos-notification-head">
+        <div>
+          <span>Notifications</span>
+          <strong>{props.unread} unread</strong>
+        </div>
+        <div className="agentos-notification-head-actions">
+          <button type="button" onClick={props.onMarkAllRead} disabled={props.unread === 0}>Mark All Read</button>
+          <button type="button" onClick={props.onClose} aria-label="Close notifications">Close</button>
+        </div>
+      </div>
+      <div className="agentos-notification-body">
+        {props.loading ? <div className="agentos-notification-empty">Loading notifications</div> : null}
+        {!props.loading && props.notifications.filter(item => item.status !== 'archived').length === 0 ? (
+          <div className="agentos-notification-empty">No notifications</div>
+        ) : null}
+        {NOTIFICATION_GROUPS.map(group => {
+          const items = (grouped.get(group) ?? []).slice(0, group === 'Recent' ? 8 : 6);
+          return (
+            <section key={group} className="agentos-notification-group">
+              <h2>{group}</h2>
+              {items.length === 0 ? <span className="agentos-notification-muted">None</span> : items.map(item => (
+                <article key={`${group}-${item.id}`} className="agentos-notification-item" data-status={item.status}>
+                  <i aria-hidden="true">{notificationGroup(item.type).slice(0, 1)}</i>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <p>{item.body}</p>
+                    <time>{formatNotificationTime(item.createdAt)}</time>
+                    <div className="agentos-notification-actions">
+                      <button type="button" onClick={() => props.onOpen(item)}>Open</button>
+                      {item.status !== 'read' ? <button type="button" onClick={() => props.onMark(item, 'read')}>Mark Read</button> : null}
+                      <button type="button" onClick={() => props.onMark(item, 'archived')}>Dismiss</button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </section>
+          );
+        })}
+      </div>
+    </aside>
   );
 }
 
@@ -284,7 +466,6 @@ function LeftSidebar(props: {
 }
 
 export default function ApplicationShell({ children }: { children: ReactNode }) {
-  const shellInstanceRef = useRef<string | null>(null);
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -300,15 +481,14 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [leftCollapsed, setLeftCollapsedState] = useState(() => tabletDefaultCollapsed());
-  const [rightCollapsed, setRightCollapsedState] = useState(() => tabletDefaultCollapsed());
+  const [leftCollapsed, setLeftCollapsedState] = useState(false);
+  const [rightCollapsed, setRightCollapsedState] = useState(false);
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-
-  if (!shellInstanceRef.current) {
-    shellInstanceCounter += 1;
-    shellInstanceRef.current = String(shellInstanceCounter);
-  }
+  const [notificationDrawerOpen, setNotificationDrawerOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationRef[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [shellSearch, setShellSearch] = useState('');
 
   const refreshShell = useCallback(async () => {
     const auth = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
@@ -361,10 +541,33 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
       if (event.key !== 'Escape') return;
       setLeftDrawerOpen(false);
       setRightDrawerOpen(false);
+      setNotificationDrawerOpen(false);
     }
     window.addEventListener('keydown', closeDrawers);
     return () => window.removeEventListener('keydown', closeDrawers);
   }, []);
+
+  const loadNotifications = useCallback(async () => {
+    if (!session) return;
+    setNotificationsLoading(true);
+    try {
+      const response = await fetchWithBrowserSession('/api/notifications?status=all&limit=100', { cache: 'no-store' });
+      if (!response.response.ok) return;
+      const data = await response.response.json() as { notifications?: NotificationRef[] };
+      setNotifications(data.notifications ?? []);
+      setPayload(current => ({
+        ...current,
+        notifications: { unread: (data.notifications ?? []).filter(item => item.status === 'unread').length },
+      }));
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!notificationDrawerOpen) return;
+    void loadNotifications();
+  }, [loadNotifications, notificationDrawerOpen]);
 
   const setLeftCollapsed = useCallback((value: boolean) => {
     const startedAt = performance.now();
@@ -515,6 +718,53 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     router.replace('/signin');
   }
 
+  async function logoutAllDevices() {
+    await fetch('/api/settings/sessions', { method: 'DELETE', credentials: 'include' }).catch(() => null);
+    await destroyBrowserSession();
+    router.replace('/signin');
+  }
+
+  async function updateNotificationStatus(item: NotificationRef, status: NotificationRef['status']) {
+    await fetchWithBrowserSession('/api/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationId: item.id, status }),
+    });
+    await loadNotifications();
+    await refreshShell();
+  }
+
+  async function markAllNotificationsRead() {
+    await fetchWithBrowserSession('/api/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'mark_all_read' }),
+    });
+    await loadNotifications();
+    await refreshShell();
+  }
+
+  async function openNotification(item: NotificationRef) {
+    if (item.status === 'unread') {
+      await updateNotificationStatus(item, 'read');
+    }
+    setNotificationDrawerOpen(false);
+    beginNavigationMetric();
+    router.push(notificationHref(item));
+  }
+
+  function submitShellSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = shellSearch.trim();
+    if (!query) return;
+    beginNavigationMetric();
+    router.push(`/search?q=${encodeURIComponent(query)}`);
+  }
+
+  const pageTitle = pageTitleForPath(pathname);
+  const primaryAction = primaryActionForPath(pathname);
+  const unreadBadge = badgeCount(payload.notifications.unread);
+
   return (
     <ApplicationShellContext.Provider value={contextValue}>
       <div
@@ -524,7 +774,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
         data-left-open={leftDrawerOpen ? 'true' : 'false'}
         data-right-open={rightDrawerOpen ? 'true' : 'false'}
         data-studio={pathname === '/studio' ? 'true' : 'false'}
-        data-shell-instance={shellInstanceRef.current}
+        data-shell-instance={SHELL_INSTANCE_ID}
       >
         <header className="agentos-global-header">
           <button type="button" className="agentos-shell-mobile-button left" onClick={() => setLeftDrawerOpen(true)} aria-label="Open navigation">Menu</button>
@@ -532,6 +782,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             <Image src="/logo.png" alt="" width={26} height={26} />
             <strong>AgentOS</strong>
           </Link>
+          <h1 className="agentos-global-title">{pageTitle}</h1>
           <div className="agentos-global-breadcrumbs" aria-label="Current operating context">
             <span>{workspace?.name ?? 'Workspace'}</span>
             <span>{project?.name ?? 'No project'}</span>
@@ -540,12 +791,38 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             {pathname === '/studio' ? <span>{process.env.NEXT_PUBLIC_AGENTOS_MODEL ?? 'Default model'}</span> : null}
           </div>
           <div className="agentos-global-header-actions">
-            <Link href="/notifications" aria-label={`${payload.notifications.unread} unread notifications`}>Alerts {payload.notifications.unread}</Link>
-            <Link href="/settings" className="agentos-global-user">
-              <span>{initials(session)}</span>
-              <b>{session?.agentName ?? 'Account'}</b>
-            </Link>
-            {session ? <button type="button" onClick={() => void logout()}>Logout</button> : <Link href="/signin">Sign in</Link>}
+            <form className="agentos-global-search" role="search" onSubmit={submitShellSearch}>
+              <input value={shellSearch} onChange={event => setShellSearch(event.target.value)} placeholder="Search" aria-label="Search AgentOS" />
+            </form>
+            {primaryAction ? <Link className="agentos-global-primary-action" href={primaryAction.href}>{primaryAction.label}</Link> : null}
+            <button
+              type="button"
+              className="agentos-notification-bell"
+              onClick={() => setNotificationDrawerOpen(value => !value)}
+              aria-label={`${payload.notifications.unread} unread notifications`}
+            >
+              <span className="agentos-bell-icon" aria-hidden="true" />
+              {unreadBadge ? <b>{unreadBadge}</b> : null}
+            </button>
+            {session ? (
+              <details className="agentos-avatar-menu">
+                <summary className="agentos-global-user" aria-label="Open account menu">
+                  <span>{initials(session)}</span>
+                  <b>{session.agentName ?? 'Account'}</b>
+                </summary>
+                <div className="agentos-avatar-menu-panel">
+                  <div className="agentos-avatar-menu-identity">
+                    <strong>{session.agentName ?? 'AgentOS User'}</strong>
+                    <span>{session.planLabel ?? session.plan ?? 'Current plan'}</span>
+                  </div>
+                  {ACCOUNT_MENU_LINKS.map(item => (
+                    <Link key={item.label} href={item.href}>{item.label}</Link>
+                  ))}
+                  <button type="button" aria-label="Sign Out" onClick={() => void logout()}>Logout</button>
+                  <button type="button" aria-label="Sign Out All Devices" onClick={() => void logoutAllDevices()}>Logout All Devices</button>
+                </div>
+              </details>
+            ) : <Link href="/signin">Sign in</Link>}
           </div>
           <button type="button" className="agentos-shell-mobile-button right" onClick={() => setRightDrawerOpen(true)} aria-label="Open context">Context</button>
         </header>
@@ -580,13 +857,25 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
           <DefaultRightPanel workspace={workspace} project={project} session={activeSession} payload={payload} />
         </aside>
 
-        {(leftDrawerOpen || rightDrawerOpen) ? (
+        <NotificationDrawer
+          open={notificationDrawerOpen}
+          notifications={notifications}
+          loading={notificationsLoading}
+          unread={payload.notifications.unread}
+          onClose={() => setNotificationDrawerOpen(false)}
+          onOpen={item => void openNotification(item)}
+          onMark={(item, status) => void updateNotificationStatus(item, status)}
+          onMarkAllRead={() => void markAllNotificationsRead()}
+        />
+
+        {(leftDrawerOpen || rightDrawerOpen || notificationDrawerOpen) ? (
           <button
             type="button"
             className="agentos-shell-backdrop"
             onClick={() => {
               setLeftDrawerOpen(false);
               setRightDrawerOpen(false);
+              setNotificationDrawerOpen(false);
             }}
             aria-label="Close drawer"
           />

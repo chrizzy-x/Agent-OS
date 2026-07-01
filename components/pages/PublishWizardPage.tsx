@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmationDialog,
   EmptyState,
   FilterChips,
   Input,
@@ -20,7 +21,7 @@ import {
   Textarea,
 } from '@/components/os/ui';
 
-const STEPS = ['Manifest', 'Permissions', 'SDK & Tests', 'Screenshots', 'Review', 'Publish'];
+const STEPS = ['Build App', 'Configure App', 'Store Listing', 'Publish'];
 
 type WizardState = {
   name: string;
@@ -28,6 +29,22 @@ type WizardState = {
   category: string;
   description: string;
   longDescription: string;
+  logoUrl: string;
+  bannerUrl: string;
+  videoUrl: string;
+  version: string;
+  developer: string;
+  websiteUrl: string;
+  documentationUrl: string;
+  supportUrl: string;
+  privacyPolicyUrl: string;
+  termsUrl: string;
+  pricing: string;
+  releaseNotes: string;
+  changelog: string;
+  tags: string;
+  features: string;
+  platforms: string;
   runtime: 'external-app' | 'agentos-app' | 'workspace-app';
   entrypoint: string;
   commands: string;
@@ -38,6 +55,7 @@ type WizardState = {
   optionalSecrets: string;
   permissions: string;
   screenshots: string[];
+  gallery: string;
   visibility: 'private' | 'workspace' | 'public';
 };
 
@@ -47,6 +65,22 @@ const DEFAULT_STATE: WizardState = {
   category: 'Research',
   description: '',
   longDescription: '',
+  logoUrl: '',
+  bannerUrl: '',
+  videoUrl: '',
+  version: '1.0.0',
+  developer: '',
+  websiteUrl: '',
+  documentationUrl: '',
+  supportUrl: '',
+  privacyPolicyUrl: '',
+  termsUrl: '',
+  pricing: 'Free',
+  releaseNotes: '',
+  changelog: '',
+  tags: '',
+  features: '',
+  platforms: 'Web, AgentOS Cloud',
   runtime: 'agentos-app',
   entrypoint: 'agentos://apps/new-app',
   commands: JSON.stringify([{ name: 'run', description: 'Run the app workflow' }], null, 2),
@@ -57,6 +91,7 @@ const DEFAULT_STATE: WizardState = {
   optionalSecrets: '',
   permissions: 'memory, files, network',
   screenshots: [],
+  gallery: '',
   visibility: 'private',
 };
 
@@ -65,11 +100,12 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [sessionLoading, setSessionLoading] = useState(true);
-  const [step, setStep] = useState('Manifest');
+  const [step, setStep] = useState(STEPS[0]);
   const [loading, setLoading] = useState(Boolean(slug));
   const [state, setState] = useState<WizardState>(DEFAULT_STATE);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pendingDestructive, setPendingDestructive] = useState<null | { type: 'unpublish' | 'delete-screenshot' | 'delete-gallery'; path?: string }>(null);
   const canPublishApp = session?.capabilities?.includes('create_app') === true;
   const accessState = resolveBrowserAccessState(session, sessionLoading, 'create_app', authState);
 
@@ -109,6 +145,22 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
           category: app.category ?? 'Research',
           description: app.description ?? '',
           longDescription: app.longDescription ?? '',
+          logoUrl: app.logoUrl ?? '',
+          bannerUrl: app.bannerUrl ?? '',
+          videoUrl: app.videoUrl ?? '',
+          version: app.manifest?.version ?? '1.0.0',
+          developer: app.publisherName ?? '',
+          websiteUrl: app.websiteUrl ?? '',
+          documentationUrl: app.documentationUrl ?? '',
+          supportUrl: app.supportUrl ?? '',
+          privacyPolicyUrl: app.privacyPolicyUrl ?? '',
+          termsUrl: app.termsUrl ?? '',
+          pricing: typeof app.pricing?.model === 'string' ? app.pricing.model : 'Free',
+          releaseNotes: app.releaseNotes ?? '',
+          changelog: (app.changelog ?? []).join('\n'),
+          tags: (app.tags ?? []).join(', '),
+          features: (app.features ?? []).join('\n'),
+          platforms: (app.platforms ?? []).join(', '),
           runtime: app.runtimeType ?? 'external-app',
           entrypoint: app.manifest?.entrypoint ?? '',
           commands: JSON.stringify(app.manifest?.commands ?? [], null, 2),
@@ -119,6 +171,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
           optionalSecrets: '',
           permissions: (app.permissionsRequired ?? app.manifest?.permissions ?? []).join(', '),
           screenshots: app.screenshots ?? [],
+          gallery: (app.gallery ?? []).join('\n'),
           visibility: app.visibility ?? 'public',
         });
       } catch {
@@ -137,7 +190,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
     try {
       return JSON.stringify({
         schemaVersion: 'agentos.app.v1',
-        version: '1.0.0',
+        version: state.version,
         runtime: state.runtime,
         entrypoint: state.entrypoint,
         primitives: state.primitives.split(',').map(item => item.trim()).filter(Boolean),
@@ -151,7 +204,22 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
     }
   }, [state]);
 
-  async function publish() {
+  const galleryItems = useMemo(
+    () => state.gallery.split('\n').map(item => item.trim()).filter(Boolean),
+    [state.gallery],
+  );
+
+  const mediaValidation = useMemo(() => {
+    const missing = [
+      state.logoUrl ? null : 'Icon',
+      state.bannerUrl ? null : 'Banner',
+      state.screenshots.length || galleryItems.length ? null : 'Screenshots or gallery',
+      state.videoUrl ? null : 'Video optional',
+    ].filter(Boolean);
+    return missing.length ? `${missing.join(', ')} needed for a complete media set.` : 'Media validates against the store preview.';
+  }, [galleryItems.length, state.bannerUrl, state.logoUrl, state.screenshots.length, state.videoUrl]);
+
+  async function publish(publishState?: 'draft' | 'submitted' | 'published' | 'update_pending' | 'unpublished') {
     setSaving(true);
     setMessage('');
     try {
@@ -162,11 +230,29 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
         category: state.category,
         description: state.description,
         longDescription: state.longDescription,
+        logoUrl: state.logoUrl || undefined,
+        bannerUrl: state.bannerUrl || undefined,
+        videoUrl: state.videoUrl || undefined,
+        version: state.version,
+        websiteUrl: state.websiteUrl || undefined,
+        documentationUrl: state.documentationUrl || undefined,
+        supportUrl: state.supportUrl || undefined,
+        privacyPolicyUrl: state.privacyPolicyUrl || undefined,
+        termsUrl: state.termsUrl || undefined,
+        pricing: { model: state.pricing },
+        releaseNotes: state.releaseNotes || undefined,
+        changelog: state.changelog.split('\n').map(item => item.trim()).filter(Boolean),
+        tags: state.tags.split(',').map(item => item.trim()).filter(Boolean),
+        keywords: state.tags.split(',').map(item => item.trim()).filter(Boolean),
+        features: state.features.split('\n').map(item => item.trim()).filter(Boolean),
+        platforms: state.platforms.split(',').map(item => item.trim()).filter(Boolean),
+        publisherName: state.developer || undefined,
         device_targets: state.deviceTargets.split(',').map(item => item.trim()).filter(Boolean),
         visibility: state.visibility,
+        publish_state: publishState,
         manifest: {
           schemaVersion: 'agentos.app.v1',
-          version: '1.0.0',
+          version: state.version,
           runtime: state.runtime,
           entrypoint: state.entrypoint,
           primitives: state.primitives.split(',').map(item => item.trim()).filter(Boolean),
@@ -178,6 +264,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
         permissionsRequired: state.permissions.split(',').map(item => item.trim()).filter(Boolean),
         requiredSecrets: state.requiredSecrets.split(',').map(item => item.trim()).filter(Boolean),
         screenshots: state.screenshots,
+        gallery: state.gallery.split('\n').map(item => item.trim()).filter(Boolean),
       };
       const res = await fetch(slug ? `/api/apps/${slug}` : '/api/apps', {
         method: slug ? 'PATCH' : 'POST',
@@ -204,6 +291,61 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
     } else {
       setMessage(payload.error ?? 'Screenshot upload failed');
     }
+  }
+
+  async function deleteScreenshot(path: string) {
+    if (!state.slug) return;
+    const response = await fetch(`/api/apps/${state.slug}/screenshots?path=${encodeURIComponent(path)}`, { method: 'DELETE' });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) {
+      setState(current => ({ ...current, screenshots: payload.screenshots ?? current.screenshots.filter(item => item !== path) }));
+    } else {
+      setMessage(payload.error ?? 'Screenshot delete failed');
+    }
+  }
+
+  function moveScreenshot(path: string, direction: -1 | 1) {
+    setState(current => {
+      const index = current.screenshots.indexOf(path);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.screenshots.length) return current;
+      const screenshots = [...current.screenshots];
+      const [item] = screenshots.splice(index, 1);
+      screenshots.splice(nextIndex, 0, item);
+      return { ...current, screenshots };
+    });
+  }
+
+  function moveGalleryItem(path: string, direction: -1 | 1) {
+    setState(current => {
+      const gallery = current.gallery.split('\n').map(item => item.trim()).filter(Boolean);
+      const index = gallery.indexOf(path);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= gallery.length) return current;
+      const [item] = gallery.splice(index, 1);
+      gallery.splice(nextIndex, 0, item);
+      return { ...current, gallery: gallery.join('\n') };
+    });
+  }
+
+  function deleteGalleryItem(path: string) {
+    setState(current => ({
+      ...current,
+      gallery: current.gallery.split('\n').map(item => item.trim()).filter(Boolean).filter(item => item !== path).join('\n'),
+    }));
+  }
+
+  async function confirmDestructive() {
+    const action = pendingDestructive;
+    if (!action) return;
+    if (action.type === 'unpublish') {
+      await publish('unpublished');
+    } else if (action.type === 'delete-screenshot' && action.path) {
+      await deleteScreenshot(action.path);
+    } else if (action.type === 'delete-gallery' && action.path) {
+      deleteGalleryItem(action.path);
+    }
+    setPendingDestructive(null);
   }
 
   return (
@@ -255,10 +397,10 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
       >
         {accessState === 'allowed' ? (
           <PageHeader
-            eyebrow="Publish app wizard"
-            title={slug ? 'Edit app metadata' : 'Publish App Wizard'}
-            subtitle="Turn internal apps and workflows into publishable listings, or refine metadata for SDK-backed apps."
-            actions={<Button onClick={() => void publish()}>{saving ? 'Saving...' : 'Publish'}</Button>}
+            eyebrow="Publish App"
+            title={slug ? 'Edit app listing' : 'Publish App'}
+            subtitle="Build, configure, preview, and publish an App Store listing."
+            actions={<Button onClick={() => void publish('published')} loading={saving}>Publish</Button>}
           />
         ) : accessState === 'signed_out' ? (
           <PageHeader
@@ -288,14 +430,19 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
           <EmptyState title="Enterprise access required" body="App creation and publishing stay gated to Enterprise and Enterprise Max workspaces." action={<Button href="/studio">Open Studio</Button>} />
         ) : (
           <>
+            <Card>
+              <Tabs tabs={STEPS.map(item => ({ key: item, label: item }))} active={step} onChange={setStep} />
+            </Card>
+
             {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
 
-            {step === 'Manifest' ? (
+            {step === 'Build App' ? (
               <Card>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                   <Input value={state.name} onChange={event => setState(current => ({ ...current, name: event.target.value }))} placeholder="App name" />
                   <Input value={state.slug} onChange={event => setState(current => ({ ...current, slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} placeholder="Slug" />
                   <Input value={state.category} onChange={event => setState(current => ({ ...current, category: event.target.value }))} placeholder="Category" />
+                  <Input value={state.version} onChange={event => setState(current => ({ ...current, version: event.target.value }))} placeholder="Version" />
                   <Select value={state.runtime} onChange={event => setState(current => ({ ...current, runtime: event.target.value as WizardState['runtime'] }))}>
                     <option value="agentos-app">Internal app</option>
                     <option value="external-app">External SDK</option>
@@ -305,14 +452,12 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
                 <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
                   <Input value={state.entrypoint} onChange={event => setState(current => ({ ...current, entrypoint: event.target.value }))} placeholder="Entrypoint" />
                   <Input value={state.deviceTargets} onChange={event => setState(current => ({ ...current, deviceTargets: event.target.value }))} placeholder="Device targets" />
-                  <Input value={state.description} onChange={event => setState(current => ({ ...current, description: event.target.value }))} placeholder="Short description" />
-                  <Textarea value={state.longDescription} onChange={event => setState(current => ({ ...current, longDescription: event.target.value }))} placeholder="Long description" />
                   <Textarea value={state.commands} onChange={event => setState(current => ({ ...current, commands: event.target.value }))} placeholder="Commands JSON" />
                 </div>
               </Card>
             ) : null}
 
-            {step === 'Permissions' ? (
+            {step === 'Configure App' ? (
               <Card>
                 <div style={{ display: 'grid', gap: 12 }}>
                   <Input value={state.primitives} onChange={event => setState(current => ({ ...current, primitives: event.target.value }))} placeholder="Primitives" />
@@ -324,34 +469,82 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
               </Card>
             ) : null}
 
-            {step === 'SDK & Tests' ? (
+            {step === 'Store Listing' ? (
               <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Validation</div>
-                <SearchBar value={state.entrypoint} readOnly />
-                <pre className="os-code-block">{manifestPreview}</pre>
-                <div className="os-entity-copy">Internal apps default to private. External SDK apps can edit metadata here after registration.</div>
-              </Card>
-            ) : null}
-
-            {step === 'Screenshots' ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Screenshots</div>
-                <input type="file" multiple accept="image/*" onChange={event => void uploadScreenshots(event.target.files)} />
-                {state.slug ? null : <div className="os-entity-copy">Save the app first to upload screenshots.</div>}
-                {state.screenshots.length === 0 ? (
-                  <EmptyState title="No screenshots yet" body="Upload screenshots after the app has a stable slug." />
-                ) : (
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {state.screenshots.map(path => <SearchBar key={path} value={path} readOnly />)}
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <Input value={state.description} onChange={event => setState(current => ({ ...current, description: event.target.value }))} placeholder="Short description" />
+                  <Textarea value={state.longDescription} onChange={event => setState(current => ({ ...current, longDescription: event.target.value }))} placeholder="Long description" />
+                  <Input value={state.developer} onChange={event => setState(current => ({ ...current, developer: event.target.value }))} placeholder="Developer" />
+                  <Input value={state.logoUrl} onChange={event => setState(current => ({ ...current, logoUrl: event.target.value }))} placeholder="Icon URL" />
+                  <Input value={state.bannerUrl} onChange={event => setState(current => ({ ...current, bannerUrl: event.target.value }))} placeholder="Banner URL" />
+                  <Input value={state.videoUrl} onChange={event => setState(current => ({ ...current, videoUrl: event.target.value }))} placeholder="Video URL optional" />
+                  <Input value={state.category} onChange={event => setState(current => ({ ...current, category: event.target.value }))} placeholder="Category" />
+                  <Input value={state.tags} onChange={event => setState(current => ({ ...current, tags: event.target.value }))} placeholder="Tags" />
+                  <Input value={state.websiteUrl} onChange={event => setState(current => ({ ...current, websiteUrl: event.target.value }))} placeholder="Website" />
+                  <Input value={state.supportUrl} onChange={event => setState(current => ({ ...current, supportUrl: event.target.value }))} placeholder="Support" />
+                  <Input value={state.privacyPolicyUrl} onChange={event => setState(current => ({ ...current, privacyPolicyUrl: event.target.value }))} placeholder="Privacy Policy" />
+                  <Input value={state.termsUrl} onChange={event => setState(current => ({ ...current, termsUrl: event.target.value }))} placeholder="Terms" />
+                  <Input value={state.pricing} onChange={event => setState(current => ({ ...current, pricing: event.target.value }))} placeholder="Pricing" />
+                  <Input value={state.documentationUrl} onChange={event => setState(current => ({ ...current, documentationUrl: event.target.value }))} placeholder="Documentation" />
+                  <Input value={state.platforms} onChange={event => setState(current => ({ ...current, platforms: event.target.value }))} placeholder="Platforms" />
+                  <Textarea value={state.features} onChange={event => setState(current => ({ ...current, features: event.target.value }))} placeholder="Features, one per line" />
+                  <Textarea value={state.gallery} onChange={event => setState(current => ({ ...current, gallery: event.target.value }))} placeholder="Gallery URLs, one per line" />
+                  <Textarea value={state.releaseNotes} onChange={event => setState(current => ({ ...current, releaseNotes: event.target.value }))} placeholder="Release notes" />
+                  <Textarea value={state.changelog} onChange={event => setState(current => ({ ...current, changelog: event.target.value }))} placeholder="Changelog, one entry per line" />
+                  <input type="file" multiple accept="image/png,image/jpeg,image/webp" disabled={!state.slug} onChange={event => void uploadScreenshots(event.target.files)} />
+                  {state.slug ? null : <div className="os-entity-copy">Save the app first to upload screenshots.</div>}
+                  <Badge tone={mediaValidation.includes('validates') ? 'success' : 'warning'}>{mediaValidation}</Badge>
+                  {state.screenshots.length ? state.screenshots.map((path, index) => (
+                    <div key={path} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto auto', gap: 8, alignItems: 'center' }}>
+                      <SearchBar value={path} readOnly />
+                      <Button variant="secondary" onClick={() => moveScreenshot(path, -1)} disabled={index === 0}>Up</Button>
+                      <Button variant="secondary" onClick={() => moveScreenshot(path, 1)} disabled={index === state.screenshots.length - 1}>Down</Button>
+                      <Button variant="danger" onClick={() => setPendingDestructive({ type: 'delete-screenshot', path })}>Delete</Button>
+                    </div>
+                  )) : null}
+                  {galleryItems.length ? galleryItems.map((path, index) => (
+                    <div key={path} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto auto', gap: 8, alignItems: 'center' }}>
+                      <SearchBar value={path} readOnly />
+                      <Button variant="secondary" onClick={() => moveGalleryItem(path, -1)} disabled={index === 0}>Up</Button>
+                      <Button variant="secondary" onClick={() => moveGalleryItem(path, 1)} disabled={index === galleryItems.length - 1}>Down</Button>
+                      <Button variant="danger" onClick={() => setPendingDestructive({ type: 'delete-gallery', path })}>Delete</Button>
+                    </div>
+                  )) : null}
+                  <div className="market-shell" data-surface="app-media-preview">
+                    <article className="market-store-card">
+                      <div className="market-card-banner">{state.bannerUrl ? <img src={state.bannerUrl} alt="" /> : state.name || 'Banner'}</div>
+                      <div className="market-store-card-main">
+                        <div className="market-listing-mark">{state.logoUrl ? <img src={state.logoUrl} alt="" /> : (state.name || 'AP').slice(0, 2).toUpperCase()}</div>
+                        <div>
+                          <h3>{state.name || 'Untitled app'}</h3>
+                          <p>{state.description || 'Short description preview'}</p>
+                        </div>
+                      </div>
+                      <div className="market-card-actions">
+                        <Button variant="secondary">Preview</Button>
+                        <Button>Install</Button>
+                      </div>
+                    </article>
+                    <section className="market-detail-hero compact">
+                      <div className="market-detail-backdrop market-card-banner">{state.bannerUrl ? <img src={state.bannerUrl} alt="" /> : <span>{state.name || 'Banner'}</span>}</div>
+                      <div className="market-detail-logo">{state.logoUrl ? <img src={state.logoUrl} alt="" /> : (state.name || 'AP').slice(0, 2).toUpperCase()}</div>
+                      <div className="market-detail-copy">
+                        <span>Appstore Detail Preview</span>
+                        <h2>{state.name || 'Untitled app'}</h2>
+                        <p>{state.longDescription || state.description || 'Long description preview'}</p>
+                        <div className="market-hero-meta">
+                          <span>Version {state.version}</span>
+                          <span>{state.platforms}</span>
+                          <span>{state.pricing}</span>
+                        </div>
+                      </div>
+                      <div className="market-detail-actions">
+                        <Button variant="secondary">Preview</Button>
+                        <Button>Install</Button>
+                      </div>
+                    </section>
                   </div>
-                )}
-              </Card>
-            ) : null}
-
-            {step === 'Review' ? (
-              <Card>
-                <div className="os-entity-title" style={{ marginBottom: 12 }}>Review</div>
-                <pre className="os-code-block">{manifestPreview}</pre>
+                </div>
               </Card>
             ) : null}
 
@@ -364,13 +557,28 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
                     <option value="public">Public</option>
                   </Select>
                   <div className="os-entity-copy">Internal apps default to private. Change to workspace or public when you are ready.</div>
-                  <Button onClick={() => void publish()}>{saving ? 'Publishing...' : 'Publish'}</Button>
+                  <div className="os-inline-actions">
+                    <Button variant="secondary" onClick={() => void publish('draft')}>{saving ? 'Saving...' : 'Draft'}</Button>
+                    <Button variant="secondary" onClick={() => void publish('submitted')}>{saving ? 'Submitting...' : 'Submit Review'}</Button>
+                    <Button variant="secondary" onClick={() => void publish('update_pending')}>{saving ? 'Updating...' : 'Update'}</Button>
+                    <Button variant="danger" onClick={() => setPendingDestructive({ type: 'unpublish' })}>Unpublish</Button>
+                    <Button onClick={() => void publish('published')} loading={saving}>Publish</Button>
+                  </div>
                 </div>
               </Card>
             ) : null}
           </>
         )}
       </WorkspaceShell>
+      <ConfirmationDialog
+        open={Boolean(pendingDestructive)}
+        title={pendingDestructive?.type === 'unpublish' ? 'Unpublish app' : 'Delete media'}
+        body={pendingDestructive?.type === 'unpublish' ? 'Move this app out of public availability?' : 'Delete this media reference from the listing?'}
+        confirmLabel={pendingDestructive?.type === 'unpublish' ? 'Unpublish' : 'Delete'}
+        busy={saving}
+        onCancel={() => setPendingDestructive(null)}
+        onConfirm={() => void confirmDestructive()}
+      />
     </div>
   );
 }

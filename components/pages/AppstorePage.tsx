@@ -7,6 +7,14 @@ import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import type { AgentAppListing } from '@/src/appstore/catalog';
 import type { AppDiscoveryPayload } from '@/src/appstore/discovery';
+import {
+  DeveloperSpotlight,
+  formatMarketplaceCount,
+  LazyMarketplaceSection,
+  ListingBanner,
+  ListingMark,
+  MarketplaceHero,
+} from '@/components/marketplace/MarketplacePrimitives';
 
 type StoreApp = AgentAppListing;
 
@@ -16,30 +24,23 @@ const FALLBACK_DISCOVERY: AppDiscoveryPayload = {
   categories: [],
   sections: [],
   hero: [],
+  developerSpotlight: [],
 };
-
-function formatCount(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString();
-}
-
-function appLogo(app: StoreApp) {
-  if (app.logoUrl) {
-    return <img src={app.logoUrl} alt="" loading="lazy" />;
-  }
-  return <span>{app.name.slice(0, 2).toUpperCase()}</span>;
-}
 
 function platformLabel(app: StoreApp): string {
   return (app.platforms.length ? app.platforms : app.deviceTargets).slice(0, 3).join(' / ') || 'AgentOS';
 }
 
-function installLabel(installed: boolean): string {
+function actionLabel(installed: boolean): string {
   return installed ? 'Open' : 'Install';
 }
 
-function MarketplaceAppCard(props: {
+function platformBadges(app: StoreApp): string[] {
+  const values = new Set((app.platforms.length ? app.platforms : app.deviceTargets).map(item => item.toLowerCase()));
+  return ['Web', 'Desktop', 'Android', 'iOS'].filter(item => values.has(item.toLowerCase()) || (item === 'Web' && values.has('agentos cloud')));
+}
+
+function AppCard(props: {
   app: StoreApp;
   installed: boolean;
   working: boolean;
@@ -48,33 +49,47 @@ function MarketplaceAppCard(props: {
 }) {
   const { app, installed, working } = props;
   return (
-    <article className="market-app-card">
-      <Link href={`/appstore/${app.slug}`} className="market-app-card-main">
-        <div className="market-app-logo">{appLogo(app)}</div>
-        <div className="market-app-copy">
-          <h3>{app.name}</h3>
-          <p>{app.description}</p>
+    <article className="market-store-card">
+      <Link href={`/appstore/${app.slug}`} className="market-store-card-link">
+        <ListingBanner name={app.name} imageUrl={app.bannerUrl ?? app.screenshots[0] ?? null} />
+        <div className="market-store-card-main">
+          <ListingMark name={app.name} imageUrl={app.logoUrl} />
+          <div>
+            <h3>{app.name}</h3>
+            <p>{app.description}</p>
+          </div>
         </div>
       </Link>
-      <div className="market-app-meta">
-        <span>{app.publisherName || 'AgentOS Developer'}</span>
+      <Link href={`/developer/${app.developerHandle}`} className="market-card-developer">{app.publisherName || 'AgentOS Developer'}</Link>
+      <div className="market-card-facts">
         <span>{app.rating > 0 ? app.rating.toFixed(1) : 'New'} rating</span>
-        <span>{formatCount(app.installCount)} installs</span>
+        <span>v{app.manifest.version}</span>
+        <span>{formatMarketplaceCount(app.installCount)} installs</span>
+        <span>{platformLabel(app)}</span>
       </div>
-      <div className="market-platforms">{platformLabel(app)}</div>
-      <button
-        type="button"
-        className="market-primary-action"
-        disabled={working}
-        onClick={() => installed ? props.onOpen(app) : props.onInstall(app)}
-      >
-        {working ? 'Working' : installLabel(installed)}
-      </button>
+      <div className="market-card-facts" aria-label={`${app.name} compatibility`}>
+        <span>{app.runtimeType}</span>
+        <span>{app.healthStatus}</span>
+      </div>
+      <div className="market-card-facts" aria-label={`${app.name} platform badges`}>
+        {platformBadges(app).map(platform => <span key={platform}>{platform}</span>)}
+      </div>
+      <div className="market-card-actions">
+        <button
+          type="button"
+          className="market-primary-action"
+          disabled={working}
+          onClick={() => installed ? props.onOpen(app) : props.onInstall(app)}
+        >
+          {working ? 'Working' : actionLabel(installed)}
+        </button>
+        {installed ? <Link href="/apps" className="market-secondary-action">Manage</Link> : null}
+      </div>
     </article>
   );
 }
 
-function AppSection(props: {
+function AppRow(props: {
   title: string;
   reason?: string;
   apps: StoreApp[];
@@ -85,16 +100,10 @@ function AppSection(props: {
 }) {
   if (props.apps.length === 0) return null;
   return (
-    <section className="market-section">
-      <div className="market-section-head">
-        <div>
-          <h2>{props.title}</h2>
-          {props.reason ? <p>{props.reason}</p> : null}
-        </div>
-      </div>
-      <div className="market-app-grid">
+    <LazyMarketplaceSection title={props.title} reason={props.reason}>
+      <div className="market-horizontal-row market-app-row">
         {props.apps.map(app => (
-          <MarketplaceAppCard
+          <AppCard
             key={app.id}
             app={app}
             installed={props.installedSlugs.has(app.slug)}
@@ -104,7 +113,7 @@ function AppSection(props: {
           />
         ))}
       </div>
-    </section>
+    </LazyMarketplaceSection>
   );
 }
 
@@ -156,7 +165,7 @@ export default function AppstorePage() {
 
   useEffect(() => {
     if (discovery.hero.length <= 1) return;
-    const id = window.setInterval(() => setHeroIndex(index => (index + 1) % discovery.hero.length), 6000);
+    const id = window.setInterval(() => setHeroIndex(index => (index + 1) % discovery.hero.length), 6500);
     return () => window.clearInterval(id);
   }, [discovery.hero.length]);
 
@@ -216,11 +225,11 @@ export default function AppstorePage() {
     <SurfaceShell
       activePath="/appstore"
       title="App Store"
-      subtitle="Discover, install, launch, manage, and update AgentOS applications."
+      subtitle="Discover AgentOS products for research, trading, productivity, development, and enterprise workflows."
       actions={(
         <>
           <Link href="/appstore/updates" className="market-secondary-action">Updates</Link>
-          {session?.capabilities?.includes('create_app') ? <Link href="/developer/publish" className="market-secondary-action">Publish</Link> : null}
+          {session?.capabilities?.includes('create_app') ? <Link href="/publish/app" className="market-secondary-action">Publish App</Link> : null}
         </>
       )}
     >
@@ -229,7 +238,7 @@ export default function AppstorePage() {
           <input
             value={search}
             onChange={event => setSearch(event.target.value)}
-            placeholder="Search apps, developers, keywords, tags, categories"
+            placeholder="Search apps, developers, categories, tags, keywords"
             aria-label="Search apps"
           />
         </div>
@@ -243,30 +252,21 @@ export default function AppstorePage() {
         </div>
 
         {hero ? (
-          <section className="market-hero">
-            <div className="market-hero-logo">{appLogo(hero)}</div>
-            <div className="market-hero-copy">
-              <span>{hero.publisherName || 'AgentOS Developer'}</span>
-              <h2>{hero.name}</h2>
-              <p>{hero.longDescription || hero.description}</p>
-              <div className="market-hero-meta">
-                <span>{platformLabel(hero)}</span>
-                <span>{hero.rating > 0 ? hero.rating.toFixed(1) : 'New'} rating</span>
-                <span>{formatCount(hero.installCount)} installs</span>
-              </div>
-            </div>
-            <div className="market-hero-actions">
-              <button
-                type="button"
-                className="market-primary-action"
-                disabled={workingSlug === hero.slug}
-                onClick={() => installedSlugs.has(hero.slug) ? void openApp(hero) : void installToWorkspace(hero)}
-              >
-                {workingSlug === hero.slug ? 'Working' : installedSlugs.has(hero.slug) ? 'Open' : 'Install'}
-              </button>
-              <Link href={`/appstore/${hero.slug}`} className="market-secondary-action">Details</Link>
-            </div>
-          </section>
+          <MarketplaceHero
+            bannerUrl={hero.bannerUrl ?? hero.screenshots[0] ?? null}
+            logoUrl={hero.logoUrl}
+            eyebrow="Featured App"
+            name={hero.name}
+            description={hero.longDescription || hero.description}
+            developerHref={`/developer/${hero.developerHandle}`}
+            developerName={hero.publisherName || 'AgentOS Developer'}
+            metadata={[platformLabel(hero), `${hero.rating > 0 ? hero.rating.toFixed(1) : 'New'} rating`, `${formatMarketplaceCount(hero.installCount)} installs`]}
+            primaryLabel={workingSlug === hero.slug ? 'Working' : installedSlugs.has(hero.slug) ? 'Open' : 'Install'}
+            primaryDisabled={workingSlug === hero.slug}
+            secondaryHref={`/appstore/${hero.slug}`}
+            secondaryLabel="Details"
+            onPrimary={() => installedSlugs.has(hero.slug) ? void openApp(hero) : void installToWorkspace(hero)}
+          />
         ) : null}
 
         {notice ? <div className="market-notice">{notice}</div> : null}
@@ -278,10 +278,10 @@ export default function AppstorePage() {
         ) : discovery.apps.length === 0 ? (
           <div className="market-empty">
             <h2>No apps found</h2>
-            <p>No accessible AgentOS SDK apps matched this search.</p>
+            <p>No accessible AgentOS apps matched this search.</p>
           </div>
         ) : search.trim() ? (
-          <AppSection
+          <AppRow
             title="Search Results"
             apps={discovery.apps}
             installedSlugs={installedSlugs}
@@ -290,18 +290,21 @@ export default function AppstorePage() {
             onOpen={app => void openApp(app)}
           />
         ) : (
-          discovery.sections.map(section => (
-            <AppSection
-              key={section.id}
-              title={section.title}
-              reason={section.reason}
-              apps={section.apps}
-              installedSlugs={installedSlugs}
-              workingSlug={workingSlug}
-              onInstall={app => void installToWorkspace(app)}
-              onOpen={app => void openApp(app)}
-            />
-          ))
+          <>
+            {discovery.sections.map(section => (
+              <AppRow
+                key={section.id}
+                title={section.title}
+                reason={section.reason}
+                apps={section.apps}
+                installedSlugs={installedSlugs}
+                workingSlug={workingSlug}
+                onInstall={app => void installToWorkspace(app)}
+                onOpen={app => void openApp(app)}
+              />
+            ))}
+            <DeveloperSpotlight developers={discovery.developerSpotlight} />
+          </>
         )}
       </div>
     </SurfaceShell>

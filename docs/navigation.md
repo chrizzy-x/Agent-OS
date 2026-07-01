@@ -1,8 +1,10 @@
 # AgentOS Navigation
 
-Top-level order:
+Top-level sidebar order:
 
-Home, Studio, Projects, Library, Skills, App Store, Subagents, Universal MCP, Vault, Community, Docs, FFP, Settings.
+Home, Studio, Library, Appstore, Skillstore, Developer, Projects, Subagents, Workflows, Memory, Vault, Universal MCP, Community, FFP, Resources, Settings.
+
+Notifications, Billing, and Profile are not primary sidebar items. Notifications open from the bell beside the avatar. Billing and Profile live inside Settings at `?section=billing` and `?section=account`.
 
 FFP is visible as disabled Coming Soon. No module is placed behind a More menu.
 

@@ -115,16 +115,45 @@ export function Button(props: {
   onClick?: () => void;
   type?: 'button' | 'submit' | 'reset';
   disabled?: boolean;
+  loading?: boolean;
   className?: string;
 }) {
   const className = `os-button ${props.variant ?? 'primary'} ${props.className ?? ''}`.trim();
+  const content = props.loading ? 'Loading...' : props.children;
   if (props.href) {
-    return <Link href={props.href} className={className}>{props.children}</Link>;
+    return props.disabled || props.loading
+      ? <span className={className} aria-disabled="true">{content}</span>
+      : <Link href={props.href} className={className}>{content}</Link>;
   }
   return (
-    <button type={props.type ?? 'button'} onClick={props.onClick} disabled={props.disabled} className={className}>
-      {props.children}
+    <button type={props.type ?? 'button'} onClick={props.onClick} disabled={props.disabled || props.loading} className={className}>
+      {content}
     </button>
+  );
+}
+
+export function ConfirmationDialog(props: {
+  open: boolean;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!props.open) return null;
+  return (
+    <div className="os-confirmation-backdrop" role="presentation">
+      <section className="os-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="os-confirmation-title">
+        <div className="os-entity-title" id="os-confirmation-title">{props.title}</div>
+        <p className="os-entity-copy">{props.body}</p>
+        <div className="os-inline-actions">
+          <Button variant="ghost" onClick={props.onCancel} disabled={props.busy}>{props.cancelLabel ?? 'Cancel'}</Button>
+          <Button variant="danger" onClick={props.onConfirm} loading={props.busy}>{props.confirmLabel}</Button>
+        </div>
+      </section>
+    </div>
   );
 }
 

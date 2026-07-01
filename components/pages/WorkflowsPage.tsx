@@ -188,9 +188,9 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         )}
       >
         <PageHeader
-          eyebrow="Workflow builder"
+          eyebrow="Workflows"
           title={active?.name || 'Workflows'}
-          subtitle={active?.summary || 'Build, run, schedule, and publish workflows.'}
+          subtitle={active?.summary || 'Templates, my workflows, scheduled jobs, running jobs, failures, execution history, and public workflows.'}
           actions={active ? (
             <>
               <Button variant="secondary" onClick={() => void runWorkflow()}>{working ? 'Working...' : 'Test Run'}</Button>
@@ -199,7 +199,6 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
               <Button variant="ghost" onClick={sendToStudio}>AI Assist</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-spec')}>Spec</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime</Button>
-              <Button href={`/publishing/new${active ? `?workflowId=${active.id}` : ''}`}>Publish</Button>
             </>
           ) : undefined}
         />

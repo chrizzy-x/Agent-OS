@@ -316,6 +316,7 @@ async function installSkill(params: {
   permissionsApproved?: string[];
   installDependencies?: boolean;
   optionalDependencies?: string[];
+  dependencyPermissionsApproved?: Record<string, string[]>;
 }) {
   const target = params.skillId || params.slug || '';
   const tracked = await runTrackedExecution({
@@ -332,6 +333,7 @@ async function installSkill(params: {
       permissionsApproved: params.permissionsApproved ?? [],
       installDependencies: params.installDependencies !== false,
       optionalDependencies: params.optionalDependencies ?? [],
+      dependencyPermissionsApproved: params.dependencyPermissionsApproved ?? {},
     },
     run: async () => {
       const result = await installSkillWithDependencies({
@@ -342,6 +344,7 @@ async function installSkill(params: {
         permissionsApproved: params.permissionsApproved ?? [],
         installDependencies: params.installDependencies,
         optionalDependencies: params.optionalDependencies,
+        dependencyPermissionsApproved: params.dependencyPermissionsApproved,
       });
       if (params.sessionId) {
         await appendStudioEvent({
@@ -548,6 +551,7 @@ export async function executeAgentOSAction(ctx: AgentContext, input: AgentOSActi
       permissionsApproved: stringArray(payload.permissionsApproved),
       installDependencies: payload.installDependencies !== false,
       optionalDependencies: stringArray(payload.optionalDependencies),
+      dependencyPermissionsApproved: objectPayload(payload.dependencyPermissionsApproved) as Record<string, string[]>,
     });
   } else if (input.action === 'uninstall_skill') {
     output = await uninstallSkill({
@@ -631,9 +635,9 @@ export async function executeAgentOSAction(ctx: AgentContext, input: AgentOSActi
       },
     };
   } else if (input.action === 'publish_app') {
-    output = { result: { navigateTo: '/developer/publish' } };
+    output = { result: { navigateTo: '/publish/app' } };
   } else if (input.action === 'publish_skill') {
-    output = { result: { navigateTo: '/developer' } };
+    output = { result: { navigateTo: '/publish/skill' } };
   } else {
     const panicAction: PanicAction = input.action === 'panic_pause' ? 'pause' : input.action === 'panic_lockdown' ? 'lockdown' : 'stop_all';
     const tracked = await runTrackedExecution({

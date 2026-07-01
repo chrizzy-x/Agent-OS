@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
@@ -25,14 +25,6 @@ type MemoryEntry = {
   visibility: 'private' | 'workspace' | 'public';
   namespaceType: string;
   namespaceId: string | null;
-  updatedAt: string;
-};
-
-type FileEntry = {
-  id: string;
-  path: string;
-  visibility: 'private' | 'workspace' | 'public';
-  metadata: Record<string, unknown>;
   updatedAt: string;
 };
 
@@ -86,7 +78,6 @@ export default function MemoryPage() {
   const [query, setQuery] = useState('');
   const [viewerAgentId, setViewerAgentId] = useState<string | null>(null);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
-  const [fileEntries, setFileEntries] = useState<FileEntry[]>([]);
   const [incomingGrants, setIncomingGrants] = useState<PermissionGrant[]>([]);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -95,22 +86,14 @@ export default function MemoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [memoryRes, filesRes] = await Promise.all([
-        fetch(`/api/memory?limit=100${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-        fetch(`/api/files?limit=100${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-      ]);
-      const [memoryBody, filesBody] = await Promise.all([
-        memoryRes.ok ? memoryRes.json() : Promise.resolve({}),
-        filesRes.ok ? filesRes.json() : Promise.resolve({}),
-      ]);
+      const memoryRes = await fetch(`/api/memory?limit=100${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
+      const memoryBody = memoryRes.ok ? await memoryRes.json() : {};
       setViewerAgentId(typeof memoryBody.viewerAgentId === 'string' ? memoryBody.viewerAgentId : null);
       setMemoryEntries(memoryBody.entries ?? []);
-      setFileEntries(filesBody.entries ?? []);
       setIncomingGrants(memoryBody.incomingGrants ?? []);
     } catch {
       setViewerAgentId(null);
       setMemoryEntries([]);
-      setFileEntries([]);
       setIncomingGrants([]);
     } finally {
       setLoading(false);
@@ -128,14 +111,6 @@ export default function MemoryPage() {
       `${entry.key} ${entry.content} ${entry.namespaceType} ${entry.namespaceId ?? ''}`.toLowerCase().includes(search),
     );
   }, [memoryEntries, query]);
-
-  const filteredFiles = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    if (!search) return fileEntries;
-    return fileEntries.filter(entry =>
-      `${entry.path} ${String(entry.metadata.kind ?? 'file')}`.toLowerCase().includes(search),
-    );
-  }, [fileEntries, query]);
 
   const memoryGroups = useMemo(() => {
     const groups: Array<{ key: MemoryGroupKey; title: string; items: MemoryEntry[] }> = [
@@ -224,12 +199,22 @@ export default function MemoryPage() {
       <Nav activePath="/memory" />
       <WorkspaceShell activePath="/memory">
         <PageHeader
-          eyebrow="Governance"
-          title="Memory and files"
-          subtitle="Create, edit, audit, and remove governed memory records and review governed files from one surface."
+          eyebrow="Memory"
+          title="Second Brain"
+          subtitle="Timeline, collections, and knowledge graph for what AgentOS knows."
         />
 
         <div style={{ display: 'grid', gap: 16 }}>
+          <Card>
+            <div className="memory-graph-hero" aria-label="Knowledge graph visualization">
+              {memoryGroups.flatMap(group => group.items.slice(0, 4)).slice(0, 10).map((entry, index) => (
+                <span key={entry.id} style={{ '--x': `${12 + (index * 17) % 76}%`, '--y': `${18 + (index * 29) % 62}%` } as CSSProperties}>
+                  {entry.key.slice(0, 18)}
+                </span>
+              ))}
+            </div>
+          </Card>
+
           <Card>
             <div className="os-entity-head" style={{ marginBottom: 12 }}>
               <div className="os-entity-title">{editingId ? 'Edit memory' : 'Create memory'}</div>
@@ -265,10 +250,10 @@ export default function MemoryPage() {
             </div>
           </Card>
 
-          <SearchBar value={query} onChange={event => setQuery(event.target.value)} placeholder="Search memory and files" />
+          <SearchBar value={query} onChange={event => setQuery(event.target.value)} placeholder="Search memory timeline and collections" />
 
-          {loading ? <LoadingState label="Loading memory" /> : filteredMemory.length === 0 && filteredFiles.length === 0 ? (
-            <EmptyState title="Nothing stored yet" body="Create memory entries, artifacts, or governed files from Studio, workflows, or subagents." />
+          {loading ? <LoadingState label="Loading memory" /> : filteredMemory.length === 0 ? (
+            <EmptyState title="Nothing stored yet" body="Create memory entries from Studio, workflows, or subagents." />
           ) : (
             <div style={{ display: 'grid', gap: 16 }}>
               {memoryGroups.length === 0 ? (
@@ -326,23 +311,6 @@ export default function MemoryPage() {
                 )}
               </Card>
 
-              <Card>
-                <div className="os-entity-head" style={{ marginBottom: 12 }}>
-                  <div className="os-entity-title">Files and artifacts</div>
-                  <Badge tone="default">{filteredFiles.length}</Badge>
-                </div>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  {filteredFiles.map(entry => (
-                    <div key={entry.id} style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-                        <strong style={{ wordBreak: 'break-word' }}>{entry.path}</strong>
-                        <Badge tone={toneForVisibility(entry.visibility)}>{entry.visibility}</Badge>
-                      </div>
-                      <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{String(entry.metadata.kind ?? 'file')}</div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
             </div>
           )}
         </div>

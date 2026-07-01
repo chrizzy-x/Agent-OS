@@ -224,7 +224,7 @@ export default function SearchPage() {
               <div className="os-inline-actions">
                 <Button href="/studio">Open Studio</Button>
                 <Button href="/appstore" variant="secondary">Browse Apps</Button>
-                <Button href="/skills" variant="secondary">Browse Skills</Button>
+                <Button href="/skillstore" variant="secondary">Browse Skills</Button>
               </div>
             </div>
           </Card>

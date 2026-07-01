@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import DocsFooter from '@/components/DocsFooter';
 import {
   FEATURE_SHOWCASE_CATEGORIES,

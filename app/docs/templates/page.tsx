@@ -497,7 +497,7 @@ export default function TemplatesPage() {
           </p>
           <div className="flex justify-center gap-3 flex-wrap">
             <Link href="/docs/guide" className="btn-primary px-5 py-2.5 text-sm">Read the full guide</Link>
-            <Link href="/skills" className="btn-outline px-5 py-2.5 text-sm">Open Skill Store</Link>
+            <Link href="/skillstore" className="btn-outline px-5 py-2.5 text-sm">Open Skill Store</Link>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import SurfaceShell from '@/components/os/surface-shell';
 import type { PublicDeveloperProfile } from '@/src/developers/service';
+import { ListingMark } from '@/components/marketplace/MarketplacePrimitives';
 
 function formatCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -18,11 +19,18 @@ export default function DeveloperProfilePage({ developer }: { developer: PublicD
     >
       <div className="market-shell" data-surface="developer">
         <section className="market-detail-hero compact">
-          <div className="market-detail-logo"><span>{developer.name.slice(0, 2).toUpperCase()}</span></div>
+          <ListingMark name={developer.name} imageUrl={developer.logoUrl} className="market-detail-logo" />
           <div className="market-detail-copy">
             <span className="market-developer-link">@{developer.handle}</span>
             <h2>{developer.name}</h2>
             <p>{developer.bio ?? 'No developer bio published.'}</p>
+            <div className="market-hero-meta">
+              <span>{developer.verificationStatus}</span>
+              <span>{developer.averageRating > 0 ? developer.averageRating.toFixed(1) : 'New'} rating</span>
+              {Object.entries(developer.socials).map(([label, href]) => (
+                <a key={label} href={href} target="_blank" rel="noreferrer">{label}</a>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -32,6 +40,24 @@ export default function DeveloperProfilePage({ developer }: { developer: PublicD
           <div><span>Followers</span><strong>{formatCount(developer.followers)}</strong></div>
           <div><span>Total Downloads</span><strong>{formatCount(developer.totalDownloads)}</strong></div>
           <div><span>Active Users</span><strong>{formatCount(developer.totalActiveUsers)}</strong></div>
+          <div><span>Ratings</span><strong>{formatCount(developer.ratingsCount)}</strong></div>
+        </section>
+
+        <section className="market-section">
+          <div className="market-section-head"><h2>Recent Releases</h2></div>
+          {developer.recentReleases.length ? (
+            <div className="market-timeline">
+              {developer.recentReleases.map(release => (
+                <article key={`${release.type}-${release.href}`}>
+                  <strong>{release.name}</strong>
+                  <p>{release.type}</p>
+                  <Link href={release.href}>Open release</Link>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="market-empty compact"><p>No recent releases.</p></div>
+          )}
         </section>
 
         <section className="market-section">

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { recordMarketplaceInstallEvent } from '../marketplace/install-events.js';
+import { recordMarketplaceInstallEvent, recordMarketplacePermissionEvent } from '../marketplace/install-events.js';
 import { scoreSearchMatch } from '../search/scoring.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
@@ -7,15 +7,15 @@ import { PermissionError, ValidationError } from '../utils/errors.js';
 import { validateRequiredSecrets } from '../vault/service.js';
 
 export const SKILL_STORE_CATEGORIES = [
-  'AI',
-  'Automation',
   'Research',
   'Trading',
-  'Developer',
   'Browser',
+  'Automation',
+  'Developer',
+  'AI',
   'System',
-  'Data',
   'Communication',
+  'Data',
   'Productivity',
 ];
 
@@ -37,6 +37,23 @@ export type SkillMarketplaceRecord = {
   category: string;
   description: string;
   long_description?: string | null;
+  icon_url: string | null;
+  banner_url: string | null;
+  video_url: string | null;
+  website_url: string | null;
+  documentation_url: string | null;
+  support_url: string | null;
+  privacy_policy_url: string | null;
+  terms_url: string | null;
+  release_notes: string | null;
+  changelog: string[];
+  gallery: string[];
+  media_assets: Array<Record<string, unknown>>;
+  compatible_apps: string[];
+  compatible_agents: string[];
+  compatible_workflows: string[];
+  rejection_reason: string | null;
+  spotlight: boolean;
   total_installs: number;
   total_calls: number;
   rating: number;
@@ -58,6 +75,21 @@ export type SkillMarketplaceRecord = {
   visibility: 'private' | 'workspace' | 'public';
   created_at: string;
   updated_at: string;
+};
+
+export type SkillDiscoveryPayload = {
+  skills: SkillMarketplaceRecord[];
+  categories: string[];
+  installedSlugs: string[];
+  sections: Array<{ id: string; title: string; reason?: string; skills: SkillMarketplaceRecord[] }>;
+  hero: SkillMarketplaceRecord[];
+  developerSpotlight: Array<{
+    handle: string;
+    name: string;
+    skillsPublished: number;
+    totalInstalls: number;
+    rating: number;
+  }>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,6 +131,23 @@ export function mapSkillMarketplaceRecord(row: Record<string, unknown>): SkillMa
     category: String(row.category ?? 'Productivity'),
     description: String(row.description ?? ''),
     long_description: typeof row.long_description === 'string' ? row.long_description : null,
+    icon_url: typeof row.icon_url === 'string' ? row.icon_url : typeof row.icon === 'string' && row.icon.startsWith('http') ? row.icon : null,
+    banner_url: typeof row.banner_url === 'string' ? row.banner_url : null,
+    video_url: typeof row.video_url === 'string' ? row.video_url : null,
+    website_url: typeof row.website_url === 'string' ? row.website_url : null,
+    documentation_url: typeof row.documentation_url === 'string' ? row.documentation_url : null,
+    support_url: typeof row.support_url === 'string' ? row.support_url : null,
+    privacy_policy_url: typeof row.privacy_policy_url === 'string' ? row.privacy_policy_url : null,
+    terms_url: typeof row.terms_url === 'string' ? row.terms_url : null,
+    release_notes: typeof row.release_notes === 'string' ? row.release_notes : null,
+    changelog: stringArray(row.changelog),
+    gallery: stringArray(row.gallery),
+    media_assets: recordArray(row.media_assets),
+    compatible_apps: stringArray(row.compatible_apps),
+    compatible_agents: stringArray(row.compatible_agents),
+    compatible_workflows: stringArray(row.compatible_workflows),
+    rejection_reason: typeof row.rejection_reason === 'string' ? row.rejection_reason : null,
+    spotlight: row.spotlight === true,
     total_installs: Number(row.total_installs ?? 0),
     total_calls: Number(row.total_calls ?? 0),
     rating: Number(row.rating ?? 0),
@@ -142,11 +191,43 @@ async function loadSkills(): Promise<SkillMarketplaceRecord[]> {
     .map(skill => mapSkillMarketplaceRecord(skill as unknown as Record<string, unknown>));
 }
 
+function skillDeveloperSpotlight(skills: SkillMarketplaceRecord[]): SkillDiscoveryPayload['developerSpotlight'] {
+  const developers = new Map<string, { handle: string; name: string; skillsPublished: number; totalInstalls: number; ratingTotal: number; ratedSkills: number }>();
+  for (const skill of skills) {
+    const handle = skill.developer_handle;
+    const current = developers.get(handle) ?? {
+      handle,
+      name: skill.author_name,
+      skillsPublished: 0,
+      totalInstalls: 0,
+      ratingTotal: 0,
+      ratedSkills: 0,
+    };
+    current.skillsPublished += 1;
+    current.totalInstalls += skill.total_installs;
+    if (skill.rating > 0) {
+      current.ratingTotal += skill.rating;
+      current.ratedSkills += 1;
+    }
+    developers.set(handle, current);
+  }
+  return [...developers.values()]
+    .map(item => ({
+      handle: item.handle,
+      name: item.name,
+      skillsPublished: item.skillsPublished,
+      totalInstalls: item.totalInstalls,
+      rating: item.ratedSkills ? item.ratingTotal / item.ratedSkills : 0,
+    }))
+    .sort((left, right) => right.totalInstalls - left.totalInstalls || right.skillsPublished - left.skillsPublished)
+    .slice(0, 8);
+}
+
 export async function listSkillDiscovery(params: {
   query?: string | null;
   category?: string | null;
   installedSlugs?: string[];
-} = {}): Promise<{ skills: SkillMarketplaceRecord[]; categories: string[]; installedSlugs: string[]; sections: Array<{ id: string; title: string; skills: SkillMarketplaceRecord[] }> }> {
+} = {}): Promise<SkillDiscoveryPayload> {
   const query = params.query?.trim() ?? '';
   const category = params.category?.trim();
   const installed = new Set(params.installedSlugs ?? []);
@@ -169,6 +250,7 @@ export async function listSkillDiscovery(params: {
   });
   const popular = [...skills].sort((left, right) => right.total_installs - left.total_installs).slice(0, 12);
   const recent = [...skills].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 12);
+  const featured = skills.filter(skill => skill.spotlight || skill.verified || skill.rating >= 4).slice(0, 12);
   const categories = SKILL_STORE_CATEGORIES;
   const categorySections = categories.map(item => ({
     id: `category-${item.toLowerCase()}`,
@@ -180,11 +262,14 @@ export async function listSkillDiscovery(params: {
     categories,
     installedSlugs: [...installed],
     sections: [
-      { id: 'recommended', title: 'Recommended Capabilities', skills: skills.slice(0, 12) },
-      { id: 'popular', title: 'Popular', skills: popular },
-      { id: 'recent', title: 'New and Updated', skills: recent },
+      { id: 'featured', title: 'Featured Skills', skills: featured.length ? featured : skills.slice(0, 12) },
+      { id: 'recommended', title: 'Recommended Skills', reason: 'Capabilities that fit common Super AgentOS workflows', skills: skills.slice(0, 12) },
+      { id: 'popular', title: 'Popular Skills', skills: popular },
+      { id: 'recent', title: 'New Skills', skills: recent },
       ...categorySections,
     ],
+    hero: (featured.length ? featured : popular).slice(0, 5),
+    developerSpotlight: skillDeveloperSpotlight(skills),
   };
 }
 
@@ -300,6 +385,7 @@ export async function installSkillWithDependencies(params: {
   permissionsApproved?: string[];
   installDependencies?: boolean;
   optionalDependencies?: string[];
+  dependencyPermissionsApproved?: Record<string, string[]>;
 }): Promise<SkillInstallResult> {
   const target = params.skillId || params.slug;
   if (!target) throw new ValidationError('skill_id or slug is required');
@@ -331,11 +417,18 @@ export async function installSkillWithDependencies(params: {
       const dependency = await getSkillByIdOrSlug(dependencyRef);
       if (!dependency) throw new ValidationError(`Required skill not found: ${dependencyRef}`);
       if (installedIds.has(dependency.id)) continue;
+      const dependencyPermissions = params.dependencyPermissionsApproved?.[dependency.slug]
+        ?? params.dependencyPermissionsApproved?.[dependency.id]
+        ?? [];
+      const missingDependencyPermissions = dependency.permissions_required.filter(permission => !dependencyPermissions.includes(permission));
+      if (missingDependencyPermissions.length > 0) {
+        throw new PermissionError(`Dependency permission approval required for ${dependency.name}: ${missingDependencyPermissions.join(', ')}`);
+      }
       const dependencyInstallation = await upsertSkillInstallation({
         agentId: params.agentId,
         workspaceId: params.workspaceId,
         skill: dependency,
-        permissionsApproved: dependency.permissions_required,
+        permissionsApproved: dependencyPermissions,
         dependencyInstall: true,
       });
       installedIds.add(dependency.id);
@@ -349,7 +442,16 @@ export async function installSkillWithDependencies(params: {
         name: dependency.name,
         description: dependency.description,
         href: `/skills/${dependency.slug}`,
-        metadata: { dependencyInstall: true, installationId: dependencyInstallation.id ?? null },
+        metadata: { dependencyInstall: true, installationId: dependencyInstallation.id ?? null, version: dependency.version },
+      }).catch(() => undefined);
+      await recordMarketplacePermissionEvent({
+        ownerAgentId: params.agentId,
+        workspaceId: params.workspaceId ?? null,
+        assetType: 'skill',
+        assetId: dependency.id,
+        permissionsApproved: dependencyPermissions,
+        action: 'approve',
+        metadata: { slug: dependency.slug, dependencyInstall: true },
       }).catch(() => undefined);
     }
   } else {
@@ -395,6 +497,15 @@ export async function installSkillWithDependencies(params: {
       dependenciesInstalled,
     },
   }).catch(() => undefined);
+  await recordMarketplacePermissionEvent({
+    ownerAgentId: params.agentId,
+    workspaceId: params.workspaceId ?? null,
+    assetType: 'skill',
+    assetId: skill.id,
+    permissionsApproved,
+    action: 'approve',
+    metadata: { slug: skill.slug, version: skill.version },
+  }).catch(() => undefined);
 
   return {
     success: true,
@@ -425,7 +536,18 @@ export async function updateSkillInstallationPermissions(params: {
       .eq('skill_id', skill.id)
       .select()
       .single();
-    if (!error && data) return { skill, installation: data as Record<string, unknown> };
+    if (!error && data) {
+      await recordMarketplacePermissionEvent({
+        ownerAgentId: params.agentId,
+        workspaceId: typeof (data as Record<string, unknown>).workspace_id === 'string' ? String((data as Record<string, unknown>).workspace_id) : skill.workspace_id,
+        assetType: 'skill',
+        assetId: skill.id,
+        permissionsApproved: params.permissionsApproved ?? [],
+        action: params.status === 'disabled' || params.status === 'removed' || (params.permissionsApproved?.length ?? 0) === 0 ? 'revoke' : 'modify',
+        metadata: { slug: skill.slug, status: params.status ?? null },
+      }).catch(() => undefined);
+      return { skill, installation: data as Record<string, unknown> };
+    }
   } catch {
     // Local fallback below.
   }
@@ -438,5 +560,14 @@ export async function updateSkillInstallationPermissions(params: {
     entry.updated_at = now;
     return entry as unknown as Record<string, unknown>;
   });
+  await recordMarketplacePermissionEvent({
+    ownerAgentId: params.agentId,
+    workspaceId: typeof installation.workspace_id === 'string' ? String(installation.workspace_id) : skill.workspace_id,
+    assetType: 'skill',
+    assetId: skill.id,
+    permissionsApproved: params.permissionsApproved ?? [],
+    action: params.status === 'disabled' || params.status === 'removed' || (params.permissionsApproved?.length ?? 0) === 0 ? 'revoke' : 'modify',
+    metadata: { slug: skill.slug, status: params.status ?? null },
+  }).catch(() => undefined);
   return { skill, installation };
 }

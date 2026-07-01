@@ -64,7 +64,7 @@ export default function GuidePage() {
           <p className="mt-3">You&apos;ll get back:</p>
           <ul className="list-disc ml-6 mt-2 space-y-1" style={{ color: 'var(--text-secondary)' }}>
             <li><strong>Browser session</strong> — always, so Studio and your workspace open immediately.</li>
-            <li><strong>Bearer token</strong> — immediately on Pro, Enterprise, and Enterprise Max. Free upgrades later at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>.</li>
+            <li><strong>Bearer token</strong> — immediately on Pro, Enterprise, and Enterprise Max. Free upgrades later in <Link href="/settings?section=billing" style={{ color: 'var(--accent)' }}>Settings billing</Link>.</li>
             <li><strong>Super AgentOS</strong> — your default workspace owner for sessions, memory, installed skills, connected apps, private workflows, and private agents.</li>
           </ul>
           <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Agent IDs are private internal identifiers. Use your agent name in the UI and your bearer token for API calls.</p>
@@ -448,7 +448,7 @@ console.log('History:', history);`}</Code>
             <Link href="/marketplace" style={{ color: 'var(--accent)' }}>Marketplace</Link> is the discovery layer. It explains how the two stores fit together and how apps built inside or outside AgentOS become discoverable through SDK registration.
           </p>
           <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
-            The <Link href="/skills" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent or workflow. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps. Apps, skills, and workflows are workspace-owned assets inside the same routing layer; workflow monetization is not part of V6.6.2.
+            The <Link href="/skillstore" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent or workflow. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps. Apps, skills, and workflows are workspace-owned assets inside the same routing layer; workflow monetization is not part of V6.6.7.
           </p>
 
           <h3 className="text-base font-semibold mb-2">Install a skill:</h3>
@@ -515,7 +515,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
           </div>
 
           <Callout emoji="🔐">
-            The Studio uses your browser session — no API key needed in the browser. Need to call the API from code or another machine? Use a Pro or Enterprise plan, then generate a bearer token from <Link href="/studio" style={{ color: 'var(--accent)' }}>Studio</Link> or upgrade at <Link href="/billing" style={{ color: 'var(--accent)' }}>/billing</Link>. Super AgentOS keeps your instructions, sessions, and installed assets scoped to your workspace.
+            The Studio uses your browser session — no API key needed in the browser. Need to call the API from code or another machine? Use a Pro or Enterprise plan, then generate a bearer token from <Link href="/studio" style={{ color: 'var(--accent)' }}>Studio</Link> or upgrade in <Link href="/settings?section=billing" style={{ color: 'var(--accent)' }}>Settings billing</Link>. Super AgentOS keeps your instructions, sessions, and installed assets scoped to your workspace.
           </Callout>
         </Section>
 
@@ -578,7 +578,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
 });`}</Code>
 
           <Callout emoji="💰">
-            V6.6.2 supports SDK validation and discoverability for eligible apps and skills. Commercial workflow sales are not part of this release.
+            V6.6.7 supports SDK validation, auto discovery, and marketplace listings for eligible apps and skills. Commercial workflow sales are not part of this release.
           </Callout>
         </Section>
 
@@ -615,7 +615,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         {/* SECTION 9 */}
         <Section id="ffp" title="Step 8 — FFP temp">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            FFP is visible but disabled in AgentOS v6.6.4. Compatibility data remains available for future Fabric Furge Protocol support.
+            FFP is visible but disabled in AgentOS v6.6.7. Compatibility data remains available for future Fabric Furge Protocol support.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
             All activities route directly to the Unified Execution Engine. FFP cannot be activated and PATCH requests return Method Not Allowed.
@@ -638,7 +638,7 @@ console.log(v); // 'world'`}</Code>
           <div className="flex gap-3 mt-6 flex-wrap">
             <Link href="/signup" className="btn-primary text-sm">Create account →</Link>
             <Link href="/docs/primitives" className="btn-ghost text-sm">All 30 tools</Link>
-            <Link href="/skills" className="btn-ghost text-sm">Browse skills</Link>
+            <Link href="/skillstore" className="btn-ghost text-sm">Browse skills</Link>
             <Link href="/appstore" className="btn-ghost text-sm">Browse apps</Link>
           </div>
         </div>

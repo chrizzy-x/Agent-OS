@@ -59,7 +59,7 @@ function SuccessContent() {
             style={{ background: 'var(--bg-primary)', border: '1px solid var(--accent)', color: 'var(--accent)' }}>A</div>
           <span className="font-mono font-bold text-sm">Agent<span style={{ color: 'var(--accent)' }}>OS</span></span>
         </Link>
-        <Link href="/skills" className="text-sm" style={{ color: 'var(--text-muted)' }}>Skill Store</Link>
+        <Link href="/skillstore" className="text-sm" style={{ color: 'var(--text-muted)' }}>Skill Store</Link>
       </div>
 
       <div className="w-full max-w-md text-center">
@@ -95,7 +95,7 @@ function SuccessContent() {
               <Link href="/" className="btn-primary px-8 py-3 text-sm">
                 Dashboard
               </Link>
-              <Link href="/skills" className="btn-outline px-8 py-3 text-sm">
+              <Link href="/skillstore" className="btn-outline px-8 py-3 text-sm">
                 Skill Store
               </Link>
             </div>

@@ -103,6 +103,23 @@ export type LocalSkillRecord = {
   category: string;
   description: string;
   icon: string;
+  icon_url?: string | null;
+  banner_url?: string | null;
+  video_url?: string | null;
+  website_url?: string | null;
+  documentation_url?: string | null;
+  support_url?: string | null;
+  privacy_policy_url?: string | null;
+  terms_url?: string | null;
+  release_notes?: string | null;
+  changelog?: string[];
+  gallery?: string[];
+  media_assets?: Array<Record<string, unknown>>;
+  compatible_apps?: string[];
+  compatible_agents?: string[];
+  compatible_workflows?: string[];
+  rejection_reason?: string | null;
+  spotlight?: boolean;
   pricing_model: string;
   price_per_call: number;
   free_tier_calls: number;
@@ -273,7 +290,7 @@ export type LocalMarketplaceOwnershipRecord = {
   id: string;
   ownerAgentId: string;
   workspaceId: string | null;
-  assetType: 'app' | 'skill';
+  assetType: 'app' | 'skill' | 'workflow' | 'subagent';
   assetId: string;
   sourceSlug: string;
   status: 'owned' | 'revoked';
@@ -286,7 +303,7 @@ export type LocalWorkspaceAssetRegistryRecord = {
   id: string;
   ownerAgentId: string;
   workspaceId: string | null;
-  assetType: 'app' | 'skill' | 'workflow' | 'subagent' | 'vault_asset' | 'memory_asset' | 'mcp_connection';
+  assetType: 'app' | 'skill' | 'workflow' | 'subagent' | 'file' | 'vault_asset' | 'memory_asset' | 'mcp_connection';
   assetId: string;
   sourceId: string | null;
   name: string;
@@ -356,6 +373,37 @@ export type LocalSessionAuditLogRecord = {
   createdAt: string;
 };
 
+export type LocalDeveloperWebhookRecord = {
+  id: string;
+  ownerAgentId: string;
+  name: string;
+  callbackUrl: string;
+  secretMasked: string;
+  events: string[];
+  status: 'active' | 'disabled';
+  failureCount: number;
+  lastDeliveryAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LocalDeveloperWebhookLogRecord = {
+  id: string;
+  webhookId: string;
+  ownerAgentId: string;
+  status: 'success' | 'failure' | 'retrying';
+  event: string;
+  responseCode: number | null;
+  error: string | null;
+  createdAt: string;
+};
+
+export type LocalCapabilityNodeRecord = Record<string, unknown>;
+export type LocalTaskRecord = Record<string, unknown>;
+export type LocalTaskStepRecord = Record<string, unknown>;
+export type LocalConfirmationRecord = Record<string, unknown>;
+export type LocalSuperAgentAuditLogRecord = Record<string, unknown>;
+
 export type LocalRuntimeState = {
   accounts: Record<string, LocalAccountRecord>;
   externalAgents: Record<string, LocalExternalAgentRegistrationRecord>;
@@ -390,10 +438,17 @@ export type LocalRuntimeState = {
   trustedDevices: Record<string, LocalTrustedDeviceRecord[]>;
   authRefreshSessions: Record<string, LocalAuthRefreshSessionRecord[]>;
   sessionAuditLogs: Record<string, LocalSessionAuditLogRecord[]>;
+  developerWebhooks: Record<string, LocalDeveloperWebhookRecord[]>;
+  developerWebhookLogs: Record<string, LocalDeveloperWebhookLogRecord[]>;
   vaultRuntimeGrants: LocalVaultRuntimeGrantRecord[];
   libraryItems: LocalLibraryItemRecord[];
   marketplaceOwnership: LocalMarketplaceOwnershipRecord[];
   workspaceAssetRegistry: LocalWorkspaceAssetRegistryRecord[];
+  capabilityRegistry: LocalCapabilityNodeRecord[];
+  agentTasks: LocalTaskRecord[];
+  agentTaskSteps: LocalTaskStepRecord[];
+  agentConfirmations: LocalConfirmationRecord[];
+  superAgentAuditLogs: LocalSuperAgentAuditLogRecord[];
 };
 
 const DEFAULT_STATE_FILE = join(tmpdir(), 'agentos-runtime-state.json');
@@ -446,10 +501,17 @@ function createDefaultState(): LocalRuntimeState {
     trustedDevices: {},
     authRefreshSessions: {},
     sessionAuditLogs: {},
+    developerWebhooks: {},
+    developerWebhookLogs: {},
     vaultRuntimeGrants: [],
     libraryItems: [],
     marketplaceOwnership: [],
     workspaceAssetRegistry: [],
+    capabilityRegistry: [],
+    agentTasks: [],
+    agentTaskSteps: [],
+    agentConfirmations: [],
+    superAgentAuditLogs: [],
   };
 }
 
@@ -495,10 +557,17 @@ function normalizeState(value: unknown): LocalRuntimeState {
     trustedDevices: state.trustedDevices ?? defaults.trustedDevices,
     authRefreshSessions: state.authRefreshSessions ?? defaults.authRefreshSessions,
     sessionAuditLogs: state.sessionAuditLogs ?? defaults.sessionAuditLogs,
+    developerWebhooks: state.developerWebhooks ?? defaults.developerWebhooks,
+    developerWebhookLogs: state.developerWebhookLogs ?? defaults.developerWebhookLogs,
     vaultRuntimeGrants: state.vaultRuntimeGrants ?? defaults.vaultRuntimeGrants,
     libraryItems: state.libraryItems ?? defaults.libraryItems,
     marketplaceOwnership: state.marketplaceOwnership ?? defaults.marketplaceOwnership,
     workspaceAssetRegistry: state.workspaceAssetRegistry ?? defaults.workspaceAssetRegistry,
+    capabilityRegistry: state.capabilityRegistry ?? defaults.capabilityRegistry,
+    agentTasks: state.agentTasks ?? defaults.agentTasks,
+    agentTaskSteps: state.agentTaskSteps ?? defaults.agentTaskSteps,
+    agentConfirmations: state.agentConfirmations ?? defaults.agentConfirmations,
+    superAgentAuditLogs: state.superAgentAuditLogs ?? defaults.superAgentAuditLogs,
   };
 }
 

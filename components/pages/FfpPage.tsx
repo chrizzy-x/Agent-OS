@@ -2,7 +2,16 @@
 
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
-import { Badge, Card, PageHeader } from '@/components/os/ui';
+import { Badge, Card, EmptyState, PageHeader } from '@/components/os/ui';
+
+const sections = [
+  ['Roadmap', 'Milestones for protocol activation, validator review, governance, and runtime integration.'],
+  ['Documentation', 'Concept references for Fabric Furge Protocol compatibility records.'],
+  ['Architecture', 'Planned routing between AgentOS execution, validators, and consensus history.'],
+  ['Preview', 'Non-interactive preview only. No proposal execution or voting is available.'],
+  ['Waitlist', 'Access requests are not open from this build.'],
+  ['Future Vision', 'A future protocol layer for governed multi-agent coordination.'],
+];
 
 export default function FfpPage() {
   return (
@@ -23,6 +32,15 @@ export default function FfpPage() {
             </div>
           </div>
         </Card>
+        <div className="resources-main">
+          {sections.map(([title, body]) => (
+            <section key={title} className="resources-section">
+              <h2>{title}</h2>
+              <p>{body}</p>
+              <EmptyState title="Coming soon" body="This FFP capability is documented as future work and is disabled in v6.6.7." />
+            </section>
+          ))}
+        </div>
       </WorkspaceShell>
     </div>
   );

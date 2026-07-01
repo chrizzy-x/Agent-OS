@@ -9,9 +9,9 @@ import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
+  Badge,
   Button,
   Card,
-  DataTable,
   EmptyState,
   FilterChips,
   LoadingState,
@@ -115,6 +115,11 @@ export default function ProjectsPage() {
     await Promise.all([load(), shell.refreshShell()]);
   }
 
+  function metadataCount(item: ProjectItem, key: string): string {
+    const value = item.metadata?.[key];
+    return typeof value === 'number' ? value.toLocaleString() : 'Not recorded';
+  }
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/projects" />
@@ -150,8 +155,8 @@ export default function ProjectsPage() {
       >
         <PageHeader
           eyebrow="Projects"
-          title="Projects"
-          subtitle="Projects list, search, recent work, pinned context, and creation."
+          title="Mission Control"
+          subtitle="Project status, assets, recent activity, assigned agents, workflows, and files."
           actions={<Button onClick={() => setCreating(value => !value)}>Create Project</Button>}
         />
 
@@ -189,24 +194,34 @@ export default function ProjectsPage() {
         ) : items.length === 0 ? (
           <EmptyState title="No projects found" body="Create or pin a project to populate this list." action={<Button href="/studio?mode=nl&prompt=Create%20a%20project">Create Project</Button>} />
         ) : (
-          <DataTable
-            columns={['Project', 'Kind', 'Status', 'Runs', 'Users', 'Updated', '']}
-            rows={items.map(item => [
-              <div key={`${item.id}-project`}>
-                <div className="os-entity-title">{item.name}</div>
-                <div className="os-entity-copy">{item.description}</div>
-              </div>,
-              item.kind,
-              item.status,
-              String(item.runs),
-              String(item.users),
-              new Date(item.updatedAt).toLocaleDateString(),
-              <div key={`${item.id}-actions`} className="os-inline-actions">
-                <button type="button" className="btn-ghost" onClick={() => void togglePin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
-                <Link href={item.href} className="btn-ghost">Open</Link>
-              </div>,
-            ])}
-          />
+          <div className="project-mission-grid">
+            {items.map(item => (
+              <Card key={item.id} className="project-mission-card">
+                <div className="os-entity-head">
+                  <div>
+                    <div className="os-entity-title">{item.name}</div>
+                    <div className="os-entity-copy">{item.description}</div>
+                  </div>
+                  <div className="os-entity-badges">
+                    <Badge>{item.kind}</Badge>
+                    <Badge tone={item.status === 'active' ? 'success' : 'warning'}>{item.status}</Badge>
+                  </div>
+                </div>
+                <dl className="project-mission-facts">
+                  <div><dt>Status</dt><dd>{item.status}</dd></div>
+                  <div><dt>Assets</dt><dd>{metadataCount(item, 'assetCount')}</dd></div>
+                  <div><dt>Recent Activity</dt><dd>{new Date(item.updatedAt).toLocaleDateString()}</dd></div>
+                  <div><dt>Assigned Agents</dt><dd>{metadataCount(item, 'assignedAgentsCount')}</dd></div>
+                  <div><dt>Workflows</dt><dd>{item.runs.toLocaleString()}</dd></div>
+                  <div><dt>Files</dt><dd>{metadataCount(item, 'fileCount')}</dd></div>
+                </dl>
+                <div className="os-inline-actions">
+                  <button type="button" className="btn-ghost" onClick={() => void togglePin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
+                  <Link href={item.href} className="btn-ghost">Open</Link>
+                </div>
+              </Card>
+            ))}
+          </div>
         )}
       </WorkspaceShell>
     </div>

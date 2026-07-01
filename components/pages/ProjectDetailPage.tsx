@@ -21,7 +21,9 @@ type ProjectPayload = {
   summary: Record<string, number>;
 };
 
-const TAB_KEYS = ['overview', 'chats', 'files', 'apps', 'skills', 'workflows', 'subagents', 'memory', 'secrets', 'mcp', 'logs'];
+type ProjectTab = 'overview' | 'assets' | 'activity' | 'files' | 'settings';
+
+const TAB_KEYS: ProjectTab[] = ['overview', 'assets', 'activity', 'files', 'settings'];
 
 function title(value: string): string {
   return value.replace(/^\w/, char => char.toUpperCase());
@@ -36,26 +38,28 @@ function descriptionFor(item: Record<string, unknown>): string {
 }
 
 function hrefFor(tab: string, item: Record<string, unknown>): string {
-  if (tab === 'chats') return `/studio?session=${encodeURIComponent(String(item.id))}`;
-  if (tab === 'files') return `/files`;
-  if (tab === 'apps') return `/apps`;
-  if (tab === 'skills') {
+  const sourceTab = String(item.__tab ?? tab);
+  if (sourceTab === 'apps') return `/library?view=apps`;
+  if (sourceTab === 'skills') {
     const skill = item.skill && typeof item.skill === 'object' ? item.skill as Record<string, unknown> : item;
     return `/skills/${String(skill.slug ?? skill.id ?? '')}`;
   }
-  if (tab === 'workflows') return `/workflows/${String(item.id)}`;
-  if (tab === 'subagents') return `/agents/${String(item.id)}`;
-  if (tab === 'memory') return '/memory';
-  if (tab === 'secrets') return '/vault';
-  if (tab === 'mcp') return '/mcp';
-  if (tab === 'logs') return '/search';
+  if (sourceTab === 'workflows') return `/workflows/${String(item.id)}`;
+  if (sourceTab === 'subagents') return `/agents/${String(item.id)}`;
+  if (sourceTab === 'memory') return '/memory';
+  if (sourceTab === 'secrets') return '/vault';
+  if (sourceTab === 'mcp') return '/mcp';
+  if (tab === 'chats') return `/studio?session=${encodeURIComponent(String(item.id))}`;
+  if (tab === 'files') return `/files`;
+  if (sourceTab === 'chats') return `/studio?session=${encodeURIComponent(String(item.id))}`;
+  if (sourceTab === 'logs') return '/search';
   return '/projects';
 }
 
 export default function ProjectDetailPage({ projectId }: { projectId: string }) {
   const [payload, setPayload] = useState<ProjectPayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState<ProjectTab>('overview');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,10 +78,23 @@ export default function ProjectDetailPage({ projectId }: { projectId: string }) 
     void load();
   }, [load]);
 
-  const rows = useMemo(() => {
-    const value = payload?.tabs?.[tab];
+  const rows = useMemo<Array<Record<string, unknown>>>(() => {
+    if (!payload) return [];
+    if (tab === 'assets') {
+      return ['apps', 'skills', 'workflows', 'subagents', 'memory', 'secrets', 'mcp'].flatMap(key => {
+        const value = payload.tabs[key];
+        return Array.isArray(value) ? value.map(item => ({ ...(item as Record<string, unknown>), __tab: key })) : [];
+      });
+    }
+    if (tab === 'activity') {
+      return ['chats', 'workflows'].flatMap(key => {
+        const value = payload.tabs[key];
+        return Array.isArray(value) ? value.map(item => ({ ...(item as Record<string, unknown>), __tab: key })) : [];
+      });
+    }
+    const value = payload.tabs[tab];
     return Array.isArray(value) ? value : [];
-  }, [payload?.tabs, tab]);
+  }, [payload, tab]);
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -90,7 +107,7 @@ export default function ProjectDetailPage({ projectId }: { projectId: string }) 
             <PageHeader
               eyebrow="Project"
               title={payload.project.name}
-              subtitle={payload.project.description ?? 'Project-owned chats, files, apps, skills, workflows, subagents, memory, secrets, and MCP.'}
+              subtitle={payload.project.description ?? 'Project overview, assets, activity, files, and settings.'}
               actions={(
                 <>
                   <Button href={`/studio?project=${encodeURIComponent(payload.project.id)}`} variant="secondary">Open in Studio</Button>
@@ -99,14 +116,20 @@ export default function ProjectDetailPage({ projectId }: { projectId: string }) 
               )}
             />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
-              {TAB_KEYS.filter(key => key !== 'overview').map(key => (
+              {['assets', 'activity', 'files'].map(key => (
                 <Card key={key} style={{ padding: 12 }}>
                   <div className="os-entity-meta">{title(key)}</div>
-                  <div className="os-metric-value">{payload.summary[key] ?? 0}</div>
+                  <div className="os-metric-value">{
+                    key === 'assets'
+                      ? ['apps', 'skills', 'workflows', 'subagents', 'memory', 'secrets', 'mcp'].reduce((sum, name) => sum + (payload.summary[name] ?? 0), 0)
+                      : key === 'activity'
+                        ? (payload.summary.chats ?? 0) + (payload.summary.workflows ?? 0)
+                        : payload.summary.files ?? 0
+                  }</div>
                 </Card>
               ))}
             </div>
-            <Tabs tabs={TAB_KEYS.map(key => ({ key, label: title(key) }))} active={tab} onChange={setTab} />
+            <Tabs tabs={TAB_KEYS.map(key => ({ key, label: title(key) }))} active={tab} onChange={key => setTab(key as ProjectTab)} />
             {tab === 'overview' ? (
               <Card>
                 <div className="os-entity-head">
@@ -115,6 +138,15 @@ export default function ProjectDetailPage({ projectId }: { projectId: string }) 
                     <div className="os-entity-copy">{String((payload.tabs.overview as Record<string, unknown>)?.summary ?? 'No activity summary yet.')}</div>
                   </div>
                   <Badge tone={payload.project.status === 'active' ? 'success' : 'warning'}>{payload.project.status}</Badge>
+                </div>
+              </Card>
+            ) : tab === 'settings' ? (
+              <Card>
+                <div className="os-drawer-stack">
+                  <div className="os-entity-copy">Project ID: {payload.project.id}</div>
+                  <div className="os-entity-copy">Workspace ID: {payload.project.workspaceId}</div>
+                  <div className="os-entity-copy">Status: {payload.project.status}</div>
+                  <div className="os-entity-copy">Updated: {new Date(payload.project.updatedAt).toLocaleString()}</div>
                 </div>
               </Card>
             ) : rows.length === 0 ? (

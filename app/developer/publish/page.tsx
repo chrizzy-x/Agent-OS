@@ -1,6 +1,6 @@
-import PublishWizardPage from '@/components/pages/PublishWizardPage';
+import { redirect } from 'next/navigation';
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ slug?: string }> }) {
   const params = await searchParams;
-  return <PublishWizardPage initialSlug={params.slug ?? null} />;
+  redirect(`/publish/app${params.slug ? `?slug=${encodeURIComponent(params.slug)}` : ''}`);
 }

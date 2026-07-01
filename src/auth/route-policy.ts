@@ -20,6 +20,7 @@ export const ROUTE_CAPABILITY_POLICY = {
   'session.token.issue': 'use_bearer_token',
   'developer.console': 'access_developer_console',
   'developer.analytics': 'use_advanced_analytics',
+  'developer.webhooks': 'manage_webhook',
   'sdk.credentials': 'access_sdk',
   'sdk.kernel': 'access_sdk',
   'vault.manage': 'use_nl_studio',

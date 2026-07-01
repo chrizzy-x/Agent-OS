@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
-import { Badge, Button, Card, DataTable, EmptyState, LoadingState, PageHeader, SearchBar } from '@/components/os/ui';
+import { Badge, Button, Card, ConfirmationDialog, DataTable, EmptyState, LoadingState, PageHeader, SearchBar } from '@/components/os/ui';
 
 type InstalledApp = {
   id: string;
@@ -31,6 +30,9 @@ export default function AppsPage() {
   const [loading, setLoading] = useState(true);
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [search, setSearch] = useState('');
+  const [working, setWorking] = useState('');
+  const [message, setMessage] = useState('');
+  const [pendingRemove, setPendingRemove] = useState<InstalledApp | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,6 +62,49 @@ export default function AppsPage() {
   const active = apps.filter(app => app.installation?.status === 'active').length;
   const pinned = apps.filter(app => app.installation?.favorite === true).length;
 
+  async function runAppAction(app: InstalledApp, action: 'open' | 'pin' | 'update' | 'remove') {
+    setWorking(`${action}:${app.slug}`);
+    setMessage('');
+    try {
+      const { response } = action === 'open'
+        ? await fetchWithBrowserSession(`/api/apps/${app.slug}/open`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: 'web' }),
+        })
+        : action === 'pin'
+          ? await fetchWithBrowserSession(`/api/apps/${app.slug}/installation`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ favorite: !app.installation?.favorite }),
+          })
+          : action === 'update'
+            ? await fetchWithBrowserSession('/api/apps/install', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slug: app.slug, workspaceId: shell.activeWorkspaceId, permissionsApproved: [] }),
+            })
+            : await fetchWithBrowserSession(`/api/apps/${app.slug}/installation`, { method: 'DELETE' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setMessage(payload.error ?? payload.message ?? `${action} failed.`);
+        return;
+      }
+      if (action === 'open' && typeof payload.openUrl === 'string') window.open(payload.openUrl, '_blank', 'noopener,noreferrer');
+      setMessage(action === 'open'
+        ? `${app.name} opened.`
+        : action === 'pin'
+          ? `${app.name} ${app.installation?.favorite ? 'unpinned' : 'pinned'}.`
+          : action === 'update'
+            ? `${app.name} updated.`
+            : `${app.name} removed.`);
+      setPendingRemove(null);
+      await load();
+    } finally {
+      setWorking('');
+    }
+  }
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/apps" />
@@ -84,6 +129,7 @@ export default function AppsPage() {
           actions={<Button href="/appstore">Install App</Button>}
         />
         <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search installed apps" />
+        {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
 
         {loading ? <LoadingState label="Loading apps" /> : authState === 'signed_out' || authState === 'expired' ? (
           <EmptyState title={authState === 'expired' ? 'Session expired' : 'Sign in required'} body="Sign in to manage installed apps." action={<Button href="/signin">{authState === 'expired' ? 'Sign in again' : 'Sign in'}</Button>} />
@@ -101,16 +147,25 @@ export default function AppsPage() {
               app.installation?.favorite ? <Badge key={`${app.id}-status`} tone="accent">Pinned</Badge> : <Badge key={`${app.id}-status`} tone={app.installation?.status === 'disabled' ? 'warning' : 'success'}>{app.installation?.status ?? 'active'}</Badge>,
               String(app.installation?.openCount ?? 0),
               <div key={`${app.id}-actions`} className="os-inline-actions">
-                <Link href={`/appstore/${app.slug}`} className="btn-ghost">Open</Link>
-                <Link href={`/appstore/${app.slug}`} className="btn-ghost">Update</Link>
-                <Link href={`/appstore/${app.slug}`} className="btn-ghost">Pin</Link>
-                <Link href={`/appstore/${app.slug}`} className="btn-ghost">Configure</Link>
-                <Link href={`/appstore/${app.slug}`} className="btn-ghost">Remove</Link>
+                <Button variant="secondary" onClick={() => void runAppAction(app, 'open')} loading={working === `open:${app.slug}`}>Open</Button>
+                <Button variant="secondary" onClick={() => void runAppAction(app, 'update')} disabled={!app.installation?.updateAvailable} loading={working === `update:${app.slug}`}>Update</Button>
+                <Button variant="secondary" onClick={() => void runAppAction(app, 'pin')} loading={working === `pin:${app.slug}`}>{app.installation?.favorite ? 'Unpin' : 'Pin'}</Button>
+                <Button href={`/appstore/${app.slug}`} variant="secondary">Manage</Button>
+                <Button variant="danger" onClick={() => setPendingRemove(app)}>Remove</Button>
               </div>,
             ])}
           />
         )}
       </WorkspaceShell>
+      <ConfirmationDialog
+        open={Boolean(pendingRemove)}
+        title="Remove app"
+        body={`Remove ${pendingRemove?.name ?? 'this app'} from this workspace? Ownership stays in Library history.`}
+        confirmLabel="Remove"
+        busy={Boolean(pendingRemove && working === `remove:${pendingRemove.slug}`)}
+        onCancel={() => setPendingRemove(null)}
+        onConfirm={() => pendingRemove ? void runAppAction(pendingRemove, 'remove') : undefined}
+      />
     </div>
   );
 }

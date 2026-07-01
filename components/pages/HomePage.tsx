@@ -36,7 +36,7 @@ const QUICK_ACTIONS = [
   { label: 'Code Studio', href: '/studio?mode=code' },
   { label: 'Create project', href: '/projects' },
   { label: 'Install app', href: '/appstore' },
-  { label: 'Install skill', href: '/skills' },
+  { label: 'Install skill', href: '/skillstore' },
   { label: 'Library', href: '/library' },
 ];
 
@@ -106,7 +106,7 @@ function PublicLanding() {
   return (
     <SurfaceShell activePath="/">
       <section style={{ display: 'grid', gap: 28, padding: '52px 0 72px' }}>
-        <Badge tone="accent">AgentOS V6.6.2</Badge>
+        <Badge tone="accent">AgentOS V6.6.7</Badge>
         <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
           <h1 style={{ margin: 0, fontSize: 'clamp(42px, 7vw, 76px)', lineHeight: 0.95, letterSpacing: '-0.05em' }}>
             Your AI operating system.
@@ -382,7 +382,7 @@ export default function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
             {[
               { label: 'Apps', value: payload.summary.connectedApps, href: '/apps' },
-              { label: 'Skills', value: payload.summary.installedSkills, href: '/skills/installed' },
+              { label: 'Skills', value: payload.summary.installedSkills, href: '/skills' },
               { label: 'Workflows', value: payload.summary.privateWorkflows, href: '/workflows' },
               { label: 'Memory', value: payload.summary.memoryEntries, href: '/memory' },
               { label: 'Files', value: payload.summary.files, href: '/files' },

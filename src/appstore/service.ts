@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { getPlanDescriptor } from '../auth/capabilities.js';
 import { isValidPlan, normalizePersistedPlan, normalizePlan } from '../auth/tiers.js';
-import { recordMarketplaceInstallEvent } from '../marketplace/install-events.js';
+import { recordMarketplaceInstallEvent, recordMarketplacePermissionEvent } from '../marketplace/install-events.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { AppUnavailableError, PermissionError, ValidationError } from '../utils/errors.js';
 import { validateRequiredSecrets } from '../vault/service.js';
@@ -48,6 +48,20 @@ export type PublishAgentAppInput = {
   description?: string;
   longDescription?: string;
   logoUrl?: string | null;
+  bannerUrl?: string | null;
+  videoUrl?: string | null;
+  websiteUrl?: string | null;
+  documentationUrl?: string | null;
+  supportUrl?: string | null;
+  privacyPolicyUrl?: string | null;
+  termsUrl?: string | null;
+  pricing?: unknown;
+  releaseNotes?: string | null;
+  changelog?: unknown;
+  gallery?: unknown;
+  mediaAssets?: unknown;
+  rejectionReason?: string | null;
+  spotlight?: unknown;
   developerHandle?: string | null;
   publisherId: string;
   publisherName?: string;
@@ -130,6 +144,20 @@ type DbAgentAppRow = {
   description?: unknown;
   long_description?: unknown;
   logo_url?: unknown;
+  banner_url?: unknown;
+  video_url?: unknown;
+  website_url?: unknown;
+  documentation_url?: unknown;
+  support_url?: unknown;
+  privacy_policy_url?: unknown;
+  terms_url?: unknown;
+  pricing?: unknown;
+  release_notes?: unknown;
+  changelog?: unknown;
+  gallery?: unknown;
+  media_assets?: unknown;
+  rejection_reason?: unknown;
+  spotlight?: unknown;
   publisher_id?: unknown;
   publisher_name?: unknown;
   developer_handle?: unknown;
@@ -220,7 +248,7 @@ type SaveAgentAppInput = PublishAgentAppInput & {
   slugFallback?: string;
 };
 
-const APP_SELECT = 'id,workspace_id,name,slug,category,description,long_description,logo_url,publisher_id,publisher_name,developer_handle,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,keywords,tags,features,platforms,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,last_command_at,last_error,health_status,endpoint_status,disabled,heartbeat_count,open_count,web_open_count,android_download_count,ios_download_count,install_count,download_count,active_user_count,rating,review_count,verified,published,created_at,updated_at';
+const APP_SELECT = 'id,workspace_id,name,slug,category,description,long_description,logo_url,banner_url,video_url,website_url,documentation_url,support_url,privacy_policy_url,terms_url,pricing,release_notes,changelog,gallery,media_assets,rejection_reason,spotlight,publisher_id,publisher_name,developer_handle,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,keywords,tags,features,platforms,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,last_command_at,last_error,health_status,endpoint_status,disabled,heartbeat_count,open_count,web_open_count,android_download_count,ios_download_count,install_count,download_count,active_user_count,rating,review_count,verified,published,created_at,updated_at';
 const APP_SELECT_LEGACY = 'id,workspace_id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,permissions_required,required_secrets,screenshots,publish_state,source,visibility,runtime_type,kernel_product,kernel_command_topic,kernel_status_topic,last_heartbeat_at,install_count,verified,published,created_at,updated_at';
 const APP_SELECT_PRE_019 = 'id,name,slug,category,description,long_description,publisher_id,publisher_name,app_url,repository_url,device_targets,manifest,default_config,publish_state,permissions_required,required_secrets,install_count,verified,published,created_at,updated_at';
 const APP_INSTALLATION_SELECT = 'id,app_id,agent_id,workspace_id,status,favorite,permissions_approved,open_count,last_opened_at,installed_at,updated_at,installed_version';
@@ -250,6 +278,11 @@ function stringArray(value: unknown, fallback: string[] = []): string[] {
   if (!Array.isArray(value)) return [...fallback];
   const items = value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
   return items.length > 0 ? items.map(item => item.trim()) : [...fallback];
+}
+
+function recordArray(value: unknown, fallback: Array<Record<string, unknown>> = []): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [...fallback];
+  return value.filter(isRecord);
 }
 
 function titleCaseSlug(value: string): string {
@@ -411,6 +444,20 @@ function normalizeLocalApp(row: Partial<AgentAppListing>): AgentAppListing {
     description: String(row.description ?? ''),
     longDescription: String(row.longDescription ?? row.description ?? ''),
     logoUrl: row.logoUrl ?? null,
+    bannerUrl: row.bannerUrl ?? null,
+    videoUrl: row.videoUrl ?? null,
+    websiteUrl: row.websiteUrl ?? null,
+    documentationUrl: row.documentationUrl ?? null,
+    supportUrl: row.supportUrl ?? null,
+    privacyPolicyUrl: row.privacyPolicyUrl ?? null,
+    termsUrl: row.termsUrl ?? null,
+    releaseNotes: row.releaseNotes ?? null,
+    changelog: Array.isArray(row.changelog) ? row.changelog : [],
+    pricing: normalizeDefaultConfig(row.pricing),
+    gallery: Array.isArray(row.gallery) ? row.gallery : [],
+    mediaAssets: recordArray(row.mediaAssets),
+    rejectionReason: row.rejectionReason ?? null,
+    spotlight: row.spotlight === true,
     publisherId: String(row.publisherId ?? ''),
     publisherName: String(row.publisherName ?? row.publisherId ?? 'Unknown'),
     developerHandle: row.developerHandle ?? publicHandle(String(row.publisherName ?? row.publisherId ?? slug)),
@@ -483,6 +530,20 @@ function fromDbRow(row: DbAgentAppRow): AgentAppListing {
     description,
     longDescription: stringValue(row.long_description, description),
     logoUrl: nullableString(row.logo_url),
+    bannerUrl: nullableString(row.banner_url),
+    videoUrl: nullableString(row.video_url),
+    websiteUrl: nullableString(row.website_url),
+    documentationUrl: nullableString(row.documentation_url),
+    supportUrl: nullableString(row.support_url),
+    privacyPolicyUrl: nullableString(row.privacy_policy_url),
+    termsUrl: nullableString(row.terms_url),
+    releaseNotes: nullableString(row.release_notes),
+    changelog: stringArray(row.changelog, []),
+    pricing: normalizeDefaultConfig(row.pricing),
+    gallery: stringArray(row.gallery, []),
+    mediaAssets: recordArray(row.media_assets),
+    rejectionReason: nullableString(row.rejection_reason),
+    spotlight: row.spotlight === true,
     publisherId: stringValue(row.publisher_id),
     publisherName: stringValue(row.publisher_name, stringValue(row.publisher_id, 'Unknown')),
     developerHandle: nullableString(row.developer_handle) ?? publicHandle(stringValue(row.publisher_name, stringValue(row.publisher_id, slug))),
@@ -539,6 +600,20 @@ function toDbPayload(app: AgentAppListing, publishState = 'draft'): Record<strin
     description: app.description,
     long_description: app.longDescription,
     logo_url: app.logoUrl,
+    banner_url: app.bannerUrl,
+    video_url: app.videoUrl,
+    website_url: app.websiteUrl,
+    documentation_url: app.documentationUrl,
+    support_url: app.supportUrl,
+    privacy_policy_url: app.privacyPolicyUrl,
+    terms_url: app.termsUrl,
+    pricing: app.pricing,
+    release_notes: app.releaseNotes,
+    changelog: app.changelog,
+    gallery: app.gallery,
+    media_assets: app.mediaAssets,
+    rejection_reason: app.rejectionReason,
+    spotlight: app.spotlight,
     publisher_id: app.publisherId,
     publisher_name: app.publisherName,
     developer_handle: app.developerHandle,
@@ -945,6 +1020,20 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
     description,
     longDescription: input.longDescription?.trim() || existing?.longDescription || description,
     logoUrl: nullableString(input.logoUrl) ?? existing?.logoUrl ?? null,
+    bannerUrl: nullableString(input.bannerUrl) ?? existing?.bannerUrl ?? null,
+    videoUrl: nullableString(input.videoUrl) ?? existing?.videoUrl ?? null,
+    websiteUrl: nullableString(input.websiteUrl) ?? existing?.websiteUrl ?? null,
+    documentationUrl: nullableString(input.documentationUrl) ?? existing?.documentationUrl ?? null,
+    supportUrl: nullableString(input.supportUrl) ?? existing?.supportUrl ?? null,
+    privacyPolicyUrl: nullableString(input.privacyPolicyUrl) ?? existing?.privacyPolicyUrl ?? null,
+    termsUrl: nullableString(input.termsUrl) ?? existing?.termsUrl ?? null,
+    releaseNotes: nullableString(input.releaseNotes) ?? existing?.releaseNotes ?? null,
+    changelog: stringArray(input.changelog, existing?.changelog ?? []),
+    pricing: normalizeDefaultConfig(input.pricing ?? existing?.pricing),
+    gallery: stringArray(input.gallery, existing?.gallery ?? []),
+    mediaAssets: recordArray(input.mediaAssets, existing?.mediaAssets ?? []),
+    rejectionReason: nullableString(input.rejectionReason) ?? existing?.rejectionReason ?? null,
+    spotlight: typeof input.spotlight === 'boolean' ? input.spotlight : existing?.spotlight ?? false,
     publisherId,
     publisherName: input.publisherName?.trim() || existing?.publisherName || publisherId,
     developerHandle: nullableString(input.developerHandle) ?? existing?.developerHandle ?? publicHandle(input.publisherName?.trim() || publisherId),
@@ -994,7 +1083,7 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
     versionHistory: existing?.versionHistory ?? [],
   };
 
-  const publishState = input.publishState && ['draft', 'submitted', 'published', 'rejected'].includes(input.publishState)
+  const publishState = input.publishState && ['draft', 'submitted', 'reviewing', 'approved', 'rejected', 'published', 'update_pending', 'unpublished'].includes(input.publishState)
     ? input.publishState
     : app.published
       ? 'published'
@@ -1668,6 +1757,15 @@ export async function installAgentApp(params: {
         platforms: readiness.app.platforms,
       },
     }).catch(() => undefined);
+    await recordMarketplacePermissionEvent({
+      ownerAgentId: params.agentId,
+      workspaceId: installation.workspaceId ?? params.workspaceId ?? readiness.app.workspaceId ?? null,
+      assetType: 'app',
+      assetId: readiness.app.id,
+      permissionsApproved: installation.permissionsApproved,
+      action: 'approve',
+      metadata: { slug: readiness.app.slug, installedVersion: installation.installedVersion ?? readiness.app.manifest.version },
+    }).catch(() => undefined);
     return {
       app: readiness.app,
       installation,
@@ -1737,6 +1835,15 @@ export async function installAgentApp(params: {
         packageCachedForOfflineInstall: true,
         platforms: readiness.app.platforms,
       },
+    }).catch(() => undefined);
+    await recordMarketplacePermissionEvent({
+      ownerAgentId: params.agentId,
+      workspaceId: installation.workspaceId ?? params.workspaceId ?? readiness.app.workspaceId ?? null,
+      assetType: 'app',
+      assetId: readiness.app.id,
+      permissionsApproved: installation.permissionsApproved,
+      action: 'approve',
+      metadata: { slug: readiness.app.slug, installedVersion: installation.installedVersion ?? readiness.app.manifest.version },
     }).catch(() => undefined);
     return {
       app: readiness.app,
@@ -1879,7 +1986,19 @@ export async function updateAgentAppInstallation(params: {
         .single()
       : { data: primary.data, error: primary.error };
     if (legacy.error) throw new Error(legacy.error.message);
-    return { app, installation: mapInstallationRow(legacy.data as DbAppInstallationRow) };
+    const installation = mapInstallationRow(legacy.data as DbAppInstallationRow);
+    if (params.permissionsApproved) {
+      await recordMarketplacePermissionEvent({
+        ownerAgentId: params.agentId,
+        workspaceId: installation.workspaceId,
+        assetType: 'app',
+        assetId: app.id,
+        permissionsApproved: installation.permissionsApproved,
+        action: params.status === 'disabled' || params.status === 'removed' || installation.permissionsApproved.length === 0 ? 'revoke' : 'modify',
+        metadata: { slug: app.slug, installedVersion: installation.installedVersion },
+      });
+    }
+    return { app, installation };
   } catch {
     const installation = await updateLocalRuntimeState(state => {
       state.agentApps.installations[params.agentId] ??= [];
@@ -1893,6 +2012,17 @@ export async function updateAgentAppInstallation(params: {
       existing.updated_at = now;
       return mapInstallationRow(existing);
     });
+    if (params.permissionsApproved) {
+      await recordMarketplacePermissionEvent({
+        ownerAgentId: params.agentId,
+        workspaceId: installation.workspaceId,
+        assetType: 'app',
+        assetId: app.id,
+        permissionsApproved: installation.permissionsApproved,
+        action: params.status === 'disabled' || params.status === 'removed' || installation.permissionsApproved.length === 0 ? 'revoke' : 'modify',
+        metadata: { slug: app.slug, installedVersion: installation.installedVersion },
+      });
+    }
     return { app, installation };
   }
 }
@@ -2199,6 +2329,24 @@ export async function installAgentAppToDevice(params: {
     });
   }
 
+  await recordMarketplaceInstallEvent({
+    ownerAgentId: params.agentId,
+    workspaceId,
+    assetType: 'app',
+    assetId: entry.app.id,
+    sourceSlug: entry.app.slug,
+    name: entry.app.name,
+    description: entry.app.description,
+    href: `/appstore/${entry.app.slug}`,
+    visibility: entry.app.visibility === 'public' ? 'public' : entry.app.visibility === 'workspace' ? 'workspace' : 'private',
+    metadata: {
+      historyAction: 'install_device',
+      deviceTarget: target,
+      installedVersion: entry.app.manifest.version,
+      packageRef: cache.packageRef,
+    },
+  }).catch(() => undefined);
+
   return {
     workspaceInstalled: true,
     deviceInstalled: true,
@@ -2242,6 +2390,24 @@ export async function removeAgentAppFromDevice(params: {
       }
     });
   }
+
+  await recordMarketplaceInstallEvent({
+    ownerAgentId: params.agentId,
+    workspaceId: entry.installation.workspaceId ?? entry.app.workspaceId ?? null,
+    assetType: 'app',
+    assetId: entry.app.id,
+    sourceSlug: entry.app.slug,
+    name: entry.app.name,
+    description: entry.app.description,
+    href: `/appstore/${entry.app.slug}`,
+    visibility: entry.app.visibility === 'public' ? 'public' : entry.app.visibility === 'workspace' ? 'workspace' : 'private',
+    status: 'active',
+    metadata: {
+      historyAction: 'remove_device',
+      deviceTarget: target,
+      installedVersion: entry.installation.installedVersion ?? entry.app.manifest.version,
+    },
+  }).catch(() => undefined);
 
   return {
     removed: true,

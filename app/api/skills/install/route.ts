@@ -25,6 +25,11 @@ export async function POST(request: NextRequest) {
     const optionalDependencies = Array.isArray(body.optionalDependencies)
       ? body.optionalDependencies.filter((item): item is string => typeof item === 'string')
       : [];
+    const dependencyPermissionsApproved = body.dependencyPermissionsApproved
+      && typeof body.dependencyPermissionsApproved === 'object'
+      && !Array.isArray(body.dependencyPermissionsApproved)
+      ? body.dependencyPermissionsApproved as Record<string, string[]>
+      : {};
     if (!skill_id && !slug) {
       return NextResponse.json({ error: 'validation_error', message: 'skill_id or slug is required' }, { status: 400 });
     }
@@ -40,6 +45,7 @@ export async function POST(request: NextRequest) {
         permissionsApproved,
         installDependencies: body.installDependencies !== false,
         optionalDependencies,
+        dependencyPermissionsApproved,
       },
     });
     const payload = result.result as { success?: boolean; installation?: unknown; skill?: unknown; dependenciesInstalled?: unknown };

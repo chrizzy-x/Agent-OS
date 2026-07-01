@@ -7,11 +7,11 @@ import WorkspaceShell from '@/components/os/workspace-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
 import {
   Button,
-  DataTable,
   EmptyState,
   Input,
   LoadingState,
   PageHeader,
+  Tabs,
   Textarea,
 } from '@/components/os/ui';
 
@@ -39,11 +39,12 @@ export default function SubagentsPage({
   basePath = '/subagents',
   eyebrow = 'Subagents',
   title = 'Subagents',
-  subtitle = 'Create focused private agents for research, operations, testing, and vault-aware runtime work.',
+  subtitle = 'Private workforce: roles, memory stance, skills, permissions, and operating status.',
 }: SubagentsPageProps) {
   const shell = useApplicationShell();
   const [loading, setLoading] = useState(true);
   const [subagents, setSubagents] = useState<Subagent[]>([]);
+  const [view, setView] = useState<'grid' | 'org'>('grid');
   const [draft, setDraft] = useState({
     workspaceId: '',
     name: '',
@@ -140,19 +141,51 @@ export default function SubagentsPage({
         {loading ? <LoadingState label="Loading subagents" /> : subagents.length === 0 ? (
           <EmptyState title="No private subagents yet" body="Create a focused subagent for research, operations, or testing." />
         ) : (
-          <DataTable
-            columns={['Subagent', 'Visibility', 'Status', 'Capabilities', '']}
-            rows={subagents.map(subagent => [
-              <div key={`${subagent.id}-name`}>
-                <div className="os-entity-title">{subagent.name}</div>
-                <div className="os-entity-copy">{subagent.description ?? 'Private subagent'}</div>
-              </div>,
-              subagent.visibility,
-              subagent.status,
-              subagent.exposedCapabilities?.join(', ') || 'None',
-              <Link key={`${subagent.id}-open`} href={`${basePath}/${subagent.id}`} className="btn-ghost">Open</Link>,
-            ])}
-          />
+          <div className="os-drawer-stack">
+            <Tabs
+              tabs={[
+                { key: 'grid', label: 'Grid' },
+                { key: 'org', label: 'Organization Chart' },
+              ]}
+              active={view}
+              onChange={key => setView(key as 'grid' | 'org')}
+            />
+            {view === 'grid' ? (
+              <div className="subagent-grid">
+                {subagents.map(subagent => (
+                  <article key={subagent.id} className="subagent-card">
+                    <div className="os-inline-actions">
+                      <div>
+                        <div className="os-entity-title">{subagent.name}</div>
+                        <div className="os-entity-copy">{subagent.description ?? 'Private subagent'}</div>
+                      </div>
+                      <span className="os-status-pill">{subagent.status}</span>
+                    </div>
+                    <dl className="subagent-facts">
+                      <div><dt>Role</dt><dd>{subagent.visibility} workforce agent</dd></div>
+                      <div><dt>Memory</dt><dd>Workspace scoped</dd></div>
+                      <div><dt>Skills</dt><dd>{subagent.exposedCapabilities?.join(', ') || 'None assigned'}</dd></div>
+                      <div><dt>Permissions</dt><dd>{subagent.visibility === 'private' ? 'Private only' : 'Workspace visible'}</dd></div>
+                    </dl>
+                    <Link href={`${basePath}/${subagent.id}`} className="btn-ghost">Open</Link>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="subagent-org">
+                <div className="subagent-org-root">Workspace Lead</div>
+                <div className="subagent-org-grid">
+                  {subagents.map(subagent => (
+                    <Link key={subagent.id} href={`${basePath}/${subagent.id}`} className="subagent-org-node">
+                      <strong>{subagent.name}</strong>
+                      <span>{subagent.description ?? subagent.visibility}</span>
+                      <small>{subagent.status}</small>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
         {message ? <div className="os-entity-copy">{message}</div> : null}
       </WorkspaceShell>

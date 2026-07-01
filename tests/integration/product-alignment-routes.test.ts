@@ -103,7 +103,7 @@ function chain(data: unknown) {
   };
 }
 
-describe('v6.5.2 product alignment routes', () => {
+describe('product alignment routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routeMocks.requireAgentContextWithTier.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_free' });

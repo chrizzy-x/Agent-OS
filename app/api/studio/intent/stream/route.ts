@@ -6,7 +6,9 @@ import { listProjects } from '@/src/projects/service';
 import { streamStudioChatReply } from '@/src/studio/conversation';
 import { detectAgentOSIntent, humanStatusForIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle } from '@/src/studio/persistence';
+import { createAgentTask, updateAgentTask, type AgentTaskRecord } from '@/src/tasks/service';
 import { sanitizeErrorMessage } from '@/src/utils/output-sanitizer';
+import { buildWorkspaceContextPackage } from '@/src/workspace-context/service';
 import { listWorkspaces } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
@@ -25,6 +27,24 @@ function isDirectConversation(intent: AgentOSIntent, message: string): boolean {
 
 function replyChunks(reply: string): string[] {
   return reply.match(/.{1,48}(?:\s+|$)|.{1,48}/g) ?? [reply];
+}
+
+function isWorkspaceCapabilityQuestion(message: string): boolean {
+  return /\b(what can you do|available capabilities|what is installed|workspace capabilities)\b/i.test(message);
+}
+
+function workspaceCapabilityReply(context: Awaited<ReturnType<typeof buildWorkspaceContextPackage>>): string {
+  const summary = context.capabilityGraph.summary;
+  const sourceSummary = Object.entries(summary.bySourceType)
+    .filter(([, count]) => count > 0)
+    .map(([sourceType, count]) => `${count} ${sourceType}`)
+    .join(', ');
+  const needsConfig = context.capabilityGraph.needsConfiguration.slice(0, 6).map(item => `${item.name}: ${item.statusReason ?? 'needs configuration'}`);
+  return [
+    `I can use ${summary.available} available workspace capabilities${sourceSummary ? ` across ${sourceSummary}` : ''}.`,
+    needsConfig.length ? `Needs configuration: ${needsConfig.join('; ')}.` : 'No configured capability blockers were found.',
+    'I will use installed apps, skills, workflows, subagents, MCP tools, projects, Library assets, memory, and Vault metadata when they are available. I will not fake unavailable tools.',
+  ].join('\n\n');
 }
 
 async function loadConversationNames(params: {
@@ -77,6 +97,7 @@ export async function POST(request: NextRequest) {
       let sessionId: string | null = null;
       let workspaceId: string | null = null;
       let projectId: string | null = null;
+      let task: AgentTaskRecord | null = null;
       let partialReply = '';
       let userPersisted = false;
       let assistantPersisted = false;
@@ -120,6 +141,32 @@ export async function POST(request: NextRequest) {
           ? body.invocations.filter(item => item && typeof item === 'object').slice(0, 20)
           : [];
 
+        const workspaceContext = await buildWorkspaceContextPackage({
+          ctx,
+          workspaceId,
+          projectId,
+        });
+        task = await createAgentTask({
+          userId: ctx.agentId,
+          workspaceId,
+          projectId,
+          sessionId,
+          title: message.slice(0, 180),
+          originalPrompt: message,
+          status: 'planning',
+          plan: [
+            { step: 'receive_user_intent', status: 'completed' },
+            { step: 'load_workspace_context', status: 'completed' },
+            { step: 'discover_capabilities', status: 'completed' },
+          ],
+          capabilityIds: workspaceContext.capabilityGraph.availableCapabilities.slice(0, 20).map(item => item.id),
+          progress: 20,
+          metadata: {
+            attachmentCount: attachments.length,
+            invocationCount: invocations.length,
+          },
+        });
+
         const startedAt = Date.now();
         const execution = await createExecution({
           agentId: ctx.agentId,
@@ -131,7 +178,7 @@ export async function POST(request: NextRequest) {
           sourceId: sessionId,
           title: message.slice(0, 180),
           input: { message, approval: body.approval === true, attachments, invocations },
-          metadata: { projectId },
+          metadata: { projectId, taskId: task.id },
           model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
         });
         executionId = execution.id;
@@ -176,19 +223,27 @@ export async function POST(request: NextRequest) {
           });
           workspaceId = names.workspaceId;
           projectId = names.projectId;
-          const completedReply = await streamStudioChatReply({
-            message,
-            intent,
-            workspaceName: names.workspaceName,
-            projectName: names.projectName,
-            sessionTitle: names.sessionTitle,
-            signal: request.signal,
-            onDelta: text => {
-              partialReply += text;
+          if (isWorkspaceCapabilityQuestion(message)) {
+            partialReply = workspaceCapabilityReply(workspaceContext);
+            for (const text of replyChunks(partialReply)) {
               push('delta', { text });
-            },
-          });
-          partialReply = completedReply || partialReply;
+              await new Promise(resolve => setTimeout(resolve, 8));
+            }
+          } else {
+            const completedReply = await streamStudioChatReply({
+              message,
+              intent,
+              workspaceName: names.workspaceName,
+              projectName: names.projectName,
+              sessionTitle: names.sessionTitle,
+              signal: request.signal,
+              onDelta: text => {
+                partialReply += text;
+                push('delta', { text });
+              },
+            });
+            partialReply = completedReply || partialReply;
+          }
 
           if (sessionId && partialReply.trim()) {
             await appendStudioMessage({
@@ -211,6 +266,16 @@ export async function POST(request: NextRequest) {
               completedAt: new Date().toISOString(),
             },
           });
+          await updateAgentTask({
+            userId: ctx.agentId,
+            taskId: task.id,
+            patch: {
+              status: 'completed',
+              progress: 100,
+              resultSummary: partialReply.slice(0, 1000),
+              metadata: { ...task.metadata, executionId },
+            },
+          }).catch(() => undefined);
           await appendExecutionLog({
             agentId: ctx.agentId,
             executionId,
@@ -270,6 +335,19 @@ export async function POST(request: NextRequest) {
             completedAt: new Date().toISOString(),
           },
         });
+        if (task) {
+          await updateAgentTask({
+            userId: ctx.agentId,
+            taskId: task.id,
+            patch: {
+              status: paused ? 'awaiting_confirmation' : 'completed',
+              confirmationStatus: paused ? 'pending' : 'not_required',
+              progress: paused ? 55 : 100,
+              resultSummary: partialReply.slice(0, 1000),
+              metadata: { ...task.metadata, executionId, payloadKind: payload.kind },
+            },
+          }).catch(() => undefined);
+        }
         await appendExecutionLog({
           agentId: ctx.agentId,
           executionId,
@@ -325,6 +403,18 @@ export async function POST(request: NextRequest) {
               level: stopped ? 'info' : 'error',
               message: stopped ? 'Super AgentOS request stopped' : 'Super AgentOS request failed',
             }).catch(() => undefined);
+        }
+        if (task && agentId) {
+          await updateAgentTask({
+            userId: agentId,
+            taskId: task.id,
+            patch: {
+              status: stopped ? 'cancelled' : 'failed',
+              progress: 100,
+              errorMessage: stopped ? null : sanitizeErrorMessage(error),
+              resultSummary: stopped ? 'Response stopped by user.' : null,
+            },
+          }).catch(() => undefined);
         }
 
         if (!stopped) {

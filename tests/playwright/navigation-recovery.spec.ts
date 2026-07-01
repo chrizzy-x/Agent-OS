@@ -12,7 +12,7 @@ test('desktop shell navigation, collapse, persistence, and FFP state', async ({ 
   await expect(right).toBeVisible();
 
   const labels = await page.locator('.agentos-global-nav b').allTextContents();
-  expect(labels).toEqual(['Home', 'Studio', 'Projects', 'Library', 'Skills', 'App Store', 'Subagents', 'Universal MCP', 'Vault', 'Community', 'Docs', 'FFP', 'Settings']);
+  expect(labels).toEqual(['Home', 'Studio', 'Search', 'Tasks', 'Projects', 'Library', 'App Store', 'Skill Store', 'Subagents', 'Workflows', 'Memory', 'Vault', 'MCP', 'Developer', 'Community', 'FFP', 'Resources', 'Settings']);
 
   if (await page.locator('.agentos-global-shell').getAttribute('data-left-collapsed') === 'true') {
     await page.getByLabel('Expand navigation sidebar').click();
@@ -32,7 +32,7 @@ test('desktop shell navigation, collapse, persistence, and FFP state', async ({ 
 });
 
 test('every first-class module renders inside the persistent shell', async ({ page }) => {
-  const routes = ['/', '/studio', '/projects', '/library', '/skills', '/appstore', '/subagents', '/mcp', '/vault', '/community', '/docs', '/ffp', '/settings'];
+  const routes = ['/', '/studio', '/search', '/tasks', '/projects', '/library', '/skills', '/appstore', '/skillstore', '/subagents', '/mcp', '/vault', '/community', '/resources', '/ffp', '/settings'];
   for (const route of routes) {
     await page.goto(route, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.agentos-global-shell')).toBeVisible();

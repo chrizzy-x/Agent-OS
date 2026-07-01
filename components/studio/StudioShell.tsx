@@ -89,11 +89,17 @@ function StudioRightPanel() {
       </section>
 
       <section>
+        <h2>Execution</h2>
+        <button type="button" onClick={() => { window.location.href = '/tasks'; }}>Task Center</button>
+        <button type="button" onClick={() => openContext('recovery')}>Running Actions ({running.length})</button>
+        <button type="button" onClick={() => openContext('logs')}>Logs</button>
+        <button type="button" onClick={() => openContext('notifications')}>Approvals ({notifications.filter(item => item.type === 'approval_request' || item.type === 'approval_required').length})</button>
+      </section>
+
+      <section>
         <h2>Open</h2>
         <button type="button" onClick={() => openContext('memory')}>Memory</button>
         <button type="button" onClick={() => openContext('files')}>Files</button>
-        <button type="button" onClick={() => openContext('logs')}>Logs</button>
-        <button type="button" onClick={() => openContext('recovery')}>Recovery</button>
         <button type="button" onClick={() => openContext('notifications')}>Notifications ({notifications.filter(item => item.status === 'unread').length})</button>
       </section>
     </div>

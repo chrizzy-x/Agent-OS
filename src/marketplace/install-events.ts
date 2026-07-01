@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { updateLocalRuntimeState } from '../storage/local-state.js';
 
-export type MarketplaceAssetType = 'app' | 'skill';
+export type MarketplaceAssetType = 'app' | 'skill' | 'workflow' | 'subagent' | 'file' | 'vault_asset' | 'memory_asset' | 'mcp_connection';
 
 export type MarketplaceInstallEventInput = {
   ownerAgentId: string;
@@ -18,8 +18,24 @@ export type MarketplaceInstallEventInput = {
   metadata?: Record<string, unknown>;
 };
 
-function librarySourceType(assetType: MarketplaceAssetType): 'installed_app' | 'installed_skill' {
-  return assetType === 'app' ? 'installed_app' : 'installed_skill';
+export type MarketplacePermissionEventInput = {
+  ownerAgentId: string;
+  workspaceId?: string | null;
+  assetType: 'app' | 'skill';
+  assetId: string;
+  permissionsApproved: string[];
+  action: 'approve' | 'modify' | 'revoke';
+  metadata?: Record<string, unknown>;
+};
+
+function librarySourceType(assetType: MarketplaceAssetType): string {
+  if (assetType === 'app') return 'installed_app';
+  if (assetType === 'skill') return 'installed_skill';
+  if (assetType === 'workflow') return 'saved_workflow';
+  if (assetType === 'subagent') return 'subagent';
+  if (assetType === 'file') return 'file';
+  if (assetType === 'mcp_connection') return 'mcp_connection';
+  return assetType;
 }
 
 function searchText(input: MarketplaceInstallEventInput): string {
@@ -43,7 +59,8 @@ export async function recordMarketplaceInstallEvent(input: MarketplaceInstallEve
   try {
     const supabase = getSupabaseAdmin();
     await Promise.all([
-      supabase.from('marketplace_ownership').upsert({
+      input.assetType === 'app' || input.assetType === 'skill'
+        ? supabase.from('marketplace_ownership').upsert({
         id: randomUUID(),
         owner_agent_id: input.ownerAgentId,
         workspace_id: input.workspaceId ?? null,
@@ -54,7 +71,8 @@ export async function recordMarketplaceInstallEvent(input: MarketplaceInstallEve
         metadata,
         acquired_at: now,
         updated_at: now,
-      }, { onConflict: 'owner_agent_id,asset_type,asset_id' }),
+        }, { onConflict: 'owner_agent_id,asset_type,asset_id' })
+        : Promise.resolve(),
       supabase.from('library_items').upsert({
         id: randomUUID(),
         owner_agent_id: input.ownerAgentId,
@@ -85,6 +103,20 @@ export async function recordMarketplaceInstallEvent(input: MarketplaceInstallEve
         created_at: now,
         updated_at: now,
       }, { onConflict: 'owner_agent_id,asset_type,asset_id' }),
+      input.assetType === 'app' || input.assetType === 'skill' || input.assetType === 'workflow' || input.assetType === 'subagent'
+        ? supabase.from('marketplace_install_history').insert({
+          owner_agent_id: input.ownerAgentId,
+          workspace_id: input.workspaceId ?? null,
+          asset_type: input.assetType,
+          asset_id: input.assetId,
+          source_slug: input.sourceSlug,
+          version: typeof metadata.version === 'string' ? metadata.version : typeof metadata.installedVersion === 'string' ? metadata.installedVersion : null,
+          device_target: typeof metadata.deviceTarget === 'string' ? metadata.deviceTarget : null,
+          action: typeof metadata.historyAction === 'string' ? metadata.historyAction : 'install',
+          metadata,
+          created_at: now,
+        })
+        : Promise.resolve(),
     ]);
     return;
   } catch {
@@ -92,25 +124,27 @@ export async function recordMarketplaceInstallEvent(input: MarketplaceInstallEve
   }
 
   await updateLocalRuntimeState(state => {
-    state.marketplaceOwnership = [
-      {
-        id: randomUUID(),
-        ownerAgentId: input.ownerAgentId,
-        workspaceId: input.workspaceId ?? null,
-        assetType: input.assetType,
-        assetId: input.assetId,
-        sourceSlug: input.sourceSlug,
-        status: 'owned',
-        metadata,
-        acquiredAt: now,
-        updatedAt: now,
-      },
-      ...(state.marketplaceOwnership ?? []).filter(item => !(
-        item.ownerAgentId === input.ownerAgentId
-        && item.assetType === input.assetType
-        && item.assetId === input.assetId
-      )),
-    ];
+    if (input.assetType === 'app' || input.assetType === 'skill') {
+      state.marketplaceOwnership = [
+        {
+          id: randomUUID(),
+          ownerAgentId: input.ownerAgentId,
+          workspaceId: input.workspaceId ?? null,
+          assetType: input.assetType,
+          assetId: input.assetId,
+          sourceSlug: input.sourceSlug,
+          status: 'owned',
+          metadata,
+          acquiredAt: now,
+          updatedAt: now,
+        },
+        ...(state.marketplaceOwnership ?? []).filter(item => !(
+          item.ownerAgentId === input.ownerAgentId
+          && item.assetType === input.assetType
+          && item.assetId === input.assetId
+        )),
+      ];
+    }
     state.workspaceAssetRegistry = [
       {
         id: randomUUID(),
@@ -156,4 +190,22 @@ export async function recordMarketplaceInstallEvent(input: MarketplaceInstallEve
       )),
     ];
   });
+}
+
+export async function recordMarketplacePermissionEvent(input: MarketplacePermissionEventInput): Promise<void> {
+  try {
+    await getSupabaseAdmin()
+      .from('marketplace_permission_history')
+      .insert({
+        owner_agent_id: input.ownerAgentId,
+        workspace_id: input.workspaceId ?? null,
+        asset_type: input.assetType,
+        asset_id: input.assetId,
+        permissions_approved: input.permissionsApproved,
+        action: input.action,
+        metadata: input.metadata ?? {},
+      });
+  } catch {
+    // Permission history is additive and should never block install/update flows.
+  }
 }

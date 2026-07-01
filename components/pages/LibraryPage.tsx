@@ -13,6 +13,7 @@ type LibraryKind =
   | 'installed_skill'
   | 'saved_workflow'
   | 'subagent'
+  | 'memory_collection'
   | 'template'
   | 'file'
   | 'published_asset'
@@ -42,19 +43,14 @@ type LibraryPayload = {
 };
 
 const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'installed_app', label: 'Apps' },
-  { key: 'installed_skill', label: 'Skills' },
-  { key: 'saved_workflow', label: 'Workflows' },
-  { key: 'template', label: 'Templates' },
-  { key: 'subagent', label: 'Subagents' },
-  { key: 'file', label: 'Files' },
-  { key: 'mcp_connection', label: 'MCP' },
-  { key: 'external_connection', label: 'External' },
-  { key: 'download', label: 'Downloads' },
-  { key: 'recent_activity', label: 'Recent Assets' },
-  { key: 'published_asset', label: 'Published' },
-  { key: 'forked_asset', label: 'Forked' },
+  { key: 'all', label: 'All', kinds: [] as LibraryKind[] },
+  { key: 'apps', label: 'Apps', kinds: ['installed_app'] as LibraryKind[] },
+  { key: 'skills', label: 'Skills', kinds: ['installed_skill'] as LibraryKind[] },
+  { key: 'agents', label: 'Agents', kinds: ['subagent'] as LibraryKind[] },
+  { key: 'workflows', label: 'Workflows', kinds: ['saved_workflow'] as LibraryKind[] },
+  { key: 'connectors', label: 'Connectors', kinds: ['mcp_connection', 'external_connection'] as LibraryKind[] },
+  { key: 'memory', label: 'Memory', kinds: ['memory_collection'] as LibraryKind[] },
+  { key: 'files', label: 'Files', kinds: ['file', 'download'] as LibraryKind[] },
 ];
 
 function formatKind(value: string): string {
@@ -77,6 +73,7 @@ export default function LibraryPage() {
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [view, setView] = useState<'grid' | 'list'>('grid');
   const [message, setMessage] = useState('');
 
   const load = useCallback(async () => {
@@ -106,9 +103,21 @@ export default function LibraryPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    function syncFilterFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get('view') ?? params.get('filter');
+      if (requested && FILTERS.some(item => item.key === requested)) setFilter(requested);
+    }
+    syncFilterFromUrl();
+    window.addEventListener('popstate', syncFilterFromUrl);
+    return () => window.removeEventListener('popstate', syncFilterFromUrl);
+  }, []);
+
   const items = useMemo(() => {
     const base = payload?.items ?? [];
-    return filter === 'all' ? base : base.filter(item => item.kind === filter);
+    const current = FILTERS.find(item => item.key === filter) ?? FILTERS[0];
+    return current.key === 'all' ? base : base.filter(item => current.kinds.includes(item.kind));
   }, [filter, payload?.items]);
 
   async function installToDevice(item: LibraryItem) {
@@ -142,7 +151,7 @@ export default function LibraryPage() {
               {FILTERS.slice(1).map(item => (
                 <div key={item.key} className="os-entity-head">
                   <span className="os-entity-copy">{item.label}</span>
-                  <Badge tone="default">{payload?.summary?.[item.key as LibraryKind] ?? 0}</Badge>
+                  <Badge tone="default">{item.kinds.reduce((sum, kind) => sum + (payload?.summary?.[kind] ?? 0), 0)}</Badge>
                 </div>
               ))}
             </div>
@@ -152,11 +161,17 @@ export default function LibraryPage() {
         <PageHeader
           eyebrow="Library"
           title="Library"
-          subtitle="Installed assets, saved workflows, subagents, templates, files, and published or forked assets."
+          subtitle="Owned apps, skills, agents, workflows, connectors, memory, and files."
           actions={<Button href="/studio" variant="secondary">Use in Super AgentOS</Button>}
         />
         <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search library assets" />
-        <FilterChips items={FILTERS.map(item => item.label)} active={FILTERS.find(item => item.key === filter)?.label ?? 'All'} onChange={label => setFilter(FILTERS.find(item => item.label === label)?.key ?? 'all')} />
+        <div className="library-toolbar">
+          <FilterChips items={FILTERS.map(item => item.label)} active={FILTERS.find(item => item.key === filter)?.label ?? 'All'} onChange={label => setFilter(FILTERS.find(item => item.label === label)?.key ?? 'all')} />
+          <div className="os-segmented-control" role="group" aria-label="Library view">
+            <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')}>Grid</button>
+            <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>List</button>
+          </div>
+        </div>
         {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
 
         {loading ? <LoadingState label="Loading library" /> : !payload ? (
@@ -165,6 +180,34 @@ export default function LibraryPage() {
             : <EmptyState title="Sign in required" body="Sign in to view installed and saved assets." action={<Button href="/signin">Sign in</Button>} />
         ) : items.length === 0 ? (
           <EmptyState title="No assets found" body="Install apps or skills, save workflows, or add files to populate Library." action={<Button href="/appstore">Open App Store</Button>} />
+        ) : view === 'grid' ? (
+          <div className="library-grid">
+            {items.map(item => (
+              <Card key={item.id} className="library-grid-card">
+                <div className="os-drawer-stack">
+                  <div className="os-entity-head">
+                    <div>
+                      <div className="os-entity-title">{item.name}</div>
+                      <div className="os-entity-copy">{item.description}</div>
+                    </div>
+                    <Badge tone={item.visibility === 'public' ? 'success' : item.visibility === 'workspace' ? 'accent' : 'default'}>{item.visibility}</Badge>
+                  </div>
+                  <div className="os-entity-meta">
+                    <span>{formatKind(item.kind)}</span>
+                    <span>{formatDate(item.updatedAt)}</span>
+                  </div>
+                  <div className="os-inline-actions">
+                    <Link href={item.href} className="btn-ghost">{item.kind === 'installed_skill' ? 'Configure' : 'Open'}</Link>
+                    {item.kind === 'installed_app' ? <Link href={item.href} className="btn-ghost">Manage</Link> : null}
+                    {item.kind === 'installed_app' && Array.isArray(item.metadata?.supportedDeviceTargets) && item.metadata.supportedDeviceTargets.length > 0 ? (
+                      <button type="button" className="btn-ghost" onClick={() => void installToDevice(item)}>Update</button>
+                    ) : null}
+                    {item.kind === 'installed_skill' ? <Link href={item.href} className="btn-ghost">Enable</Link> : null}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
         ) : (
           <DataTable
             columns={['Asset', 'Type', 'Visibility', 'Updated', '']}

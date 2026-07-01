@@ -149,3 +149,31 @@ export async function updateNotification(params: {
     return mapNotification(state.notifications[index]);
   });
 }
+
+export async function markAllNotificationsRead(params: {
+  agentId: string;
+}): Promise<{ updated: number }> {
+  const readAt = new Date().toISOString();
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('agent_notifications')
+      .update({ status: 'read', read_at: readAt })
+      .eq('agent_id', params.agentId)
+      .eq('status', 'unread')
+      .select('id');
+
+    if (!error) return { updated: (data ?? []).length };
+  } catch {
+    // Fall through to local state.
+  }
+
+  return updateLocalRuntimeState(state => {
+    let updated = 0;
+    state.notifications = state.notifications.map(item => {
+      if (String(item.agent_id) !== params.agentId || item.status !== 'unread') return item;
+      updated += 1;
+      return { ...item, status: 'read', read_at: readAt };
+    });
+    return { updated };
+  });
+}

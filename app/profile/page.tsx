@@ -1,5 +1,7 @@
-import SettingsPage from '@/components/pages/SettingsPage';
+import { redirect } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 
 export default function Page() {
-  return <SettingsPage />;
+  redirect('/settings?section=account');
 }

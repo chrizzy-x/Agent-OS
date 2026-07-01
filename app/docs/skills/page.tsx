@@ -16,7 +16,7 @@ export default function SkillsDocsPage() {
           <Link href="/" className="font-mono font-bold text-lg text-gray-900">Agent OS</Link>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             <Link href="/docs" className="text-blue-600">Docs</Link>
-            <Link href="/skills" className="hover:text-gray-900">Skill Store</Link>
+            <Link href="/skillstore" className="hover:text-gray-900">Skill Store</Link>
             <Link href="/developer" className="hover:text-gray-900">Developer</Link>
           </div>
         </div>
@@ -100,7 +100,7 @@ export default function SkillsDocsPage() {
 
         <Section id="installing" title="Installing skills">
           <p>
-            In the web app, open the <Link href="/skills" className="text-blue-600 hover:underline">Skill Store</Link> and install directly while signed in. For external clients, call the install endpoint with a bearer token.
+            In the web app, open the <Link href="/skillstore" className="text-blue-600 hover:underline">Skill Store</Link> and install directly while signed in. For external clients, call the install endpoint with a bearer token.
           </p>
           <CodeBlock>{`POST /api/skills/install
 Authorization: Bearer <your-bearer-token>

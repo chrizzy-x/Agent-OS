@@ -27,6 +27,13 @@ export type AppDiscoveryPayload = {
   categories: string[];
   sections: AppDiscoverySection[];
   hero: AgentAppListing[];
+  developerSpotlight: Array<{
+    handle: string;
+    name: string;
+    appsPublished: number;
+    totalInstalls: number;
+    rating: number;
+  }>;
 };
 
 function activityScore(app: AgentAppListing): number {
@@ -104,6 +111,38 @@ function recommendationReason(installedApps: Array<{ app: AgentAppListing }>): s
   return 'Based on your installed apps';
 }
 
+function developerSpotlight(apps: AgentAppListing[]): AppDiscoveryPayload['developerSpotlight'] {
+  const developers = new Map<string, { handle: string; name: string; appsPublished: number; totalInstalls: number; ratingTotal: number; ratedApps: number }>();
+  for (const app of apps) {
+    const handle = app.developerHandle || app.publisherName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const current = developers.get(handle) ?? {
+      handle,
+      name: app.publisherName || handle,
+      appsPublished: 0,
+      totalInstalls: 0,
+      ratingTotal: 0,
+      ratedApps: 0,
+    };
+    current.appsPublished += 1;
+    current.totalInstalls += app.installCount;
+    if (app.rating > 0) {
+      current.ratingTotal += app.rating;
+      current.ratedApps += 1;
+    }
+    developers.set(handle, current);
+  }
+  return [...developers.values()]
+    .map(item => ({
+      handle: item.handle,
+      name: item.name,
+      appsPublished: item.appsPublished,
+      totalInstalls: item.totalInstalls,
+      rating: item.ratedApps ? item.ratingTotal / item.ratedApps : 0,
+    }))
+    .sort((left, right) => right.totalInstalls - left.totalInstalls || right.appsPublished - left.appsPublished)
+    .slice(0, 8);
+}
+
 export async function getAppStoreDiscovery(params: {
   viewerAgentId?: string | null;
   viewerWorkspaceIds?: string[];
@@ -147,11 +186,12 @@ export async function getAppStoreDiscovery(params: {
     apps: top(apps.filter(app => app.category.toLowerCase() === item.toLowerCase()), 12),
   })).filter(section => section.apps.length > 0);
 
-  const featured = top(apps.filter(app => app.verified || app.rating >= 4), 12);
+  const featured = top(apps.filter(app => app.spotlight || app.verified || app.rating >= 4), 12);
   const sections: AppDiscoverySection[] = [
     { id: 'featured', title: 'Featured', apps: featured },
     { id: 'trending', title: 'Trending', apps: top(trending, 12) },
     { id: 'recommended', title: 'Recommended For You', reason: recommendationReason(installed), apps: top(recommended.length ? recommended : ranked, 12) },
+    { id: 'because-you-use', title: 'Because You Use AgentOS', reason: 'Capabilities that fit your workspace assets', apps: top(ranked.filter(app => !installedSlugs.includes(app.slug)), 12) },
     { id: 'new', title: 'New Releases', apps: top(newReleases, 12) },
     { id: 'updated', title: 'Recently Updated', apps: top(recentlyUpdated, 12) },
     { id: 'top-installed', title: 'Top Installed', apps: top(topInstalled, 12) },
@@ -164,6 +204,7 @@ export async function getAppStoreDiscovery(params: {
     categories: APP_STORE_CATEGORIES,
     sections,
     hero: top(featured.length ? featured : trending, 5),
+    developerSpotlight: developerSpotlight(apps),
   };
 }
 

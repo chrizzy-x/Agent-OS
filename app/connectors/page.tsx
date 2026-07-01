@@ -1,5 +1,7 @@
-import ConnectorsPage from '@/components/pages/ConnectorsPage';
+import { redirect } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 
 export default function Page() {
-  return <ConnectorsPage />;
+  redirect('/mcp');
 }

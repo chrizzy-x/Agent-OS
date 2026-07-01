@@ -103,9 +103,8 @@ export default function McpDiagnosticsPage() {
       >
         <PageHeader
           eyebrow="Universal MCP"
-          title="Diagnostics"
-          subtitle="Registry-wide visibility into primitives, skills, external connectors, and workspace route guards."
-          actions={<Button href="/connectors" variant="secondary">Open Connectors</Button>}
+          title="Connectivity Hub"
+          subtitle="Connected services, available tools, external agents, logs, and health indicators."
         />
 
         {loading ? <LoadingState label="Loading MCP diagnostics" /> : !payload ? (

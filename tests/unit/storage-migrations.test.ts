@@ -174,7 +174,7 @@ describe('storage migrations', () => {
     expect(sql).toContain("CHECK (visibility IN ('public', 'private', 'workspace', 'unlisted'))");
   });
 
-  it('adds V6.5.2 Library and runtime control primitives', () => {
+  it('adds Library and runtime control primitives', () => {
     const sql = migrationSql('027_v652_product_alignment.sql');
 
     expect(sql).toContain('CREATE TABLE IF NOT EXISTS library_items');

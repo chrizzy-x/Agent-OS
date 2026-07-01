@@ -9,7 +9,7 @@ import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
-const FULL_SKILL_SELECT = 'id,name,slug,version,author_id,author_name,workspace_id,category,description,icon,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,published,verified,visibility,created_at,updated_at';
+const FULL_SKILL_SELECT = 'id,name,slug,version,author_id,author_name,workspace_id,category,description,long_description,icon,icon_url,banner_url,video_url,website_url,documentation_url,support_url,privacy_policy_url,terms_url,release_notes,changelog,gallery,media_assets,compatible_apps,compatible_agents,compatible_workflows,rejection_reason,spotlight,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,permissions_required,required_secrets,required_skills,optional_skills,compatibility,examples,inputs,outputs,dependencies,publish_state,published,verified,visibility,created_at,updated_at';
 const LEGACY_SKILL_SELECT = 'id,name,slug,version,author_id,author_name,category,description,icon,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,published,verified,created_at,updated_at';
 
 function compareBySort(sort: string, left: Record<string, unknown>, right: Record<string, unknown>): number {
@@ -192,10 +192,28 @@ export async function POST(request: NextRequest) {
     const insertPayload = {
       name: String(name),
       slug: String(slug),
+      version: typeof body.version === 'string' ? body.version : '1.0.0',
       category: String(category),
       description: typeof description === 'string' ? description : '',
       long_description: typeof body.long_description === 'string' ? body.long_description : null,
       icon: typeof body.icon === 'string' ? body.icon : '[skill]',
+      icon_url: typeof body.icon_url === 'string' ? body.icon_url : typeof body.iconUrl === 'string' ? body.iconUrl : null,
+      banner_url: typeof body.banner_url === 'string' ? body.banner_url : typeof body.bannerUrl === 'string' ? body.bannerUrl : null,
+      video_url: typeof body.video_url === 'string' ? body.video_url : typeof body.videoUrl === 'string' ? body.videoUrl : null,
+      website_url: typeof body.website_url === 'string' ? body.website_url : typeof body.websiteUrl === 'string' ? body.websiteUrl : null,
+      documentation_url: typeof body.documentation_url === 'string' ? body.documentation_url : typeof body.documentationUrl === 'string' ? body.documentationUrl : null,
+      support_url: typeof body.support_url === 'string' ? body.support_url : typeof body.supportUrl === 'string' ? body.supportUrl : null,
+      privacy_policy_url: typeof body.privacy_policy_url === 'string' ? body.privacy_policy_url : typeof body.privacyPolicyUrl === 'string' ? body.privacyPolicyUrl : null,
+      terms_url: typeof body.terms_url === 'string' ? body.terms_url : typeof body.termsUrl === 'string' ? body.termsUrl : null,
+      release_notes: typeof body.release_notes === 'string' ? body.release_notes : typeof body.releaseNotes === 'string' ? body.releaseNotes : null,
+      changelog: Array.isArray(body.changelog) ? body.changelog : [],
+      gallery: Array.isArray(body.gallery) ? body.gallery : [],
+      media_assets: Array.isArray(body.media_assets) ? body.media_assets : Array.isArray(body.mediaAssets) ? body.mediaAssets : [],
+      compatible_apps: Array.isArray(body.compatible_apps) ? body.compatible_apps : Array.isArray(body.compatibleApps) ? body.compatibleApps : [],
+      compatible_agents: Array.isArray(body.compatible_agents) ? body.compatible_agents : Array.isArray(body.compatibleAgents) ? body.compatibleAgents : [],
+      compatible_workflows: Array.isArray(body.compatible_workflows) ? body.compatible_workflows : Array.isArray(body.compatibleWorkflows) ? body.compatibleWorkflows : [],
+      rejection_reason: typeof body.rejection_reason === 'string' ? body.rejection_reason : typeof body.rejectionReason === 'string' ? body.rejectionReason : null,
+      spotlight: body.spotlight === true,
       author_id: agentCtx.agentId,
       author_name: account?.name ?? 'AgentOS Publisher',
       workspace_id: typeof body.workspaceId === 'string' ? body.workspaceId : null,
@@ -205,6 +223,13 @@ export async function POST(request: NextRequest) {
       capabilities: Array.isArray(body.capabilities) ? body.capabilities : [],
       permissions_required: Array.isArray(body.permissions_required) ? body.permissions_required : [],
       required_secrets: Array.isArray(body.required_secrets) ? body.required_secrets : [],
+      required_skills: Array.isArray(body.required_skills) ? body.required_skills : [],
+      optional_skills: Array.isArray(body.optional_skills) ? body.optional_skills : [],
+      compatibility: Array.isArray(body.compatibility) ? body.compatibility : ['Super AgentOS', 'Workflows', 'Subagents', 'Apps'],
+      examples: Array.isArray(body.examples) ? body.examples : [],
+      inputs: Array.isArray(body.inputs) ? body.inputs : [],
+      outputs: Array.isArray(body.outputs) ? body.outputs : [],
+      dependencies: body.dependencies && typeof body.dependencies === 'object' && !Array.isArray(body.dependencies) ? body.dependencies : {},
       source_code: typeof body.source_code === 'string' ? body.source_code : '',
       primitives_required: Array.isArray(body.primitives_required) ? body.primitives_required : [],
       tags: Array.isArray(body.tags) ? body.tags : [],
@@ -220,7 +245,39 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error?.code === '42703') {
-      const { workspace_id: _workspaceId, visibility: _visibility, ...legacyInsertPayload } = insertPayload;
+      const {
+        workspace_id: _workspaceId,
+        visibility: _visibility,
+        version: _version,
+        long_description: _longDescription,
+        icon_url: _iconUrl,
+        banner_url: _bannerUrl,
+        video_url: _videoUrl,
+        website_url: _websiteUrl,
+        documentation_url: _documentationUrl,
+        support_url: _supportUrl,
+        privacy_policy_url: _privacyPolicyUrl,
+        terms_url: _termsUrl,
+        release_notes: _releaseNotes,
+        changelog: _changelog,
+        gallery: _gallery,
+        media_assets: _mediaAssets,
+        compatible_apps: _compatibleApps,
+        compatible_agents: _compatibleAgents,
+        compatible_workflows: _compatibleWorkflows,
+        rejection_reason: _rejectionReason,
+        spotlight: _spotlight,
+        permissions_required: _permissionsRequired,
+        required_secrets: _requiredSecrets,
+        required_skills: _requiredSkills,
+        optional_skills: _optionalSkills,
+        compatibility: _compatibility,
+        examples: _examples,
+        inputs: _inputs,
+        outputs: _outputs,
+        dependencies: _dependencies,
+        ...legacyInsertPayload
+      } = insertPayload;
       ({ data, error } = await supabase
         .from('skills')
         .insert(legacyInsertPayload)
