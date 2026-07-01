@@ -121,6 +121,14 @@ export async function createConfirmation(params: {
 }): Promise<ConfirmationRecord> {
   const actionName = params.actionName.trim();
   if (!actionName) throw new ValidationError('confirmation action name is required');
+  const riskLevel = normalizeRiskLevel(params.riskLevel);
+  const policy = evaluateConfirmationPolicy({
+    actionName,
+    riskLevel,
+    confirmationRequired: true,
+    requiredSecrets: params.secretScopes,
+  });
+  const requiredApprovals = Math.max(policy.requiredApprovals, params.requiredApprovals ?? policy.requiredApprovals);
   const now = new Date().toISOString();
   const row = {
     id: crypto.randomUUID(),
@@ -129,14 +137,14 @@ export async function createConfirmation(params: {
     capability_id: params.capabilityId ?? null,
     action_id: params.actionId ?? null,
     action_name: actionName.slice(0, 240),
-    risk_level: normalizeRiskLevel(params.riskLevel),
+    risk_level: riskLevel,
     status: 'pending',
     data_summary: (params.dataSummary ?? '').slice(0, 2000),
     secret_scopes: params.secretScopes ?? [],
     expected_result: (params.expectedResult ?? '').slice(0, 2000),
     payload: redactSecretsDeep(params.payload ?? {}),
     approval_count: 0,
-    required_approvals: Math.max(1, Math.min(params.requiredApprovals ?? 1, 2)),
+    required_approvals: Math.max(1, Math.min(requiredApprovals, 2)),
     created_at: now,
     updated_at: now,
     resolved_at: null,
