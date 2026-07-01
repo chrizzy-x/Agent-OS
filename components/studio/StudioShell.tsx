@@ -114,6 +114,15 @@ function StudioRightPortal() {
   return target ? createPortal(<StudioRightPanel />, target) : null;
 }
 
+function StudioLoadingState() {
+  return (
+    <div className="studio-loading-state" role="status" aria-live="polite">
+      <div className="studio-loading-mark" />
+      <span>Loading workspace...</span>
+    </div>
+  );
+}
+
 export default function StudioShell() {
   const { loading, browserSession, mode } = useStudio();
 
@@ -122,7 +131,9 @@ export default function StudioShell() {
       <section className="studio-main">
         <StudioTopbar />
         <div className="studio-mode-body">
-          {!browserSession && !loading ? (
+          {loading ? (
+            <StudioLoadingState />
+          ) : !browserSession ? (
             <div className="studio-signed-out">
               <h1>Super AgentOS</h1>
               <Button href="/signin">Sign in</Button>
@@ -160,6 +171,29 @@ export default function StudioShell() {
           place-content: center;
           justify-items: center;
           gap: 14px;
+        }
+
+        .studio-loading-state {
+          min-height: calc(100vh - 56px);
+          display: grid;
+          place-content: center;
+          justify-items: center;
+          gap: 12px;
+          color: var(--text-secondary);
+          font-size: 0.88rem;
+        }
+
+        .studio-loading-mark {
+          width: 28px;
+          height: 28px;
+          border: 2px solid rgba(148, 163, 184, 0.3);
+          border-top-color: var(--accent-primary);
+          border-radius: 50%;
+          animation: studioSpin 0.8s linear infinite;
+        }
+
+        @keyframes studioSpin {
+          to { transform: rotate(360deg); }
         }
 
         .studio-global-context {

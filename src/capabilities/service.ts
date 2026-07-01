@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { executeAgentOSAction } from '../actions/service.js';
+import { logSuperAgentAudit } from '../audit/super-agent.js';
 import type { AgentContext } from '../auth/permissions.js';
 import { listInstalledAgentApps, type AgentAppOpenTarget } from '../appstore/service.js';
 import { createConfirmation, evaluateConfirmationPolicy, getConfirmation, type RiskLevel } from '../confirmations/service.js';
@@ -243,39 +244,57 @@ async function installedSkillNodes(params: {
   availableSecrets: Set<string>;
 }): Promise<CapabilityNode[]> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const supabase = getSupabaseAdmin();
+    let installationQuery = supabase
       .from('skill_installations')
-      .select(`
-        id,
-        workspace_id,
-        status,
-        permissions_approved,
-        skill:skills(id,name,slug,category,description,capabilities,permissions_required,required_secrets,inputs,outputs)
-      `)
+      .select('id,skill_id,workspace_id,status,permissions_approved,installed_at')
       .eq('agent_id', params.ownerAgentId)
       .neq('status', 'removed')
       .order('installed_at', { ascending: false });
+    if (params.workspaceId) installationQuery = installationQuery.eq('workspace_id', params.workspaceId);
+    const { data, error } = await installationQuery;
     if (error) throw new Error(error.message);
-    return ((data ?? []) as Array<Record<string, unknown>>).flatMap(row => {
-      const skill = asRecord(row.skill);
+
+    const installations = (data ?? []) as Array<Record<string, unknown>>;
+    const skillIds = [...new Set(installations.map(row => String(row.skill_id ?? '')).filter(Boolean))];
+    if (skillIds.length === 0) return [];
+
+    let skillResult: { data: unknown; error: { message: string } | null } = await supabase
+      .from('skills')
+      .select('id,name,slug,category,description,capabilities,permissions_required,required_secrets,inputs,outputs')
+      .in('id', skillIds);
+    if (skillResult.error) {
+      skillResult = await supabase
+        .from('skills')
+        .select('id,name,slug,category,description,capabilities,permissions_required,required_secrets')
+        .in('id', skillIds);
+    }
+    if (skillResult.error) throw new Error(skillResult.error.message);
+    const skillById = new Map(((skillResult.data ?? []) as Array<Record<string, unknown>>).map(skill => [String(skill.id), skill]));
+
+    return installations.flatMap(row => {
+      const skill = skillById.get(String(row.skill_id ?? '')) ?? {};
       if (!skill.id) return [];
       const capabilityId = stableId('skill', String(skill.slug ?? skill.id));
       const caps = recordArray(skill.capabilities);
       const requiredSecrets = secretRefs(stringArray(skill.required_secrets), params.availableSecrets);
       const missingSecrets = requiredSecrets.filter(item => item.availabilityStatus === 'missing');
-      const actions = caps.length > 0 ? caps.map(capability => action({
-        id: String(capability.name ?? 'run').replace(/[^a-zA-Z0-9_.-]+/g, '_'),
-        name: String(capability.name ?? 'Run skill'),
-        description: String(capability.description ?? skill.description ?? 'Run installed skill capability.'),
-        inputSchema: asRecord(capability.params ?? skill.inputs ?? genericObjectSchema),
-        outputSchema: asRecord(capability.returns ?? skill.outputs ?? genericObjectSchema),
-        executeEndpoint: `/api/capabilities/${encodeURIComponent(capabilityId)}/actions/${encodeURIComponent(String(capability.name ?? 'run'))}/execute`,
-        confirmationRequired: false,
-        riskLevel: 'low',
-        permissions: stringArray(skill.permissions_required),
-        timeoutMs: 60_000,
-        retryable: true,
-      })) : [action({
+      const actions = caps.length > 0 ? caps.map(capability => {
+        const actionId = String(capability.name ?? 'run').replace(/[^a-zA-Z0-9_.-]+/g, '_');
+        return action({
+          id: actionId,
+          name: String(capability.name ?? 'Run skill'),
+          description: String(capability.description ?? skill.description ?? 'Run installed skill capability.'),
+          inputSchema: asRecord(capability.params ?? skill.inputs ?? genericObjectSchema),
+          outputSchema: asRecord(capability.returns ?? skill.outputs ?? genericObjectSchema),
+          executeEndpoint: `/api/capabilities/${encodeURIComponent(capabilityId)}/actions/${encodeURIComponent(actionId)}/execute`,
+          confirmationRequired: false,
+          riskLevel: 'low',
+          permissions: stringArray(skill.permissions_required),
+          timeoutMs: 60_000,
+          retryable: true,
+        });
+      }) : [action({
         id: 'run',
         name: 'Run skill',
         description: 'Run installed skill capability.',
@@ -896,6 +915,19 @@ export async function executeCapabilityAction(params: {
         progress: 0,
       },
     });
+    await logSuperAgentAudit({
+      userId: params.ctx.agentId,
+      workspaceId: resolvedTask.workspaceId,
+      sessionId: resolvedTask.sessionId,
+      taskId: resolvedTask.id,
+      action: 'capability_needs_configuration',
+      capabilityId: capability.id,
+      riskLevel: action.riskLevel,
+      permissionUsed: action.permissions.join(', ') || null,
+      success: false,
+      errorMessage: capability.statusReason ?? 'Capability is not available.',
+      metadata: { actionId: action.id, sourceType: capability.sourceType, sourceId: capability.sourceId },
+    });
     return { status: 'needs_configuration', task: updated };
   }
 
@@ -927,6 +959,22 @@ export async function executeCapabilityAction(params: {
         status: 'awaiting_confirmation',
         confirmationStatus: 'pending',
         progress: 20,
+      },
+    });
+    await logSuperAgentAudit({
+      userId: params.ctx.agentId,
+      workspaceId: resolvedTask.workspaceId,
+      sessionId: resolvedTask.sessionId,
+      taskId: resolvedTask.id,
+      action: 'capability_awaiting_confirmation',
+      capabilityId: capability.id,
+      riskLevel: action.riskLevel,
+      permissionUsed: action.permissions.join(', ') || null,
+      success: true,
+      metadata: {
+        actionId: action.id,
+        confirmationId: typeof confirmation === 'object' && confirmation && 'id' in confirmation ? String(confirmation.id) : null,
+        requiredApprovals: policy.requiredApprovals,
       },
     });
     return { status: 'awaiting_confirmation', task: updated, confirmation };
@@ -997,6 +1045,18 @@ export async function executeCapabilityAction(params: {
         metadata: { ...resolvedTask.metadata, executionId: tracked.execution.id },
       },
     });
+    await logSuperAgentAudit({
+      userId: params.ctx.agentId,
+      workspaceId: resolvedTask.workspaceId,
+      sessionId: resolvedTask.sessionId,
+      taskId: resolvedTask.id,
+      action: 'capability_action_execute',
+      capabilityId: capability.id,
+      riskLevel: action.riskLevel,
+      permissionUsed: action.permissions.join(', ') || null,
+      success: true,
+      metadata: { actionId: action.id, executionId: tracked.execution.id },
+    });
     return { status: 'completed', task: updated, result };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Capability execution failed';
@@ -1012,6 +1072,19 @@ export async function executeCapabilityAction(params: {
       userId: params.ctx.agentId,
       taskId: resolvedTask.id,
       patch: { status: 'failed', errorMessage: message, progress: 100 },
+    });
+    await logSuperAgentAudit({
+      userId: params.ctx.agentId,
+      workspaceId: resolvedTask.workspaceId,
+      sessionId: resolvedTask.sessionId,
+      taskId: resolvedTask.id,
+      action: 'capability_action_execute',
+      capabilityId: capability.id,
+      riskLevel: action.riskLevel,
+      permissionUsed: action.permissions.join(', ') || null,
+      success: false,
+      errorMessage: message,
+      metadata: { actionId: action.id },
     });
     return { status: 'failed', task: updated };
   }

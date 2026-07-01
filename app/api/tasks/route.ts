@@ -47,16 +47,12 @@ export async function POST(request: NextRequest) {
       projectId: typeof body.projectId === 'string' ? body.projectId : null,
       title,
       originalPrompt: typeof body.originalPrompt === 'string' ? body.originalPrompt : title,
-      status: body.status === 'planning' || body.status === 'awaiting_confirmation' || body.status === 'running' || body.status === 'paused' || body.status === 'completed' || body.status === 'failed' || body.status === 'cancelled' || body.status === 'needs_configuration'
-        ? body.status
-        : 'queued',
+      status: body.status === 'planning' ? 'planning' : 'queued',
       plan: recordArray(body.plan),
       capabilityIds: stringArray(body.capabilityIds),
       requiredPermissions: stringArray(body.requiredPermissions),
-      confirmationStatus: body.confirmationStatus === 'pending' || body.confirmationStatus === 'approved' || body.confirmationStatus === 'rejected'
-        ? body.confirmationStatus
-        : 'not_required',
-      progress: typeof body.progress === 'number' ? body.progress : 0,
+      confirmationStatus: 'not_required',
+      progress: 0,
       metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata as Record<string, unknown> : {},
     });
     return NextResponse.json({ task }, { status: 201 });

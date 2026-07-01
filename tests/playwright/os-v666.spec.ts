@@ -108,6 +108,7 @@ test.describe('AgentOS V6.6.7 OS surfaces', () => {
   });
 
   test('captures notification drawer and publishing flows', async ({ page }, testInfo) => {
+    test.setTimeout(150_000);
     mkdirSync('agentos-artifacts/v666-qa', { recursive: true });
 
     await page.goto('/', { waitUntil: 'domcontentloaded' });

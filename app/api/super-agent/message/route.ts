@@ -46,23 +46,25 @@ export async function POST(request: NextRequest) {
       progress: 40,
     });
 
-    const reply = isCapabilityQuestion(message)
+    const answersWorkspaceQuestion = isCapabilityQuestion(message);
+    const reply = answersWorkspaceQuestion
       ? `In this workspace I can use ${capabilitySummary(context)} Available sources include apps, skills, workflows, subagents, MCP tools, projects, Library items, memory, and Vault metadata. I will show missing configuration instead of pretending unavailable tools worked.`
       : `I loaded your workspace context and found ${capabilitySummary(context)} No execution was started because this endpoint only prepares and routes Super AgentOS messages; use Studio streaming or a capability action endpoint to run a specific capability.`;
 
-    const completed = await updateAgentTask({
+    const updated = await updateAgentTask({
       userId: ctx.agentId,
       taskId: task.id,
       patch: {
-        status: 'completed',
-        progress: 100,
-        resultSummary: reply,
+        status: answersWorkspaceQuestion ? 'completed' : 'needs_configuration',
+        progress: answersWorkspaceQuestion ? 100 : 40,
+        resultSummary: answersWorkspaceQuestion ? reply : null,
+        errorMessage: answersWorkspaceQuestion ? null : 'No executable capability action was selected.',
       },
     });
 
     return NextResponse.json({
       reply,
-      task: completed,
+      task: updated,
       workspaceContext: context,
     });
   } catch (error) {

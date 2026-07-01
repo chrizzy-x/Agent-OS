@@ -13,7 +13,7 @@
         "test:watch": "node scripts/run-vitest.mjs watch",
         "test:coverage": "node scripts/run-vitest.mjs run --coverage",
         "lint": "tsc --noEmit --incremental false -p tsconfig.lint.json",
-        "test:e2e": "playwright test"
+        "test:e2e": "node scripts/run-playwright.mjs"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.78.0",

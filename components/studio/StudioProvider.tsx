@@ -363,7 +363,7 @@ export function StudioProvider(props: {
   const streamSettledRef = useRef<Promise<void> | null>(null);
   const activeStreamExecutionIdRef = useRef<string | null>(null);
 
-  const currentWorkspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? workspaces[0]?.id ?? null;
+  const currentWorkspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? requestedWorkspaceId ?? workspaces[0]?.id ?? null;
   const activeSubagent = useMemo(
     () => session?.linkedSubagentId ? subagents.find(item => item.id === session.linkedSubagentId) ?? null : null,
     [session?.linkedSubagentId, subagents],

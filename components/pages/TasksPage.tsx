@@ -232,6 +232,11 @@ export default function TasksPage() {
                         <strong>{item.actionName}</strong>
                         <span>{item.riskLevel} · {item.approvalCount}/{item.requiredApprovals}</span>
                         <p>{item.dataSummary || item.expectedResult}</p>
+                        {item.secretScopes.length > 0 ? (
+                          <div className="tasks-secret-scopes" aria-label="Secret scopes required">
+                            {item.secretScopes.map(scope => <code key={scope}>{scope}</code>)}
+                          </div>
+                        ) : null}
                       </div>
                       {item.status === 'pending' ? (
                         <div className="os-inline-actions">
@@ -352,6 +357,17 @@ export default function TasksPage() {
           overflow-wrap: anywhere;
           border-radius: 8px;
           background: var(--bg-primary);
+        }
+        .tasks-secret-scopes {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .tasks-secret-scopes code {
+          display: inline-flex;
+          padding: 5px 7px;
+          border: 1px solid var(--border);
+          font-size: 0.76rem;
         }
         @media (max-width: 980px) {
           .tasks-layout {

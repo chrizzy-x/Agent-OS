@@ -23,6 +23,7 @@ describe('v6.6.7 Super AgentOS contract', () => {
   it('ships context, capability, task, confirmation, memory, notification, library, and super-agent routes', () => {
     expect(exists('app', 'api', 'workspace', 'context', 'route.ts')).toBe(true);
     expect(exists('app', 'api', 'capabilities', 'route.ts')).toBe(true);
+    expect(exists('app', 'api', 'capabilities', 'register', 'route.ts')).toBe(true);
     expect(exists('app', 'api', 'capabilities', '[id]', 'route.ts')).toBe(true);
     expect(exists('app', 'api', 'capabilities', '[id]', 'actions', '[actionId]', 'execute', 'route.ts')).toBe(true);
     expect(exists('app', 'api', 'tasks', 'route.ts')).toBe(true);
@@ -43,6 +44,7 @@ describe('v6.6.7 Super AgentOS contract', () => {
 
   it('adds additive database support for V6.6.7 task and capability state', () => {
     const migration = read('src', 'storage', 'migrations', '033_v667_super_agentos.sql');
+    const capabilityService = read('src', 'capabilities', 'service.ts');
     expect(migration).toContain('capability_registry');
     expect(migration).toContain('agent_tasks');
     expect(migration).toContain('agent_task_steps');
@@ -50,6 +52,8 @@ describe('v6.6.7 Super AgentOS contract', () => {
     expect(migration).toContain('super_agent_audit_logs');
     expect(migration).toContain('source_type TEXT');
     expect(migration).toContain('sdk_manifest');
+    expect(read('src', 'audit', 'super-agent.ts')).toContain('super_agent_audit_logs');
+    expect(capabilityService).toContain('logSuperAgentAudit');
   });
 
   it('requires approval for write, high-risk, and critical actions', () => {
