@@ -95,7 +95,29 @@ describe('capability graph installed skill discovery', () => {
       sourceType: 'skill',
       sourceId: 'skill-1',
       name: 'Research Skill',
+      provider: 'skill',
+      health: 'healthy',
+      version: '6.6.8',
       actions: [expect.objectContaining({ id: 'research' })],
+      contract: expect.objectContaining({
+        capabilityId: 'skill:research-skill',
+        provider: 'skill',
+        health: 'healthy',
+        executionEndpoint: '/api/capabilities/skill%3Aresearch-skill/actions/research/execute',
+      }),
+    });
+    expect(graph.graphVersion).toMatch(/^capgraph-/);
+    expect(graph.registryAssets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        assetId: 'skill-1',
+        assetType: 'skill',
+        capabilitiesPublished: ['skill:research-skill'],
+      }),
+    ]));
+    expect(graph.runtimeContract).toMatchObject({
+      runtime: 'super-agentos',
+      version: '6.6.8',
+      selectionPolicy: 'deterministic-health-permission-rank',
     });
   });
 });

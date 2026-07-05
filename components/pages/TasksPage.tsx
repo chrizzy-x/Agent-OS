@@ -7,7 +7,23 @@ import { useApplicationShell } from '@/components/os/application-shell';
 import { Badge, Button, Card, DataTable, EmptyState, LoadingState, PageHeader } from '@/components/os/ui';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 
-type TaskStatus = 'queued' | 'planning' | 'awaiting_confirmation' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled' | 'needs_configuration';
+type TaskStatus =
+  | 'created'
+  | 'queued'
+  | 'planning'
+  | 'waiting_for_dependencies'
+  | 'waiting_for_approval'
+  | 'awaiting_confirmation'
+  | 'scheduled'
+  | 'running'
+  | 'paused'
+  | 'retrying'
+  | 'cancelling'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'needs_configuration'
+  | 'archived';
 
 type TaskRecord = {
   id: string;
@@ -45,7 +61,10 @@ const FILTERS: Array<{ key: TaskStatus | 'all'; label: string }> = [
   { key: 'all', label: 'All' },
   { key: 'running', label: 'Running' },
   { key: 'queued', label: 'Queued' },
+  { key: 'scheduled', label: 'Scheduled' },
+  { key: 'retrying', label: 'Retrying' },
   { key: 'awaiting_confirmation', label: 'Awaiting Confirmation' },
+  { key: 'waiting_for_approval', label: 'Waiting Approval' },
   { key: 'completed', label: 'Completed' },
   { key: 'failed', label: 'Failed' },
   { key: 'cancelled', label: 'Cancelled' },
@@ -54,8 +73,8 @@ const FILTERS: Array<{ key: TaskStatus | 'all'; label: string }> = [
 function toneForStatus(status: TaskStatus): 'default' | 'success' | 'warning' | 'danger' | 'accent' {
   if (status === 'completed') return 'success';
   if (status === 'failed' || status === 'cancelled') return 'danger';
-  if (status === 'awaiting_confirmation' || status === 'needs_configuration') return 'warning';
-  if (status === 'running' || status === 'planning') return 'accent';
+  if (status === 'awaiting_confirmation' || status === 'waiting_for_approval' || status === 'needs_configuration') return 'warning';
+  if (status === 'running' || status === 'planning' || status === 'retrying') return 'accent';
   return 'default';
 }
 
@@ -186,10 +205,10 @@ export default function TasksPage() {
                 formatTime(task.updatedAt),
                 <div key={`${task.id}-actions`} className="os-inline-actions">
                   <button type="button" className="btn-ghost" onClick={() => setSelectedTaskId(task.id)}>Open</button>
-                  {task.status === 'running' || task.status === 'queued' || task.status === 'planning' || task.status === 'awaiting_confirmation' ? (
+                  {['created', 'running', 'queued', 'planning', 'waiting_for_dependencies', 'waiting_for_approval', 'awaiting_confirmation', 'scheduled', 'retrying'].includes(task.status) ? (
                     <button type="button" className="btn-ghost" onClick={() => void taskAction(task, 'cancel')}>Cancel</button>
                   ) : null}
-                  {task.status === 'failed' || task.status === 'cancelled' || task.status === 'needs_configuration' ? (
+                  {task.status === 'failed' || task.status === 'cancelled' || task.status === 'needs_configuration' || task.status === 'archived' ? (
                     <button type="button" className="btn-ghost" onClick={() => void taskAction(task, 'retry')}>Retry</button>
                   ) : null}
                 </div>,

@@ -28,16 +28,26 @@ describe('POST /api/super-agent/message', () => {
     vi.clearAllMocks();
     mocks.requireAgentContextWithTier.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_pro' });
     mocks.buildWorkspaceContextPackage.mockResolvedValue({
+      metadata: {
+        contextVersion: 'ctx-test',
+        dependencyHash: 'hash-test',
+        sourcesUsed: [],
+      },
       capabilityGraph: {
+        graphVersion: 'capgraph-test',
         availableCapabilities: [],
         needsConfiguration: [],
         unavailableCapabilities: [],
+        relationships: [],
         summary: {
           total: 0,
           available: 0,
           needsConfiguration: 0,
           disabled: 0,
           error: 0,
+          registryAssets: 0,
+          healthy: 0,
+          warning: 0,
           bySourceType: {
             system: 0,
             app: 0,
@@ -48,6 +58,17 @@ describe('POST /api/super-agent/message', () => {
             project: 0,
             library: 0,
           },
+        },
+      },
+      runtimeRegistry: {
+        assets: [],
+        graphVersion: 'capgraph-test',
+        contract: {
+          runtime: 'super-agentos',
+          version: '6.6.8',
+          plannerVersion: 'super-agentos-planner-v6.6.8',
+          registryVersion: '6.6.8',
+          selectionPolicy: 'deterministic-health-permission-rank',
         },
       },
     });

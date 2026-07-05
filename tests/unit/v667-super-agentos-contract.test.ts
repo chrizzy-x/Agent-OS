@@ -13,11 +13,13 @@ function read(...parts: string[]): string {
   return readFileSync(join(process.cwd(), ...parts), 'utf8');
 }
 
-describe('v6.6.7 Super AgentOS contract', () => {
-  it('publishes the V6.6.7 version label', () => {
-    expect(APP_VERSION).toBe('6.6.7');
-    expect(read('package.json')).toContain('"version": "6.6.7"');
-    expect(read('README.md')).toContain('> V6.6.7');
+describe('v6.6.8 Super AgentOS contract', () => {
+  it('publishes the V6.6.8 version label', () => {
+    expect(APP_VERSION).toBe('6.6.8');
+    expect(read('package.json')).toContain('"version": "6.6.8"');
+    expect(read('package-lock.json')).toContain('"version": "6.6.8"');
+    expect(read('README.md')).toContain('> V6.6.8');
+    expect(exists('RELEASE_NOTES_v6.6.8.md')).toBe(true);
   });
 
   it('ships context, capability, task, confirmation, memory, notification, library, and super-agent routes', () => {
@@ -42,9 +44,11 @@ describe('v6.6.7 Super AgentOS contract', () => {
     expect(exists('app', 'tasks', 'page.tsx')).toBe(true);
   });
 
-  it('adds additive database support for V6.6.7 task and capability state', () => {
+  it('adds additive database support for V6.6.8 runtime contract state', () => {
     const migration = read('src', 'storage', 'migrations', '033_v667_super_agentos.sql');
+    const v668Migration = read('src', 'storage', 'migrations', '034_v668_runtime_contract.sql');
     const capabilityService = read('src', 'capabilities', 'service.ts');
+    const taskService = read('src', 'tasks', 'service.ts');
     expect(migration).toContain('capability_registry');
     expect(migration).toContain('agent_tasks');
     expect(migration).toContain('agent_task_steps');
@@ -52,8 +56,18 @@ describe('v6.6.7 Super AgentOS contract', () => {
     expect(migration).toContain('super_agent_audit_logs');
     expect(migration).toContain('source_type TEXT');
     expect(migration).toContain('sdk_manifest');
+    expect(v668Migration).toContain('health_status');
+    expect(v668Migration).toContain('dependencies JSONB');
+    expect(v668Migration).toContain('root_execution_id');
+    expect(v668Migration).toContain('context_version');
+    expect(v668Migration).toContain('waiting_for_approval');
     expect(read('src', 'audit', 'super-agent.ts')).toContain('super_agent_audit_logs');
     expect(capabilityService).toContain('logSuperAgentAudit');
+    expect(capabilityService).toContain('CapabilityContract');
+    expect(capabilityService).toContain('registryAssets');
+    expect(capabilityService).toContain('graphVersion');
+    expect(taskService).toContain('rootExecutionId');
+    expect(taskService).toContain('contextVersion');
   });
 
   it('requires approval for write, high-risk, and critical actions', () => {
@@ -64,11 +78,17 @@ describe('v6.6.7 Super AgentOS contract', () => {
       requiredApprovals: 2,
     });
     expect(normalizeTaskStatus('awaiting_confirmation')).toBe('awaiting_confirmation');
+    expect(normalizeTaskStatus('waitingforapproval')).toBe('waiting_for_approval');
+    expect(normalizeTaskStatus('retrying')).toBe('retrying');
+    expect(normalizeTaskStatus('archived')).toBe('archived');
     expect(normalizeTaskStatus('unknown')).toBe('queued');
   });
 
   it('keeps Vault metadata out of model context by contract', () => {
     const contextService = read('src', 'workspace-context', 'service.ts');
+    expect(contextService).toContain('contextVersion');
+    expect(contextService).toContain('contextObjects');
+    expect(contextService).toContain('dependencyHash');
     expect(contextService).toContain('availableSecretMetadataOnly');
     expect(contextService).not.toContain('maskedValue');
     expect(contextService).not.toContain('encrypted_value');

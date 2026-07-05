@@ -6,19 +6,32 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 export type AgentTaskStatus =
+  | 'created'
   | 'queued'
   | 'planning'
+  | 'waiting_for_dependencies'
+  | 'waiting_for_approval'
   | 'awaiting_confirmation'
+  | 'scheduled'
   | 'running'
   | 'paused'
+  | 'retrying'
+  | 'cancelling'
   | 'completed'
   | 'failed'
   | 'cancelled'
-  | 'needs_configuration';
+  | 'needs_configuration'
+  | 'archived';
 
 export type AgentTaskStepStatus =
   | 'queued'
+  | 'planning'
+  | 'waiting_for_dependencies'
+  | 'waiting_for_approval'
+  | 'scheduled'
   | 'running'
+  | 'paused'
+  | 'retrying'
   | 'completed'
   | 'failed'
   | 'cancelled'
@@ -26,6 +39,8 @@ export type AgentTaskStepStatus =
 
 export type AgentTaskRecord = {
   id: string;
+  parentTaskId: string | null;
+  rootExecutionId: string;
   userId: string;
   sessionId: string | null;
   workspaceId: string | null;
@@ -35,14 +50,20 @@ export type AgentTaskRecord = {
   status: AgentTaskStatus;
   plan: Array<Record<string, unknown>>;
   capabilityIds: string[];
+  plannerVersion: string;
+  contextVersion: string | null;
+  priority: 'critical' | 'high' | 'normal' | 'low' | 'background';
   requiredPermissions: string[];
   confirmationStatus: 'not_required' | 'pending' | 'approved' | 'rejected';
   progress: number;
+  retryCount: number;
   errorMessage: string | null;
   resultSummary: string | null;
   metadata: Record<string, unknown>;
+  executionMetadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  startedAt: string | null;
   completedAt: string | null;
 };
 
@@ -64,6 +85,8 @@ export type AgentTaskStepRecord = {
 
 type TaskCreateInput = {
   userId: string;
+  parentTaskId?: string | null;
+  rootExecutionId?: string | null;
   sessionId?: string | null;
   workspaceId?: string | null;
   projectId?: string | null;
@@ -72,32 +95,65 @@ type TaskCreateInput = {
   status?: AgentTaskStatus;
   plan?: Array<Record<string, unknown>>;
   capabilityIds?: string[];
+  plannerVersion?: string;
+  contextVersion?: string | null;
+  priority?: AgentTaskRecord['priority'];
   requiredPermissions?: string[];
   confirmationStatus?: AgentTaskRecord['confirmationStatus'];
   progress?: number;
+  retryCount?: number;
   metadata?: Record<string, unknown>;
+  executionMetadata?: Record<string, unknown>;
 };
 
 type TaskPatchInput = Partial<Pick<
   AgentTaskRecord,
-  'status' | 'plan' | 'capabilityIds' | 'requiredPermissions' | 'confirmationStatus' | 'progress' | 'errorMessage' | 'resultSummary' | 'metadata' | 'completedAt'
+  | 'status'
+  | 'plan'
+  | 'capabilityIds'
+  | 'plannerVersion'
+  | 'contextVersion'
+  | 'priority'
+  | 'requiredPermissions'
+  | 'confirmationStatus'
+  | 'progress'
+  | 'retryCount'
+  | 'errorMessage'
+  | 'resultSummary'
+  | 'metadata'
+  | 'executionMetadata'
+  | 'startedAt'
+  | 'completedAt'
 >>;
 
 const TASK_STATUSES = new Set<AgentTaskStatus>([
+  'created',
   'queued',
   'planning',
+  'waiting_for_dependencies',
+  'waiting_for_approval',
   'awaiting_confirmation',
+  'scheduled',
   'running',
   'paused',
+  'retrying',
+  'cancelling',
   'completed',
   'failed',
   'cancelled',
   'needs_configuration',
+  'archived',
 ]);
 
 const TASK_STEP_STATUSES = new Set<AgentTaskStepStatus>([
   'queued',
+  'planning',
+  'waiting_for_dependencies',
+  'waiting_for_approval',
+  'scheduled',
   'running',
+  'paused',
+  'retrying',
   'completed',
   'failed',
   'cancelled',
@@ -120,8 +176,15 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
+function normalizePriority(value: unknown): AgentTaskRecord['priority'] {
+  return value === 'critical' || value === 'high' || value === 'low' || value === 'background' ? value : 'normal';
+}
+
 export function normalizeTaskStatus(value: unknown): AgentTaskStatus {
   const status = typeof value === 'string' ? value.toLowerCase() : 'queued';
+  if (status === 'waitingforapproval' || status === 'waiting_for_confirmation') return 'waiting_for_approval';
+  if (status === 'awaiting_approval') return 'awaiting_confirmation';
+  if (status === 'waitingfordependencies') return 'waiting_for_dependencies';
   return TASK_STATUSES.has(status as AgentTaskStatus) ? status as AgentTaskStatus : 'queued';
 }
 
@@ -131,8 +194,11 @@ function normalizeStepStatus(value: unknown): AgentTaskStepStatus {
 }
 
 function mapTask(row: Record<string, unknown>): AgentTaskRecord {
+  const id = String(row.id);
   return {
-    id: String(row.id),
+    id,
+    parentTaskId: typeof (row.parent_task_id ?? row.parentTaskId) === 'string' ? String(row.parent_task_id ?? row.parentTaskId) : null,
+    rootExecutionId: typeof (row.root_execution_id ?? row.rootExecutionId) === 'string' ? String(row.root_execution_id ?? row.rootExecutionId) : id,
     userId: String(row.user_id ?? row.userId),
     sessionId: typeof (row.session_id ?? row.sessionId) === 'string' ? String(row.session_id ?? row.sessionId) : null,
     workspaceId: typeof (row.workspace_id ?? row.workspaceId) === 'string' ? String(row.workspace_id ?? row.workspaceId) : null,
@@ -142,6 +208,9 @@ function mapTask(row: Record<string, unknown>): AgentTaskRecord {
     status: normalizeTaskStatus(row.status),
     plan: recordArray(row.plan),
     capabilityIds: stringArray(row.capability_ids ?? row.capabilityIds),
+    plannerVersion: String(row.planner_version ?? row.plannerVersion ?? 'super-agentos-planner-v6.6.8'),
+    contextVersion: typeof (row.context_version ?? row.contextVersion) === 'string' ? String(row.context_version ?? row.contextVersion) : null,
+    priority: normalizePriority(row.priority),
     requiredPermissions: stringArray(row.required_permissions ?? row.requiredPermissions),
     confirmationStatus: row.confirmation_status === 'pending' || row.confirmation_status === 'approved' || row.confirmation_status === 'rejected'
       ? row.confirmation_status
@@ -149,11 +218,14 @@ function mapTask(row: Record<string, unknown>): AgentTaskRecord {
         ? row.confirmationStatus
         : 'not_required',
     progress: Math.max(0, Math.min(100, Number(row.progress ?? 0))),
+    retryCount: Math.max(0, Number(row.retry_count ?? row.retryCount ?? 0)),
     errorMessage: typeof (row.error_message ?? row.errorMessage) === 'string' ? String(row.error_message ?? row.errorMessage) : null,
     resultSummary: typeof (row.result_summary ?? row.resultSummary) === 'string' ? String(row.result_summary ?? row.resultSummary) : null,
     metadata: asRecord(row.metadata),
+    executionMetadata: asRecord(row.execution_metadata ?? row.executionMetadata),
     createdAt: String(row.created_at ?? row.createdAt ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? row.updatedAt ?? new Date().toISOString()),
+    startedAt: typeof (row.started_at ?? row.startedAt) === 'string' ? String(row.started_at ?? row.startedAt) : null,
     completedAt: typeof (row.completed_at ?? row.completedAt) === 'string' ? String(row.completed_at ?? row.completedAt) : null,
   };
 }
@@ -181,6 +253,8 @@ function toTaskRow(input: TaskCreateInput, id = crypto.randomUUID(), now = new D
   if (!title) throw new ValidationError('task title is required');
   return {
     id,
+    parent_task_id: input.parentTaskId ?? null,
+    root_execution_id: input.rootExecutionId ?? id,
     user_id: input.userId,
     session_id: input.sessionId ?? null,
     workspace_id: input.workspaceId ?? null,
@@ -190,14 +264,20 @@ function toTaskRow(input: TaskCreateInput, id = crypto.randomUUID(), now = new D
     status: input.status ?? 'queued',
     plan: redactSecretsDeep(input.plan ?? []),
     capability_ids: input.capabilityIds ?? [],
+    planner_version: input.plannerVersion ?? 'super-agentos-planner-v6.6.8',
+    context_version: input.contextVersion ?? null,
+    priority: normalizePriority(input.priority),
     required_permissions: input.requiredPermissions ?? [],
     confirmation_status: input.confirmationStatus ?? 'not_required',
     progress: Math.max(0, Math.min(100, input.progress ?? 0)),
+    retry_count: Math.max(0, input.retryCount ?? 0),
     error_message: null,
     result_summary: null,
     metadata: redactSecretsDeep(input.metadata ?? {}),
+    execution_metadata: redactSecretsDeep(input.executionMetadata ?? {}),
     created_at: now,
     updated_at: now,
+    started_at: input.status === 'running' ? now : null,
     completed_at: null,
   };
 }
@@ -207,12 +287,19 @@ function taskPatchToDb(patch: TaskPatchInput): Record<string, unknown> {
   if (patch.status !== undefined) row.status = normalizeTaskStatus(patch.status);
   if (patch.plan !== undefined) row.plan = redactSecretsDeep(patch.plan);
   if (patch.capabilityIds !== undefined) row.capability_ids = patch.capabilityIds;
+  if (patch.plannerVersion !== undefined) row.planner_version = patch.plannerVersion;
+  if (patch.contextVersion !== undefined) row.context_version = patch.contextVersion;
+  if (patch.priority !== undefined) row.priority = normalizePriority(patch.priority);
   if (patch.requiredPermissions !== undefined) row.required_permissions = patch.requiredPermissions;
   if (patch.confirmationStatus !== undefined) row.confirmation_status = patch.confirmationStatus;
   if (patch.progress !== undefined) row.progress = Math.max(0, Math.min(100, patch.progress));
+  if (patch.retryCount !== undefined) row.retry_count = Math.max(0, patch.retryCount);
   if (patch.errorMessage !== undefined) row.error_message = patch.errorMessage;
   if (patch.resultSummary !== undefined) row.result_summary = patch.resultSummary;
   if (patch.metadata !== undefined) row.metadata = redactSecretsDeep(patch.metadata);
+  if (patch.executionMetadata !== undefined) row.execution_metadata = redactSecretsDeep(patch.executionMetadata);
+  if (patch.startedAt !== undefined) row.started_at = patch.startedAt;
+  if (patch.status === 'running' && patch.startedAt === undefined) row.started_at = new Date().toISOString();
   if (patch.completedAt !== undefined) row.completed_at = patch.completedAt;
   if (patch.status === 'completed' && patch.completedAt === undefined) row.completed_at = new Date().toISOString();
   if ((patch.status === 'failed' || patch.status === 'cancelled') && patch.completedAt === undefined) row.completed_at = new Date().toISOString();
@@ -412,15 +499,16 @@ export async function retryAgentTask(params: {
   taskId: string;
 }): Promise<AgentTaskRecord> {
   const { task } = await getAgentTaskBundle(params);
-  if (task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'needs_configuration') {
-    throw new ValidationError('Only failed, cancelled, or needs_configuration tasks can be retried');
+  if (task.status !== 'failed' && task.status !== 'cancelled' && task.status !== 'needs_configuration' && task.status !== 'archived') {
+    throw new ValidationError('Only failed, cancelled, needs_configuration, or archived tasks can be retried');
   }
   return updateAgentTask({
     userId: params.userId,
     taskId: params.taskId,
     patch: {
-      status: 'queued',
+      status: 'retrying',
       progress: 0,
+      retryCount: task.retryCount + 1,
       errorMessage: null,
       resultSummary: null,
       confirmationStatus: task.confirmationStatus === 'rejected' ? 'pending' : task.confirmationStatus,

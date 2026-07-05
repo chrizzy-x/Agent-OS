@@ -41,9 +41,23 @@ export async function POST(request: NextRequest) {
       title: message ? message.slice(0, 160) : 'Super AgentOS message',
       originalPrompt: message,
       status: 'planning',
-      plan: [{ step: 'load_workspace_context', status: 'completed' }, { step: 'discover_capabilities', status: 'completed' }],
+      plan: [
+        { step: 'load_workspace_context', status: 'completed', contextVersion: context.metadata.contextVersion },
+        { step: 'discover_capabilities', status: 'completed', graphVersion: context.capabilityGraph.graphVersion },
+      ],
       capabilityIds: context.capabilityGraph.availableCapabilities.slice(0, 12).map(item => item.id),
+      plannerVersion: context.runtimeRegistry.contract.plannerVersion,
+      contextVersion: context.metadata.contextVersion,
       progress: 40,
+      metadata: {
+        contextVersion: context.metadata.contextVersion,
+        graphVersion: context.capabilityGraph.graphVersion,
+      },
+      executionMetadata: {
+        runtime: 'super-agentos',
+        runtimeContract: context.runtimeRegistry.contract,
+        contextBuild: context.metadata,
+      },
     });
 
     const answersWorkspaceQuestion = isCapabilityQuestion(message);

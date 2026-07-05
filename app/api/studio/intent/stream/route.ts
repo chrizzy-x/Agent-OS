@@ -156,14 +156,23 @@ export async function POST(request: NextRequest) {
           status: 'planning',
           plan: [
             { step: 'receive_user_intent', status: 'completed' },
-            { step: 'load_workspace_context', status: 'completed' },
-            { step: 'discover_capabilities', status: 'completed' },
+            { step: 'load_workspace_context', status: 'completed', contextVersion: workspaceContext.metadata.contextVersion },
+            { step: 'discover_capabilities', status: 'completed', graphVersion: workspaceContext.capabilityGraph.graphVersion },
           ],
           capabilityIds: workspaceContext.capabilityGraph.availableCapabilities.slice(0, 20).map(item => item.id),
+          plannerVersion: workspaceContext.runtimeRegistry.contract.plannerVersion,
+          contextVersion: workspaceContext.metadata.contextVersion,
           progress: 20,
           metadata: {
             attachmentCount: attachments.length,
             invocationCount: invocations.length,
+            contextVersion: workspaceContext.metadata.contextVersion,
+            graphVersion: workspaceContext.capabilityGraph.graphVersion,
+          },
+          executionMetadata: {
+            runtime: 'super-agentos',
+            runtimeContract: workspaceContext.runtimeRegistry.contract,
+            contextBuild: workspaceContext.metadata,
           },
         });
 

@@ -21,6 +21,7 @@ import { listVaultSecrets } from '../vault/service.js';
 
 export type CapabilitySourceType = 'system' | 'app' | 'skill' | 'workflow' | 'subagent' | 'mcp' | 'project' | 'library';
 export type CapabilityStatus = 'available' | 'needs_config' | 'disabled' | 'error';
+export type CapabilityHealth = 'healthy' | 'warning' | 'unavailable' | 'deprecated' | 'failed' | 'disabled';
 
 export type CapabilityAction = {
   id: string;
@@ -43,32 +44,108 @@ export type CapabilityNode = {
   sourceId: string;
   name: string;
   description: string;
+  provider: string;
+  version: string;
   status: CapabilityStatus;
   statusReason: string | null;
+  health: CapabilityHealth;
   actions: CapabilityAction[];
   requiredPermissions: string[];
   requiredSecrets: Array<Record<string, unknown>>;
+  dependencies: string[];
+  costProfile: Record<string, unknown>;
+  computeRequirement: Record<string, unknown>;
+  supportedModels: string[];
+  supportedContextTypes: string[];
+  executionPriority: number;
+  confidenceScore: number;
+  fallbackCapabilities: string[];
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;
   metadata: Record<string, unknown>;
+  contract: CapabilityContract;
   createdAt: string;
   updatedAt: string;
 };
 
+export type CapabilityContract = {
+  capabilityId: string;
+  capabilityName: string;
+  description: string;
+  provider: string;
+  inputs: Record<string, unknown>;
+  outputs: Record<string, unknown>;
+  executionEndpoint: string | null;
+  permissionRequirements: string[];
+  dependencies: string[];
+  estimatedCost: Record<string, unknown>;
+  estimatedCompute: Record<string, unknown>;
+  health: CapabilityHealth;
+  version: string;
+  supportedModels: string[];
+  supportedContextTypes: string[];
+  executionPriority: number;
+  confidenceScore: number;
+  fallbackCapabilities: string[];
+};
+
+export type RuntimeRegistryAsset = {
+  assetId: string;
+  workspaceId: string | null;
+  assetType: CapabilitySourceType;
+  name: string;
+  description: string;
+  provider: string;
+  version: string;
+  installationStatus: CapabilityStatus;
+  healthStatus: CapabilityHealth;
+  owner: string | null;
+  permissions: string[];
+  tags: string[];
+  categories: string[];
+  dependencies: string[];
+  capabilitiesPublished: string[];
+  lastUpdated: string;
+  createdAt: string;
+  runtimeMetadata: Record<string, unknown>;
+};
+
+export type CapabilityRelationship = {
+  from: string;
+  to: string;
+  type: 'depends_on' | 'fallback_for' | 'extends' | 'replaces' | 'conflicts_with' | 'enhances' | 'consumes' | 'produces';
+};
+
 export type CapabilityGraph = {
+  graphVersion: string;
+  generatedAt: string;
   availableCapabilities: CapabilityNode[];
   unavailableCapabilities: CapabilityNode[];
   needsConfiguration: CapabilityNode[];
+  registryAssets: RuntimeRegistryAsset[];
+  relationships: CapabilityRelationship[];
+  runtimeContract: {
+    runtime: 'super-agentos';
+    version: string;
+    plannerVersion: string;
+    registryVersion: string;
+    selectionPolicy: 'deterministic-health-permission-rank';
+  };
   summary: {
     total: number;
     available: number;
     needsConfiguration: number;
     disabled: number;
     error: number;
+    registryAssets: number;
+    healthy: number;
+    warning: number;
     bySourceType: Record<CapabilitySourceType, number>;
   };
 };
 
+const RUNTIME_CONTRACT_VERSION = '6.6.8';
+const PLANNER_VERSION = 'super-agentos-planner-v6.6.8';
 const genericObjectSchema = { type: 'object', additionalProperties: true };
 const emptyObjectSchema = { type: 'object', additionalProperties: false };
 
@@ -86,6 +163,12 @@ function recordArray(value: unknown): Array<Record<string, unknown>> {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function numberBetween(value: unknown, min: number, max: number, fallback: number): number {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
 }
 
 function stableId(sourceType: CapabilitySourceType, sourceId: string): string {
@@ -109,15 +192,95 @@ function action(params: Omit<CapabilityAction, 'capabilityId'> & { capabilityId?
   };
 }
 
-function node(params: Omit<CapabilityNode, 'createdAt' | 'updatedAt'> & { createdAt?: string; updatedAt?: string }): CapabilityNode {
+type CapabilityNodeInput = Omit<
+  CapabilityNode,
+  | 'createdAt'
+  | 'updatedAt'
+  | 'contract'
+  | 'provider'
+  | 'version'
+  | 'health'
+  | 'dependencies'
+  | 'costProfile'
+  | 'computeRequirement'
+  | 'supportedModels'
+  | 'supportedContextTypes'
+  | 'executionPriority'
+  | 'confidenceScore'
+  | 'fallbackCapabilities'
+> & Partial<Pick<
+  CapabilityNode,
+  | 'createdAt'
+  | 'updatedAt'
+  | 'provider'
+  | 'version'
+  | 'health'
+  | 'dependencies'
+  | 'costProfile'
+  | 'computeRequirement'
+  | 'supportedModels'
+  | 'supportedContextTypes'
+  | 'executionPriority'
+  | 'confidenceScore'
+  | 'fallbackCapabilities'
+>>;
+
+function healthForStatus(status: CapabilityStatus, value?: unknown): CapabilityHealth {
+  if (value === 'healthy' || value === 'warning' || value === 'unavailable' || value === 'deprecated' || value === 'failed' || value === 'disabled') {
+    return value;
+  }
+  if (status === 'available') return 'healthy';
+  if (status === 'needs_config') return 'warning';
+  if (status === 'disabled') return 'disabled';
+  return 'failed';
+}
+
+function buildCapabilityContract(capability: Omit<CapabilityNode, 'contract'>): CapabilityContract {
+  const executionEndpoint = capability.actions.find(item => item.executeEndpoint)?.executeEndpoint ?? null;
+  return {
+    capabilityId: capability.id,
+    capabilityName: capability.name,
+    description: capability.description,
+    provider: capability.provider,
+    inputs: capability.inputSchema,
+    outputs: capability.outputSchema,
+    executionEndpoint,
+    permissionRequirements: capability.requiredPermissions,
+    dependencies: capability.dependencies,
+    estimatedCost: capability.costProfile,
+    estimatedCompute: capability.computeRequirement,
+    health: capability.health,
+    version: capability.version,
+    supportedModels: capability.supportedModels,
+    supportedContextTypes: capability.supportedContextTypes,
+    executionPriority: capability.executionPriority,
+    confidenceScore: capability.confidenceScore,
+    fallbackCapabilities: capability.fallbackCapabilities,
+  };
+}
+
+function node(params: CapabilityNodeInput): CapabilityNode {
   const now = new Date().toISOString();
   const actions = params.actions.map(item => ({ ...item, capabilityId: params.id }));
-  return {
+  const metadata = params.metadata ?? {};
+  const capability: Omit<CapabilityNode, 'contract'> = {
     ...params,
+    provider: params.provider ?? (typeof metadata.provider === 'string' ? metadata.provider : params.sourceType),
+    version: params.version ?? (typeof metadata.version === 'string' ? metadata.version : RUNTIME_CONTRACT_VERSION),
+    health: healthForStatus(params.status, params.health ?? metadata.healthStatus),
     actions,
+    dependencies: params.dependencies ?? stringArray(metadata.dependencies),
+    costProfile: params.costProfile ?? asRecord(metadata.costProfile),
+    computeRequirement: params.computeRequirement ?? asRecord(metadata.computeRequirement),
+    supportedModels: params.supportedModels ?? stringArray(metadata.supportedModels),
+    supportedContextTypes: params.supportedContextTypes ?? stringArray(metadata.supportedContextTypes),
+    executionPriority: numberBetween(params.executionPriority ?? metadata.executionPriority, 0, 100, 50),
+    confidenceScore: numberBetween(params.confidenceScore ?? metadata.confidenceScore, 0, 1, params.status === 'available' ? 0.9 : 0.4),
+    fallbackCapabilities: params.fallbackCapabilities ?? stringArray(metadata.fallbackCapabilities),
     createdAt: params.createdAt ?? now,
     updatedAt: params.updatedAt ?? now,
   };
+  return { ...capability, contract: buildCapabilityContract(capability) };
 }
 
 function normalizeStatus(value: unknown): CapabilityStatus {
@@ -130,6 +293,7 @@ function normalizeRisk(value: unknown): RiskLevel {
 
 function mapCapability(row: Record<string, unknown>): CapabilityNode {
   const id = String(row.id);
+  const metadata = asRecord(row.metadata);
   const rawActions = recordArray(row.actions).map(item => action({
     id: String(item.id ?? 'run'),
     capabilityId: id,
@@ -150,14 +314,25 @@ function mapCapability(row: Record<string, unknown>): CapabilityNode {
     sourceId: String(row.source_id ?? row.sourceId ?? id),
     name: String(row.name ?? 'Capability'),
     description: String(row.description ?? ''),
+    provider: String(row.provider ?? metadata.provider ?? row.source_type ?? row.sourceType ?? 'system'),
+    version: String(row.version ?? metadata.version ?? RUNTIME_CONTRACT_VERSION),
     status: normalizeStatus(row.status),
     statusReason: typeof (row.status_reason ?? row.statusReason) === 'string' ? String(row.status_reason ?? row.statusReason) : null,
+    health: healthForStatus(normalizeStatus(row.status), row.health_status ?? row.health ?? metadata.healthStatus),
     actions: rawActions,
     requiredPermissions: stringArray(row.required_permissions ?? row.requiredPermissions),
     requiredSecrets: recordArray(row.required_secrets ?? row.requiredSecrets),
+    dependencies: stringArray(row.dependencies ?? metadata.dependencies),
+    costProfile: asRecord(row.cost_profile ?? row.costProfile ?? metadata.costProfile),
+    computeRequirement: asRecord(row.compute_requirement ?? row.computeRequirement ?? metadata.computeRequirement),
+    supportedModels: stringArray(row.supported_models ?? row.supportedModels ?? metadata.supportedModels),
+    supportedContextTypes: stringArray(row.supported_context_types ?? row.supportedContextTypes ?? metadata.supportedContextTypes),
+    executionPriority: numberBetween(row.execution_priority ?? row.executionPriority ?? metadata.executionPriority, 0, 100, 50),
+    confidenceScore: numberBetween(row.confidence_score ?? row.confidenceScore ?? metadata.confidenceScore, 0, 1, normalizeStatus(row.status) === 'available' ? 0.9 : 0.4),
+    fallbackCapabilities: stringArray(row.fallback_capabilities ?? row.fallbackCapabilities ?? metadata.fallbackCapabilities),
     inputSchema: asRecord(row.input_schema ?? row.inputSchema),
     outputSchema: asRecord(row.output_schema ?? row.outputSchema),
-    metadata: asRecord(row.metadata),
+    metadata,
     createdAt: String(row.created_at ?? row.createdAt ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? row.updatedAt ?? new Date().toISOString()),
   });
@@ -172,6 +347,62 @@ function dedupe(nodes: CapabilityNode[]): CapabilityNode[] {
     if (left.status !== right.status) return left.status === 'available' ? -1 : right.status === 'available' ? 1 : left.status.localeCompare(right.status);
     return left.name.localeCompare(right.name);
   });
+}
+
+function runtimeRegistryAsset(capability: CapabilityNode): RuntimeRegistryAsset {
+  const workspaceId = typeof capability.metadata.workspaceId === 'string' ? capability.metadata.workspaceId : null;
+  return {
+    assetId: capability.sourceId,
+    workspaceId,
+    assetType: capability.sourceType,
+    name: capability.name,
+    description: capability.description,
+    provider: capability.provider,
+    version: capability.version,
+    installationStatus: capability.status,
+    healthStatus: capability.health,
+    owner: typeof capability.metadata.owner === 'string' ? capability.metadata.owner : null,
+    permissions: capability.requiredPermissions,
+    tags: stringArray(capability.metadata.tags),
+    categories: [
+      ...(typeof capability.metadata.category === 'string' ? [capability.metadata.category] : []),
+      ...stringArray(capability.metadata.categories),
+    ],
+    dependencies: capability.dependencies,
+    capabilitiesPublished: [capability.id],
+    lastUpdated: capability.updatedAt,
+    createdAt: capability.createdAt,
+    runtimeMetadata: redactSecretsDeep({
+      statusReason: capability.statusReason,
+      actionCount: capability.actions.length,
+      contract: capability.contract,
+      ...capability.metadata,
+    }) as Record<string, unknown>,
+  };
+}
+
+function graphRelationships(nodes: CapabilityNode[]): CapabilityRelationship[] {
+  return nodes.flatMap(item => [
+    ...item.dependencies.map(dependency => ({ from: item.id, to: dependency, type: 'depends_on' as const })),
+    ...item.fallbackCapabilities.map(fallback => ({ from: fallback, to: item.id, type: 'fallback_for' as const })),
+  ]);
+}
+
+function graphVersion(nodes: CapabilityNode[], relationships: CapabilityRelationship[]): string {
+  const hash = crypto.createHash('sha256');
+  hash.update(JSON.stringify({
+    version: RUNTIME_CONTRACT_VERSION,
+    nodes: nodes.map(item => ({
+      id: item.id,
+      status: item.status,
+      health: item.health,
+      version: item.version,
+      updatedAt: item.updatedAt,
+      actions: item.actions.map(action => action.id),
+    })),
+    relationships,
+  }));
+  return `capgraph-${hash.digest('hex').slice(0, 16)}`;
 }
 
 function summarizeGraph(nodes: CapabilityNode[]): CapabilityGraph {
@@ -189,19 +420,39 @@ function summarizeGraph(nodes: CapabilityNode[]): CapabilityGraph {
   const availableCapabilities = nodes.filter(item => item.status === 'available');
   const needsConfiguration = nodes.filter(item => item.status === 'needs_config');
   const unavailableCapabilities = nodes.filter(item => item.status !== 'available');
+  const registryAssets = nodes.map(runtimeRegistryAsset);
+  const relationships = graphRelationships(nodes);
   return {
+    graphVersion: graphVersion(nodes, relationships),
+    generatedAt: new Date().toISOString(),
     availableCapabilities,
     unavailableCapabilities,
     needsConfiguration,
+    registryAssets,
+    relationships,
+    runtimeContract: {
+      runtime: 'super-agentos',
+      version: RUNTIME_CONTRACT_VERSION,
+      plannerVersion: PLANNER_VERSION,
+      registryVersion: RUNTIME_CONTRACT_VERSION,
+      selectionPolicy: 'deterministic-health-permission-rank',
+    },
     summary: {
       total: nodes.length,
       available: availableCapabilities.length,
       needsConfiguration: needsConfiguration.length,
       disabled: nodes.filter(item => item.status === 'disabled').length,
       error: nodes.filter(item => item.status === 'error').length,
+      registryAssets: registryAssets.length,
+      healthy: nodes.filter(item => item.health === 'healthy').length,
+      warning: nodes.filter(item => item.health === 'warning').length,
       bySourceType,
     },
   };
+}
+
+export function createEmptyCapabilityGraph(): CapabilityGraph {
+  return summarizeGraph([]);
 }
 
 async function listPersistedCapabilities(params: {
@@ -452,6 +703,57 @@ function libraryNode(item: LibraryItem): CapabilityNode {
   });
 }
 
+function systemCapability(params: {
+  sourceId: string;
+  name: string;
+  description: string;
+  actionId?: string;
+  actionName?: string;
+  permissions: string[];
+  status?: CapabilityStatus;
+  statusReason?: string | null;
+  metadata?: Record<string, unknown>;
+}): CapabilityNode {
+  const capabilityId = stableId('system', params.sourceId);
+  return node({
+    id: capabilityId,
+    sourceType: 'system',
+    sourceId: params.sourceId,
+    name: params.name,
+    description: params.description,
+    provider: 'AgentOS',
+    version: RUNTIME_CONTRACT_VERSION,
+    status: params.status ?? 'available',
+    statusReason: params.statusReason ?? null,
+    actions: params.status === 'needs_config' ? [] : [action({
+      id: params.actionId ?? 'describe',
+      name: params.actionName ?? `Describe ${params.name}`,
+      description: params.description,
+      inputSchema: emptyObjectSchema,
+      outputSchema: genericObjectSchema,
+      executeEndpoint: `/api/capabilities/${encodeURIComponent(capabilityId)}/actions/${encodeURIComponent(params.actionId ?? 'describe')}/execute`,
+      confirmationRequired: false,
+      riskLevel: 'low',
+      permissions: params.permissions,
+      timeoutMs: 10_000,
+      retryable: false,
+    })],
+    requiredPermissions: params.permissions,
+    requiredSecrets: [],
+    dependencies: [],
+    costProfile: { unit: 'platform', estimatedCost: 0 },
+    computeRequirement: { tier: 'low', worker: 'runtime' },
+    supportedModels: [],
+    supportedContextTypes: ['workspace'],
+    executionPriority: 90,
+    confidenceScore: params.status === 'needs_config' ? 0.4 : 1,
+    fallbackCapabilities: [],
+    inputSchema: emptyObjectSchema,
+    outputSchema: genericObjectSchema,
+    metadata: params.metadata ?? {},
+  });
+}
+
 export async function buildCapabilityGraph(params: {
   ownerAgentId: string;
   workspaceId?: string | null;
@@ -619,32 +921,75 @@ export async function buildCapabilityGraph(params: {
     });
 
   const systemNodes = [
-    node({
-      id: stableId('system', 'workspace-context'),
-      sourceType: 'system',
+    systemCapability({
+      sourceId: 'super-agentos-runtime',
+      name: 'Super AgentOS Runtime',
+      description: 'Single orchestration kernel for intent, planning, approvals, task dispatch, recovery, and result synthesis.',
+      permissions: ['runtime:execute'],
+      metadata: { layer: 'Super AgentOS Runtime', owner: 'runtime' },
+    }),
+    systemCapability({
       sourceId: 'workspace-context',
       name: 'Workspace Context',
       description: 'Read current workspace context, capability summary, memory metadata, projects, and Library assets.',
-      status: 'available',
-      statusReason: null,
-      actions: [action({
-        id: 'describe',
-        name: 'Describe workspace',
-        description: 'Return the current workspace capability summary.',
-        inputSchema: emptyObjectSchema,
-        outputSchema: genericObjectSchema,
-        executeEndpoint: `/api/workspace/context`,
-        confirmationRequired: false,
-        riskLevel: 'low',
-        permissions: ['workspace:read'],
-        timeoutMs: 10_000,
-        retryable: false,
-      })],
-      requiredPermissions: ['workspace:read'],
-      requiredSecrets: [],
-      inputSchema: emptyObjectSchema,
-      outputSchema: genericObjectSchema,
-      metadata: {},
+      permissions: ['workspace:read'],
+      metadata: { layer: 'Workspace Intelligence', owner: 'workspace-context-engine' },
+    }),
+    systemCapability({
+      sourceId: 'runtime-registry',
+      name: 'Runtime Registry',
+      description: 'Canonical inventory of registered workspace assets and published capabilities.',
+      permissions: ['registry:read'],
+      metadata: { layer: 'Capability Layer', owner: 'runtime-registry' },
+    }),
+    systemCapability({
+      sourceId: 'capability-graph',
+      name: 'Capability Graph',
+      description: 'Deterministic capability resolution, ranking, dependencies, and fallback relationships.',
+      permissions: ['capability:read'],
+      metadata: { layer: 'Capability Layer', owner: 'capability-graph' },
+    }),
+    systemCapability({
+      sourceId: 'task-engine',
+      name: 'Task Engine',
+      description: 'Durable task lifecycle, execution timeline, retries, cancellation, and recovery.',
+      permissions: ['tasks:read'],
+      metadata: { layer: 'Execution Layer', owner: 'task-engine' },
+    }),
+    systemCapability({
+      sourceId: 'scheduler',
+      name: 'Scheduler',
+      description: 'Central queue, recurring execution, time-based scheduling, and dependency scheduling contract.',
+      permissions: ['scheduler:read'],
+      metadata: { layer: 'Execution Layer', owner: 'scheduler' },
+    }),
+    systemCapability({
+      sourceId: 'approval-system',
+      name: 'Approval System',
+      description: 'Approval policy, persistence, history, expiration, and authorization gating.',
+      permissions: ['approvals:read'],
+      metadata: { layer: 'Execution Layer', owner: 'approval-system' },
+    }),
+    systemCapability({
+      sourceId: 'memory-resolver',
+      name: 'Memory Resolver',
+      description: 'Permission-aware memory search and execution-history context for Super AgentOS planning.',
+      permissions: ['memory:read'],
+      metadata: { layer: 'Workspace Intelligence', owner: 'memory-service' },
+    }),
+    systemCapability({
+      sourceId: 'vault-metadata',
+      name: 'Vault Metadata',
+      description: 'Secret metadata discovery for runtime planning without exposing secret values.',
+      permissions: ['vault:metadata:read'],
+      metadata: { layer: 'Workspace Intelligence', owner: 'vault-service' },
+    }),
+    systemCapability({
+      sourceId: 'unified-search',
+      name: 'Unified Search',
+      description: 'Search workspace apps, skills, tasks, projects, memory, files, conversations, subagents, SDK assets, and MCP servers.',
+      permissions: ['search:read'],
+      metadata: { layer: 'Platform Services', owner: 'search-service' },
     }),
     node({
       id: stableId('system', 'computer-use'),
@@ -652,11 +997,21 @@ export async function buildCapabilityGraph(params: {
       sourceId: 'computer-use',
       name: 'Computer Use',
       description: 'Browser automation capability contract for future web interactions.',
+      provider: 'AgentOS',
+      version: RUNTIME_CONTRACT_VERSION,
       status: 'needs_config',
       statusReason: 'Browser automation backend is not connected to AgentOS runtime.',
       actions: [],
       requiredPermissions: ['computer:use'],
       requiredSecrets: [],
+      dependencies: ['system:super-agentos-runtime'],
+      costProfile: {},
+      computeRequirement: { tier: 'medium', worker: 'browser' },
+      supportedModels: [],
+      supportedContextTypes: ['workspace', 'browser'],
+      executionPriority: 20,
+      confidenceScore: 0.35,
+      fallbackCapabilities: [],
       inputSchema: genericObjectSchema,
       outputSchema: genericObjectSchema,
       metadata: { supportedStates: ['available', 'needs_setup', 'unavailable'], currentState: 'unavailable' },
@@ -713,7 +1068,7 @@ export async function getCapabilityNode(params: {
 export async function registerCapabilityNode(params: {
   ownerAgentId: string;
   workspaceId?: string | null;
-  node: Omit<CapabilityNode, 'createdAt' | 'updatedAt'> & { createdAt?: string; updatedAt?: string };
+  node: CapabilityNodeInput;
 }): Promise<CapabilityNode> {
   const capability = node(params.node);
   const row = {
@@ -724,11 +1079,22 @@ export async function registerCapabilityNode(params: {
     source_id: capability.sourceId,
     name: capability.name,
     description: capability.description,
+    provider: capability.provider,
+    version: capability.version,
     status: capability.status,
+    health_status: capability.health,
     status_reason: capability.statusReason,
     actions: redactSecretsDeep(capability.actions),
     required_permissions: capability.requiredPermissions,
     required_secrets: redactSecretsDeep(capability.requiredSecrets),
+    dependencies: capability.dependencies,
+    cost_profile: redactSecretsDeep(capability.costProfile),
+    compute_requirement: redactSecretsDeep(capability.computeRequirement),
+    supported_models: capability.supportedModels,
+    supported_context_types: capability.supportedContextTypes,
+    execution_priority: capability.executionPriority,
+    confidence_score: capability.confidenceScore,
+    fallback_capabilities: capability.fallbackCapabilities,
     input_schema: capability.inputSchema,
     output_schema: capability.outputSchema,
     metadata: redactSecretsDeep(capability.metadata),
@@ -888,11 +1254,25 @@ export async function executeCapabilityAction(params: {
       title: `${action.name}: ${capability.name}`,
       originalPrompt: typeof input.prompt === 'string' ? input.prompt : `${action.name}: ${capability.name}`,
       status: capability.status === 'available' ? 'planning' : 'needs_configuration',
-      plan: [{ capabilityId: capability.id, actionId: action.id, actionName: action.name }],
+      plan: [{
+        step: 'execute_capability_action',
+        status: capability.status === 'available' ? 'planning' : 'needs_configuration',
+        capabilityId: capability.id,
+        actionId: action.id,
+        actionName: action.name,
+        contract: capability.contract,
+      }],
       capabilityIds: [capability.id],
+      plannerVersion: PLANNER_VERSION,
       requiredPermissions: [...new Set([...capability.requiredPermissions, ...action.permissions])],
       progress: capability.status === 'available' ? 10 : 0,
       metadata: { capabilitySourceType: capability.sourceType, capabilitySourceId: capability.sourceId },
+      executionMetadata: {
+        runtime: 'super-agentos',
+        runtimeVersion: RUNTIME_CONTRACT_VERSION,
+        capabilityGraphVersion: capability.version,
+        capabilityContract: capability.contract,
+      },
     });
   const resolvedTask = await task;
 
@@ -956,7 +1336,7 @@ export async function executeCapabilityAction(params: {
       userId: params.ctx.agentId,
       taskId: resolvedTask.id,
       patch: {
-        status: 'awaiting_confirmation',
+        status: 'waiting_for_approval',
         confirmationStatus: 'pending',
         progress: 20,
       },

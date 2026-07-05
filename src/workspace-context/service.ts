@@ -1,7 +1,8 @@
+import crypto from 'crypto';
 import { getPlanDescriptor } from '../auth/capabilities.js';
 import type { AgentContext } from '../auth/permissions.js';
 import { listInstalledAgentApps } from '../appstore/service.js';
-import { buildCapabilityGraph } from '../capabilities/service.js';
+import { buildCapabilityGraph, createEmptyCapabilityGraph } from '../capabilities/service.js';
 import { listLibrary } from '../library/service.js';
 import { listAccessibleMemoryEntries } from '../memory/service.js';
 import { listProjects } from '../projects/service.js';
@@ -12,9 +13,81 @@ import { listVaultSecrets } from '../vault/service.js';
 import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
 
 type UserRole = 'retail' | 'pro' | 'enterprise' | 'admin';
+type ContextSource = 'workspace' | 'project' | 'library' | 'app' | 'skill' | 'workflow' | 'conversation' | 'memory' | 'vault' | 'file' | 'task' | 'notification' | 'mcp' | 'sdk' | 'subagent' | 'capability' | 'runtime';
+
+type WorkspaceContextObject = {
+  contextId: string;
+  workspaceId: string | null;
+  source: ContextSource;
+  assetType: string;
+  owner: string;
+  permissions: string[];
+  timestamp: string;
+  version: string;
+  relevanceScore: number;
+  confidenceScore: number;
+  freshness: number;
+  dependencies: string[];
+  metadata: Record<string, unknown>;
+  searchIndexRef: string | null;
+};
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function numberBetween(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function hashObject(value: unknown): string {
+  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function freshnessScore(timestamp: string | null): number {
+  if (!timestamp) return 0.5;
+  const ageMs = Date.now() - new Date(timestamp).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0) return 0.8;
+  const ageDays = ageMs / 86_400_000;
+  return numberBetween(1 - ageDays / 30, 0.1, 1);
+}
+
+function contextObject(params: {
+  workspaceId: string | null;
+  source: ContextSource;
+  assetType: string;
+  owner: string;
+  assetId: string;
+  permissions?: string[];
+  timestamp?: string | null;
+  version?: string | null;
+  relevanceScore: number;
+  confidenceScore: number;
+  dependencies?: string[];
+  metadata?: Record<string, unknown>;
+  searchIndexRef?: string | null;
+}): WorkspaceContextObject {
+  const timestamp = params.timestamp ?? new Date().toISOString();
+  return {
+    contextId: `${params.source}:${params.assetType}:${params.assetId}`.replace(/\s+/g, '-').toLowerCase(),
+    workspaceId: params.workspaceId,
+    source: params.source,
+    assetType: params.assetType,
+    owner: params.owner,
+    permissions: params.permissions ?? [],
+    timestamp,
+    version: params.version ?? '1',
+    relevanceScore: numberBetween(params.relevanceScore, 0, 1),
+    confidenceScore: numberBetween(params.confidenceScore, 0, 1),
+    freshness: freshnessScore(timestamp),
+    dependencies: params.dependencies ?? [],
+    metadata: params.metadata ?? {},
+    searchIndexRef: params.searchIndexRef ?? null,
+  };
 }
 
 function roleForTier(tier: unknown): UserRole {
@@ -116,6 +189,7 @@ export async function buildWorkspaceContextPackage(params: {
   workspaceId?: string | null;
   projectId?: string | null;
 }) {
+  const startedAt = Date.now();
   const [userProfile, workspaces] = await Promise.all([
     loadUserProfile(params.ctx.agentId),
     listWorkspaces(params.ctx.agentId).catch(() => []),
@@ -147,29 +221,240 @@ export async function buildWorkspaceContextPackage(params: {
     listAccessibleSubagents({ viewerAgentId: params.ctx.agentId, workspaceId, projectId }).catch(() => []),
     listMcpConnections(),
     listLibrary({ ownerAgentId: params.ctx.agentId, workspaceId, projectId, limit: 100 }).catch(() => ({ items: [], groups: {}, summary: {} })),
-    listAgentTasks({ userId: params.ctx.agentId, workspaceId, status: 'all', limit: 50 }).then(tasks => tasks.filter(task => ['queued', 'planning', 'awaiting_confirmation', 'running', 'paused'].includes(task.status))).catch(() => []),
+    listAgentTasks({ userId: params.ctx.agentId, workspaceId, status: 'all', limit: 50 }).then(tasks => tasks.filter(task => [
+      'created',
+      'queued',
+      'planning',
+      'waiting_for_dependencies',
+      'waiting_for_approval',
+      'awaiting_confirmation',
+      'scheduled',
+      'running',
+      'paused',
+      'retrying',
+      'cancelling',
+    ].includes(task.status))).catch(() => []),
     listAgentTasks({ userId: params.ctx.agentId, workspaceId, status: 'all', limit: 20 }).catch(() => []),
     listAccessibleMemoryEntries({ viewerAgentId: params.ctx.agentId, ownerAgentId: params.ctx.agentId, workspaceId, limit: 40 }).catch(() => []),
     workspaceId ? listVaultSecrets({ ownerAgentId: params.ctx.agentId, workspaceId }).catch(() => ({ secrets: [] })) : Promise.resolve({ secrets: [] }),
-    buildCapabilityGraph({ ownerAgentId: params.ctx.agentId, workspaceId, projectId }).catch(() => ({
-      availableCapabilities: [],
-      unavailableCapabilities: [],
-      needsConfiguration: [],
-      summary: {
-        total: 0,
-        available: 0,
-        needsConfiguration: 0,
-        disabled: 0,
-        error: 0,
-        bySourceType: { system: 0, app: 0, skill: 0, workflow: 0, subagent: 0, mcp: 0, project: 0, library: 0 },
-      },
-    })),
+    buildCapabilityGraph({ ownerAgentId: params.ctx.agentId, workspaceId, projectId }).catch(() => createEmptyCapabilityGraph()),
   ]);
 
   const plan = getPlanDescriptor(params.ctx.tier);
   const role = userProfile.roleOverride ?? roleForTier(plan.plan);
+  const vaultSecrets = vault.secrets ?? [];
+  const capabilityObjects = [...capabilityGraph.availableCapabilities, ...capabilityGraph.unavailableCapabilities];
+  const contextObjects = [
+    ...(workspaceId ? [contextObject({
+      workspaceId,
+      source: 'workspace',
+      assetType: 'workspace',
+      owner: params.ctx.agentId,
+      assetId: workspaceId,
+      permissions: ['workspace:read'],
+      timestamp: defaultWorkspace?.createdAt ?? null,
+      relevanceScore: 1,
+      confidenceScore: 1,
+      metadata: { name: defaultWorkspace?.name ?? null, role },
+      searchIndexRef: `workspace:${workspaceId}`,
+    })] : []),
+    ...projects.map(project => contextObject({
+      workspaceId: project.workspaceId,
+      source: 'project',
+      assetType: 'project',
+      owner: params.ctx.agentId,
+      assetId: project.id,
+      permissions: ['project:read'],
+      timestamp: project.updatedAt,
+      relevanceScore: project.id === projectId ? 1 : 0.82,
+      confidenceScore: 0.95,
+      metadata: { name: project.name, status: project.status },
+      searchIndexRef: `project:${project.id}`,
+    })),
+    ...installedApps.map(entry => contextObject({
+      workspaceId,
+      source: 'app',
+      assetType: 'installed_app',
+      owner: params.ctx.agentId,
+      assetId: entry.app.id,
+      permissions: entry.app.permissionsRequired,
+      timestamp: entry.installation.installedAt,
+      relevanceScore: 0.74,
+      confidenceScore: entry.app.disabled ? 0.35 : 0.9,
+      dependencies: entry.app.requiredSecrets,
+      metadata: { name: entry.app.name, slug: entry.app.slug, status: entry.installation.status, health: entry.app.healthStatus },
+      searchIndexRef: `app:${entry.app.slug}`,
+    })),
+    ...installedSkills.map(item => {
+      const skill = asRecord(item.skill);
+      return contextObject({
+        workspaceId: typeof item.workspace_id === 'string' ? String(item.workspace_id) : workspaceId,
+        source: 'skill',
+        assetType: 'installed_skill',
+        owner: params.ctx.agentId,
+        assetId: String(skill.id ?? item.skill_id ?? item.id),
+        permissions: stringArray(skill.permissions_required),
+        timestamp: typeof item.installed_at === 'string' ? String(item.installed_at) : null,
+        relevanceScore: 0.72,
+        confidenceScore: 0.9,
+        dependencies: stringArray(skill.required_secrets),
+        metadata: { name: skill.name ?? null, slug: skill.slug ?? null, category: skill.category ?? null, status: item.status ?? null },
+        searchIndexRef: `skill:${String(skill.slug ?? skill.id ?? item.id)}`,
+      });
+    }),
+    ...workflows.map(item => contextObject({
+      workspaceId: typeof item.workspace_id === 'string' ? String(item.workspace_id) : workspaceId,
+      source: 'workflow',
+      assetType: 'workflow',
+      owner: params.ctx.agentId,
+      assetId: String(item.id),
+      permissions: ['run_workflow'],
+      timestamp: typeof item.updated_at === 'string' ? String(item.updated_at) : null,
+      relevanceScore: item.project_id === projectId ? 0.86 : 0.68,
+      confidenceScore: item.status === 'active' ? 0.9 : 0.5,
+      metadata: { name: item.name ?? null, status: item.status ?? null, schedule: item.schedule ?? null },
+      searchIndexRef: `workflow:${String(item.id)}`,
+    })),
+    ...subagents.map(item => contextObject({
+      workspaceId: item.workspaceId,
+      source: 'subagent',
+      assetType: 'subagent',
+      owner: params.ctx.agentId,
+      assetId: item.id,
+      permissions: ['agent:invoke'],
+      timestamp: item.updatedAt,
+      relevanceScore: item.projectId === projectId ? 0.84 : 0.66,
+      confidenceScore: item.status === 'active' || item.status === 'running' ? 0.9 : 0.45,
+      dependencies: item.exposedCapabilities,
+      metadata: { name: item.name, status: item.status, projectId: item.projectId },
+      searchIndexRef: `subagent:${item.id}`,
+    })),
+    ...mcpConnections.map(item => contextObject({
+      workspaceId,
+      source: 'mcp',
+      assetType: 'mcp_server',
+      owner: params.ctx.agentId,
+      assetId: String(item.id),
+      permissions: stringArray(item.permissions),
+      timestamp: typeof item.lastHealthCheck === 'string' ? String(item.lastHealthCheck) : null,
+      relevanceScore: 0.62,
+      confidenceScore: item.connectionStatus === 'connected' ? 0.86 : 0.35,
+      dependencies: stringArray(item.capabilities),
+      metadata: { provider: item.provider, connectionStatus: item.connectionStatus, authStatus: item.authStatus },
+      searchIndexRef: `mcp:${String(item.id)}`,
+    })),
+    ...library.items.map(item => contextObject({
+      workspaceId: item.workspaceId,
+      source: item.kind === 'file' ? 'file' : 'library',
+      assetType: item.kind,
+      owner: params.ctx.agentId,
+      assetId: item.id,
+      permissions: ['library:read'],
+      timestamp: item.updatedAt,
+      relevanceScore: item.projectId === projectId ? 0.78 : 0.58,
+      confidenceScore: 0.85,
+      metadata: { name: item.name, href: item.href, projectId: item.projectId },
+      searchIndexRef: `library:${item.id}`,
+    })),
+    ...activeTasks.map(task => contextObject({
+      workspaceId: task.workspaceId,
+      source: 'task',
+      assetType: 'active_task',
+      owner: params.ctx.agentId,
+      assetId: task.id,
+      permissions: task.requiredPermissions,
+      timestamp: task.updatedAt,
+      relevanceScore: 0.92,
+      confidenceScore: 0.9,
+      dependencies: task.capabilityIds,
+      metadata: { title: task.title, status: task.status, progress: task.progress },
+      searchIndexRef: `task:${task.id}`,
+    })),
+    ...recentTasks.map(task => contextObject({
+      workspaceId: task.workspaceId,
+      source: 'task',
+      assetType: 'task_history',
+      owner: params.ctx.agentId,
+      assetId: task.id,
+      permissions: task.requiredPermissions,
+      timestamp: task.updatedAt,
+      relevanceScore: 0.52,
+      confidenceScore: 0.8,
+      dependencies: task.capabilityIds,
+      metadata: { title: task.title, status: task.status, resultSummary: task.resultSummary },
+      searchIndexRef: `task:${task.id}`,
+    })),
+    ...memoryEntries.map(entry => contextObject({
+      workspaceId,
+      source: 'memory',
+      assetType: entry.namespaceType,
+      owner: params.ctx.agentId,
+      assetId: entry.id,
+      permissions: ['memory:read'],
+      timestamp: entry.updatedAt,
+      relevanceScore: entry.namespaceId === projectId ? 0.84 : 0.6,
+      confidenceScore: 0.82,
+      metadata: { scope: entry.namespaceType, sourceType: entry.metadata.sourceType ?? entry.namespaceType, tags: entry.tags, summary: entry.metadata.summary ?? entry.content.slice(0, 180) },
+      searchIndexRef: `memory:${entry.id}`,
+    })),
+    ...vaultSecrets.map(secret => contextObject({
+      workspaceId,
+      source: 'vault',
+      assetType: 'secret_metadata',
+      owner: params.ctx.agentId,
+      assetId: secret.id,
+      permissions: ['vault:metadata:read'],
+      timestamp: secret.updatedAt,
+      relevanceScore: 0.56,
+      confidenceScore: secret.status === 'active' ? 0.85 : 0.4,
+      metadata: { provider: secret.name.split('_')[0]?.toLowerCase() || 'secret', status: secret.status },
+      searchIndexRef: `vault:${secret.id}`,
+    })),
+    ...capabilityObjects.map(capability => contextObject({
+      workspaceId: typeof capability.metadata.workspaceId === 'string' ? capability.metadata.workspaceId : workspaceId,
+      source: 'capability',
+      assetType: capability.sourceType,
+      owner: params.ctx.agentId,
+      assetId: capability.id,
+      permissions: capability.requiredPermissions,
+      timestamp: capability.updatedAt,
+      relevanceScore: capability.status === 'available' ? 0.8 : 0.42,
+      confidenceScore: capability.confidenceScore,
+      dependencies: capability.dependencies,
+      metadata: { name: capability.name, status: capability.status, health: capability.health, contract: capability.contract },
+      searchIndexRef: `capability:${capability.id}`,
+    })),
+  ].sort((left, right) => {
+    if (right.relevanceScore !== left.relevanceScore) return right.relevanceScore - left.relevanceScore;
+    if (right.confidenceScore !== left.confidenceScore) return right.confidenceScore - left.confidenceScore;
+    return left.contextId.localeCompare(right.contextId);
+  });
+  const sourcesUsed = [...new Set(contextObjects.map(item => item.source))].sort();
+  const dependencyHash = hashObject(contextObjects.map(item => ({
+    id: item.contextId,
+    version: item.version,
+    timestamp: item.timestamp,
+    dependencies: item.dependencies,
+  })));
+  const contextVersion = `ctx-${dependencyHash.slice(0, 16)}`;
+  const tokenEstimate = Math.ceil(JSON.stringify(contextObjects.map(item => ({ id: item.contextId, metadata: item.metadata }))).length / 4);
 
   return {
+    metadata: {
+      contextVersion,
+      timestamp: new Date().toISOString(),
+      buildId: 'workspace-context-engine-v6.6.8',
+      workspaceVersion: defaultWorkspace?.createdAt ?? null,
+      dependencyHash,
+      sourcesUsed,
+      cache: { mode: 'event-ready', hit: false },
+      permissionChecks: contextObjects.length,
+      removedDuplicates: 0,
+      finalTokenEstimate: tokenEstimate,
+      buildDurationMs: Date.now() - startedAt,
+      runtimeRegistryVersion: capabilityGraph.graphVersion,
+    },
+    contextObjects,
     user: {
       id: params.ctx.agentId,
       displayName: userProfile.displayName,
@@ -202,7 +487,7 @@ export async function buildWorkspaceContextPackage(params: {
       relevantConversationMemory: memorySummary(memoryEntries.filter(entry => entry.namespaceType !== 'user' && entry.namespaceType !== 'agent')),
     },
     vault: {
-      availableSecretMetadataOnly: (vault.secrets ?? []).map(secret => ({
+      availableSecretMetadataOnly: vaultSecrets.map(secret => ({
         secretId: secret.id,
         provider: secret.name.split('_')[0]?.toLowerCase() || 'secret',
         scope: workspaceId ? `workspace:${workspaceId}` : 'workspace',
@@ -215,6 +500,14 @@ export async function buildWorkspaceContextPackage(params: {
       unavailableCapabilities: capabilityGraph.unavailableCapabilities,
       needsConfiguration: capabilityGraph.needsConfiguration,
       summary: capabilityGraph.summary,
+      graphVersion: capabilityGraph.graphVersion,
+      generatedAt: capabilityGraph.generatedAt,
+      relationships: capabilityGraph.relationships,
+    },
+    runtimeRegistry: {
+      assets: capabilityGraph.registryAssets,
+      graphVersion: capabilityGraph.graphVersion,
+      contract: capabilityGraph.runtimeContract,
     },
   };
 }

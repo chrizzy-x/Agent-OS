@@ -13,6 +13,10 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
+function initialTaskStatus(value: unknown): AgentTaskStatus {
+  return value === 'created' || value === 'planning' || value === 'scheduled' ? value : 'queued';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireAgentContextWithTier(request.headers);
@@ -47,13 +51,21 @@ export async function POST(request: NextRequest) {
       projectId: typeof body.projectId === 'string' ? body.projectId : null,
       title,
       originalPrompt: typeof body.originalPrompt === 'string' ? body.originalPrompt : title,
-      status: body.status === 'planning' ? 'planning' : 'queued',
+      status: initialTaskStatus(body.status),
       plan: recordArray(body.plan),
       capabilityIds: stringArray(body.capabilityIds),
+      plannerVersion: typeof body.plannerVersion === 'string' ? body.plannerVersion : undefined,
+      contextVersion: typeof body.contextVersion === 'string' ? body.contextVersion : null,
+      priority: body.priority === 'critical' || body.priority === 'high' || body.priority === 'low' || body.priority === 'background'
+        ? body.priority
+        : 'normal',
       requiredPermissions: stringArray(body.requiredPermissions),
       confirmationStatus: 'not_required',
       progress: 0,
       metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata as Record<string, unknown> : {},
+      executionMetadata: body.executionMetadata && typeof body.executionMetadata === 'object' && !Array.isArray(body.executionMetadata)
+        ? body.executionMetadata as Record<string, unknown>
+        : {},
     });
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {

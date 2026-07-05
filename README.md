@@ -4,7 +4,7 @@
   <img src="public/logo.png" alt="AgentOS logo" width="220" />
 </p>
 
-> V6.6.7
+> V6.6.8
 
 AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, workspace assets, and activity.
 
@@ -14,6 +14,12 @@ Live:
 
 Supporting message:
 - talk to it, build with it, and install what it needs
+
+## V6.6.8 status
+
+V6.6.8 formalizes the Super AgentOS runtime contract: Runtime Registry assets, standardized capability contracts, deterministic graph metadata, versioned Workspace Context packages, expanded durable task lifecycle states, and migration support for replayable task/context execution.
+
+See [Runtime contract release notes](RELEASE_NOTES_v6.6.8.md).
 
 ## V6.6.7 status
 
