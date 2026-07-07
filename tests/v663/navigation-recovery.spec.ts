@@ -14,6 +14,9 @@ describe('v6.6.3 navigation and workspace recovery', () => {
     expect(layout).toContain('<ApplicationShell>{children}</ApplicationShell>');
     expect(NAVIGATION_SURFACES.map(surface => surface.label)).toEqual(expect.arrayContaining(['Home', 'Studio', 'Search', 'Tasks', 'Projects', 'Library', 'App Store', 'Skill Store', 'Subagents', 'Workflows', 'Memory', 'Vault', 'Universal MCP', 'Developer', 'Community', 'FFP', 'Docs', 'Settings']));
     expect(shell).toContain('NAVIGATION_SURFACES');
+    expect(shell).toContain('appendShellContextToHref');
+    expect(shell).toContain('routeStateKey');
+    expect(shell).toContain('data-agentos-drawer-open');
     expect(shell).toContain('agentos.shell.leftCollapsed');
     expect(shell).toContain('agentos.shell.rightCollapsed');
     expect(shell).toContain('Pinned Sessions');

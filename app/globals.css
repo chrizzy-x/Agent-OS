@@ -1034,6 +1034,10 @@ body {
   overflow-x: hidden;
 }
 
+body[data-agentos-drawer-open="true"] {
+  overflow: hidden;
+}
+
 :root[data-theme="light"] body {
   background: linear-gradient(180deg, rgba(14, 116, 144, 0.08), transparent 240px), var(--bg-primary);
 }
@@ -3685,11 +3689,9 @@ nextjs-portal {
     background: rgba(2,8,15,0.68);
   }
 
-  .agentos-global-sidebar {
-    padding-bottom: 24px;
-  }
-
+  .agentos-global-sidebar,
   .agentos-global-context {
+    padding-top: 46px;
     padding-bottom: 24px;
   }
 

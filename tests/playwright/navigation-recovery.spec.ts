@@ -12,7 +12,7 @@ test('desktop shell navigation, collapse, persistence, and FFP state', async ({ 
   await expect(right).toBeVisible();
 
   const labels = await page.locator('.agentos-global-nav b').allTextContents();
-  expect(labels).toEqual(['Home', 'Studio', 'Search', 'Tasks', 'Projects', 'Library', 'App Store', 'Skill Store', 'Subagents', 'Workflows', 'Memory', 'Vault', 'MCP', 'Developer', 'Community', 'FFP', 'Resources', 'Settings']);
+  expect(labels).toEqual(['Home', 'Studio', 'Search', 'Tasks', 'Projects', 'Library', 'App Store', 'Skill Store', 'Subagents', 'Workflows', 'Memory', 'Vault', 'Universal MCP', 'Developer', 'Community', 'FFP', 'Docs', 'Settings']);
 
   if (await page.locator('.agentos-global-shell').getAttribute('data-left-collapsed') === 'true') {
     await page.getByLabel('Expand navigation sidebar').click();
@@ -56,10 +56,17 @@ test('mobile uses left and right drawers', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-left-open', 'true');
+  await expect(page.locator('body')).toHaveAttribute('data-agentos-drawer-open', 'true');
   await page.keyboard.press('Escape');
+  await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-left-open', 'false');
+  await expect(page.locator('body')).toHaveAttribute('data-agentos-drawer-open', 'false');
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('link', { name: /Library/ }).click();
+  await expect(page).toHaveURL(/\/library/);
   await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-left-open', 'false');
   await page.getByRole('button', { name: 'Open context' }).click();
   await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-right-open', 'true');
+  await expect(page.locator('body')).toHaveAttribute('data-agentos-drawer-open', 'true');
   await expect(page.getByText('More', { exact: true })).toHaveCount(0);
   await mkdir(artifactDir, { recursive: true });
   await page.screenshot({ path: `${artifactDir}/mobile-context.png`, fullPage: true });

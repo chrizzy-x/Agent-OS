@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { destroyBrowserSession, fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { appendShellContextToHref, type ShellNavigationContext } from '@/src/product/shell-routing';
 import { NAVIGATION_SURFACES, isProductSurfaceActivePath, pageTitleForProductPath, primaryActionForProductPath } from '@/src/product/surfaces';
 
 type WorkspaceRef = { id: string; name: string; slug: string; plan: string };
@@ -285,6 +286,7 @@ function LeftSidebar(props: {
   activeWorkspaceId: string | null;
   activeProjectId: string | null;
   activeSessionId: string | null;
+  navigationContext: ShellNavigationContext;
   collapsed: boolean;
   onWorkspace: (id: string) => void;
   onProject: (id: string) => void;
@@ -304,7 +306,7 @@ function LeftSidebar(props: {
   function navigate(href: string) {
     props.onCloseMobile();
     beginNavigationMetric();
-    router.push(href);
+    router.push(appendShellContextToHref(href, props.navigationContext));
   }
 
   return (
@@ -325,7 +327,7 @@ function LeftSidebar(props: {
         {NAVIGATION_SURFACES.map(item => (
           <Link
             key={item.href}
-            href={item.href}
+            href={appendShellContextToHref(item.href, props.navigationContext)}
             className={[
               isProductSurfaceActivePath(props.pathname, item) ? 'active' : '',
               item.status === 'coming_soon' ? 'coming-soon' : '',
@@ -398,6 +400,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const routeStateKey = `${pathname}?${searchParams.toString()}`;
   const excluded = EXCLUDED_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [payload, setPayload] = useState<ShellPayload>({
@@ -427,19 +430,31 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     if (!response.response.ok) return;
     const next = await response.response.json() as ShellPayload;
     setPayload(next);
+    const params = new URLSearchParams(window.location.search);
+    const requestedWorkspace = params.get('workspace');
+    const requestedProject = params.get('project');
+    const requestedSession = params.get('session');
+    const requestedSessionRef = next.sessions.find(item => item.id === requestedSession) ?? null;
     const storedWorkspace = readStored('agentos.shell.workspace');
-    const workspaceId = next.workspaces.some(item => item.id === storedWorkspace) ? storedWorkspace : next.workspaces[0]?.id ?? null;
+    const workspaceId = requestedSessionRef?.workspaceId
+      ?? (next.workspaces.some(item => item.id === requestedWorkspace) ? requestedWorkspace : null)
+      ?? (next.workspaces.some(item => item.id === storedWorkspace) ? storedWorkspace : next.workspaces[0]?.id ?? null);
     writeStored('agentos.shell.workspace', workspaceId);
     setActiveWorkspaceId(workspaceId);
     if (!workspaceId) return;
     const storedProject = readStored(`agentos.shell.project.${workspaceId}`);
-    const projectId = next.projects.some(item => item.workspaceId === workspaceId && item.id === storedProject)
-      ? storedProject
-      : next.projects.find(item => item.workspaceId === workspaceId)?.id ?? null;
+    const projectId = next.projects.some(item => item.workspaceId === workspaceId && item.id === requestedProject)
+      ? requestedProject
+      : requestedSessionRef?.projectId
+        ?? (next.projects.some(item => item.workspaceId === workspaceId && item.id === storedProject)
+          ? storedProject
+          : next.projects.find(item => item.workspaceId === workspaceId)?.id ?? null);
     const storedSession = readStored(`agentos.shell.session.${workspaceId}`);
-    const sessionId = next.sessions.some(item => item.workspaceId === workspaceId && item.id === storedSession)
-      ? storedSession
-      : null;
+    const sessionId = requestedSessionRef?.workspaceId === workspaceId
+      ? requestedSessionRef.id
+      : next.sessions.some(item => item.workspaceId === workspaceId && item.id === storedSession)
+        ? storedSession
+        : null;
     writeStored(`agentos.shell.project.${workspaceId}`, projectId);
     writeStored(`agentos.shell.session.${workspaceId}`, sessionId);
     setActiveProjectId(projectId);
@@ -456,6 +471,20 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     setRightCollapsedState(storedRight === null ? tabletDefault : storedRight === 'true');
     void refreshShell();
   }, [excluded, refreshShell]);
+
+  useEffect(() => {
+    setLeftDrawerOpen(false);
+    setRightDrawerOpen(false);
+    setNotificationDrawerOpen(false);
+  }, [routeStateKey]);
+
+  useEffect(() => {
+    const drawerOpen = leftDrawerOpen || rightDrawerOpen || notificationDrawerOpen;
+    document.body.setAttribute('data-agentos-drawer-open', drawerOpen ? 'true' : 'false');
+    return () => {
+      document.body.removeAttribute('data-agentos-drawer-open');
+    };
+  }, [leftDrawerOpen, notificationDrawerOpen, rightDrawerOpen]);
 
   useEffect(() => {
     try {
@@ -558,7 +587,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
       writeStored('agentos.shell.workspace', target.workspaceId);
       writeStored(`agentos.shell.session.${target.workspaceId}`, target.id);
       if (target.projectId) writeStored(`agentos.shell.project.${target.workspaceId}`, target.projectId);
-      router.push(`/studio?mode=nl&session=${encodeURIComponent(target.id)}${target.projectId ? `&project=${encodeURIComponent(target.projectId)}` : ''}`);
+      router.push(`/studio?mode=nl&workspace=${encodeURIComponent(target.workspaceId)}&session=${encodeURIComponent(target.id)}${target.projectId ? `&project=${encodeURIComponent(target.projectId)}` : ''}`);
     }
     setLeftDrawerOpen(false);
   }, [payload.sessions, router]);
@@ -613,6 +642,11 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
   const project = payload.projects.find(item => item.id === activeProjectId) ?? null;
   const activeSession = payload.sessions.find(item => item.id === activeSessionId) ?? null;
   const mode = searchParams.get('mode');
+  const navigationContext = useMemo<ShellNavigationContext>(() => ({
+    workspaceId: activeWorkspaceId,
+    projectId: activeProjectId,
+    sessionId: activeSessionId,
+  }), [activeProjectId, activeSessionId, activeWorkspaceId]);
 
   const contextValue = useMemo<ApplicationShellContextValue>(() => ({
     session,
@@ -727,7 +761,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             <form className="agentos-global-search" role="search" onSubmit={submitShellSearch}>
               <input value={shellSearch} onChange={event => setShellSearch(event.target.value)} placeholder="Search" aria-label="Search AgentOS" />
             </form>
-            {primaryAction ? <Link className="agentos-global-primary-action" href={primaryAction.href}>{primaryAction.label}</Link> : null}
+            {primaryAction ? <Link className="agentos-global-primary-action" href={appendShellContextToHref(primaryAction.href, navigationContext)}>{primaryAction.label}</Link> : null}
             <button
               type="button"
               className="agentos-notification-bell"
@@ -763,7 +797,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
         <aside className="agentos-global-left" aria-label="Navigation sidebar">
           <button type="button" className="agentos-shell-drawer-close" onClick={() => setLeftDrawerOpen(false)} aria-label="Close navigation">Close</button>
           <button type="button" className="agentos-shell-collapse" onClick={() => setLeftCollapsed(!leftCollapsed)} aria-label={leftCollapsed ? 'Expand navigation sidebar' : 'Collapse navigation sidebar'}>
-            {leftCollapsed ? '›' : '‹'}
+            {leftCollapsed ? '>' : '<'}
           </button>
           <LeftSidebar
             payload={payload}
@@ -771,6 +805,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             activeWorkspaceId={activeWorkspaceId}
             activeProjectId={activeProjectId}
             activeSessionId={activeSessionId}
+            navigationContext={navigationContext}
             collapsed={leftCollapsed}
             onWorkspace={setActiveWorkspace}
             onProject={setActiveProject}
@@ -785,7 +820,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
         <aside className="agentos-global-right" aria-label="Context sidebar">
           <button type="button" className="agentos-shell-drawer-close" onClick={() => setRightDrawerOpen(false)} aria-label="Close context">Close</button>
           <button type="button" className="agentos-shell-collapse" onClick={() => setRightCollapsed(!rightCollapsed)} aria-label={rightCollapsed ? 'Expand context sidebar' : 'Collapse context sidebar'}>
-            {rightCollapsed ? '‹' : '›'}
+            {rightCollapsed ? '<' : '>'}
           </button>
           <DefaultRightPanel workspace={workspace} project={project} session={activeSession} payload={payload} />
         </aside>
