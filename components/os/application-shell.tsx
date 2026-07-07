@@ -14,6 +14,7 @@ import {
   type ReactNode,
 } from 'react';
 import { destroyBrowserSession, fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { NAVIGATION_SURFACES, isProductSurfaceActivePath, pageTitleForProductPath, primaryActionForProductPath } from '@/src/product/surfaces';
 
 type WorkspaceRef = { id: string; name: string; slug: string; plan: string };
 type SessionRef = {
@@ -88,26 +89,6 @@ const ApplicationShellContext = createContext<ApplicationShellContextValue>({
 });
 const SHELL_INSTANCE_ID = 'agentos-global-shell-root';
 const EXCLUDED_PREFIXES = ['/signin', '/signup', '/login', '/forgot-password', '/onboarding'];
-const NAV_ITEMS = [
-  { href: '/', label: 'Home', icon: 'H' },
-  { href: '/studio', label: 'Studio', icon: 'S' },
-  { href: '/search', label: 'Search', icon: 'Q' },
-  { href: '/tasks', label: 'Tasks', icon: 'J' },
-  { href: '/projects', label: 'Projects', icon: 'P' },
-  { href: '/library', label: 'Library', icon: 'L' },
-  { href: '/appstore', label: 'App Store', icon: 'A' },
-  { href: '/skillstore', label: 'Skill Store', icon: 'K', aliases: ['/skills'] },
-  { href: '/subagents', label: 'Subagents', icon: 'G', aliases: ['/agents'] },
-  { href: '/workflows', label: 'Workflows', icon: 'W' },
-  { href: '/memory', label: 'Memory', icon: 'M' },
-  { href: '/vault', label: 'Vault', icon: 'V' },
-  { href: '/mcp', label: 'MCP', icon: 'U', aliases: ['/connectors'] },
-  { href: '/developer', label: 'Developer', icon: 'D', aliases: ['/publish'] },
-  { href: '/community', label: 'Community', icon: 'C' },
-  { href: '/ffp', label: 'FFP', icon: 'F' },
-  { href: '/resources', label: 'Resources', icon: 'R', aliases: ['/docs'] },
-  { href: '/settings', label: 'Settings', icon: 'T', aliases: ['/profile', '/billing'] },
-] as const;
 
 const ACCOUNT_MENU_LINKS = [
   { label: 'Profile', href: '/settings?section=account' },
@@ -122,42 +103,6 @@ const ACCOUNT_MENU_LINKS = [
   { label: 'Switch Organization', href: '/settings?section=general#organizations' },
   { label: 'Create Workspace', href: '/settings?section=general#workspaces' },
 ] as const;
-
-const PAGE_TITLES: Array<{ prefix: string; title: string }> = [
-  { prefix: '/studio', title: 'Studio' },
-  { prefix: '/search', title: 'Search' },
-  { prefix: '/tasks', title: 'Tasks' },
-  { prefix: '/library', title: 'Library' },
-  { prefix: '/appstore', title: 'App Store' },
-  { prefix: '/skillstore', title: 'Skill Store' },
-  { prefix: '/skills', title: 'Skills' },
-  { prefix: '/developer', title: 'Developer' },
-  { prefix: '/projects', title: 'Projects' },
-  { prefix: '/subagents', title: 'Subagents' },
-  { prefix: '/agents', title: 'Subagents' },
-  { prefix: '/workflows', title: 'Workflows' },
-  { prefix: '/memory', title: 'Memory' },
-  { prefix: '/vault', title: 'Vault' },
-  { prefix: '/mcp', title: 'Universal MCP' },
-  { prefix: '/community', title: 'Community' },
-  { prefix: '/ffp', title: 'FFP' },
-  { prefix: '/resources', title: 'Resources' },
-  { prefix: '/settings', title: 'Settings' },
-];
-
-const PRIMARY_ACTIONS: Array<{ prefix: string; label: string; href: string }> = [
-  { prefix: '/studio', label: 'Create', href: '/studio?mode=nl' },
-  { prefix: '/tasks', label: 'New Chat', href: '/studio?mode=nl' },
-  { prefix: '/appstore', label: 'Install', href: '/appstore' },
-  { prefix: '/skillstore', label: 'Install', href: '/skillstore' },
-  { prefix: '/developer', label: 'Publish', href: '/publish/app' },
-  { prefix: '/projects', label: 'Create', href: '/projects?create=1' },
-  { prefix: '/subagents', label: 'Create', href: '/subagents?create=1' },
-  { prefix: '/agents', label: 'Create', href: '/subagents?create=1' },
-  { prefix: '/workflows', label: 'Create', href: '/studio?mode=workflow&new=1' },
-  { prefix: '/vault', label: 'Save', href: '/vault?create=secret' },
-  { prefix: '/settings', label: 'Save', href: '/settings' },
-];
 
 const NOTIFICATION_GROUPS = [
   'Unread',
@@ -195,13 +140,6 @@ function beginNavigationMetric() {
   }
 }
 
-function isActive(pathname: string, item: (typeof NAV_ITEMS)[number]) {
-  if (item.href === '/') return pathname === '/';
-  return pathname === item.href
-    || pathname.startsWith(`${item.href}/`)
-    || ('aliases' in item && item.aliases.some(alias => pathname === alias || pathname.startsWith(`${alias}/`)));
-}
-
 function initials(session: BrowserSession | null) {
   return (session?.agentName || 'User')
     .split(/\s+/)
@@ -214,15 +152,6 @@ function formatMode(value: string | null) {
   if (value === 'workflow') return 'Workflow Studio';
   if (value === 'code') return 'Code Studio';
   return 'NL Studio';
-}
-
-function pageTitleForPath(pathname: string): string {
-  if (pathname === '/') return 'Home';
-  return PAGE_TITLES.find(item => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`))?.title ?? 'AgentOS';
-}
-
-function primaryActionForPath(pathname: string) {
-  return PRIMARY_ACTIONS.find(item => pathname === item.prefix || pathname.startsWith(`${item.prefix}/`)) ?? null;
 }
 
 function badgeCount(value: number): string {
@@ -393,21 +322,21 @@ function LeftSidebar(props: {
       </section>
 
       <nav className="agentos-global-nav" aria-label="AgentOS modules">
-        {NAV_ITEMS.map(item => 'disabled' in item && item.disabled ? (
-          <span key={item.href} className="disabled" aria-disabled="true" title="Coming Soon">
-            <i aria-hidden="true">{item.icon}</i><b>{item.label}</b><small>Soon</small>
-          </span>
-        ) : (
+        {NAVIGATION_SURFACES.map(item => (
           <Link
             key={item.href}
             href={item.href}
-            className={isActive(props.pathname, item) ? 'active' : ''}
+            className={[
+              isProductSurfaceActivePath(props.pathname, item) ? 'active' : '',
+              item.status === 'coming_soon' ? 'coming-soon' : '',
+            ].filter(Boolean).join(' ')}
+            title={item.disabledReason}
             onClick={() => {
               beginNavigationMetric();
               props.onCloseMobile();
             }}
           >
-            <i aria-hidden="true">{item.icon}</i><b>{item.label}</b>
+            <i aria-hidden="true">{item.icon}</i><b>{item.label}</b>{item.status === 'coming_soon' ? <small>Soon</small> : null}
           </Link>
         ))}
       </nav>
@@ -765,8 +694,8 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     router.push(`/search?q=${encodeURIComponent(query)}`);
   }
 
-  const pageTitle = pageTitleForPath(pathname);
-  const primaryAction = primaryActionForPath(pathname);
+  const pageTitle = pageTitleForProductPath(pathname);
+  const primaryAction = primaryActionForProductPath(pathname);
   const unreadBadge = badgeCount(payload.notifications.unread);
 
   return (

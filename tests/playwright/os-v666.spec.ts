@@ -36,11 +36,11 @@ const navLabels = [
   'Workflows',
   'Memory',
   'Vault',
-  'MCP',
+  'Universal MCP',
   'Developer',
   'Community',
   'FFP',
-  'Resources',
+  'Docs',
   'Settings',
 ];
 

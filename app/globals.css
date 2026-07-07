@@ -3262,6 +3262,10 @@ nextjs-portal {
   cursor: not-allowed;
 }
 
+.agentos-global-nav a.coming-soon {
+  opacity: 0.76;
+}
+
 .agentos-global-nav small {
   font-size: 0.58rem;
 }

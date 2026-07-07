@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { NAVIGATION_SURFACES } from '../../src/product/surfaces.js';
 
 function source(...parts: string[]) {
   return readFileSync(join(process.cwd(), ...parts), 'utf8');
@@ -11,9 +12,8 @@ describe('v6.6.3 navigation and workspace recovery', () => {
     const layout = source('app', 'layout.tsx');
     const shell = source('components', 'os', 'application-shell.tsx');
     expect(layout).toContain('<ApplicationShell>{children}</ApplicationShell>');
-    for (const label of ['Home', 'Studio', 'Search', 'Tasks', 'Projects', 'Library', 'App Store', 'Skill Store', 'Subagents', 'Workflows', 'Memory', 'Vault', 'MCP', 'Developer', 'Community', 'FFP', 'Resources', 'Settings']) {
-      expect(shell).toContain(`label: '${label}'`);
-    }
+    expect(NAVIGATION_SURFACES.map(surface => surface.label)).toEqual(expect.arrayContaining(['Home', 'Studio', 'Search', 'Tasks', 'Projects', 'Library', 'App Store', 'Skill Store', 'Subagents', 'Workflows', 'Memory', 'Vault', 'Universal MCP', 'Developer', 'Community', 'FFP', 'Docs', 'Settings']));
+    expect(shell).toContain('NAVIGATION_SURFACES');
     expect(shell).toContain('agentos.shell.leftCollapsed');
     expect(shell).toContain('agentos.shell.rightCollapsed');
     expect(shell).toContain('Pinned Sessions');
