@@ -746,6 +746,8 @@ async function loadAppVersionHistory(appIds: string[]): Promise<Map<string, Agen
     // Fall back to local state below.
   }
 
+  if (!allowLocalAppstoreFallback()) return history;
+
   const state = await readLocalRuntimeState();
   for (const app of state.agentApps.catalog) {
     if (!normalizedIds.includes(app.id)) continue;
@@ -856,6 +858,8 @@ async function listInstalledSkillSlugs(agentId: string): Promise<string[]> {
     // Local fallback below.
   }
 
+  if (!allowLocalAppstoreFallback()) return [];
+
   const state = await readLocalRuntimeState();
   return (state.skills.installations[agentId] ?? [])
     .map(installation => state.skills.catalog.find(skill => skill.id === installation.skill_id)?.slug ?? '')
@@ -962,6 +966,8 @@ async function persistAgentAppVersion(app: AgentAppListing, changeSummary: strin
   } catch {
     // Local fallback below.
   }
+
+  if (!allowLocalAppstoreFallback()) return;
 
   await updateLocalRuntimeState(state => {
     const target = state.agentApps.catalog.find(item => item.id === app.id);
@@ -2248,6 +2254,8 @@ export async function getAgentAppPackageCacheStatus(params: {
   } catch {
     // Fall through to local state.
   }
+
+  if (!allowLocalAppstoreFallback()) return { cached: false, packageRef: null };
 
   const state = await readLocalRuntimeState();
   const cached = state.appPackageCache.find(item =>

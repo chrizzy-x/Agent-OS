@@ -7,6 +7,7 @@ import { Drawer } from '@/components/os/overlays';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { resolveBrowserAccessState } from '@/src/auth/browser-access';
 import { fetchBrowserSessionState, type BrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
+import { formatMetricCount, formatMoneyMetric } from '@/src/data/discipline';
 import {
   ActivityFeed,
   Badge,
@@ -149,6 +150,11 @@ const DEVELOPER_TABS: Array<{ key: DeveloperTab; label: string }> = [
 
 function formatDate(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString() : 'Not recorded';
+}
+
+function metricOrNoData(value: number | string | null | undefined): string | number {
+  if (value === null || value === undefined || value === '') return 'No data';
+  return value;
 }
 
 export default function DeveloperConsolePage() {
@@ -356,10 +362,10 @@ export default function DeveloperConsolePage() {
           <div className="os-entity-copy" style={{ marginTop: 12 }}>Icon, banner, gallery, and video binary uploads are disabled until backend media storage is available.</div>
           {/* TODO: Connect disabled icon, banner, gallery, and video uploads to durable media storage with file type, size, and aspect ratio validation. */}
           <div className="os-inline-actions" style={{ marginTop: 12 }}>
-            <Button disabled variant="secondary">Replace media</Button>
-            <Button disabled variant="secondary">Delete media</Button>
-            <Button disabled variant="secondary">Reorder media</Button>
-            <Button disabled variant="secondary">Mark primary</Button>
+            <Button disabled variant="secondary" disabledReason="Backend media storage is not available yet.">Replace media</Button>
+            <Button disabled variant="secondary" disabledReason="Backend media storage is not available yet.">Delete media</Button>
+            <Button disabled variant="secondary" disabledReason="Backend media storage is not available yet.">Reorder media</Button>
+            <Button disabled variant="secondary" disabledReason="Backend media storage is not available yet.">Mark primary</Button>
             <Button href="/publish/app" variant="secondary">New app media</Button>
             <Button href="/publish/skill" variant="secondary">New skill media</Button>
           </div>
@@ -417,8 +423,8 @@ export default function DeveloperConsolePage() {
             <MetricCard label="Drafts" value={[...apps, ...skills].filter(item => publishStatus(item) === 'Draft').length} />
             <MetricCard label="Pending Reviews" value={[...apps, ...skills].filter(item => ['Submitted', 'Reviewing', 'Update Pending'].includes(publishStatus(item))).length} />
             <MetricCard label="Rejections" value={[...apps, ...skills].filter(item => publishStatus(item) === 'Rejected').length} />
-            <MetricCard label="Revenue" value={earnings ? `$${earnings.all_time ?? '0.00'}` : 'No data'} />
-            <MetricCard label="Usage" value={analytics?.totals?.calls ?? 0} />
+            <MetricCard label="Revenue" value={earnings ? formatMoneyMetric(earnings.all_time) : 'No revenue data'} />
+            <MetricCard label="Usage" value={metricOrNoData(analytics?.totals?.calls)} />
           </div>
         </div>
       );
@@ -488,15 +494,19 @@ export default function DeveloperConsolePage() {
       return (
         <Card>
           <div className="os-entity-title" style={{ marginBottom: 12 }}>Review Pipeline</div>
-          <DataTable
-            columns={['Listing', 'Type', 'Status', 'Rejection Reason']}
-            rows={items.map(item => [
-              item.name,
-              item.type,
-              <StatusPill key={`${item.id}-status`} status={item.status} />,
-              item.status === 'Rejected' ? item.reason : 'No rejection reason recorded.',
-            ])}
-          />
+          {items.length === 0 ? (
+            <EmptyState title="No listings in review" body="Create an app or skill draft before review records appear." action={<Button href="/publish/app">Create app draft</Button>} />
+          ) : (
+            <DataTable
+              columns={['Listing', 'Type', 'Status', 'Rejection Reason']}
+              rows={items.map(item => [
+                item.name,
+                item.type,
+                <StatusPill key={`${item.id}-status`} status={item.status} />,
+                item.status === 'Rejected' ? item.reason : 'No rejection reason recorded.',
+              ])}
+            />
+          )}
         </Card>
       );
     }
@@ -506,23 +516,26 @@ export default function DeveloperConsolePage() {
     if (tab === 'analytics') {
       return (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-          <MetricCard label="Installs" value={analytics?.app_totals?.installs ?? apps.reduce((sum, app) => sum + app.installCount, 0)} />
-          <MetricCard label="Active users" value={analytics?.totals?.active_users ?? analytics?.app_totals?.opens ?? 0} />
-          <MetricCard label="API calls" value={analytics?.totals?.calls ?? 0} />
-          <MetricCard label="Error rate" value={`${analytics?.totals?.error_rate ?? '0.0'}%`} />
-          <MetricCard label="Opens" value={analytics?.app_totals?.opens ?? 0} />
-          <MetricCard label="Downloads" value={analytics?.app_totals?.downloads ?? 0} />
+          <MetricCard label="Installs" value={analytics ? formatMetricCount(analytics.app_totals?.installs, 'No installs recorded') : 'No data'} />
+          <MetricCard label="Active users" value={analytics ? formatMetricCount(analytics.totals?.active_users ?? analytics.app_totals?.opens, 'No active users recorded') : 'No data'} />
+          <MetricCard label="API calls" value={analytics ? formatMetricCount(analytics.totals?.calls, 'No calls recorded') : 'No data'} />
+          <MetricCard label="Error rate" value={analytics?.totals?.error_rate ? `${analytics.totals.error_rate}%` : 'No data'} />
+          <MetricCard label="Opens" value={analytics ? formatMetricCount(analytics.app_totals?.opens, 'No opens recorded') : 'No data'} />
+          <MetricCard label="Downloads" value={analytics ? formatMetricCount(analytics.app_totals?.downloads, 'No downloads recorded') : 'No data'} />
         </div>
       );
     }
 
     if (tab === 'revenue') {
+      if (!earnings) {
+        return <EmptyState title="No revenue data" body="No monetization records are available from the backend yet." />;
+      }
       return (
         <div className="os-drawer-stack">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-            <MetricCard label="Revenue Summary" value={`$${earnings?.all_time ?? '0.00'}`} />
-            <MetricCard label="Monthly Revenue" value={`$${earnings?.this_month ?? '0.00'}`} />
-            <MetricCard label="Last Month" value={`$${earnings?.last_month ?? '0.00'}`} />
+            <MetricCard label="Revenue Summary" value={formatMoneyMetric(earnings.all_time)} />
+            <MetricCard label="Monthly Revenue" value={formatMoneyMetric(earnings.this_month)} />
+            <MetricCard label="Last Month" value={formatMoneyMetric(earnings.last_month)} />
             <MetricCard label="Payout Status" value={Number(earnings?.all_time ?? 0) > 0 ? 'Pending' : 'No payout'} />
           </div>
           <Card>
@@ -704,7 +717,7 @@ export default function DeveloperConsolePage() {
                 <StatusPill status={detail.visibility} />
               </div>
               <div className="os-drawer-stack" style={{ marginTop: 12 }}>
-                <div className="os-entity-copy">Version: {detail.manifest?.version ?? '1.0.0'}</div>
+                <div className="os-entity-copy">Version: {detail.manifest?.version ?? 'Not recorded'}</div>
                 <div className="os-entity-copy">Installs: {detail.installCount}</div>
                 <div className="os-entity-copy">Opens: {detail.openCount ?? 0}</div>
                 <div className="os-entity-copy">Last heartbeat: {formatDate(detail.lastHeartbeatAt)}</div>

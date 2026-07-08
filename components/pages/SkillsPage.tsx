@@ -54,6 +54,9 @@ export default function SkillsPage() {
       }
       const installedRes = await fetch('/api/skills/installed', { cache: 'no-store' });
       const installedData = await installedRes.json();
+      if (!installedRes.ok || installedData.dataState === 'backend_unavailable') {
+        setMessage(installedData.message ?? installedData.error ?? 'Installed skills could not be loaded.');
+      }
       setInstalled(installedData.installed_skills ?? []);
     } catch {
       setInstalled([]);

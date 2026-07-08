@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
+import { formatCountLabel } from '@/src/data/discipline';
 import { disabledControlReason, normalizeButtonVariant, type AgentOsButtonVariantInput, type AgentOsStateKind } from '@/src/ui/design-system';
 
 export type ShellNavItem = {
@@ -400,7 +401,7 @@ export function AppCard(props: {
       </div>
       <div className="os-entity-meta">
         {typeof props.rating === 'number' ? <span>{props.rating.toFixed(1)} *</span> : null}
-        {typeof props.installs === 'number' ? <span>{props.installs.toLocaleString()} installs</span> : null}
+        {typeof props.installs === 'number' ? <span>{formatCountLabel(props.installs, 'install', 'installs')}</span> : null}
       </div>
       {props.footer ? <div className="os-entity-footer">{props.footer}</div> : null}
     </Card>

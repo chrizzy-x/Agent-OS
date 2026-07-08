@@ -2,6 +2,7 @@ import Link from 'next/link';
 import SurfaceShell from '@/components/os/surface-shell';
 import type { PublicDeveloperProfile } from '@/src/developers/service';
 import { ListingMark } from '@/components/marketplace/MarketplacePrimitives';
+import { formatCountLabel } from '@/src/data/discipline';
 
 function formatCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -75,7 +76,7 @@ export default function DeveloperProfilePage({ developer }: { developer: PublicD
                   </Link>
                   <div className="market-app-meta">
                     <span>{app.rating > 0 ? app.rating.toFixed(1) : 'New'} rating</span>
-                    <span>{formatCount(app.installCount)} installs</span>
+                    <span>{formatCountLabel(app.installCount, 'install', 'installs')}</span>
                   </div>
                 </article>
               ))}
@@ -99,7 +100,7 @@ export default function DeveloperProfilePage({ developer }: { developer: PublicD
                     <span>{skill.category}</span>
                   </Link>
                   <div className="market-skill-meta">
-                    <span>{formatCount(skill.total_installs)} installs</span>
+                    <span>{formatCountLabel(skill.total_installs, 'install', 'installs')}</span>
                     <span>{skill.capabilities.length} capabilities</span>
                   </div>
                 </article>

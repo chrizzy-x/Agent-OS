@@ -78,6 +78,7 @@ export default function SubagentsPage({
   }, [load]);
 
   async function createSubagent() {
+    if (!draft.workspaceId || !draft.name.trim()) return;
     const response = await fetch('/api/subagents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,7 +106,15 @@ export default function SubagentsPage({
           eyebrow={eyebrow}
           title={title}
           subtitle={subtitle}
-          actions={<Button onClick={() => void createSubagent()}>Create subagent</Button>}
+          actions={(
+            <Button
+              onClick={() => void createSubagent()}
+              disabled={!draft.workspaceId || !draft.name.trim()}
+              disabledReason={!draft.workspaceId ? 'Select a workspace before creating a subagent.' : !draft.name.trim() ? 'Enter a subagent name before creating.' : undefined}
+            >
+              Create subagent
+            </Button>
+          )}
         />
 
         <div style={{ display: 'grid', gap: 10 }}>
@@ -139,7 +148,7 @@ export default function SubagentsPage({
         </div>
 
         {loading ? <LoadingState label="Loading subagents" /> : subagents.length === 0 ? (
-          <EmptyState title="No private subagents yet" body="Create a focused subagent for research, operations, or testing." />
+          <EmptyState title="No private subagents yet" body="Create a focused subagent for research, operations, or testing." action={<Button href="/studio?mode=nl&prompt=Create%20a%20private%20subagent">Create with Super AgentOS</Button>} />
         ) : (
           <div className="os-drawer-stack">
             <Tabs

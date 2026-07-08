@@ -74,11 +74,11 @@
 
 .market-shell {
   --market-bg: transparent;
-  --market-card: #FFFFFF;
+  --market-card: rgba(18, 27, 45, 0.92);
   --market-primary: #4F46E5;
   --market-success: #10B981;
   --market-danger: #EF4444;
-  --market-border: #E2E8F0;
+  --market-border: rgba(148, 163, 184, 0.2);
   display: grid;
   gap: 24px;
   padding: 20px;
@@ -4494,11 +4494,11 @@ nextjs-portal {
 
 .market-shell {
   --market-bg: transparent;
-  --market-card: #FFFFFF;
+  --market-card: rgba(18, 27, 45, 0.92);
   --market-primary: #4F46E5;
   --market-success: #10B981;
   --market-danger: #EF4444;
-  --market-border: #E2E8F0;
+  --market-border: rgba(148, 163, 184, 0.2);
   width: 100%;
   padding: 0;
   border: 0;

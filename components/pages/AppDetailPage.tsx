@@ -7,6 +7,7 @@ import SurfaceShell from '@/components/os/surface-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import type { AgentAppListing } from '@/src/appstore/catalog';
+import { formatMetricCount, formatRatingLabel } from '@/src/data/discipline';
 import { ListingBanner, ListingMark } from '@/components/marketplace/MarketplacePrimitives';
 
 export type AppDetailRecord = AgentAppListing & {
@@ -31,12 +32,6 @@ type AppReadiness = {
   targets: Array<{ target: 'web' | 'android' | 'ios'; url: string }>;
   appUnavailableReason?: string | null;
 };
-
-function formatCount(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString();
-}
 
 function logo(app: AppDetailRecord) {
   return <ListingMark name={app.name} imageUrl={app.logoUrl} className="market-detail-logo" />;
@@ -126,12 +121,7 @@ export default function AppDetailPage({
   );
   const platforms = app ? uniqueList(app.platforms.length ? app.platforms : app.deviceTargets) : [];
   const features = app ? (app.features.length ? app.features : app.manifest.commands.map(command => command.description).filter(Boolean)) : [];
-  const versionHistory = app ? (app.versionHistory.length ? app.versionHistory : [{
-    id: `${app.id}-current`,
-    version: app.manifest.version,
-    changeSummary: 'Current production release.',
-    createdAt: app.updatedAt,
-  }]) : [];
+  const versionHistory = app ? app.versionHistory : [];
 
   async function installToWorkspace() {
     if (!app) return;
@@ -231,10 +221,22 @@ export default function AppDetailPage({
                 <button type="button" className="market-primary-action" disabled={working === 'workspace'} onClick={() => void installToWorkspace()}>
                   {working === 'workspace' ? 'Working' : installed ? 'Reinstall To Workspace' : 'Install To Workspace'}
                 </button>
-                <button type="button" className="market-secondary-action" disabled={working === 'device'} onClick={() => void installToDevice()}>
+                <button
+                  type="button"
+                  className="market-secondary-action"
+                  disabled={!installed || working === 'device'}
+                  title={!installed ? 'Install this app to the workspace before installing it to a device.' : undefined}
+                  onClick={() => void installToDevice()}
+                >
                   {working === 'device' ? 'Working' : 'Install To Device'}
                 </button>
-                <button type="button" className="market-secondary-action" disabled={!installed || working === 'launch'} onClick={() => void launch()}>
+                <button
+                  type="button"
+                  className="market-secondary-action"
+                  disabled={!installed || working === 'launch'}
+                  title={!installed ? 'Install this app before opening it.' : undefined}
+                  onClick={() => void launch()}
+                >
                   {working === 'launch' ? 'Opening' : 'Open'}
                 </button>
                 {installed ? <Link href="/apps" className="market-secondary-action">Manage</Link> : null}
@@ -244,10 +246,10 @@ export default function AppDetailPage({
             {notice ? <div className="market-notice">{notice}</div> : null}
 
             <section className="market-metric-grid" aria-label="App analytics">
-              <div><span>Downloads</span><strong>{formatCount(app.downloadCount || app.installCount)}</strong></div>
-              <div><span>Active Users</span><strong>{formatCount(app.activeUserCount)}</strong></div>
-              <div><span>Rating</span><strong>{app.rating > 0 ? app.rating.toFixed(1) : 'New'}</strong></div>
-              <div><span>Reviews</span><strong>{formatCount(app.reviewCount)}</strong></div>
+              <div><span>Downloads</span><strong>{formatMetricCount(app.downloadCount, 'No downloads recorded')}</strong></div>
+              <div><span>Active Users</span><strong>{formatMetricCount(app.activeUserCount, 'No active users recorded')}</strong></div>
+              <div><span>Rating</span><strong>{formatRatingLabel(app.rating, app.reviewCount)}</strong></div>
+              <div><span>Reviews</span><strong>{formatMetricCount(app.reviewCount, 'No reviews yet')}</strong></div>
             </section>
 
             <section className="market-section">
@@ -282,10 +284,10 @@ export default function AppDetailPage({
             <section className="market-section">
               <div className="market-section-head"><h2>Ratings</h2></div>
               <div className="market-metric-grid">
-                <div><span>Average</span><strong>{app.rating > 0 ? app.rating.toFixed(1) : 'New'}</strong></div>
-                <div><span>Reviews</span><strong>{formatCount(app.reviewCount)}</strong></div>
-                <div><span>Installs</span><strong>{formatCount(app.installCount)}</strong></div>
-                <div><span>Downloads</span><strong>{formatCount(app.downloadCount)}</strong></div>
+                <div><span>Average</span><strong>{formatRatingLabel(app.rating, app.reviewCount)}</strong></div>
+                <div><span>Reviews</span><strong>{formatMetricCount(app.reviewCount, 'No reviews yet')}</strong></div>
+                <div><span>Installs</span><strong>{formatMetricCount(app.installCount, 'No installs yet')}</strong></div>
+                <div><span>Downloads</span><strong>{formatMetricCount(app.downloadCount, 'No downloads recorded')}</strong></div>
               </div>
             </section>
 
@@ -344,26 +346,30 @@ export default function AppDetailPage({
             <section className="market-section">
               <div className="market-section-head"><h2>Release Notes</h2></div>
               <div className="market-release-panel">
-                <p>{app.releaseNotes || versionHistory[0]?.changeSummary || 'Release notes not provided.'}</p>
+                <p>{app.releaseNotes || 'Release notes not provided.'}</p>
               </div>
             </section>
 
             <section className="market-section">
               <div className="market-section-head"><h2>Version History</h2></div>
-              <div className="market-timeline">
-                {((app.changelog ?? []).length ? (app.changelog ?? []).map((item, index) => ({
-                  id: `${app.id}-changelog-${index}`,
-                  version: app.manifest.version,
-                  changeSummary: item,
-                  createdAt: app.updatedAt,
-                })) : versionHistory).map(entry => (
-                  <article key={entry.id}>
-                    <strong>Version {entry.version}</strong>
-                    <p>{entry.changeSummary || 'Release notes not provided.'}</p>
-                    <span>{new Date(entry.createdAt).toLocaleDateString()}</span>
-                  </article>
-                ))}
-              </div>
+              {((app.changelog ?? []).length || versionHistory.length) ? (
+                <div className="market-timeline">
+                  {((app.changelog ?? []).length ? (app.changelog ?? []).map((item, index) => ({
+                    id: `${app.id}-changelog-${index}`,
+                    version: app.manifest.version,
+                    changeSummary: item,
+                    createdAt: app.updatedAt,
+                  })) : versionHistory).map(entry => (
+                    <article key={entry.id}>
+                      <strong>Version {entry.version}</strong>
+                      <p>{entry.changeSummary || 'Release notes not provided.'}</p>
+                      <span>{new Date(entry.createdAt).toLocaleDateString()}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No version history published.</p></div>
+              )}
             </section>
 
             <section className="market-section">

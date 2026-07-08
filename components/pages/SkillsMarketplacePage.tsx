@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import SurfaceShell from '@/components/os/surface-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { formatCountLabel } from '@/src/data/discipline';
 import type { SkillDiscoveryPayload, SkillMarketplaceRecord } from '@/src/skills/marketplace';
 import {
   DeveloperSpotlight,
-  formatMarketplaceCount,
   LazyMarketplaceSection,
   ListingBanner,
   ListingMark,
@@ -58,7 +58,7 @@ function SkillCard(props: {
       <div className="market-card-facts">
         <span>{skill.category}</span>
         <span>v{skill.version}</span>
-        <span>{formatMarketplaceCount(skill.total_installs)} installs</span>
+        <span>{formatCountLabel(skill.total_installs, 'install', 'installs')}</span>
         <span>{capabilityLabel(skill)}</span>
       </div>
       <div className="market-card-facts" aria-label={`${skill.name} compatibility`}>
@@ -229,7 +229,7 @@ export default function SkillsMarketplacePage() {
             description={hero.long_description || hero.description}
             developerHref={`/developer/${hero.developer_handle}`}
             developerName={hero.author_name}
-            metadata={[hero.category, capabilityLabel(hero), `${formatMarketplaceCount(hero.total_installs)} installs`]}
+            metadata={[hero.category, capabilityLabel(hero), formatCountLabel(hero.total_installs, 'install', 'installs')]}
             primaryLabel={workingSlug === hero.slug ? 'Installing' : installed.has(hero.slug) ? 'Use' : 'Install'}
             primaryDisabled={workingSlug === hero.slug}
             secondaryHref={`/skills/${hero.slug}`}
@@ -247,7 +247,8 @@ export default function SkillsMarketplacePage() {
         ) : discovery.skills.length === 0 ? (
           <div className="market-empty">
             <h2>No skills found</h2>
-            <p>No accessible capabilities matched this search.</p>
+            <p>{search.trim() ? 'No accessible capabilities matched this search.' : 'No published skills are available from the backend yet.'}</p>
+            <Link href="/studio" className="market-secondary-action">Open Super AgentOS</Link>
           </div>
         ) : search.trim() ? (
           <SkillRow title="Search Results" skills={discovery.skills} installed={installed} workingSlug={workingSlug} onInstall={skill => void installSkill(skill)} />

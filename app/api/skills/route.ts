@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { filterAccessibleResources, normalizeVisibility, resolveViewerWorkspaceIds } from '@/src/access/service';
 import { findAccountById } from '@/src/auth/agent-store';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
+import { allowLocalDataFallback } from '@/src/data/discipline';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { readLocalRuntimeState } from '@/src/storage/local-state';
 import { requireAgentContext, requireRouteCapability } from '@/src/auth/request';
@@ -115,6 +116,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ skills: omitAgentIdentifierFields(skills), pagination: { page, limit, total: count ?? 0 } });
     } catch {
       // Fall back to local catalog below.
+    }
+
+    if (!allowLocalDataFallback('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK')) {
+      return NextResponse.json({
+        skills: [],
+        pagination: { page, limit, total: 0 },
+        dataState: 'backend_unavailable',
+        message: 'Skill data source unavailable; local sample data was not returned.',
+      });
     }
 
     const state = await readLocalRuntimeState();

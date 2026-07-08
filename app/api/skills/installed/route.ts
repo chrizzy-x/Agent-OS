@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { readLocalRuntimeState } from '@/src/storage/local-state';
+import { allowLocalDataFallback } from '@/src/data/discipline';
 import { requireAgentContext } from '@/src/auth/request';
 import { toErrorResponse } from '@/src/utils/errors';
 
@@ -45,6 +46,14 @@ export async function GET(request: NextRequest) {
       }
     } catch {
       // Fall back to local state below.
+    }
+
+    if (!allowLocalDataFallback('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK')) {
+      return NextResponse.json({
+        installed_skills: [],
+        dataState: 'backend_unavailable',
+        message: 'Installed skill data source unavailable; local sample data was not returned.',
+      });
     }
 
     const state = await readLocalRuntimeState();

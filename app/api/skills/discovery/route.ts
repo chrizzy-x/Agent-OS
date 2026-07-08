@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
+import { allowLocalDataFallback } from '@/src/data/discipline';
 import { requireAgentContext } from '@/src/auth/request';
 import { listSkillDiscovery } from '@/src/skills/marketplace';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
@@ -23,6 +24,7 @@ async function installedSlugs(agentId: string): Promise<string[]> {
   } catch {
     // Fall through to local state.
   }
+  if (!allowLocalDataFallback('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK')) return [];
   const state = await readLocalRuntimeState();
   return (state.skills.installations[agentId] ?? [])
     .filter(item => item.status !== 'removed')

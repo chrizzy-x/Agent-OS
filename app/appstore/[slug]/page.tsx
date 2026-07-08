@@ -3,6 +3,8 @@ import AppDetailPage, { type AppDetailRecord } from '@/components/pages/AppDetai
 import { getAgentAppBySlug } from '@/src/appstore/service';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 
+export const dynamic = 'force-dynamic';
+
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const app = await getAgentAppBySlug(slug, {

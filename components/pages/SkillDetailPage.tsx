@@ -5,16 +5,18 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import SurfaceShell from '@/components/os/surface-shell';
 import { ConfirmationDialog } from '@/components/os/ui';
+import { formatCountLabel, formatRatingLabel } from '@/src/data/discipline';
 import type { SkillMarketplaceRecord } from '@/src/skills/marketplace';
 import { ListingBanner, ListingMark } from '@/components/marketplace/MarketplacePrimitives';
 
 export type SkillDetailRecord = SkillMarketplaceRecord;
 
 type SkillPreview = {
-  inputExample: unknown;
-  outputExample: unknown;
-  executionExample: unknown;
-  expectedResults: unknown;
+  dataState?: 'published_example' | 'schema_only';
+  inputExample?: unknown;
+  outputExample?: unknown;
+  executionExample?: unknown;
+  expectedResults?: unknown;
 };
 
 function pretty(value: unknown): string {
@@ -115,7 +117,7 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
     if (!skill) return [];
     const raw = skill.dependencies?.versionHistory;
     if (Array.isArray(raw)) return raw.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>;
-    return [{ version: skill.version, notes: 'Current production release.', createdAt: skill.updated_at }];
+    return [];
   }, [skill]);
 
   function togglePermission(permission: string) {
@@ -254,7 +256,13 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
                 <button type="button" className="market-primary-action" disabled={installing} onClick={() => void install()}>
                   {installing ? 'Installing' : 'Install'}
                 </button>
-                <button type="button" className="market-secondary-action" disabled={working === 'use'} onClick={() => void useSkill()}>
+                <button
+                  type="button"
+                  className="market-secondary-action"
+                  disabled={working === 'use' || !(skill.capabilities ?? [])[0]?.name}
+                  title={!(skill.capabilities ?? [])[0]?.name ? 'No executable capability is published for this skill.' : undefined}
+                  onClick={() => void useSkill()}
+                >
                   {working === 'use' ? 'Using' : 'Use'}
                 </button>
                 <button type="button" className="market-secondary-action" disabled={working === 'save'} onClick={() => void saveAccess()}>
@@ -273,8 +281,8 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
               <div className="market-info-grid">
                 <div><span>Developer</span><strong>{skill.author_name}</strong></div>
                 <div><span>Category</span><strong>{skill.category}</strong></div>
-                <div><span>Installs</span><strong>{skill.total_installs.toLocaleString()}</strong></div>
-                <div><span>Rating</span><strong>{skill.rating > 0 ? skill.rating.toFixed(1) : 'New'}</strong></div>
+                <div><span>Installs</span><strong>{formatCountLabel(skill.total_installs, 'install', 'installs')}</strong></div>
+                <div><span>Rating</span><strong>{formatRatingLabel(skill.rating, skill.review_count)}</strong></div>
                 <div><span>Website</span><strong>{skill.website_url ? <a href={skill.website_url} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
                 <div><span>Documentation</span><strong>{skill.documentation_url ? <a href={skill.documentation_url} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
               </div>
@@ -326,18 +334,26 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
 
             <section className="market-section">
               <div className="market-section-head"><h2>Inputs & Outputs</h2></div>
-              <div className="market-code-grid">
-                <pre>{pretty((skill.inputs ?? []).length ? skill.inputs : preview?.inputExample ?? {})}</pre>
-                <pre>{pretty((skill.outputs ?? []).length ? skill.outputs : preview?.outputExample ?? {})}</pre>
-              </div>
+              {((skill.inputs ?? []).length || (skill.outputs ?? []).length || preview?.inputExample || preview?.outputExample) ? (
+                <div className="market-code-grid">
+                  <pre>{pretty((skill.inputs ?? []).length ? skill.inputs : preview?.inputExample ?? 'No input schema published.')}</pre>
+                  <pre>{pretty((skill.outputs ?? []).length ? skill.outputs : preview?.outputExample ?? 'No output schema published.')}</pre>
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No input or output schema published.</p></div>
+              )}
             </section>
 
             <section className="market-section">
               <div className="market-section-head"><h2>Execution Preview</h2></div>
-              <div className="market-code-grid">
-                <pre>{pretty(preview?.executionExample ?? { skill: skill.slug, capability: (skill.capabilities ?? [])[0]?.name ?? 'run' })}</pre>
-                <pre>{pretty(preview?.expectedResults ?? { result: `Expected output from ${skill.name}` })}</pre>
-              </div>
+              {preview?.executionExample || preview?.expectedResults ? (
+                <div className="market-code-grid">
+                  <pre>{pretty(preview?.executionExample ?? 'No execution request example published.')}</pre>
+                  <pre>{preview?.expectedResults ? pretty(preview.expectedResults) : 'No expected result published. Run the skill to produce real output.'}</pre>
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No execution preview published. Run the skill after install to produce real output.</p></div>
+              )}
             </section>
 
             <section className="market-section">
@@ -429,20 +445,24 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
 
             <section className="market-section">
               <div className="market-section-head"><h2>Version History</h2></div>
-              <div className="market-timeline">
-                {((skill.changelog ?? []).length ? (skill.changelog ?? []).map((item, index) => ({
-                  version: skill.version,
-                  notes: item,
-                  createdAt: skill.updated_at,
-                  id: `${skill.id}-changelog-${index}`,
-                })) : versionHistory).map((entry, index) => (
-                  <article key={String(entry.version ?? index)}>
-                    <strong>Version {String(entry.version ?? skill.version)}</strong>
-                    <p>{String(entry.notes ?? ('changeSummary' in entry ? entry.changeSummary : undefined) ?? 'Release notes not provided.')}</p>
-                    <span>{new Date(String(entry.createdAt ?? skill.updated_at)).toLocaleDateString()}</span>
-                  </article>
-                ))}
-              </div>
+              {((skill.changelog ?? []).length || versionHistory.length) ? (
+                <div className="market-timeline">
+                  {((skill.changelog ?? []).length ? (skill.changelog ?? []).map((item, index) => ({
+                    version: skill.version,
+                    notes: item,
+                    createdAt: skill.updated_at,
+                    id: `${skill.id}-changelog-${index}`,
+                  })) : versionHistory).map((entry, index) => (
+                    <article key={String(entry.version ?? index)}>
+                      <strong>Version {String(entry.version ?? skill.version)}</strong>
+                      <p>{String(entry.notes ?? ('changeSummary' in entry ? entry.changeSummary : undefined) ?? 'Release notes not provided.')}</p>
+                      <span>{new Date(String(entry.createdAt ?? skill.updated_at)).toLocaleDateString()}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No version history published.</p></div>
+              )}
             </section>
           </>
         )}

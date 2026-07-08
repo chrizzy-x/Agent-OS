@@ -1,8 +1,11 @@
 import { notFound } from 'next/navigation';
 import SkillDetailPage, { type SkillDetailRecord } from '@/components/pages/SkillDetailPage';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
+import { allowLocalDataFallback } from '@/src/data/discipline';
 import { readLocalRuntimeState } from '@/src/storage/local-state';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
+
+export const dynamic = 'force-dynamic';
 
 async function loadPublishedSkill(id: string): Promise<SkillDetailRecord | null> {
   const isUuid = /^[0-9a-f-]{36}$/i.test(id);
@@ -25,6 +28,8 @@ async function loadPublishedSkill(id: string): Promise<SkillDetailRecord | null>
   } catch {
     // Fall back to local runtime state below.
   }
+
+  if (!allowLocalDataFallback('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK')) return null;
 
   const state = await readLocalRuntimeState();
   const skill = state.skills.catalog.find(item => (isUuid ? item.id === id : item.slug === id) && item.published);

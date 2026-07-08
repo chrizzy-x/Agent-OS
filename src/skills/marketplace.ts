@@ -3,6 +3,7 @@ import { recordMarketplaceInstallEvent, recordMarketplacePermissionEvent } from 
 import { scoreSearchMatch } from '../search/scoring.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
+import { allowLocalDataFallback } from '../data/discipline.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { validateRequiredSecrets } from '../vault/service.js';
 
@@ -25,6 +26,10 @@ export type SkillInstallResult = {
   skill: SkillMarketplaceRecord;
   dependenciesInstalled: Array<{ id: string; slug: string; name: string }>;
 };
+
+function allowLocalSkillMarketplaceFallback(): boolean {
+  return allowLocalDataFallback('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK');
+}
 
 export type SkillMarketplaceRecord = {
   id: string;
@@ -185,6 +190,8 @@ async function loadSkills(): Promise<SkillMarketplaceRecord[]> {
     // Fall through to local state.
   }
 
+  if (!allowLocalSkillMarketplaceFallback()) return [];
+
   const state = await readLocalRuntimeState();
   return state.skills.catalog
     .filter(skill => skill.published)
@@ -280,17 +287,24 @@ export async function getSkillByIdOrSlug(idOrSlug: string): Promise<SkillMarketp
 
 export function buildSkillPreview(skill: SkillMarketplaceRecord) {
   const capability = skill.capabilities[0] ?? {};
-  const inputExample = skill.examples[0]?.input ?? Object.fromEntries(Object.entries((capability.params ?? {}) as Record<string, unknown>).map(([key]) => [key, `<${key}>`]));
-  const outputExample = skill.examples[0]?.output ?? { result: `Result from ${skill.name}` };
+  const publishedExample = skill.examples[0];
+  const inputExample = publishedExample?.input
+    ?? ((skill.inputs ?? []).length ? skill.inputs : null)
+    ?? (capability.params ? Object.fromEntries(Object.entries((capability.params ?? {}) as Record<string, unknown>).map(([key]) => [key, `<${key}>`])) : null);
+  const outputExample = publishedExample?.output
+    ?? ((skill.outputs ?? []).length ? skill.outputs : null)
+    ?? (capability.returns ? { returns: capability.returns } : null);
+  if (!inputExample && !outputExample && !capability.name) return null;
   return {
+    dataState: publishedExample ? 'published_example' : 'schema_only',
     inputExample,
     outputExample,
     executionExample: {
       skill: skill.slug,
       capability: String(capability.name ?? 'run'),
-      params: inputExample,
+      params: inputExample ?? {},
     },
-    expectedResults: outputExample,
+    expectedResults: publishedExample ? outputExample : null,
   };
 }
 

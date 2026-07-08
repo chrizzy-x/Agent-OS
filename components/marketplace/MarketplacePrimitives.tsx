@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { formatCountLabel } from '@/src/data/discipline';
 
 export function formatMarketplaceCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -119,7 +120,7 @@ export function DeveloperSpotlight(props: {
               <p>@{developer.handle}</p>
               <span>{developer.appsPublished ?? developer.skillsPublished ?? 0} published</span>
             </div>
-            <strong>{formatMarketplaceCount(developer.totalInstalls)} installs</strong>
+            <strong>{formatCountLabel(developer.totalInstalls, 'install', 'installs')}</strong>
           </Link>
         ))}
       </div>

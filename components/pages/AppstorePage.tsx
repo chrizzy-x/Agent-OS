@@ -6,10 +6,10 @@ import SurfaceShell from '@/components/os/surface-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import type { AgentAppListing } from '@/src/appstore/catalog';
+import { formatCountLabel, formatRatingLabel } from '@/src/data/discipline';
 import type { AppDiscoveryPayload } from '@/src/appstore/discovery';
 import {
   DeveloperSpotlight,
-  formatMarketplaceCount,
   LazyMarketplaceSection,
   ListingBanner,
   ListingMark,
@@ -62,9 +62,9 @@ function AppCard(props: {
       </Link>
       <Link href={`/developer/${app.developerHandle}`} className="market-card-developer">{app.publisherName || 'AgentOS Developer'}</Link>
       <div className="market-card-facts">
-        <span>{app.rating > 0 ? app.rating.toFixed(1) : 'New'} rating</span>
+        <span>{formatRatingLabel(app.rating, app.reviewCount)}</span>
         <span>v{app.manifest.version}</span>
-        <span>{formatMarketplaceCount(app.installCount)} installs</span>
+        <span>{formatCountLabel(app.installCount, 'install', 'installs')}</span>
         <span>{platformLabel(app)}</span>
       </div>
       <div className="market-card-facts" aria-label={`${app.name} compatibility`}>
@@ -260,7 +260,7 @@ export default function AppstorePage() {
             description={hero.longDescription || hero.description}
             developerHref={`/developer/${hero.developerHandle}`}
             developerName={hero.publisherName || 'AgentOS Developer'}
-            metadata={[platformLabel(hero), `${hero.rating > 0 ? hero.rating.toFixed(1) : 'New'} rating`, `${formatMarketplaceCount(hero.installCount)} installs`]}
+            metadata={[platformLabel(hero), formatRatingLabel(hero.rating, hero.reviewCount), formatCountLabel(hero.installCount, 'install', 'installs')]}
             primaryLabel={workingSlug === hero.slug ? 'Working' : installedSlugs.has(hero.slug) ? 'Open' : 'Install'}
             primaryDisabled={workingSlug === hero.slug}
             secondaryHref={`/appstore/${hero.slug}`}
@@ -278,7 +278,8 @@ export default function AppstorePage() {
         ) : discovery.apps.length === 0 ? (
           <div className="market-empty">
             <h2>No apps found</h2>
-            <p>No accessible AgentOS apps matched this search.</p>
+            <p>{search.trim() ? 'No accessible AgentOS apps matched this search.' : 'No published AgentOS apps are available from the backend yet.'}</p>
+            <Link href="/studio" className="market-secondary-action">Open Super AgentOS</Link>
           </div>
         ) : search.trim() ? (
           <AppRow

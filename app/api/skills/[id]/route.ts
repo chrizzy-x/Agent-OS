@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertResourceAccess, normalizeVisibility } from '@/src/access/service';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
+import { allowLocalDataFallback } from '@/src/data/discipline';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { readLocalRuntimeState } from '@/src/storage/local-state';
 import { requireAgentContext, requireRouteCapability } from '@/src/auth/request';
@@ -58,6 +59,10 @@ export async function GET(
       }
     } catch {
       // Fall back to local runtime state below.
+    }
+
+    if (!allowLocalDataFallback('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK')) {
+      return NextResponse.json({ code: 'NOT_FOUND', error: 'Skill not found', message: 'Skill not found' }, { status: 404 });
     }
 
     const state = await readLocalRuntimeState();
