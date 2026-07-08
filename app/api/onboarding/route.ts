@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         workspace: null,
         session: existingSessions[0] ?? null,
-        nextRoute: existingSessions[0] ? `/studio?session=${existingSessions[0].id}` : '/studio',
+        nextRoute: existingSessions[0] ? `/studio?mode=nl&session=${existingSessions[0].id}` : '/studio?mode=nl',
       });
     }
 
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       workspace,
       session,
-      nextRoute: `/studio?session=${session.id}`,
+      nextRoute: `/studio?mode=nl&workspace=${encodeURIComponent(workspace.id)}&session=${encodeURIComponent(session.id)}`,
     }, { status: 201 });
   } catch (error) {
     const err = toErrorResponse(error);

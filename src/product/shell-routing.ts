@@ -4,7 +4,7 @@ export type ShellNavigationContext = {
   sessionId: string | null;
 };
 
-const EXCLUDED_CONTEXT_PREFIXES = ['/signin', '/signup', '/login', '/forgot-password', '/onboarding'];
+const EXCLUDED_CONTEXT_PREFIXES = ['/signin', '/signup', '/login', '/forgot-password'];
 
 export function appendShellContextToHref(href: string, context: ShellNavigationContext) {
   if (!href.startsWith('/') || href.startsWith('//')) return href;

@@ -79,6 +79,11 @@ export default function ProjectsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('create') === '1') setCreating(true);
+  }, []);
+
   const items = useMemo(() => {
     if (!payload) return [];
     if (tab === 'Pinned') return payload.favorites ?? [];

@@ -4081,6 +4081,29 @@ nextjs-portal {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.onboarding-page {
+  width: min(100%, 1120px);
+}
+
+.onboarding-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.8fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.onboarding-surface-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(144px, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .onboarding-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .library-toolbar {
   display: flex;
   flex-wrap: wrap;
