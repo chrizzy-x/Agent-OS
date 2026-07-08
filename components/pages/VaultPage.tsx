@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   Card,
+  ComingSoonState,
   DataTable,
   EmptyState,
   Input,
@@ -331,12 +332,11 @@ export default function VaultPage() {
         </div>
 
         {vaultView !== 'secrets' && vaultView !== 'audit' ? (
-          <Card>
-            <EmptyState
-              title={`${vaultView === 'apiKeys' ? 'API keys' : vaultView} coming soon`}
-              body="This credential type is disabled in v6.6.7. Use Secrets for live encrypted values."
-            />
-          </Card>
+          <ComingSoonState
+            title={`${vaultView === 'apiKeys' ? 'API keys' : vaultView} coming soon`}
+            body="This credential type is disabled in V6.6.8. Use Secrets for live encrypted values."
+            meta={<Badge tone="warning">Disabled</Badge>}
+          />
         ) : vaultView === 'audit' ? (
           <Card>
             <DataTable

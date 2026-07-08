@@ -2,7 +2,7 @@
 
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
-import { Badge, Card, EmptyState, PageHeader } from '@/components/os/ui';
+import { Badge, ComingSoonState, DisabledState, PageHeader } from '@/components/os/ui';
 
 const sections = [
   ['Roadmap', 'Milestones for protocol activation, validator review, governance, and runtime integration.'],
@@ -24,20 +24,17 @@ export default function FfpPage() {
           subtitle="Fabric Furge Protocol is visible in AgentOS but disabled. No routing, consensus, validator voting, proposal history, or activation control is available."
           actions={<Badge tone="default">Disabled</Badge>}
         />
-        <Card>
-          <div style={{ display: 'grid', gap: 10 }}>
-            <div className="os-entity-title">FFP Disabled</div>
-            <div className="os-entity-copy">
-              Multi-agent work continues through the Unified Execution Engine. Existing compatibility records are retained but ignored.
-            </div>
-          </div>
-        </Card>
+        <DisabledState
+          title="FFP Disabled"
+          body="Multi-agent work continues through the Unified Execution Engine. Existing compatibility records are retained but ignored."
+          meta={<Badge tone="warning">No validator routing</Badge>}
+        />
         <div className="resources-main">
           {sections.map(([title, body]) => (
             <section key={title} className="resources-section">
               <h2>{title}</h2>
               <p>{body}</p>
-              <EmptyState title="Coming soon" body="This FFP capability is documented as future work and is disabled in v6.6.7." />
+              <ComingSoonState title="Coming soon" body="This FFP capability is documented as future work and is disabled in V6.6.8." />
             </section>
           ))}
         </div>

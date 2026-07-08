@@ -161,7 +161,13 @@ export default function CodeStudioPanel() {
             disabled={!advancedMode}
             className="os-input"
           />
-          <Button onClick={() => void sendTerminalInput()} disabled={!advancedMode || !terminal}>Run</Button>
+          <Button
+            onClick={() => void sendTerminalInput()}
+            disabled={!advancedMode || !terminal}
+            disabledReason={!advancedMode ? 'Enable terminal access before running commands.' : !terminal ? 'Start a terminal before running commands.' : undefined}
+          >
+            Run
+          </Button>
         </div>
       </section>
 

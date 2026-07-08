@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
+import { disabledControlReason, normalizeButtonVariant, type AgentOsButtonVariantInput, type AgentOsStateKind } from '@/src/ui/design-system';
 
 export type ShellNavItem = {
   href?: string;
@@ -9,6 +10,7 @@ export type ShellNavItem = {
   onClick?: () => void;
   badge?: string;
   locked?: boolean;
+  disabledReason?: string;
 };
 
 export function AppShell(props: {
@@ -54,8 +56,14 @@ export function SidebarNav(props: { items: ShellNavItem[] }) {
         );
         if (item.locked) {
           return (
-            <span key={`${item.href ?? item.label}-locked`} className="os-sidebar-link locked" aria-disabled="true">
+            <span
+              key={`${item.href ?? item.label}-locked`}
+              className="os-sidebar-link locked"
+              aria-disabled="true"
+              title={item.disabledReason ?? 'Unavailable right now'}
+            >
               {content}
+              <small className="os-disabled-reason">{item.disabledReason ?? 'Unavailable right now'}</small>
             </span>
           );
         }
@@ -110,26 +118,91 @@ export function MetricCard(props: { label: string; value: ReactNode; hint?: Reac
 
 export function Button(props: {
   children: ReactNode;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: AgentOsButtonVariantInput;
   href?: string;
   onClick?: () => void;
   type?: 'button' | 'submit' | 'reset';
   disabled?: boolean;
+  disabledReason?: string;
   loading?: boolean;
+  loadingLabel?: string;
+  title?: string;
+  ariaLabel?: string;
   className?: string;
 }) {
-  const className = `os-button ${props.variant ?? 'primary'} ${props.className ?? ''}`.trim();
-  const content = props.loading ? 'Loading...' : props.children;
-  if (props.href) {
-    return props.disabled || props.loading
-      ? <span className={className} aria-disabled="true">{content}</span>
-      : <Link href={props.href} className={className}>{content}</Link>;
-  }
+  const variant = normalizeButtonVariant(props.variant);
+  const reason = disabledControlReason(props);
+  const disabled = Boolean(props.disabled || props.loading);
+  const className = `os-button ${variant} ${props.className ?? ''}`.trim();
+  const content = props.loading ? props.loadingLabel ?? 'Loading...' : props.children;
+  const control = props.href
+    ? disabled
+      ? <span className={className} aria-disabled="true" title={reason ?? props.title} aria-label={props.ariaLabel}>{content}</span>
+      : <Link href={props.href} className={className} title={props.title} aria-label={props.ariaLabel}>{content}</Link>
+    : (
+      <button
+        type={props.type ?? 'button'}
+        onClick={props.onClick}
+        disabled={disabled}
+        className={className}
+        title={reason ?? props.title}
+        aria-label={props.ariaLabel}
+      >
+        {content}
+      </button>
+    );
+
+  if (!reason || !disabled) return control;
+
   return (
-    <button type={props.type ?? 'button'} onClick={props.onClick} disabled={props.disabled || props.loading} className={className}>
-      {content}
-    </button>
+    <span className="os-control-wrap">
+      {control}
+      {props.disabledReason ? <small className="os-disabled-reason">{reason}</small> : null}
+    </span>
   );
+}
+
+export function StatePanel(props: {
+  kind: AgentOsStateKind;
+  title: string;
+  body: string;
+  action?: ReactNode;
+  meta?: ReactNode;
+}) {
+  return (
+    <section
+      className={`os-state-panel ${props.kind}`}
+      role={props.kind === 'error' ? 'alert' : 'status'}
+      aria-busy={props.kind === 'loading' ? 'true' : undefined}
+    >
+      <div className="os-state-head">
+        <Badge tone={
+          props.kind === 'error' ? 'danger'
+            : props.kind === 'permission' || props.kind === 'disabled' || props.kind === 'coming-soon' ? 'warning'
+              : props.kind === 'loading' ? 'accent'
+                : 'default'
+        }>
+          {props.kind.replace('-', ' ')}
+        </Badge>
+        {props.meta}
+      </div>
+      <div className="os-empty-title">{props.title}</div>
+      <div className="os-empty-body">{props.body}</div>
+      {props.action ? <div className="os-empty-action">{props.action}</div> : null}
+    </section>
+  );
+}
+
+export function DisabledState(props: { title: string; body: string; action?: ReactNode; meta?: ReactNode }) {
+  return <StatePanel kind="disabled" title={props.title} body={props.body} action={props.action} meta={props.meta} />;
+}
+
+export function PermissionState(props: { title: string; body: string; action?: ReactNode; meta?: ReactNode }) {
+  return <StatePanel kind="permission" title={props.title} body={props.body} action={props.action} meta={props.meta} />;
+}
+
+export function ComingSoonState(props: { title: string; body: string; action?: ReactNode; meta?: ReactNode }) {
+  return <StatePanel kind="coming-soon" title={props.title} body={props.body} action={props.action} meta={props.meta} />;
 }
 
 export function ConfirmationDialog(props: {
@@ -150,7 +223,7 @@ export function ConfirmationDialog(props: {
         <p className="os-entity-copy">{props.body}</p>
         <div className="os-inline-actions">
           <Button variant="ghost" onClick={props.onCancel} disabled={props.busy}>{props.cancelLabel ?? 'Cancel'}</Button>
-          <Button variant="danger" onClick={props.onConfirm} loading={props.busy}>{props.confirmLabel}</Button>
+          <Button variant="destructive" onClick={props.onConfirm} loading={props.busy}>{props.confirmLabel}</Button>
         </div>
       </section>
     </div>
@@ -211,33 +284,21 @@ export function Tabs(props: {
 }
 
 export function EmptyState(props: { title: string; body: string; action?: ReactNode }) {
-  return (
-    <Card className="os-empty-state">
-      <div className="os-empty-title">{props.title}</div>
-      <div className="os-empty-body">{props.body}</div>
-      {props.action ? <div className="os-empty-action">{props.action}</div> : null}
-    </Card>
-  );
+  return <StatePanel kind="empty" title={props.title} body={props.body} action={props.action} />;
 }
 
 export function LoadingState(props: { label?: string }) {
   return (
-    <Card className="os-loading-state">
+    <section className="os-state-panel loading os-loading-state" role="status" aria-busy="true">
       <div className="os-loading-bar" />
       <div className="os-loading-bar short" />
       <div className="os-loading-copy">{props.label ?? 'Loading'}</div>
-    </Card>
+    </section>
   );
 }
 
 export function ErrorState(props: { title: string; body: string; action?: ReactNode }) {
-  return (
-    <Card className="os-error-state">
-      <div className="os-empty-title">{props.title}</div>
-      <div className="os-empty-body">{props.body}</div>
-      {props.action ? <div className="os-empty-action">{props.action}</div> : null}
-    </Card>
-  );
+  return <StatePanel kind="error" title={props.title} body={props.body} action={props.action} />;
 }
 
 export function SearchBar(props: React.InputHTMLAttributes<HTMLInputElement>) {

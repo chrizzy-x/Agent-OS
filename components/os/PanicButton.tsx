@@ -168,9 +168,9 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
         {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
         <Card className="panic-action-card">
           <div className="panic-action-grid">
-            <Button variant="secondary" onClick={() => void run('pause')} disabled={working}>Pause runs</Button>
-            <Button variant="danger" onClick={() => void run('stop_all')} disabled={working}>Stop all</Button>
-            <Button variant="danger" onClick={() => void run('lockdown')} disabled={working}>Lockdown</Button>
+            <Button variant="secondary" onClick={() => void run('pause')} disabled={working} disabledReason="A panic action is already running.">Pause runs</Button>
+            <Button variant="destructive" onClick={() => void run('stop_all')} disabled={working} disabledReason="A panic action is already running.">Stop all</Button>
+            <Button variant="destructive" onClick={() => void run('lockdown')} disabled={working} disabledReason="A panic action is already running.">Lockdown</Button>
             <Button href="/mcp" variant="secondary">Diagnostics</Button>
           </div>
         </Card>

@@ -24,10 +24,10 @@ export default function WorkflowStudioPanel() {
           <h1>{active?.name ?? 'Workflow Studio'}</h1>
         </div>
         <div>
-          <Button onClick={() => prompt('Run')} disabled={sending}>Run</Button>
-          <Button variant="secondary" onClick={() => prompt('Test')} disabled={sending}>Test</Button>
-          <Button variant="secondary" onClick={() => prompt('Deploy')} disabled={sending}>Deploy</Button>
-          <Button variant="ghost" onClick={() => prompt('Show version history for')} disabled={sending}>Version History</Button>
+          <Button onClick={() => prompt('Run')} disabled={sending} disabledReason="Super AgentOS is already processing a workflow request.">Run</Button>
+          <Button variant="secondary" onClick={() => prompt('Test')} disabled={sending} disabledReason="Super AgentOS is already processing a workflow request.">Test</Button>
+          <Button variant="secondary" onClick={() => prompt('Deploy')} disabled={sending} disabledReason="Super AgentOS is already processing a workflow request.">Deploy</Button>
+          <Button variant="ghost" onClick={() => prompt('Show version history for')} disabled={sending} disabledReason="Super AgentOS is already processing a workflow request.">Version History</Button>
         </div>
       </header>
 

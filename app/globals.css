@@ -190,7 +190,7 @@ body:has(.market-shell) .agentos-global-right {
   min-height: 260px;
   padding: 24px;
   border: 1px solid var(--market-border);
-  border-radius: 24px;
+  border-radius: 8px;
   background:
     linear-gradient(120deg, rgba(79, 70, 229, 0.12), rgba(6, 182, 212, 0.08)),
     var(--market-card);
@@ -207,7 +207,7 @@ body:has(.market-shell) .agentos-global-right {
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--market-border);
-  border-radius: 16px;
+  border-radius: 8px;
   background: #F1F5F9;
   color: var(--text-primary);
   font-weight: 700;
@@ -724,7 +724,7 @@ body:has(.market-shell) .agentos-global-right {
   min-width: 0;
   padding: 8px;
   border: 1px solid var(--market-border);
-  border-radius: 20px;
+  border-radius: 8px;
   background: var(--market-card);
   scroll-snap-align: start;
 }
@@ -1564,6 +1564,79 @@ textarea {
   border-color: rgba(139, 92, 246, 0.25);
 }
 
+.os-control-wrap {
+  display: inline-grid;
+  gap: 5px;
+  justify-items: start;
+}
+
+.os-disabled-reason {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.os-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+.os-button.primary {
+  border-color: rgba(20, 184, 166, 0.32);
+  background: var(--accent);
+  color: #fff;
+}
+
+.os-button.secondary {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-primary);
+}
+
+.os-button.ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.os-button.destructive,
+.os-button.danger {
+  border-color: rgba(248, 113, 113, 0.36);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+
+.os-button:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: var(--border-active);
+  background: rgba(20, 184, 166, 0.14);
+  color: var(--text-primary);
+}
+
+.os-button.destructive:hover:not(:disabled):not([aria-disabled="true"]),
+.os-button.danger:hover:not(:disabled):not([aria-disabled="true"]) {
+  border-color: rgba(248, 113, 113, 0.48);
+  background: rgba(248, 113, 113, 0.18);
+}
+
+.os-button:disabled,
+.os-button[aria-disabled="true"] {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
 .os-metric-card {
   display: flex;
   flex-direction: column;
@@ -1672,19 +1745,44 @@ textarea {
   line-height: 1.6;
 }
 
+.os-state-panel,
 .os-empty-state,
 .os-loading-state,
 .os-error-state {
-  min-height: 160px;
+  min-height: 116px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
 }
 
+.os-state-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.os-state-panel.error,
 .os-error-state {
   border-color: rgba(248, 113, 113, 0.22);
   background: rgba(248, 113, 113, 0.06);
+}
+
+.os-state-panel.permission,
+.os-state-panel.disabled,
+.os-state-panel.coming-soon {
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.os-state-panel.loading {
+  border-color: rgba(20, 184, 166, 0.22);
+  background: rgba(20, 184, 166, 0.05);
 }
 
 .os-loading-bar {
@@ -1762,7 +1860,7 @@ textarea {
   max-height: 82vh;
   border-left: 0;
   border-top: 1px solid var(--border-active);
-  border-radius: 24px 24px 0 0;
+  border-radius: 8px 8px 0 0;
 }
 
 .os-drawer-header,
@@ -1828,7 +1926,7 @@ textarea {
 .os-modal {
   width: min(520px, calc(100vw - 32px));
   margin: auto;
-  border-radius: 16px;
+  border-radius: 8px;
 }
 
 .os-drawer-stack {
@@ -2081,7 +2179,7 @@ textarea {
     max-height: 82vh;
     border-left: 0;
     border-top: 1px solid var(--border-active);
-    border-radius: 24px 24px 0 0;
+    border-radius: 8px 8px 0 0;
   }
 
   .os-drawer[data-mobile-placement="right"] {
@@ -3411,7 +3509,7 @@ nextjs-portal {
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
-  border-radius: 24px 0 0 0;
+  border-radius: 8px 0 0 0;
   background: var(--bg-secondary);
   box-shadow: var(--shadow-lg);
   color: var(--text-primary);
@@ -3493,7 +3591,7 @@ nextjs-portal {
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--bg-tertiary);
 }
 
@@ -3782,7 +3880,7 @@ nextjs-portal {
   gap: 4px;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: 8px;
   background: var(--bg-secondary);
   box-shadow: var(--shadow-lg);
 }
@@ -4343,8 +4441,8 @@ nextjs-portal {
 .agentos-avatar-menu-panel button,
 .agentos-notification-head-actions button,
 .agentos-notification-actions button {
-  min-height: 44px;
-  border-radius: 12px;
+  min-height: 36px;
+  border-radius: 8px;
 }
 
 .os-input,
@@ -4354,8 +4452,8 @@ nextjs-portal {
 .market-search-panel input,
 .agentos-global-search input,
 .agentos-global-workspace select {
-  min-height: 44px;
-  border-radius: 12px;
+  min-height: 36px;
+  border-radius: 8px;
 }
 
 .os-card,
@@ -4365,21 +4463,33 @@ nextjs-portal {
 .resources-link-card.os-card,
 .os-table-wrap,
 .os-feed-item {
-  border-radius: 16px;
+  border-radius: 8px;
 }
 
 .market-store-card,
 .market-app-card,
 .market-skill-card,
 .market-update-card {
-  border-radius: 20px;
+  border-radius: 8px;
 }
 
 .agentos-notification-drawer,
 .agentos-avatar-menu-panel,
 .drawer,
 .modal {
-  border-radius: 24px;
+  border-radius: 8px;
+}
+
+@media (max-width: 767px) {
+  .os-button,
+  .btn-primary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger,
+  .market-primary-action,
+  .market-secondary-action {
+    min-height: 44px;
+  }
 }
 
 .market-shell {
@@ -4495,7 +4605,7 @@ body:has(.market-shell) .surface-shell-main {
   gap: 14px;
   padding: 20px;
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: 8px;
   background: var(--bg-secondary);
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
