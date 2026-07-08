@@ -332,7 +332,7 @@ export default function PublishSkillWizardPage({ initialSlug }: { initialSlug?: 
         {sessionLoading || (accessState === 'allowed' && loading) ? <LoadingState label="Loading skill publishing" /> : !session ? (
           <EmptyState title="Sign in required" body="Sign in to publish skills." action={<Button href="/signin">Sign in</Button>} />
         ) : !canPublishSkill ? (
-          <EmptyState title="Enterprise access required" body="Skill creation and publishing stay gated to Enterprise and Enterprise Max workspaces." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState title="Enterprise access required" body="Skill creation and publishing stay gated to Enterprise Plus and Enterprise Max workspaces." action={<Button href="/studio">Open Studio</Button>} />
         ) : (
           <div className="os-drawer-stack">
             <Card>

@@ -15,8 +15,18 @@ export const PLAN_ORDER = ['retail_free', 'retail_pro', 'enterprise_plus', 'ente
 export const PLAN_LABELS: Record<AgentPlan, string> = {
   retail_free: 'Free',
   retail_pro: 'Pro',
-  enterprise_plus: 'Enterprise',
+  enterprise_plus: 'Enterprise Plus',
   enterprise_max: 'Enterprise Max',
+};
+
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  retail: 'Retail',
+  enterprise: 'Enterprise',
+};
+
+export const DEFAULT_PLAN_BY_ACCOUNT_TYPE: Record<AccountType, AgentPlan> = {
+  retail: 'retail_free',
+  enterprise: 'enterprise_plus',
 };
 
 export const PLAN_PRICES_USD: Record<AgentPlan, number> = {
@@ -114,6 +124,20 @@ export function getUpgradeablePlans(value: unknown): AgentPlan[] {
   const current = normalizePlan(value);
   const index = PLAN_ORDER.indexOf(current);
   return index >= 0 ? [...PLAN_ORDER.slice(index + 1)] : [...PLAN_ORDER];
+}
+
+export function getSwitchablePlans(value: unknown): AgentPlan[] {
+  const current = normalizePlan(value);
+  return PLAN_ORDER.filter(plan => plan !== current);
+}
+
+export function parseAccountTypeSelection(value: unknown): AccountType | null {
+  return value === 'enterprise' ? 'enterprise' : value === 'retail' ? 'retail' : null;
+}
+
+export function defaultPlanForAccountType(value: unknown): AgentPlan | null {
+  const accountType = parseAccountTypeSelection(value);
+  return accountType ? DEFAULT_PLAN_BY_ACCOUNT_TYPE[accountType] : null;
 }
 
 export function parsePlanSelection(accountType: unknown, selectedPlan: unknown): AgentPlan | null {

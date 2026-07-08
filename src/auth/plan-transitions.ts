@@ -43,6 +43,7 @@ export async function transitionPlan(params: {
     ...metadata,
     plan: newPlan,
     account_type: PLAN_ACCOUNT_TYPE[newPlan],
+    account_intent: PLAN_ACCOUNT_TYPE[newPlan],
     plan_selection_skipped: false,
     plan_changed_at: now,
   };

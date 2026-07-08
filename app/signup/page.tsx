@@ -7,12 +7,16 @@ import { APP_URL } from '@/lib/config';
 import { fetchBrowserSession } from '@/src/auth/browser-session';
 
 interface Credentials {
-  bearerToken: string;
-  apiKey?: string;
+  bearerToken: string | null;
+  apiKey?: string | null;
   expiresIn: string;
   tier?: string;
-  accountType?: string | null;
+  plan?: PlanKey;
+  planLabel?: string;
+  accountType?: AccountType | null;
+  accountIntent?: AccountType | null;
   planSelectionSkipped?: boolean;
+  capabilities?: string[];
 }
 
 type AccountType = 'retail' | 'enterprise';
@@ -24,9 +28,16 @@ const RETAIL_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
 ];
 
 const ENTERPRISE_PLANS: Array<{ key: PlanKey; name: string; detail: string }> = [
-  { key: 'enterprise_plus', name: 'Enterprise', detail: 'SDK, Developer Console, Apps, Skills, publishing, and teams.' },
+  { key: 'enterprise_plus', name: 'Enterprise Plus', detail: 'SDK, Developer Console, Apps, Skills, publishing, and teams.' },
   { key: 'enterprise_max', name: 'Enterprise Max', detail: 'Highest limits, diagnostics, governance, and org controls.' },
 ];
+
+const PLAN_LABEL_BY_KEY: Record<PlanKey, string> = {
+  retail_free: 'Free',
+  retail_pro: 'Pro',
+  enterprise_plus: 'Enterprise Plus',
+  enterprise_max: 'Enterprise Max',
+};
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -60,8 +71,11 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 }
 
 function CredentialsPanel({ credentials }: { credentials: Credentials }) {
-  const bearerToken = credentials.bearerToken || credentials.apiKey || '';
-  const quickstart = `const AGENT_OS_URL = '${APP_URL}';
+  const bearerToken = credentials.bearerToken || credentials.apiKey || null;
+  const hasBearerToken = Boolean(bearerToken);
+  const accountIntent = credentials.accountIntent ?? credentials.accountType ?? 'retail';
+  const planLabel = credentials.planLabel ?? (credentials.plan ? PLAN_LABEL_BY_KEY[credentials.plan] : credentials.tier) ?? 'Free';
+  const quickstart = hasBearerToken ? `const AGENT_OS_URL = '${APP_URL}';
 const BEARER_TOKEN = '${bearerToken}';
 
 // Store a value in memory
@@ -75,7 +89,22 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
     tool: 'mem_set',
     input: { key: 'hello', value: 'world' }
   }),
-});`;
+});` : '';
+  const nextLinks = accountIntent === 'enterprise'
+    ? [
+        { href: '/studio', label: 'Open Studio', primary: true },
+        { href: '/developer', label: 'Developer Console', primary: false },
+        { href: '/sdk', label: 'SDK', primary: false },
+        { href: '/publish/app', label: 'Publish App', primary: false },
+        { href: '/publish/skill', label: 'Publish Skill', primary: false },
+      ]
+    : [
+        { href: '/studio', label: 'Open Studio', primary: true },
+        { href: '/', label: 'Home', primary: false },
+        { href: '/appstore', label: 'Apps', primary: false },
+        { href: '/skillstore', label: 'Skills', primary: false },
+        { href: '/projects', label: 'Projects', primary: false },
+      ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -108,102 +137,119 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
             fontSize: '13px',
             color: 'var(--text-secondary)',
             margin: 0,
-          }}>Your Super AgentOS, NL Studio, workspace, and Vault are provisioned. Save your bearer token if your plan includes one.</p>
+          }}>{planLabel} is active. Your Super AgentOS, NL Studio, workspace, and Vault are provisioned.</p>
         </div>
       </div>
 
-      {/* Warning + credentials */}
-      <div style={{
-        padding: '16px',
-        background: 'rgba(255,170,0,0.06)',
-        border: '1px solid rgba(255,170,0,0.25)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '8px',
-          color: 'var(--warning)',
-          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-          fontSize: '12px',
-        }}>
-          <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20" style={{ flexShrink: 0, marginTop: '1px' }}>
-            <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
-          </svg>
-          <span>Your bearer token is shown <strong>only once</strong>. Copy and store it securely. Agent IDs stay private and are not displayed.</span>
-        </div>
-
-        {[
-          { label: 'Bearer Token', value: bearerToken },
-        ].map(field => (
-          <div key={field.label}>
+      {hasBearerToken ? (
+        <>
+          <div style={{
+            padding: '16px',
+            background: 'rgba(255,170,0,0.06)',
+            border: '1px solid rgba(255,170,0,0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}>
             <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px',
+              color: 'var(--warning)',
               fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-              fontSize: '11px',
-              fontWeight: 500,
-              color: 'var(--text-secondary)',
-              textTransform: 'uppercase' as const,
-              letterSpacing: '0.06em',
-              marginBottom: '6px',
-            }}>{field.label}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              fontSize: '12px',
+            }}>
+              <svg width="14" height="14" fill="currentColor" viewBox="0 0 20 20" style={{ flexShrink: 0, marginTop: '1px' }}>
+                <path fillRule="evenodd" d="M8.485 3.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 3.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+              </svg>
+              <span>Your bearer token is shown <strong>only once</strong>. Copy and store it securely. Agent IDs stay private and are not displayed.</span>
+            </div>
+
+            <div>
               <div style={{
-                flex: 1,
-                padding: '8px 12px',
-                fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
                 fontSize: '11px',
-                color: 'var(--accent)',
-                background: 'var(--code-bg)',
-                border: '1px solid var(--code-border)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>{field.value}</div>
-              <CopyButton text={field.value} />
+                fontWeight: 500,
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase' as const,
+                letterSpacing: '0.06em',
+                marginBottom: '6px',
+              }}>Bearer Token</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontFamily: 'var(--font-mono), JetBrains Mono, monospace',
+                  fontSize: '11px',
+                  color: 'var(--accent)',
+                  background: 'var(--code-bg)',
+                  border: '1px solid var(--code-border)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>{bearerToken}</div>
+                <CopyButton text={bearerToken ?? ''} />
+              </div>
+            </div>
+            <p style={{
+              fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+              fontSize: '12px',
+              color: 'var(--text-tertiary)',
+              margin: 0,
+            }}>Expires in {credentials.expiresIn}</p>
+          </div>
+
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <span style={{
+                fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+                fontSize: '13px',
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+              }}>Quick start</span>
+              <CopyButton text={quickstart} label="copy all" />
+            </div>
+            <div className="terminal">
+              <div className="terminal-header">
+                <div className="terminal-dot" style={{ background: '#ff5f57' }} />
+                <div className="terminal-dot" style={{ background: '#ffbd2e' }} />
+                <div className="terminal-dot" style={{ background: '#28c840' }} />
+                <span style={{ marginLeft: '12px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>quickstart.js</span>
+              </div>
+              <pre style={{ padding: '16px', fontSize: '11px', overflowX: 'auto', color: 'var(--text-secondary)', margin: 0 }}>{quickstart}</pre>
             </div>
           </div>
-        ))}
-        <p style={{
-          fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
-          fontSize: '12px',
-          color: 'var(--text-tertiary)',
-          margin: 0,
-        }}>Expires in {credentials.expiresIn}</p>
-      </div>
-
-      {/* Quick start */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <span style={{
+        </>
+      ) : (
+        <div style={{
+          padding: '16px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid var(--border)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}>
+          <strong style={{
             fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
             fontSize: '13px',
-            fontWeight: 500,
             color: 'var(--text-primary)',
-          }}>Quick start</span>
-          <CopyButton text={quickstart} label="copy all" />
+          }}>Browser workspace access is active.</strong>
+          <p style={{
+            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            margin: 0,
+            lineHeight: 1.45,
+          }}>Free accounts do not receive bearer tokens. Upgrade to Pro, Enterprise Plus, or Enterprise Max in Settings when external API, SDK, or CLI access is needed.</p>
+          <Link href="/settings?section=billing" className="btn-ghost" style={{ justifyContent: 'center', fontSize: '13px', padding: '9px 14px' }}>
+            View plan options
+          </Link>
         </div>
-        <div className="terminal">
-          <div className="terminal-header">
-            <div className="terminal-dot" style={{ background: '#ff5f57' }} />
-            <div className="terminal-dot" style={{ background: '#ffbd2e' }} />
-            <div className="terminal-dot" style={{ background: '#28c840' }} />
-            <span style={{ marginLeft: '12px', fontSize: '11px', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono), JetBrains Mono, monospace' }}>quickstart.js</span>
-          </div>
-          <pre style={{ padding: '16px', fontSize: '11px', overflowX: 'auto', color: 'var(--text-secondary)', margin: 0 }}>{quickstart}</pre>
-        </div>
-      </div>
+      )}
 
       {/* Navigation links */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-        {[
-          { href: '/studio', label: 'Open Studio', primary: true },
-          { href: '/', label: 'Home', primary: false },
-          { href: '/docs', label: 'Docs', primary: false },
-          { href: '/skillstore', label: 'Skills', primary: false },
-          { href: '/appstore', label: 'Apps', primary: false },
-        ].map(btn => (
+        {nextLinks.map(btn => (
           <Link
             key={btn.href}
             href={btn.href}
@@ -231,6 +277,9 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const planOptions = accountType === 'retail' ? RETAIL_PLANS : ENTERPRISE_PLANS;
+  const accountTypeCopy = accountType === 'retail'
+    ? 'For personal and team workspace use: Studio, installs, workflows, subagents, Library, and Vault.'
+    : 'For SDK, app and skill publishing, developer console, team controls, and enterprise workspace setup.';
 
   const selectAccountType = (type: AccountType) => {
     setAccountType(type);
@@ -366,15 +415,22 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
                   textTransform: 'capitalize',
                 }}
               >
-                {type}
+                {type === 'retail' ? 'Retail' : 'Enterprise'}
               </button>
             ))}
           </div>
+          <p style={{
+            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+            fontSize: '12px',
+            color: 'var(--text-tertiary)',
+            margin: '8px 0 0',
+            lineHeight: 1.4,
+          }}>{accountTypeCopy}</p>
         </div>
 
         <div>
           <label style={labelStyle}>Subscription</label>
-          <div style={{ display: 'grid', gridTemplateColumns: accountType === 'retail' ? 'repeat(auto-fit, minmax(96px, 1fr))' : '1fr', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: '8px' }}>
             {planOptions.map(plan => (
               <button
                 key={plan.key}
@@ -401,6 +457,13 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
               </button>
             ))}
           </div>
+          <p style={{
+            fontFamily: 'var(--font-sans), IBM Plex Sans, sans-serif',
+            fontSize: '12px',
+            color: 'var(--text-tertiary)',
+            margin: '8px 0 0',
+            lineHeight: 1.4,
+          }}>You can change plan and account intent later from Settings while beta billing is disabled.</p>
         </div>
 
         {error && (
@@ -442,7 +505,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
           fontSize: '12px',
           color: 'var(--text-tertiary)',
           margin: 0,
-        }}>Every account includes Super AgentOS, NL Studio, a workspace, and Vault. No credit card required.</p>
+        }}>Every account includes Super AgentOS, NL Studio, a workspace, and Vault. Enterprise controls stay gated by plan capabilities.</p>
       </form>
 
       <div style={{
@@ -536,7 +599,7 @@ export default function SignupPage() {
               color: 'var(--text-secondary)',
               marginBottom: '28px',
               marginTop: 0,
-            }}>Provision Super AgentOS, NL Studio, your workspace, and Vault in one step.</p>
+            }}>Choose retail or enterprise intent, then provision Super AgentOS, NL Studio, your workspace, and Vault.</p>
             <SignupForm onSuccess={setCredentials} />
           </>
         ) : (

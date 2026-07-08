@@ -46,6 +46,7 @@ function mapLocalAccount(record: LocalAccountRecord): AgentAccount {
       ...(record.avatarUrl ? { avatar_url: record.avatarUrl } : {}),
       plan: record.plan ?? 'retail_free',
       account_type: record.accountType ?? 'retail',
+      account_intent: record.accountType ?? 'retail',
     },
   };
 }
@@ -122,6 +123,7 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
         password_hash: input.passwordHash,
         signup_source: 'web',
         account_type: accountType,
+        account_intent: accountType,
         plan,
         plan_price_usd: 0,
         plan_selection_skipped: Boolean(input.planSelectionSkipped),

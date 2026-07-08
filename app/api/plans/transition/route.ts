@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     const newPlan = typeof body.newPlan === 'string' ? body.newPlan : '';
     const reason = typeof body.reason === 'string' && body.reason.trim()
       ? body.reason.trim()
-      : 'beta_self_serve_upgrade';
+      : 'beta_self_serve_plan_change';
 
     if (!isValidPlan(newPlan)) {
       return NextResponse.json({

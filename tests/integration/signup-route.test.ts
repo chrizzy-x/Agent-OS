@@ -67,11 +67,13 @@ describe('POST /api/signup', () => {
       expect(body.credentials.bearerToken).toBeNull();
     }
     expect(body.credentials.plan).toBe(selectedPlan);
+    expect(body.credentials.accountIntent).toBe(accountType);
     expect(body.credentials.planPriceUsd).toBe(0);
     expect(body.credentials.capabilities).toContain('use_nl_studio');
     expect(response.headers.get('set-cookie')).toContain('agent_session=');
     expect(db.insertedAgents[0].metadata).toMatchObject({
       account_type: accountType,
+      account_intent: accountType,
       plan: selectedPlan,
       plan_price_usd: 0,
     });
@@ -109,5 +111,28 @@ describe('POST /api/signup', () => {
 
     expect(response.status).toBe(409);
     expect(body.message).toContain('already exists');
+  });
+
+  it('uses Enterprise Plus when enterprise signup skips explicit plan selection', async () => {
+    const db = mockSignupDatabase();
+
+    const response = await POST(createSignupRequest({
+      accountType: 'enterprise',
+      selectedPlan: undefined,
+      planSelectionSkipped: true,
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body.credentials.plan).toBe('enterprise_plus');
+    expect(body.credentials.planLabel).toBe('Enterprise Plus');
+    expect(body.credentials.accountIntent).toBe('enterprise');
+    expect(body.credentials.bearerToken).toBeTruthy();
+    expect(db.insertedAgents[0].metadata).toMatchObject({
+      account_type: 'enterprise',
+      account_intent: 'enterprise',
+      plan: 'enterprise_plus',
+      plan_selection_skipped: true,
+    });
   });
 });

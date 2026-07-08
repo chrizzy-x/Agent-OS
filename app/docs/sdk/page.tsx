@@ -48,7 +48,7 @@ export default async function SdkPage() {
         <Step n={1} title="Create your agent">
           <p className="text-gray-600 mb-4">
             Go to <Link href="/signup" className="text-blue-600 hover:underline">/signup</Link>, choose a beta plan, and create your account with email and password.
-            <strong> Pro</strong>, <strong>Enterprise</strong>, and <strong>Enterprise Max</strong> return a bearer token immediately.
+            <strong> Pro</strong>, <strong>Enterprise Plus</strong>, and <strong>Enterprise Max</strong> return a bearer token immediately.
             <strong> Free</strong> stays browser-session only until you upgrade in <Link href="/settings?section=billing" className="text-blue-600 hover:underline">Settings billing</Link>.
           </p>
           <p className="text-sm text-gray-500">

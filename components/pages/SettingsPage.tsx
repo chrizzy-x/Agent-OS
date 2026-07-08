@@ -11,7 +11,7 @@ import {
   type BrowserSession,
   type BrowserSessionAuthState,
 } from '@/src/auth/browser-session';
-import { getUpgradeablePlans, PLAN_LABELS, type AgentPlan } from '@/src/auth/tiers';
+import { getSwitchablePlans, PLAN_ACCOUNT_TYPE, PLAN_LABELS, type AgentPlan } from '@/src/auth/tiers';
 import { Badge, Button, Card, EmptyState, Input, LoadingState, PageHeader, Textarea } from '@/components/os/ui';
 
 type SettingsSectionId =
@@ -61,7 +61,7 @@ const PLAN_CARDS: Array<{ plan: AgentPlan; summary: string }> = [
   { plan: 'retail_free', summary: 'Core AgentOS, workspace installs, workflows, subagents, and Vault.' },
   { plan: 'retail_pro', summary: 'Free plus bearer tokens, higher limits, and API access.' },
   { plan: 'enterprise_plus', summary: 'Pro plus SDK, publishing, MCP, and team controls.' },
-  { plan: 'enterprise_max', summary: 'Enterprise plus highest limits, governance, and diagnostics.' },
+  { plan: 'enterprise_max', summary: 'Highest enterprise limits, governance, and diagnostics.' },
 ];
 
 function planLabel(plan: string | undefined): string {
@@ -110,7 +110,7 @@ export default function SettingsPage() {
   const currentPlan = workspaces[0]?.plan ? String(workspaces[0].plan) : session?.plan ?? 'retail_free';
   const currentPlanLabel = planLabel(currentPlan);
   const currentPlanKey = currentPlan in PLAN_LABELS ? currentPlan as AgentPlan : null;
-  const upgradeablePlans = useMemo(() => currentPlanKey ? new Set(getUpgradeablePlans(currentPlanKey)) : new Set<AgentPlan>(), [currentPlanKey]);
+  const switchablePlans = useMemo(() => currentPlanKey ? new Set(getSwitchablePlans(currentPlanKey)) : new Set<AgentPlan>(), [currentPlanKey]);
 
   const themePreference = (profile?.preferences?.theme === 'light' || profile?.preferences?.theme === 'dark' || profile?.preferences?.theme === 'system'
     ? profile.preferences.theme
@@ -349,7 +349,8 @@ export default function SettingsPage() {
         <CardSection title="Account">
           <div className="settings-two-column">
             <div className="os-entity-copy">Current Session: {session?.expiresAt ? `expires ${formatDate(session.expiresAt)}` : 'Active'}</div>
-            <div className="os-entity-copy">Account type: {session?.accountType ?? 'retail'}</div>
+            <div className="os-entity-copy">Account type: {session?.accountType === 'enterprise' ? 'Enterprise' : 'Retail'}</div>
+            <div className="os-entity-copy">Intent can be changed from Subscription & Billing while beta billing is disabled.</div>
           </div>
         </CardSection>
       </div>
@@ -369,13 +370,15 @@ export default function SettingsPage() {
           <div className="settings-two-column">
             <div className="os-entity-copy">Token Usage: available in plan telemetry when enabled.</div>
             <div className="os-entity-copy">Builder Revenue: {session?.capabilities?.includes('create_app') ? 'Enabled for publisher workspaces.' : 'Not enabled.'}</div>
+            <div className="os-entity-copy">Upgrade, Downgrade, and plan switching are available while beta billing is disabled.</div>
           </div>
         </CardSection>
         <CardSection title="Plans">
           <div className="settings-plan-grid">
             {PLAN_CARDS.map(card => {
               const active = currentPlanKey === card.plan;
-              const canSwitch = active || upgradeablePlans.has(card.plan);
+              const canSwitch = active || switchablePlans.has(card.plan);
+              const targetIntent = PLAN_ACCOUNT_TYPE[card.plan] === 'enterprise' ? 'Enterprise' : 'Retail';
               return (
                 <Card key={card.plan}>
                   <div className="os-drawer-stack">
@@ -383,9 +386,10 @@ export default function SettingsPage() {
                       <strong>{PLAN_LABELS[card.plan]}</strong>
                       {active ? <Badge tone="success">Current</Badge> : null}
                     </div>
+                    <div className="os-entity-copy">Account intent: {targetIntent}</div>
                     <div className="os-entity-copy">{card.summary}</div>
                     <Button disabled={!canSwitch || active || pendingPlan !== null} onClick={() => void changePlan(card.plan)}>
-                      {active ? 'Active' : pendingPlan === card.plan ? 'Changing...' : card.plan.startsWith('retail') ? 'Downgrade' : 'Upgrade'}
+                      {active ? 'Active' : pendingPlan === card.plan ? 'Changing...' : `Switch to ${PLAN_LABELS[card.plan]}`}
                     </Button>
                   </div>
                 </Card>

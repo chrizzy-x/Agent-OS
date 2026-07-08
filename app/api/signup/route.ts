@@ -3,7 +3,7 @@ import { createAgentToken } from '@/src/auth/agent-identity';
 import { issueBrowserSession } from '@/src/auth/browser-auth';
 import { hashPassword } from '@/src/auth/password';
 import { createAgentAccount, findAccountsByEmail } from '@/src/auth/agent-store';
-import { parsePlanSelection, PLAN_LABELS, type AccountType, type AgentPlan } from '@/src/auth/tiers';
+import { defaultPlanForAccountType, parseAccountTypeSelection, parsePlanSelection, PLAN_LABELS, type AccountType, type AgentPlan } from '@/src/auth/tiers';
 import { getPlanDescriptor } from '@/src/auth/capabilities';
 import { provisionAgentOSAccount } from '@/src/agentos/provisioning';
 import crypto from 'crypto';
@@ -30,11 +30,11 @@ export async function POST(req: NextRequest) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
   const agentName = typeof body.agentName === 'string' ? body.agentName.trim() : '';
-  const accountType = body.accountType === 'enterprise' ? 'enterprise' : body.accountType === 'retail' ? 'retail' : null;
+  const accountType = parseAccountTypeSelection(body.accountType);
   const planSelectionSkipped = body.planSelectionSkipped === true;
   const selectedPlan = typeof body.selectedPlan === 'string' ? body.selectedPlan : undefined;
   const plan = planSelectionSkipped
-    ? 'retail_free'
+    ? defaultPlanForAccountType(accountType)
     : parsePlanSelection(accountType, selectedPlan);
 
   if (!email || !isValidEmail(email)) {
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: 'invalid_plan',
-        message: 'Choose Free, Pro, Enterprise, or Enterprise Max under the matching account type.',
+        message: 'Choose Free or Pro for retail, or Enterprise Plus or Enterprise Max for enterprise.',
       },
       { status: 400 },
     );
@@ -133,6 +133,7 @@ export async function POST(req: NextRequest) {
         planLabel: PLAN_LABELS[plan as AgentPlan],
         planPriceUsd: 0,
         accountType,
+        accountIntent: accountType,
         planSelectionSkipped,
         capabilities: planDescriptor.capabilities,
         expiresIn: '90 days',

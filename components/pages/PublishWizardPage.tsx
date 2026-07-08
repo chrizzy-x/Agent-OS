@@ -388,7 +388,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
                   : accessState === 'expired'
                     ? 'Sign in again with an enterprise workspace to create or publish apps.'
                     : accessState === 'forbidden'
-                    ? 'App creation and publishing stay gated to Enterprise and Enterprise Max.'
+                    ? 'App creation and publishing stay gated to Enterprise Plus and Enterprise Max.'
                     : 'Validating publishing permissions.'}
               </div>
             </div>
@@ -427,7 +427,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
         ) : accessState === 'expired' ? (
           <EmptyState title="Session expired" body="Sign in again to create or edit app listings." action={<Button href="/signin">Sign in again</Button>} />
         ) : !canPublishApp ? (
-          <EmptyState title="Enterprise access required" body="App creation and publishing stay gated to Enterprise and Enterprise Max workspaces." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState title="Enterprise access required" body="App creation and publishing stay gated to Enterprise Plus and Enterprise Max workspaces." action={<Button href="/studio">Open Studio</Button>} />
         ) : (
           <>
             <Card>
