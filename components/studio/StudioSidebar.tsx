@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { fetchWithBrowserSession } from '@/src/auth/browser-session';
 import { useStudio } from '@/components/studio/StudioProvider';
+import { buildStudioRoute, STUDIO_MODES } from '@/src/studio/modes';
 
 type ChatSearchMatch = {
   messageId: string;
@@ -20,6 +21,7 @@ export default function StudioSidebar() {
     startNewChat,
     currentProject,
     mode,
+    setMode,
   } = useStudio();
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
@@ -54,9 +56,17 @@ export default function StudioSidebar() {
     }
   }
 
+  const workspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? null;
+  const studioHomeHref = buildStudioRoute({
+    mode: 'nl',
+    sessionId: session?.id ?? null,
+    projectId: currentProject?.id ?? null,
+    workspaceId,
+  });
+
   return (
     <div className="agentos-sidebar studio-chat-sidebar">
-      <Link href="/studio?mode=nl" className="agentos-sidebar-brand">AgentOS Studio</Link>
+      <Link href={studioHomeHref} className="agentos-sidebar-brand">AgentOS Studio</Link>
       <button type="button" onClick={() => void startNewChat()} className="studio-sidebar-new">
         <span>＋</span>
         New chat
@@ -78,9 +88,18 @@ export default function StudioSidebar() {
 
       <nav className="studio-sidebar-modes" aria-label="Studio modes">
         <span>Studio modes</span>
-        <Link href="/studio?mode=nl" className={mode === 'nl' ? 'active' : ''}>NL</Link>
-        <Link href="/studio?mode=workflow" className={mode === 'workflow' ? 'active' : ''}>Workflow</Link>
-        <Link href="/studio?mode=code" className={mode === 'code' ? 'active' : ''}>Code</Link>
+        {STUDIO_MODES.map(item => (
+          <button
+            key={item.key}
+            type="button"
+            className={mode === item.key ? 'active' : ''}
+            aria-current={mode === item.key ? 'page' : undefined}
+            title={item.description}
+            onClick={() => setMode(item.key)}
+          >
+            {item.shortLabel}
+          </button>
+        ))}
       </nav>
 
       {currentProject ? (
@@ -180,18 +199,20 @@ export default function StudioSidebar() {
           text-transform: uppercase;
         }
 
-        .studio-sidebar-modes a {
+        .studio-sidebar-modes button {
           min-height: 30px;
           display: grid;
           place-items: center;
+          border: 0;
           border-radius: 7px;
+          background: transparent;
           color: var(--text-secondary);
           font-size: 0.7rem;
-          text-decoration: none;
+          cursor: pointer;
         }
 
-        .studio-sidebar-modes a.active,
-        .studio-sidebar-modes a:hover {
+        .studio-sidebar-modes button.active,
+        .studio-sidebar-modes button:hover {
           background: rgba(255,255,255,0.055);
           color: var(--text-primary);
         }

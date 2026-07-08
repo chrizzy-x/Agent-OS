@@ -1,12 +1,7 @@
 'use client';
 
 import type { StudioMode } from '@/src/studio/types';
-
-const MODES: Array<{ key: StudioMode; label: string; short: string; icon: string; legacyLabel?: string }> = [
-  { key: 'nl', label: 'NL Studio', short: 'NL', icon: 'N' },
-  { key: 'workflow', label: 'Workflow Studio', short: 'Flow', icon: 'W' },
-  { key: 'code', label: 'Code Studio', short: 'Code', icon: 'C' },
-];
+import { STUDIO_MODES } from '@/src/studio/modes';
 
 export default function ModeSwitch(props: {
   mode: StudioMode;
@@ -14,18 +9,20 @@ export default function ModeSwitch(props: {
 }) {
   return (
     <div className="studio-mode-switch" role="tablist" aria-label="Studio mode">
-      {MODES.map(item => (
+      {STUDIO_MODES.map(item => (
         <button
           key={item.key}
           type="button"
           role="tab"
           aria-selected={props.mode === item.key}
-          aria-label={item.legacyLabel ? `${item.label} (${item.legacyLabel})` : item.label}
+          aria-label={item.label}
+          title={item.description}
+          data-mode={item.key}
           onClick={() => props.onChange(item.key)}
         >
           <span className="studio-mode-icon" aria-hidden="true">{item.icon}</span>
           <span className="studio-mode-full">{item.label}</span>
-          <span className="studio-mode-short">{item.short}</span>
+          <span className="studio-mode-short">{item.shortLabel}</span>
         </button>
       ))}
       <style>{`

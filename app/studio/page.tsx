@@ -1,4 +1,5 @@
 import StudioPage from '@/components/pages/StudioPage';
+import { normalizeStudioMode } from '@/src/studio/modes';
 import type { StudioMode } from '@/src/studio/types';
 import { Suspense } from 'react';
 
@@ -9,7 +10,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
       <StudioPage
         initialSessionId={params.session ?? null}
         initialPrompt={params.prompt ?? null}
-        initialMode={params.mode === 'code' || params.mode === 'workflow' ? params.mode : 'nl'}
+        initialMode={normalizeStudioMode(params.mode)}
       />
     </Suspense>
   );

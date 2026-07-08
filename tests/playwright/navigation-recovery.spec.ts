@@ -43,7 +43,7 @@ test('every first-class module renders inside the persistent shell', async ({ pa
 test('Studio modes retain the global shell', async ({ page }, testInfo) => {
   await page.goto('/studio?mode=nl');
   const shellInstance = await page.locator('.agentos-global-shell').getAttribute('data-shell-instance');
-  await page.getByRole('tab', { name: 'Workflow Studio' }).click();
+  await page.getByRole('tab', { name: 'Workflow Builder' }).click();
   await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-shell-instance', shellInstance ?? '');
   await page.getByRole('tab', { name: 'Code Studio' }).click();
   await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-shell-instance', shellInstance ?? '');

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { buildStudioBootstrap } from '@/src/studio/bootstrap';
+import { normalizeStudioMode } from '@/src/studio/modes';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -14,11 +15,7 @@ export async function GET(request: NextRequest) {
       sessionId: searchParams.get('session'),
       projectId: searchParams.get('project'),
       workspaceId: searchParams.get('workspace') ?? searchParams.get('workspaceId'),
-      mode: searchParams.get('mode') === 'code'
-        ? 'code'
-        : searchParams.get('mode') === 'workflow'
-          ? 'workflow'
-          : 'nl',
+      mode: normalizeStudioMode(searchParams.get('mode')),
     });
     return NextResponse.json(payload);
   } catch (error: unknown) {

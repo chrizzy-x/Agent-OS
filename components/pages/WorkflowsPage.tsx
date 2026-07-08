@@ -208,7 +208,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         {loading ? <LoadingState label="Loading workflows" /> : authState === 'signed_out' || authState === 'expired' ? (
           <EmptyState title={authState === 'expired' ? 'Session expired' : 'Sign in required'} body="Sign in to manage workspace workflows." action={<Button href="/signin">{authState === 'expired' ? 'Sign in again' : 'Sign in'}</Button>} />
         ) : !active ? (
-          <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." action={<Button href="/studio?mode=workflow">Open Workflow Studio</Button>} />
+          <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." action={<Button href="/studio?mode=workflow">Open Workflow Builder</Button>} />
         ) : (
           <>
             <WorkflowCard

@@ -2,6 +2,7 @@
 
 import ModeSwitch from '@/components/studio/ModeSwitch';
 import { useStudio } from '@/components/studio/StudioProvider';
+import { getStudioModeDefinition } from '@/src/studio/modes';
 
 export default function StudioTopbar() {
   const {
@@ -16,6 +17,7 @@ export default function StudioTopbar() {
     startNewChat,
   } = useStudio();
   const nlMode = mode === 'nl';
+  const modeDefinition = getStudioModeDefinition(mode);
   const modelLabel = process.env.NEXT_PUBLIC_AGENTOS_MODEL ?? 'Default model';
   const workspace = workspaces.find(item => item.id === session?.workspaceId)
     ?? workspaces.find(item => item.id === currentProject?.workspaceId)
@@ -28,6 +30,7 @@ export default function StudioTopbar() {
         <strong>{nlMode ? session?.title ?? 'New chat' : currentProject?.name ?? 'AgentOS Studio'}</strong>
         <span>{workspace?.name ?? 'Workspace'}</span>
         <span>{currentProject?.name ?? 'No project'}</span>
+        <span>{modeDefinition.label}</span>
       </div>
       <ModeSwitch mode={mode} onChange={setMode} />
       <div className="studio-switchbar-actions">

@@ -150,7 +150,7 @@ function initials(session: BrowserSession | null) {
 }
 
 function formatMode(value: string | null) {
-  if (value === 'workflow') return 'Workflow Studio';
+  if (value === 'workflow') return 'Workflow Builder';
   if (value === 'code') return 'Code Studio';
   return 'NL Studio';
 }

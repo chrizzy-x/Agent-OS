@@ -37,7 +37,7 @@ describe('GET /api/studio/bootstrap', () => {
     expect(body).toEqual({ ok: true });
   });
 
-  it('preserves Workflow Studio mode', async () => {
+  it('preserves Workflow Builder mode', async () => {
     await GET(new NextRequest('http://localhost/api/studio/bootstrap?mode=workflow'));
 
     expect(buildStudioBootstrap).toHaveBeenCalledWith({

@@ -10,6 +10,7 @@ import { listAccessibleSubagents } from '../subagents/service.js';
 import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
 import { listVaultSecrets } from '../vault/service.js';
 import { listProjectFiles } from './files.js';
+import { studioModeInitialState } from './modes.js';
 import type { StudioMode } from './types.js';
 import type { StudioSessionRecord } from './persistence.js';
 
@@ -129,7 +130,7 @@ export async function buildStudioBootstrap(params: {
         superAgentId: superAgent?.id ?? null,
         title: project.name === 'Default Project' ? 'New Studio Session' : `${project.name} session`,
         initialState: {
-          mode: params.mode === 'code' ? 'CODE_STUDIO' : params.mode === 'workflow' ? 'WORKFLOW_STUDIO' : 'NL_STUDIO',
+          mode: studioModeInitialState(params.mode ?? 'nl'),
         },
       }).catch(() => null);
       if (session) {

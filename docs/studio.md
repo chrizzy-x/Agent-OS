@@ -38,7 +38,7 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - copy and edit actions
 - live generation status and stop control
 - searchable recent chats
-- separate NL Studio, Workflow Studio, and Code Studio modes
+- persistent NL Studio, Workflow Builder, and Code Studio modes
 - mobile drawer navigation and responsive conversation layout
 
 ## Verification
@@ -56,6 +56,6 @@ The June 18, 2026 production refresh passed:
 - mobile conversation layout
 # AgentOS v6.6.3 Studio
 
-Studio remains a single `/studio` route inside the persistent AgentOS shell. NL Studio, Workflow Studio, and Code Studio are client-side modes and retain session, project, files, workflow, terminal, composer, and execution state while switching.
+Studio remains a single `/studio` route inside the persistent AgentOS shell. NL Studio, Workflow Builder, and Code Studio are client-side modes and retain session, project, workspace, files, workflows, terminal, composer, and execution state while switching.
 
 The bottom composer supports auto-growth, file/image uploads, connected Skill/App/Workflow/MCP invocations, slash commands, SSE streaming, and cancellation.

@@ -19,6 +19,7 @@ import {
 } from '@/src/studio/client-state';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import { useApplicationShell } from '@/components/os/application-shell';
+import { buildStudioRoute, normalizeStudioMode } from '@/src/studio/modes';
 import { consumeStudioSseStream } from '@/src/studio/sse';
 import type {
   StudioContextSection,
@@ -259,24 +260,6 @@ type StudioContextValue = {
 
 const StudioContext = createContext<StudioContextValue | null>(null);
 
-function normalizeMode(value: string | null | undefined): StudioMode {
-  return value === 'code' || value === 'workflow' ? value : 'nl';
-}
-
-function buildStudioUrl(params: {
-  mode: StudioMode;
-  sessionId?: string | null;
-  projectId?: string | null;
-  workspaceId?: string | null;
-}): string {
-  const query = new URLSearchParams();
-  query.set('mode', params.mode);
-  if (params.sessionId) query.set('session', params.sessionId);
-  if (params.projectId) query.set('project', params.projectId);
-  if (params.workspaceId) query.set('workspace', params.workspaceId);
-  return `/studio?${query.toString()}`;
-}
-
 function flattenFiles(nodes: StudioFileNode[]): StudioFileNode[] {
   return nodes.flatMap(node => [node, ...(node.children ? flattenFiles(node.children) : [])]);
 }
@@ -313,12 +296,12 @@ export function StudioProvider(props: {
   const applicationShell = useApplicationShell();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedMode = normalizeMode(searchParams.get('mode') ?? props.initialMode);
+  const requestedMode = normalizeStudioMode(searchParams.get('mode') ?? props.initialMode);
   const requestedSessionId = searchParams.get('session') ?? props.initialSessionId ?? null;
   const requestedProjectId = searchParams.get('project');
   const requestedWorkspaceId = searchParams.get('workspace') ?? applicationShell.activeWorkspaceId;
   const advancedKey = getStudioAdvancedSessionKey('studio-shell');
-  const initialBootstrapModeRef = useRef(requestedMode);
+  const activeBootstrapModeRef = useRef(requestedMode);
 
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -370,13 +353,13 @@ export function StudioProvider(props: {
   );
 
   const pushRoute = useCallback((nextMode: StudioMode, nextSessionId?: string | null, nextProjectId?: string | null) => {
-    router.replace(buildStudioUrl({
+    router.replace(buildStudioRoute({
       mode: nextMode,
       sessionId: nextSessionId === undefined ? session?.id ?? requestedSessionId : nextSessionId,
       projectId: nextProjectId === undefined ? currentProject?.id ?? requestedProjectId : nextProjectId,
-      workspaceId: session?.workspaceId ?? requestedWorkspaceId,
+      workspaceId: session?.workspaceId ?? currentProject?.workspaceId ?? requestedWorkspaceId ?? currentWorkspaceId,
     }));
-  }, [currentProject?.id, requestedProjectId, requestedSessionId, requestedWorkspaceId, router, session?.id, session?.workspaceId]);
+  }, [currentProject?.id, currentProject?.workspaceId, currentWorkspaceId, requestedProjectId, requestedSessionId, requestedWorkspaceId, router, session?.id, session?.workspaceId]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -388,7 +371,7 @@ export function StudioProvider(props: {
     }
 
     const params = new URLSearchParams();
-    params.set('mode', initialBootstrapModeRef.current);
+    params.set('mode', activeBootstrapModeRef.current);
     if (requestedSessionId) params.set('session', requestedSessionId);
     if (requestedProjectId) params.set('project', requestedProjectId);
     if (requestedWorkspaceId) params.set('workspace', requestedWorkspaceId);
@@ -524,6 +507,7 @@ export function StudioProvider(props: {
   }, [refreshRuntimeState]);
 
   useEffect(() => {
+    activeBootstrapModeRef.current = requestedMode;
     setModeState(requestedMode);
   }, [requestedMode]);
 
@@ -575,9 +559,12 @@ export function StudioProvider(props: {
   }, [currentProject, terminal]);
 
   const setMode = useCallback((nextMode: StudioMode) => {
+    if (nextMode === mode) return;
+    activeBootstrapModeRef.current = nextMode;
     setModeState(nextMode);
     pushRoute(nextMode);
-  }, [pushRoute]);
+    setSidebarOpen(false);
+  }, [mode, pushRoute]);
 
   const openContext = useCallback((section: StudioContextSection) => {
     setContextSection(section);

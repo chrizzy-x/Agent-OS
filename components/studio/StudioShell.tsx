@@ -57,7 +57,7 @@ function StudioRightPanel() {
         </>
       ) : mode === 'workflow' ? (
         <section>
-          <h2>Workflow Studio</h2>
+          <h2>Workflow Builder</h2>
           <ContextRow label="Nodes" value={workflows.length ? 'Available' : 0} />
           <ContextRow label="Triggers" value={workflows.filter(item => item.status === 'active').length} />
           <ContextRow label="Schedules" value={workflows.length} />

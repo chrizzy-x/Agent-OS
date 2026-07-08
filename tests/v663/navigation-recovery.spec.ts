@@ -27,7 +27,7 @@ describe('v6.6.3 navigation and workspace recovery', () => {
   it('keeps Studio mode switching client-side and supports structured composer inputs', () => {
     const provider = source('components', 'studio', 'StudioProvider.tsx');
     const composer = source('components', 'studio', 'NLStudioPanel.tsx');
-    expect(provider).toContain('initialBootstrapModeRef');
+    expect(provider).toContain('activeBootstrapModeRef');
     expect(provider).toContain('attachments: composerAttachments');
     expect(provider).toContain('invocations: composerInvocations');
     expect(composer).toContain('Upload file');

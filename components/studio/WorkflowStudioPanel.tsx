@@ -20,8 +20,8 @@ export default function WorkflowStudioPanel() {
     <div className="workflow-studio">
       <header className="workflow-toolbar">
         <div>
-          <div className="nl-kicker">Workflow Studio</div>
-          <h1>{active?.name ?? 'Workflow Studio'}</h1>
+          <div className="nl-kicker">Workflow Builder</div>
+          <h1>{active?.name ?? 'Workflow Builder'}</h1>
         </div>
         <div>
           <Button onClick={() => prompt('Run')} disabled={sending} disabledReason="Super AgentOS is already processing a workflow request.">Run</Button>
