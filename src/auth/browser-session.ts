@@ -22,26 +22,72 @@ export interface BrowserTokenCredentials {
 }
 
 const KNOWN_SESSION_KEY = 'agentos.browserSessionSeen';
+const KNOWN_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 120;
+
+function readStorage(storage: Storage | undefined, key: string): string | null {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(storage: Storage | undefined, key: string, value: string): void {
+  try {
+    storage?.setItem(key, value);
+  } catch {
+    // Session persistence should never block auth on locked-down browsers.
+  }
+}
+
+function removeStorage(storage: Storage | undefined, key: string): void {
+  try {
+    storage?.removeItem(key);
+  } catch {
+    // Session persistence should never block logout on locked-down browsers.
+  }
+}
 
 export function clearLegacyBrowserAuth(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem('apiKey');
-  localStorage.removeItem('agentId');
+  removeStorage(window.localStorage, 'apiKey');
+  removeStorage(window.localStorage, 'agentId');
 }
 
 function rememberBrowserSession(): void {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.setItem(KNOWN_SESSION_KEY, '1');
+  const marker = JSON.stringify({ seenAt: Date.now() });
+  writeStorage(window.sessionStorage, KNOWN_SESSION_KEY, '1');
+  writeStorage(window.localStorage, KNOWN_SESSION_KEY, marker);
 }
 
 function forgetBrowserSession(): void {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.removeItem(KNOWN_SESSION_KEY);
+  removeStorage(window.sessionStorage, KNOWN_SESSION_KEY);
+  removeStorage(window.localStorage, KNOWN_SESSION_KEY);
 }
 
 function hasKnownBrowserSession(): boolean {
   if (typeof window === 'undefined') return false;
-  return window.sessionStorage.getItem(KNOWN_SESSION_KEY) === '1';
+  if (readStorage(window.sessionStorage, KNOWN_SESSION_KEY) === '1') return true;
+
+  const raw = readStorage(window.localStorage, KNOWN_SESSION_KEY);
+  if (!raw) return false;
+  if (raw === '1') {
+    rememberBrowserSession();
+    return true;
+  }
+  try {
+    const marker = JSON.parse(raw) as { seenAt?: unknown };
+    const seenAt = typeof marker.seenAt === 'number' ? marker.seenAt : 0;
+    if (seenAt > 0 && Date.now() - seenAt <= KNOWN_SESSION_TTL_MS) {
+      writeStorage(window.sessionStorage, KNOWN_SESSION_KEY, '1');
+      return true;
+    }
+  } catch {
+    removeStorage(window.localStorage, KNOWN_SESSION_KEY);
+  }
+  return false;
 }
 
 async function refreshBrowserSession(): Promise<boolean> {
