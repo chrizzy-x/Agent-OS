@@ -221,6 +221,12 @@ describe('GET /api/dashboard', () => {
     expect(response.status).toBe(200);
     expect(body.summary.installedApps).toBe(1);
     expect(body.summary.mcpConnectors).toBe(0);
+    expect(body.summary.privateSubagents).toBe(1);
+    expect(body.privateSubagents).toHaveLength(1);
+    expect(body.privateSubagents[0].name).toBe('Research helper');
+    expect(body.credits.available).toBe(false);
+    expect(body.credits.message).toBe('Credit telemetry is not connected yet.');
+    expect(body.recommendedActions.some((action: { id: string }) => action.id === 'open-super-agentos')).toBe(true);
     expect(body.sdkApps).toEqual([]);
     expect(body.ffp).toBeNull();
     expect(body.subagents).toBeUndefined();

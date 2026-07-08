@@ -8,6 +8,7 @@ import { listStudioSessions } from '@/src/studio/persistence';
 import { toErrorResponse } from '@/src/utils/errors';
 import { listVaultSecrets } from '@/src/vault/service';
 import { listProjects } from '@/src/projects/service';
+import { listPrivateSubagents } from '@/src/subagents/service';
 import { assertWorkspaceMembership, listWorkspaces, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
@@ -46,11 +47,12 @@ export async function GET(request: NextRequest) {
       ? (await assertWorkspaceMembership(requestedWorkspaceId, ctx.agentId)).workspace
       : defaultWorkspace;
 
-    const [workspaces, sessions, projects, installedApps, workflowsResult, skillsResult, eventsResult, kernelsResult, ffpResult, mcpServersResult, mcpCallsResult] = await Promise.all([
+    const [workspaces, sessions, projects, installedApps, privateSubagents, workflowsResult, skillsResult, eventsResult, kernelsResult, ffpResult, mcpServersResult, mcpCallsResult] = await Promise.all([
       listWorkspaces(ctx.agentId),
       listStudioSessions(ctx.agentId),
       listProjects({ ownerAgentId: ctx.agentId, workspaceId: workspace?.id, status: 'active' }),
       listInstalledAgentApps(ctx.agentId).catch(() => []),
+      listPrivateSubagents({ ownerAgentId: ctx.agentId, workspaceId: workspace?.id }).catch(() => []),
       getSupabaseAdmin()
         .from('agent_workflows')
         .select('id,workspace_id,name,summary,status,updated_at,created_at,last_run_at,last_error')
@@ -184,6 +186,36 @@ export async function GET(request: NextRequest) {
 
     const filteredSessions = sessions.filter(item => !workspace?.id || item.workspaceId === workspace.id);
     const filteredInstalledApps = installedApps.filter(item => !workspace?.id || item.app.workspaceId === workspace.id);
+    const privateSubagentItems = privateSubagents.map(item => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      visibility: item.visibility,
+      status: item.status,
+      projectId: item.projectId,
+      updatedAt: item.updatedAt,
+      href: `/subagents/${encodeURIComponent(item.id)}`,
+    }));
+    const credits = {
+      available: false,
+      status: 'not_connected',
+      label: 'Agent Credits',
+      balance: null,
+      resetWindow: null,
+      weeklyAllowance: null,
+      message: 'Credit telemetry is not connected yet.',
+    };
+    const recommendedActions = [
+      { id: 'open-super-agentos', label: 'Open Super AgentOS', href: '/studio?mode=nl', reason: 'Start or continue execution from NL Studio.' },
+      ...(filteredSessions.length === 0 ? [{ id: 'start-session', label: 'Start a Studio session', href: '/studio?mode=nl', reason: 'No recent Studio sessions exist in this workspace.' }] : []),
+      ...(projects.length === 0 ? [{ id: 'create-project', label: 'Create a project', href: '/projects', reason: 'Projects keep chats, assets, workflows, and context together.' }] : []),
+      ...(filteredInstalledApps.length === 0 ? [{ id: 'install-app', label: 'Install an app', href: '/appstore', reason: 'Installed apps become available to Super AgentOS and Library.' }] : []),
+      ...(installedSkills.length === 0 ? [{ id: 'install-skill', label: 'Install a skill', href: '/skillstore', reason: 'Skills add reusable capabilities to Studio and workflows.' }] : []),
+      ...(workflows.length === 0 ? [{ id: 'build-workflow', label: 'Build a workflow', href: '/studio?mode=workflow', reason: 'Workflows turn repeatable work into reusable execution graphs.' }] : []),
+      ...(privateSubagentItems.length === 0 ? [{ id: 'create-subagent', label: 'Create a private subagent', href: '/subagents', reason: 'Subagents are private operators you control.' }] : []),
+      ...(vaultSecrets.length === 0 ? [{ id: 'setup-vault', label: 'Set up Vault', href: '/vault', reason: 'Vault keeps secrets permissioned and out of normal memory.' }] : []),
+      ...(mcpServers.length === 0 ? [{ id: 'connect-mcp', label: 'Connect an MCP tool', href: '/mcp', reason: 'Universal MCP connects external tools without turning them into apps.' }] : []),
+    ].slice(0, 8);
 
     return NextResponse.json({
       workspace: workspace ? {
@@ -203,6 +235,7 @@ export async function GET(request: NextRequest) {
         installedApps: filteredInstalledApps.length,
         installedSkills: installedSkills.length,
         workflows: workflows.length,
+        privateSubagents: privateSubagentItems.length,
         vaultSecrets: vaultSecrets.length,
         sdkApps: sdkApps.length,
         ffpChains: chainMap.size,
@@ -234,6 +267,7 @@ export async function GET(request: NextRequest) {
       })),
       installedSkills: installedSkills.slice(0, 8),
       workflows: workflows.slice(0, 8),
+      privateSubagents: privateSubagentItems.slice(0, 8),
       vault: {
         total: vaultSecrets.length,
         active: vaultSecrets.filter(item => item.status === 'active').length,
@@ -252,6 +286,8 @@ export async function GET(request: NextRequest) {
         })),
       },
       sdkApps: enterprise ? sdkApps.slice(0, 8) : [],
+      credits,
+      recommendedActions,
       ffp: enterprise ? {
         chainCount: chainMap.size,
         chains: [...chainMap.entries()].slice(0, 6).map(([chainId, value]) => ({

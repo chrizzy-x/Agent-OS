@@ -1,43 +1,100 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import SurfaceShell from '@/components/os/surface-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
-import { Badge, Button, Card, EmptyState } from '@/components/os/ui';
-import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import {
+  ActivityFeed,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MetricCard,
+  StatusPill,
+} from '@/components/os/ui';
+import {
+  fetchBrowserSessionState,
+  fetchWithBrowserSession,
+  type BrowserSession,
+  type BrowserSessionAuthState,
+} from '@/src/auth/browser-session';
 
-type HomePayload = {
-  sessions: Array<{ id: string; workspaceId?: string; title: string; updatedAt: string }>;
-  apps: Array<{ id: string; name: string; slug: string; description: string }>;
-  skills: Array<{ id: string; name: string; slug: string; description: string }>;
-  workflows: Array<{ id: string; name: string; summary: string | null; status: string; visibility?: string }>;
-  projects: Array<{ id: string; name: string; description: string; status: string; updatedAt: string; href: string }>;
-  subagents: Array<{ id: string; name: string; description: string | null; visibility: string; updatedAt: string }>;
-  memoryEntries: Array<{ id: string; key: string; visibility: string; namespaceType: string; updatedAt: string }>;
-  files: Array<{ id: string; path: string; visibility: string; metadata: Record<string, unknown> }>;
+const DASHBOARD_TIMEOUT_MS = 8000;
+
+type DashboardPayload = {
+  workspace: { id: string; name: string; slug: string; plan: string } | null;
+  plan: { plan: string; label: string; enterprise: boolean };
   summary: {
-    activeSessions: number;
-    subagents: number;
-    memoryEntries: number;
-    files: number;
+    sessions: number;
+    projects: number;
+    installedApps: number;
     installedSkills: number;
-    connectedApps: number;
-    privateWorkflows: number;
-    visibility: Record<string, Record<string, number>>;
-    recentActions: Array<{ id: string; type: string; summary: string; createdAt: string }>;
+    workflows: number;
+    privateSubagents: number;
+    vaultSecrets: number;
+    sdkApps: number;
+    ffpChains: number;
+    mcpConnectors: number;
+    recentEvents: number;
   };
+  recentSessions: Array<{ id: string; title: string; status: string; updatedAt: string }>;
+  activeProjects: Array<{ id: string; name: string; plan: string; href: string; createdAt: string }>;
+  installedApps: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    description: string;
+    healthStatus: string;
+    openCount: number;
+    favorite: boolean;
+    href: string;
+  }>;
+  installedSkills: Array<{ id: string; installedAt: string; name: string; slug: string; category: string; description: string }>;
+  workflows: Array<{ id: string; name: string; summary: string; status: string; updatedAt: string; lastRunAt: string | null }>;
+  privateSubagents: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    visibility: string;
+    status: string;
+    projectId: string | null;
+    updatedAt: string;
+    href: string;
+  }>;
+  vault: { total: number; active: number; lastUsedAt: string | null };
+  mcp: {
+    connectorCount: number;
+    activeConnectors: number;
+    lastCallAt: string | null;
+    connectors: Array<{ name: string; category: string; status: string }>;
+  };
+  credits: {
+    available: boolean;
+    status: string;
+    label: string;
+    balance: number | string | null;
+    resetWindow: string | null;
+    weeklyAllowance: number | string | null;
+    message: string;
+  };
+  recommendedActions: Array<{ id: string; label: string; href: string; reason: string }>;
+  recentEvents: Array<{ id: string; sessionId: string; type: string; summary: string; createdAt: string }>;
 };
 
 const QUICK_ACTIONS = [
-  { label: 'New chat', href: '/studio?mode=nl' },
-  { label: 'Workflow Studio', href: '/studio?mode=workflow' },
+  { label: 'Super AgentOS', href: '/studio?mode=nl' },
+  { label: 'Workflow Builder', href: '/studio?mode=workflow' },
   { label: 'Code Studio', href: '/studio?mode=code' },
-  { label: 'Create project', href: '/projects' },
-  { label: 'Install app', href: '/appstore' },
-  { label: 'Install skill', href: '/skillstore' },
+  { label: 'Projects', href: '/projects' },
+  { label: 'Appstore', href: '/appstore' },
+  { label: 'Skill Store', href: '/skillstore' },
   { label: 'Library', href: '/library' },
+  { label: 'Vault', href: '/vault' },
+  { label: 'Universal MCP', href: '/mcp' },
 ];
 
 function hourGreeting(): string {
@@ -48,7 +105,7 @@ function hourGreeting(): string {
 }
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return 'Recently';
+  if (!value) return 'No activity yet';
   try {
     return new Intl.DateTimeFormat(undefined, {
       month: 'short',
@@ -57,42 +114,46 @@ function formatDate(value: string | null | undefined): string {
       minute: '2-digit',
     }).format(new Date(value));
   } catch {
-    return 'Recently';
+    return 'Recent activity';
   }
 }
 
-function Grid(props: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gap: 14,
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-      }}
-    >
-      {props.children}
-    </div>
-  );
+function countState(count: number, singular: string, plural: string, empty: string): string {
+  if (count === 0) return empty;
+  if (count === 1) return `1 ${singular}`;
+  return `${count} ${plural}`;
 }
 
-function ToneForVisibility(value: string): 'accent' | 'default' | 'success' {
-  if (value === 'public') return 'success';
-  if (value === 'workspace') return 'accent';
-  return 'default';
+function dashboardUrl(workspaceId: string | null | undefined): string {
+  if (!workspaceId) return '/api/dashboard';
+  return `/api/dashboard?workspace=${encodeURIComponent(workspaceId)}`;
 }
 
-function HomeSection(props: {
-  title: string;
-  actionHref?: string;
-  actionLabel?: string;
-  children: ReactNode;
-}) {
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`${label} timed out.`)), DASHBOARD_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function fetchDashboardResponse(url: string): Promise<{ response: Response; authState: BrowserSessionAuthState }> {
+  const direct = await withTimeout(fetch(url, { cache: 'no-store', credentials: 'include' }), 'Dashboard request').catch(() => null);
+  if (direct && direct.status !== 401) return { response: direct, authState: 'active' };
+  return withTimeout(fetchWithBrowserSession(url, { cache: 'no-store' }), 'Authenticated dashboard request');
+}
+
+function Section(props: { title: string; actionHref?: string; actionLabel?: string; children: ReactNode }) {
   return (
-    <section style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>{props.title}</h2>
+    <section style={{ display: 'grid', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: 18, letterSpacing: 0 }}>{props.title}</h2>
         {props.actionHref && props.actionLabel ? (
-          <Link href={props.actionHref} style={{ color: 'var(--text-secondary)', fontSize: 14, textDecoration: 'none' }}>
+          <Link href={props.actionHref} className="os-chip" style={{ textDecoration: 'none' }}>
             {props.actionLabel}
           </Link>
         ) : null}
@@ -102,60 +163,51 @@ function HomeSection(props: {
   );
 }
 
-function PublicLanding() {
+function LinkCard(props: { href: string; title: string; body: string; meta?: ReactNode }) {
+  return (
+    <Link href={props.href} className="os-card-link">
+      <Card style={{ padding: 14, minHeight: 104 }}>
+        <div className="os-entity-head" style={{ alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="os-entity-title">{props.title}</div>
+            <div className="os-entity-copy">{props.body}</div>
+          </div>
+          {props.meta}
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
+  const expired = props.authState === 'expired';
   return (
     <SurfaceShell activePath="/">
-      <section style={{ display: 'grid', gap: 28, padding: '52px 0 72px' }}>
-        <Badge tone="accent">AgentOS V6.6.7</Badge>
-        <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
-          <h1 style={{ margin: 0, fontSize: 'clamp(42px, 7vw, 76px)', lineHeight: 0.95, letterSpacing: '-0.05em' }}>
-            Your AI operating system.
+      <section style={{ display: 'grid', gap: 20, padding: '28px 0 56px' }}>
+        <div style={{ display: 'grid', gap: 10, maxWidth: 760 }}>
+          <Badge tone="accent">AgentOS Home</Badge>
+          <h1 style={{ margin: 0, fontSize: 'clamp(30px, 5vw, 48px)', lineHeight: 1.05, letterSpacing: 0 }}>
+            Workspace command overview
           </h1>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 18, lineHeight: 1.8 }}>
-            Talk to it. Build with it. Install what it needs.
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 16, lineHeight: 1.7 }}>
+            {expired
+              ? 'Your session expired. Sign in again to view real workspace activity.'
+              : 'Sign in to view real sessions, projects, installed apps, skills, workflows, subagents, Vault health, MCP status, and compute state.'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Link href="/signup" className="btn-primary">Get started</Link>
-          <Link href="/studio" className="btn-outline">Open Studio</Link>
-          <Link href="/appstore" className="btn-outline">Browse apps</Link>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Button href="/signin">{expired ? 'Sign in again' : 'Sign in'}</Button>
+          <Button href="/signup" variant="secondary">Create account</Button>
+          <Button href="/studio?mode=nl" variant="secondary">Open Super AgentOS</Button>
         </div>
-        <Grid>
-          <Card style={{ padding: 22 }}>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Chat</Badge>
-              <strong>Start with a conversation.</strong>
-              <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                Ask your Super AgentOS to research, analyze, create, or plan without setting up a workflow first.
-              </span>
-            </div>
-          </Card>
-          <Card style={{ padding: 22 }}>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Build</Badge>
-              <strong>Switch into Code Studio when you need it.</strong>
-              <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                The same session, project, memory, apps, skills, and Vault stay with you in both Studio modes.
-              </span>
-            </div>
-          </Card>
-          <Card style={{ padding: 22 }}>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <Badge tone="accent">Install</Badge>
-              <strong>Give your Super AgentOS new capabilities.</strong>
-              <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                Install apps for product surfaces and skills for new abilities, then use them from one workspace.
-              </span>
-            </div>
-          </Card>
-        </Grid>
-        <Card style={{ padding: 24, display: 'grid', gap: 12 }}>
-          <Badge tone="accent">One system</Badge>
-          <strong>Everything belongs to your Super AgentOS.</strong>
-          <span style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            Home, Studio, projects, memory, Vault, workflows, apps, skills, and activity all work as one operating system.
-          </span>
-        </Card>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+          {['Studio sessions', 'Projects', 'Installed apps', 'Installed skills', 'Workflows', 'Private subagents', 'Vault health', 'MCP status'].map(item => (
+            <Card key={item} style={{ padding: 14 }}>
+              <div className="os-entity-title">{item}</div>
+              <div className="os-entity-copy">Sign in required.</div>
+            </Card>
+          ))}
+        </div>
       </section>
     </SurfaceShell>
   );
@@ -165,105 +217,53 @@ export default function HomePage() {
   const shell = useApplicationShell();
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [command, setCommand] = useState('');
-  const [payload, setPayload] = useState<HomePayload>({
-    sessions: [],
-    apps: [],
-    skills: [],
-    workflows: [],
-    projects: [],
-    subagents: [],
-    memoryEntries: [],
-    files: [],
-    summary: {
-      activeSessions: 0,
-      subagents: 0,
-      memoryEntries: 0,
-      files: 0,
-      installedSkills: 0,
-      connectedApps: 0,
-      privateWorkflows: 0,
-      visibility: {},
-      recentActions: [],
-    },
-  });
+  const [payload, setPayload] = useState<DashboardPayload | null>(null);
 
-  useEffect(() => {
-    let active = true;
-
-    async function load() {
-      const auth = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
-      if (!active) return;
-      setSession(auth.session);
-
-      if (!auth.session) {
-        setLoading(false);
+  const load = useCallback(async (isActive: () => boolean = () => true) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const current = await withTimeout(
+        fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null })),
+        'Session request',
+      );
+      if (!isActive()) return;
+      setSession(current.session);
+      setAuthState(current.state);
+      if (!current.session) {
+        setPayload(null);
         return;
       }
 
-      const [sessionsRes, appsRes, skillsRes, workflowsRes, projectsRes, superAgentRes, subagentsRes, memoryRes, filesRes] = await Promise.all([
-        fetchWithBrowserSession('/api/studio/sessions?status=active', { cache: 'no-store' }),
-        fetchWithBrowserSession(`/api/apps/installed${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/skills/installed', { cache: 'no-store' }),
-        fetchWithBrowserSession(`/api/agent/workflows${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-        fetchWithBrowserSession(`/api/projects${shell.activeWorkspaceId ? `?workspace=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-        fetchWithBrowserSession('/api/super-agent', { cache: 'no-store' }),
-        fetchWithBrowserSession(`/api/subagents${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-        fetchWithBrowserSession(`/api/memory?limit=4${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-        fetchWithBrowserSession(`/api/files?limit=4${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-      ]);
-
-      if (!active) return;
-
-      const [sessionsBody, appsBody, skillsBody, workflowsBody, projectsBody, superAgentBody, subagentsBody, memoryBody, filesBody] = await Promise.all([
-        sessionsRes.response.ok ? sessionsRes.response.json() : Promise.resolve({}),
-        appsRes.response.ok ? appsRes.response.json() : Promise.resolve({}),
-        skillsRes.response.ok ? skillsRes.response.json() : Promise.resolve({}),
-        workflowsRes.response.ok ? workflowsRes.response.json() : Promise.resolve({}),
-        projectsRes.response.ok ? projectsRes.response.json() : Promise.resolve({}),
-        superAgentRes.response.ok ? superAgentRes.response.json() : Promise.resolve({}),
-        subagentsRes.response.ok ? subagentsRes.response.json() : Promise.resolve({}),
-        memoryRes.response.ok ? memoryRes.response.json() : Promise.resolve({}),
-        filesRes.response.ok ? filesRes.response.json() : Promise.resolve({}),
-      ]);
-
-      setPayload({
-        sessions: (sessionsBody.sessions ?? []).filter((item: { workspaceId?: string }) => !shell.activeWorkspaceId || item.workspaceId === shell.activeWorkspaceId).slice(0, 4),
-        apps: (appsBody.installedApps ?? []).slice(0, 4),
-        skills: ((skillsBody.installed_skills ?? []) as Array<{ skill?: Record<string, unknown> }>)
-          .map((item, index) => ({
-            id: String(item.skill?.id ?? item.skill?.slug ?? `skill-${index}`),
-            name: String(item.skill?.name ?? 'Skill'),
-            slug: String(item.skill?.slug ?? `skill-${index}`),
-            description: String(item.skill?.description ?? 'Installed capability'),
-          }))
-          .slice(0, 4),
-        workflows: (workflowsBody.workflows ?? []).slice(0, 4),
-        projects: (projectsBody.projects ?? []).slice(0, 4),
-        subagents: (subagentsBody.subagents ?? []).slice(0, 4),
-        memoryEntries: (memoryBody.entries ?? []).slice(0, 4),
-        files: (filesBody.entries ?? []).slice(0, 4),
-        summary: {
-          activeSessions: Number(superAgentBody.summary?.activeSessions ?? 0),
-          subagents: Number(superAgentBody.summary?.subagents ?? 0),
-          memoryEntries: Number(superAgentBody.summary?.memoryEntries ?? 0),
-          files: Number(superAgentBody.summary?.files ?? 0),
-          installedSkills: Number(superAgentBody.summary?.installedSkills ?? 0),
-          connectedApps: Number(superAgentBody.summary?.connectedApps ?? 0),
-          privateWorkflows: Number(superAgentBody.summary?.privateWorkflows ?? 0),
-          visibility: superAgentBody.summary?.visibility ?? {},
-          recentActions: superAgentBody.summary?.recentActions ?? [],
-        },
-      });
-      setLoading(false);
+      const { response, authState: nextAuthState } = await fetchDashboardResponse(dashboardUrl(shell.activeWorkspaceId));
+      if (!isActive()) return;
+      setAuthState(nextAuthState);
+      if (!response.ok) {
+        setPayload(null);
+        if (nextAuthState !== 'active') return;
+        throw new Error('The dashboard route did not return workspace data.');
+      }
+      setPayload(await response.json());
+    } catch (err) {
+      if (!isActive()) return;
+      setPayload(null);
+      setError(err instanceof Error ? err.message : 'Home dashboard unavailable.');
+    } finally {
+      if (isActive()) setLoading(false);
     }
+  }, [shell.activeWorkspaceId]);
 
-    void load();
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
     return () => {
       active = false;
     };
-  }, [shell.activeWorkspaceId]);
+  }, [load]);
 
   const greeting = useMemo(() => {
     const name = session?.agentName?.trim() || 'there';
@@ -280,27 +280,54 @@ export default function HomePage() {
     router.push(`/studio?mode=nl&prompt=${encodeURIComponent(next)}`);
   }
 
-  if (!session && !loading) {
-    return <PublicLanding />;
-  }
-
-  if (loading && !session) {
+  if (loading) {
     return (
       <SurfaceShell activePath="/">
-        <div style={{ padding: '80px 0', color: 'var(--text-secondary)' }}>Loading your AgentOS…</div>
+        <LoadingState label="Loading workspace command overview" />
+      </SurfaceShell>
+    );
+  }
+
+  if (!session || authState === 'expired' || authState === 'signed_out') {
+    return <SignedOutHome authState={authState} />;
+  }
+
+  if (error || !payload) {
+    return (
+      <SurfaceShell activePath="/">
+        <ErrorState
+          title="Home dashboard unavailable"
+          body={error ?? 'AgentOS could not load the workspace dashboard.'}
+          action={<Button onClick={() => void load()}>Retry</Button>}
+        />
       </SurfaceShell>
     );
   }
 
   return (
     <SurfaceShell activePath="/">
-      <section style={{ display: 'grid', gap: 18 }}>
+      <section style={{ display: 'grid', gap: 18, minWidth: 0 }}>
         <div style={{ display: 'grid', gap: 10 }}>
-          <Badge tone="accent">Super AgentOS</Badge>
-          <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', letterSpacing: 0 }}>{greeting}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Badge tone="accent">Super AgentOS</Badge>
+            <Badge>{payload.workspace?.name ?? 'Workspace'}</Badge>
+            <Badge>{payload.plan.label}</Badge>
+          </div>
+          <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.08, letterSpacing: 0 }}>{greeting}</h1>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            Home is your live command overview for sessions, projects, installed capabilities, private operators, Vault, MCP, and compute state.
+          </p>
         </div>
 
-        <form onSubmit={submitCommand} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10 }}>
+        <form
+          onSubmit={submitCommand}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
+            gap: 10,
+            alignItems: 'stretch',
+          }}
+        >
           <input
             value={command}
             onChange={event => setCommand(event.target.value)}
@@ -308,10 +335,10 @@ export default function HomePage() {
             placeholder="Message Super AgentOS"
             style={{ minHeight: 48 }}
           />
-          <Button type="submit">Send</Button>
+          <Button type="submit">Open Super AgentOS</Button>
         </form>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))', gap: 10 }}>
           {QUICK_ACTIONS.map(action => (
             <Link
               key={action.label}
@@ -335,68 +362,157 @@ export default function HomePage() {
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-          <HomeSection title="Recent Chats" actionHref="/studio" actionLabel="Open Studio">
-            {payload.sessions.length > 0 ? (
-              <div style={{ display: 'grid', gap: 8 }}>
-                {payload.sessions.map(item => (
-                  <Link key={item.id} href={`/studio?session=${encodeURIComponent(item.id)}`} style={{ textDecoration: 'none' }}>
-                    <Card style={{ padding: 12 }}>
-                      <div className="os-entity-head">
-                        <strong>{item.title}</strong>
-                        <span className="os-entity-meta">{formatDate(item.updatedAt)}</span>
-                      </div>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="No chats yet" body="Start in Studio and recent sessions show here." action={<Button href="/studio">Open Studio</Button>} />
-            )}
-          </HomeSection>
-
-          <HomeSection title="Projects" actionHref="/projects" actionLabel="All Projects">
-            {payload.projects.length > 0 ? (
-              <div style={{ display: 'grid', gap: 8 }}>
-                {payload.projects.map(item => (
-                  <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
-                    <Card style={{ padding: 12 }}>
-                      <div className="os-entity-head">
-                        <div>
-                          <strong>{item.name}</strong>
-                          <div className="os-entity-copy">{item.description}</div>
-                        </div>
-                        <Badge tone={item.status === 'active' ? 'success' : 'warning'}>{item.status}</Badge>
-                      </div>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="No projects yet" body="Create a project to organize chats, assets, memory, secrets, and MCP." action={<Button href="/projects">Projects</Button>} />
-            )}
-          </HomeSection>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(168px, 1fr))', gap: 12 }}>
+          <MetricCard label="Studio sessions" value={countState(payload.summary.sessions, 'session', 'sessions', 'No sessions')} hint="Recent NL Studio work" />
+          <MetricCard label="Projects" value={countState(payload.summary.projects, 'project', 'projects', 'No projects')} hint="Durable context containers" />
+          <MetricCard label="Installed apps" value={countState(payload.summary.installedApps, 'app', 'apps', 'No apps')} hint="SDK-backed app surfaces" />
+          <MetricCard label="Installed skills" value={countState(payload.summary.installedSkills, 'skill', 'skills', 'No skills')} hint="Reusable capabilities" />
+          <MetricCard label="Workflows" value={countState(payload.summary.workflows, 'workflow', 'workflows', 'No workflows')} hint="Execution graphs" />
+          <MetricCard label="Private subagents" value={countState(payload.summary.privateSubagents, 'subagent', 'subagents', 'No subagents')} hint="Private user-created operators" />
+          <MetricCard label="Vault health" value={payload.vault.total > 0 ? `${payload.vault.active}/${payload.vault.total} active` : 'No secrets'} hint="Secrets stay permissioned" />
+          <MetricCard label="MCP status" value={payload.mcp.connectorCount > 0 ? `${payload.mcp.activeConnectors}/${payload.mcp.connectorCount} active` : 'No connectors'} hint="External tool layer" />
+          <MetricCard label={payload.credits.label} value={payload.credits.available ? String(payload.credits.balance ?? 'Available') : 'Not connected'} hint={payload.credits.message} />
         </div>
 
-        <HomeSection title="Context">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            {[
-              { label: 'Apps', value: payload.summary.connectedApps, href: '/apps' },
-              { label: 'Skills', value: payload.summary.installedSkills, href: '/skills' },
-              { label: 'Workflows', value: payload.summary.privateWorkflows, href: '/workflows' },
-              { label: 'Memory', value: payload.summary.memoryEntries, href: '/memory' },
-              { label: 'Files', value: payload.summary.files, href: '/files' },
-              { label: 'Subagents', value: payload.summary.subagents, href: '/agents' },
-            ].map(item => (
-              <Link key={item.label} href={item.href} style={{ textDecoration: 'none' }}>
-                <Card style={{ padding: 12 }}>
-                  <div className="os-entity-meta">{item.label}</div>
-                  <div style={{ fontSize: 24, fontWeight: 700 }}>{item.value}</div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </HomeSection>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16 }}>
+          <Section title="Recent Studio Sessions" actionHref="/studio?mode=nl" actionLabel="Open Studio">
+            {payload.recentSessions.length > 0 ? (
+              <ActivityFeed items={payload.recentSessions.map(item => ({
+                id: item.id,
+                title: item.title,
+                subtitle: item.status,
+                time: formatDate(item.updatedAt),
+              }))} />
+            ) : (
+              <EmptyState title="No recent sessions" body="Start a chat in NL Studio and it will appear here." action={<Button href="/studio?mode=nl">Start chat</Button>} />
+            )}
+          </Section>
+
+          <Section title="Active Projects" actionHref="/projects" actionLabel="All projects">
+            {payload.activeProjects.length > 0 ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {payload.activeProjects.map(item => (
+                  <LinkCard key={item.id} href={item.href} title={item.name} body={`Plan: ${item.plan}. Created ${formatDate(item.createdAt)}.`} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No active projects" body="Create a project to keep chats, assets, workflows, and context together." action={<Button href="/projects">Create project</Button>} />
+            )}
+          </Section>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16 }}>
+          <Section title="Installed Apps" actionHref="/appstore" actionLabel="Browse Appstore">
+            {payload.installedApps.length > 0 ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {payload.installedApps.slice(0, 4).map(item => (
+                  <LinkCard key={item.id} href={item.href} title={item.name} body={item.description} meta={<StatusPill status={item.healthStatus} />} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No installed apps" body="Install SDK apps from the Appstore to add product surfaces to your workspace." action={<Button href="/appstore">Open Appstore</Button>} />
+            )}
+          </Section>
+
+          <Section title="Installed Skills" actionHref="/skillstore" actionLabel="Browse Skill Store">
+            {payload.installedSkills.length > 0 ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {payload.installedSkills.slice(0, 4).map(item => (
+                  <LinkCard key={item.id} href={`/skillstore/${encodeURIComponent(item.slug)}`} title={item.name} body={item.description} meta={<Badge tone="accent">{item.category}</Badge>} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No installed skills" body="Install skills to give Super AgentOS reusable capabilities." action={<Button href="/skillstore">Open Skill Store</Button>} />
+            )}
+          </Section>
+
+          <Section title="Active Workflows" actionHref="/studio?mode=workflow" actionLabel="Open Builder">
+            {payload.workflows.length > 0 ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {payload.workflows.slice(0, 4).map(item => (
+                  <LinkCard key={item.id} href={`/workflows/${encodeURIComponent(item.id)}`} title={item.name} body={item.summary} meta={<StatusPill status={item.status} />} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No workflows" body="Build reusable execution graphs in Workflow Builder." action={<Button href="/studio?mode=workflow">Build workflow</Button>} />
+            )}
+          </Section>
+
+          <Section title="Private Subagents" actionHref="/subagents" actionLabel="Manage">
+            {payload.privateSubagents.length > 0 ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {payload.privateSubagents.slice(0, 4).map(item => (
+                  <LinkCard
+                    key={item.id}
+                    href={item.href}
+                    title={item.name}
+                    body={item.description ?? 'Private operator'}
+                    meta={<StatusPill status={item.visibility} />}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No private subagents" body="Create private operators for scoped work inside your workspace." action={<Button href="/subagents">Create subagent</Button>} />
+            )}
+          </Section>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16 }}>
+          <Card style={{ padding: 16 }}>
+            <div className="os-entity-head" style={{ marginBottom: 12 }}>
+              <div>
+                <div className="os-entity-title">Vault Health</div>
+                <div className="os-entity-copy">Secrets remain permissioned and are not shown as memory.</div>
+              </div>
+              <Badge tone={payload.vault.active > 0 ? 'success' : 'default'}>
+                {payload.vault.total > 0 ? `${payload.vault.active} active` : 'Empty'}
+              </Badge>
+            </div>
+            <div className="os-entity-copy">Last update: {formatDate(payload.vault.lastUsedAt)}</div>
+            <div className="os-inline-actions" style={{ marginTop: 12 }}>
+              <Button href="/vault" variant="secondary">Open Vault</Button>
+            </div>
+          </Card>
+
+          <Card style={{ padding: 16 }}>
+            <div className="os-entity-head" style={{ marginBottom: 12 }}>
+              <div>
+                <div className="os-entity-title">MCP Status</div>
+                <div className="os-entity-copy">Universal MCP connects external tools without making them Appstore apps.</div>
+              </div>
+              <Badge tone={payload.mcp.activeConnectors > 0 ? 'success' : 'default'}>
+                {payload.mcp.connectorCount > 0 ? `${payload.mcp.activeConnectors} active` : 'No connectors'}
+              </Badge>
+            </div>
+            <div className="os-entity-copy">Last call: {formatDate(payload.mcp.lastCallAt)}</div>
+            <div className="os-inline-actions" style={{ marginTop: 12 }}>
+              <Button href="/mcp" variant="secondary">Open Universal MCP</Button>
+            </div>
+          </Card>
+
+          <Card style={{ padding: 16 }}>
+            <div className="os-entity-head" style={{ marginBottom: 12 }}>
+              <div>
+                <div className="os-entity-title">{payload.credits.label}</div>
+                <div className="os-entity-copy">{payload.credits.message}</div>
+              </div>
+              <Badge tone="warning">Disabled</Badge>
+            </div>
+            <Button disabled variant="secondary" disabledReason={payload.credits.message}>View usage</Button>
+          </Card>
+        </div>
+
+        <Section title="Recommended Next Actions">
+          {payload.recommendedActions.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 12 }}>
+              {payload.recommendedActions.map(action => (
+                <LinkCard key={action.id} href={action.href} title={action.label} body={action.reason} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No recommendations" body="AgentOS has no workspace recommendation for the current state." />
+          )}
+        </Section>
       </section>
     </SurfaceShell>
   );
