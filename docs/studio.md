@@ -33,6 +33,8 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 
 - empty-state prompt suggestions
 - sticky responsive composer
+- compact empty state that disappears once conversation starts
+- readable active conversation column with separated user, assistant, system, streaming, stopped, and error states
 - Enter to send and Shift+Enter for a newline
 - Markdown and GitHub-flavored Markdown rendering
 - copy and edit actions

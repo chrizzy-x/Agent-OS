@@ -46,7 +46,9 @@ export default function StudioDocsPage() {
         <section className="card" style={{ marginTop: 16, padding: 24 }}>
           <h2>Verified behavior</h2>
           <ul style={{ color: 'var(--text-secondary)', lineHeight: 1.9 }}>
-            <li>Empty-state prompt suggestions and sticky composer</li>
+            <li>Compact empty-state prompt suggestions that disappear after the first message</li>
+            <li>Readable active conversation column with clear message states</li>
+            <li>Sticky responsive composer</li>
             <li>Enter to send and Shift+Enter for newlines</li>
             <li>Markdown and GitHub-flavored Markdown rendering</li>
             <li>Live generation status, stop, and partial-output persistence</li>

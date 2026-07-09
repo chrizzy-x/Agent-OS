@@ -158,14 +158,14 @@ export default function NLStudioPanel() {
           : [];
 
   return (
-    <div className={`nl-studio-panel${activeConversation ? ' active' : ' empty'}`}>
+    <div className={`nl-studio-panel${activeConversation ? ' active' : ' empty'}`} data-active-conversation={activeConversation ? 'true' : 'false'}>
       <main className="nl-conversation" ref={conversationRef} aria-live="polite">
         {!activeConversation ? (
           <section className="nl-empty-state">
             <img src="/logo.png" alt="AgentOS" className="nl-empty-logo" />
             <div>
-              <h1>Super AgentOS</h1>
-              <p>Ask anything. Build, automate, research, or execute.</p>
+              <h1>What should Super AgentOS do?</h1>
+              <p>Start with a request, a file, an app, a skill, or a workflow.</p>
             </div>
             <div className="nl-empty-suggestions" aria-label="Prompt suggestions">
               {SUGGESTIONS.map(suggestion => (
@@ -200,7 +200,7 @@ export default function NLStudioPanel() {
                       </ReactMarkdown>
                     </div>
                   ) : message.state === 'streaming' ? (
-                    <div className="nl-stream-status">{streamingStatus ?? 'Generating…'}</div>
+                    <div className="nl-stream-status">{streamingStatus ?? 'Generating...'}</div>
                   ) : null}
                   {message.state === 'streaming' ? <span className="nl-stream-cursor" aria-hidden="true" /> : null}
                   {message.state === 'stopped' ? <div className="nl-message-state">Stopped</div> : null}
@@ -245,12 +245,12 @@ export default function NLStudioPanel() {
           <div className="nl-composer-meta">
             {composerAttachments.map(item => (
               <button key={item.id} type="button" onClick={() => removeComposerAttachment(item.id)} title="Remove attachment">
-                {item.name} ×
+                {item.name} x
               </button>
             ))}
             {composerInvocations.map(item => (
               <button key={item.id} type="button" onClick={() => removeComposerInvocation(item.id)} title="Remove invocation">
-                {item.kind}: {item.label} ×
+                {item.kind}: {item.label} x
               </button>
             ))}
           </div>
@@ -264,14 +264,14 @@ export default function NLStudioPanel() {
                 submitComposer();
               }
             }}
-            placeholder="Message Super AgentOS…"
+            placeholder="Message Super AgentOS..."
             rows={1}
             aria-label="Message Super AgentOS"
           />
           <div className="nl-composer-tools" aria-label="Composer tools">
             <input ref={fileInputRef} type="file" multiple hidden onChange={event => void uploadFiles(event.target.files)} />
             <input ref={imageInputRef} type="file" multiple accept="image/*" hidden onChange={event => void uploadFiles(event.target.files)} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} aria-label="Upload file">{uploading ? 'Uploading…' : 'File'}</button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} aria-label="Upload file">{uploading ? 'Uploading...' : 'File'}</button>
             <button type="button" onClick={() => imageInputRef.current?.click()} aria-label="Upload image">Image</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'skill' ? null : 'skill')}>Skills</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'app' ? null : 'app')}>Apps</button>
@@ -284,7 +284,7 @@ export default function NLStudioPanel() {
             </button>
           ) : (
             <button type="submit" className="nl-composer-action send" disabled={!composerValue.trim()} aria-label="Send message">
-              ↑
+              Send
             </button>
           )}
           {resourceMenu ? (
@@ -334,37 +334,39 @@ export default function NLStudioPanel() {
         }
 
         .nl-empty-state {
-          width: min(720px, calc(100% - 32px));
+          width: min(620px, calc(100% - 32px));
           min-height: 100%;
           margin: 0 auto;
-          padding: 48px 0 28px;
+          padding: 32px 0 24px;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 24px;
+          gap: 18px;
           text-align: center;
         }
 
         .nl-empty-logo {
-          width: 76px;
-          height: 76px;
-          border-radius: 20px;
+          width: 54px;
+          height: 54px;
+          border-radius: 14px;
           object-fit: cover;
-          box-shadow: 0 16px 44px rgba(0, 0, 0, 0.2);
+          box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
         }
 
         .nl-empty-state h1 {
           margin: 0;
-          font-size: clamp(2rem, 5vw, 3rem);
-          line-height: 1.05;
-          letter-spacing: -0.035em;
+          font-size: 1.78rem;
+          line-height: 1.15;
+          letter-spacing: 0;
         }
 
         .nl-empty-state p {
-          margin: 10px 0 0;
+          max-width: 480px;
+          margin: 8px auto 0;
           color: var(--text-secondary);
-          font-size: clamp(0.95rem, 2vw, 1.08rem);
+          font-size: 0.95rem;
+          line-height: 1.5;
         }
 
         .nl-empty-suggestions {
@@ -392,12 +394,12 @@ export default function NLStudioPanel() {
         }
 
         .nl-message-list {
-          width: min(900px, calc(100% - 40px));
+          width: min(820px, calc(100% - 40px));
           margin: 0 auto;
-          padding: 28px 0 72px;
+          padding: 24px 0 60px;
           display: flex;
           flex-direction: column;
-          gap: 28px;
+          gap: 24px;
         }
 
         .nl-message {
@@ -409,7 +411,7 @@ export default function NLStudioPanel() {
 
         .nl-message.user {
           width: fit-content;
-          max-width: min(78%, 680px);
+          max-width: min(72%, 620px);
           align-self: flex-end;
           grid-template-columns: minmax(0, 1fr);
           padding: 11px 15px;
@@ -440,8 +442,13 @@ export default function NLStudioPanel() {
 
         .nl-message-content {
           min-width: 0;
+          max-width: 760px;
           color: var(--text-primary);
           line-height: 1.68;
+        }
+
+        .nl-message.assistant .nl-message-content {
+          padding-top: 1px;
         }
 
         .nl-markdown > :first-child {
@@ -587,7 +594,7 @@ export default function NLStudioPanel() {
           min-height: 58px;
           margin: 0 auto;
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 38px;
+          grid-template-columns: minmax(0, 1fr) 48px;
           grid-template-rows: auto auto auto;
           align-items: end;
           gap: 10px;
@@ -626,7 +633,7 @@ export default function NLStudioPanel() {
         .nl-composer-action {
           grid-column: 2;
           grid-row: 2;
-          width: 36px;
+          width: 46px;
           height: 36px;
           display: grid;
           place-items: center;
@@ -638,7 +645,7 @@ export default function NLStudioPanel() {
         .nl-composer-action.send {
           background: var(--accent);
           color: #021014;
-          font-size: 1.25rem;
+          font-size: 0.74rem;
           font-weight: 800;
         }
 
@@ -768,8 +775,12 @@ export default function NLStudioPanel() {
           }
 
           .nl-empty-logo {
-            width: 64px;
-            height: 64px;
+            width: 48px;
+            height: 48px;
+          }
+
+          .nl-empty-state h1 {
+            font-size: 1.45rem;
           }
 
           .nl-empty-suggestions {
@@ -802,9 +813,14 @@ export default function NLStudioPanel() {
           }
 
           .nl-composer {
+            grid-template-columns: minmax(0, 1fr) 44px;
             min-height: 54px;
             padding: 13px 10px 8px 14px;
             border-radius: 17px;
+          }
+
+          .nl-composer-action {
+            width: 42px;
           }
 
           .nl-message-actions {
