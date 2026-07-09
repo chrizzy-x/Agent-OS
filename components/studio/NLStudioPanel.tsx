@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/os/ui';
@@ -25,6 +25,13 @@ const SLASH_COMMANDS = [
 ];
 
 type ResourceMenu = 'skill' | 'app' | 'workflow' | 'mcp' | 'subagent' | 'project' | 'context';
+
+type ChatSearchMatch = {
+  messageId: string;
+  start: number;
+  end: number;
+  index: number;
+};
 
 const INTERNAL_JSON_KEYS = new Set([
   'executionId',
@@ -98,15 +105,45 @@ export default function NLStudioPanel() {
   } = useStudio();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
+  const chatSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const messageRefs = useRef<Record<string, HTMLElement | null>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [resourceMenu, setResourceMenu] = useState<ResourceMenu | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [activeChatMatchIndex, setActiveChatMatchIndex] = useState(0);
   const activeConversation = messages.length > 0;
+  const normalizedChatSearch = chatSearchQuery.trim().toLowerCase();
   const lastUserMessage = useMemo(
     () => [...messages].reverse().find(message => message.role === 'user')?.content ?? '',
     [messages],
   );
+  const chatSearchMatches = useMemo(() => {
+    if (!normalizedChatSearch) return [];
+    const next: ChatSearchMatch[] = [];
+    for (const message of messages) {
+      const content = visibleMessageContent(message);
+      const lowerContent = content.toLowerCase();
+      let start = lowerContent.indexOf(normalizedChatSearch);
+      while (start >= 0) {
+        next.push({
+          messageId: message.id,
+          start,
+          end: start + normalizedChatSearch.length,
+          index: next.length,
+        });
+        start = lowerContent.indexOf(normalizedChatSearch, start + normalizedChatSearch.length);
+      }
+    }
+    return next;
+  }, [messages, normalizedChatSearch]);
+  const activeChatMatch = chatSearchMatches[activeChatMatchIndex] ?? null;
+  const chatSearchStatus = !normalizedChatSearch
+    ? 'Search active chat'
+    : chatSearchMatches.length > 0
+      ? `${activeChatMatchIndex + 1}/${chatSearchMatches.length} matches`
+      : '0 matches';
 
   useEffect(() => {
     const input = composerRef.current;
@@ -123,6 +160,22 @@ export default function NLStudioPanel() {
       behavior: sending ? 'auto' : 'smooth',
     });
   }, [messages, sending]);
+
+  useEffect(() => {
+    if (chatSearchMatches.length === 0) {
+      setActiveChatMatchIndex(0);
+      return;
+    }
+    setActiveChatMatchIndex(current => Math.min(current, chatSearchMatches.length - 1));
+  }, [chatSearchMatches.length]);
+
+  useEffect(() => {
+    if (!activeChatMatch) return;
+    messageRefs.current[activeChatMatch.messageId]?.scrollIntoView({
+      block: 'center',
+      behavior: 'smooth',
+    });
+  }, [activeChatMatch]);
 
   function submitComposer() {
     const nextMessage = composerValue.trim();
@@ -147,7 +200,44 @@ export default function NLStudioPanel() {
   function searchConversation(message: string) {
     const query = message.trim().slice(0, 120);
     if (!query) return;
-    window.location.assign(`/search?q=${encodeURIComponent(query)}`);
+    setChatSearchQuery(query);
+    setActiveChatMatchIndex(0);
+    requestAnimationFrame(() => chatSearchInputRef.current?.focus());
+  }
+
+  function updateChatSearchQuery(value: string) {
+    setChatSearchQuery(value);
+    setActiveChatMatchIndex(0);
+  }
+
+  function navigateChatSearch(direction: 1 | -1) {
+    if (chatSearchMatches.length === 0) return;
+    setActiveChatMatchIndex(current => (
+      current + direction + chatSearchMatches.length
+    ) % chatSearchMatches.length);
+  }
+
+  function renderHighlightedContent(messageId: string, content: string) {
+    if (!normalizedChatSearch) return null;
+    const matches = chatSearchMatches.filter(match => match.messageId === messageId);
+    if (matches.length === 0) return content;
+    const nodes: ReactNode[] = [];
+    let cursor = 0;
+    for (const match of matches) {
+      if (match.start > cursor) nodes.push(content.slice(cursor, match.start));
+      nodes.push(
+        <mark
+          key={`${messageId}-${match.index}`}
+          className={`nl-chat-search-hit${match.index === activeChatMatchIndex ? ' active' : ''}`}
+          data-active-match={match.index === activeChatMatchIndex ? 'true' : 'false'}
+        >
+          {content.slice(match.start, match.end)}
+        </mark>,
+      );
+      cursor = match.end;
+    }
+    if (cursor < content.length) nodes.push(content.slice(cursor));
+    return <div className="nl-search-highlighted-text">{nodes}</div>;
   }
 
   async function uploadFiles(files: FileList | null) {
@@ -223,10 +313,60 @@ export default function NLStudioPanel() {
           </section>
         ) : (
           <div className="nl-message-list">
+            <section className="nl-chat-search" role="search" aria-label="Active chat search controls">
+              <input
+                ref={chatSearchInputRef}
+                value={chatSearchQuery}
+                onChange={event => updateChatSearchQuery(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    navigateChatSearch(event.shiftKey ? -1 : 1);
+                  }
+                }}
+                placeholder="Search this chat"
+                aria-label="Search active conversation"
+              />
+              <span aria-live="polite">{chatSearchStatus}</span>
+              <button
+                type="button"
+                onClick={() => navigateChatSearch(-1)}
+                disabled={chatSearchMatches.length === 0}
+                title={chatSearchMatches.length === 0 ? 'No matches in this chat' : 'Previous match'}
+                aria-label="Previous match"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateChatSearch(1)}
+                disabled={chatSearchMatches.length === 0}
+                title={chatSearchMatches.length === 0 ? 'No matches in this chat' : 'Next match'}
+                aria-label="Next match"
+              >
+                Next
+              </button>
+              <button
+                type="button"
+                onClick={() => updateChatSearchQuery('')}
+                disabled={!chatSearchQuery}
+                title={!chatSearchQuery ? 'Search is already clear' : 'Clear chat search'}
+                aria-label="Clear chat search"
+              >
+                Clear
+              </button>
+            </section>
             {messages.map(message => {
               const visibleContent = visibleMessageContent(message);
+              const highlightedContent = renderHighlightedContent(message.id, visibleContent);
               return (
-              <article key={message.id} className={`nl-message ${message.role} ${message.state ?? 'complete'}`}>
+              <article
+                key={message.id}
+                ref={element => { messageRefs.current[message.id] = element; }}
+                className={`nl-message ${message.role} ${message.state ?? 'complete'}`}
+                data-message-id={message.id}
+                data-search-active={activeChatMatch?.messageId === message.id ? 'true' : 'false'}
+              >
                 {message.role === 'assistant' ? (
                   <div className="nl-assistant-avatar">
                     <img src="/logo.png" alt="" />
@@ -236,16 +376,18 @@ export default function NLStudioPanel() {
                   {message.role === 'system' ? <div className="nl-system-label">System</div> : null}
                   {visibleContent ? (
                     <div className="nl-markdown">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          a: ({ children, ...props }) => (
-                            <a {...props} target="_blank" rel="noreferrer">{children}</a>
-                          ),
-                        }}
-                      >
-                        {visibleContent}
-                      </ReactMarkdown>
+                      {highlightedContent ?? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            a: ({ children, ...props }) => (
+                              <a {...props} target="_blank" rel="noreferrer">{children}</a>
+                            ),
+                          }}
+                        >
+                          {visibleContent}
+                        </ReactMarkdown>
+                      )}
                     </div>
                   ) : message.state === 'streaming' ? (
                     <div className="nl-stream-status">{streamingStatus ?? 'Generating...'}</div>
@@ -295,7 +437,7 @@ export default function NLStudioPanel() {
                         <button type="button" onClick={() => void branchConversation()}>Branch</button>
                       ) : null}
                       {message.role === 'assistant' || message.role === 'user' ? (
-                        <button type="button" onClick={() => searchConversation(message.content)}>Search</button>
+                        <button type="button" onClick={() => searchConversation(visibleContent)}>Search chat</button>
                       ) : null}
                     </div>
                   ) : null}
@@ -495,6 +637,84 @@ export default function NLStudioPanel() {
           display: flex;
           flex-direction: column;
           gap: 24px;
+        }
+
+        .nl-chat-search {
+          position: sticky;
+          top: 10px;
+          z-index: 3;
+          display: grid;
+          grid-template-columns: minmax(180px, 1fr) auto auto auto auto;
+          gap: 8px;
+          align-items: center;
+          padding: 8px;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+          box-shadow: 0 10px 26px rgba(0,0,0,0.18);
+          backdrop-filter: blur(12px);
+        }
+
+        .nl-chat-search input {
+          min-width: 0;
+          min-height: 32px;
+          padding: 0 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          outline: 0;
+          background: rgba(255,255,255,0.03);
+          color: var(--text-primary);
+          font: inherit;
+          font-size: 0.78rem;
+        }
+
+        .nl-chat-search input:focus {
+          border-color: rgba(20, 184, 166, 0.5);
+        }
+
+        .nl-chat-search span {
+          min-width: 86px;
+          color: var(--text-secondary);
+          font-size: 0.73rem;
+          white-space: nowrap;
+        }
+
+        .nl-chat-search button {
+          min-height: 32px;
+          padding: 0 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: rgba(255,255,255,0.025);
+          color: var(--text-secondary);
+          font-size: 0.72rem;
+          cursor: pointer;
+        }
+
+        .nl-chat-search button:disabled {
+          opacity: 0.55;
+          cursor: default;
+        }
+
+        .nl-search-highlighted-text {
+          white-space: pre-wrap;
+        }
+
+        .nl-chat-search-hit {
+          padding: 0 2px;
+          border-radius: 4px;
+          background: rgba(251, 191, 36, 0.32);
+          color: inherit;
+        }
+
+        .nl-chat-search-hit.active {
+          background: rgba(20, 184, 166, 0.42);
+          box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.5);
+        }
+
+        .nl-message[data-search-active="true"] .nl-message-content {
+          border-radius: 10px;
+          outline: 1px solid rgba(20, 184, 166, 0.34);
+          outline-offset: 6px;
         }
 
         .nl-message {
@@ -951,6 +1171,18 @@ export default function NLStudioPanel() {
             padding-top: 20px;
             padding-bottom: 48px;
             gap: 24px;
+          }
+
+          .nl-chat-search {
+            top: 8px;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            gap: 6px;
+          }
+
+          .nl-chat-search span {
+            grid-column: 1 / -1;
+            grid-row: 2;
+            min-width: 0;
           }
 
           .nl-message {

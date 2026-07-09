@@ -48,4 +48,15 @@ describe('NL Studio layout contract', () => {
     expect(panel).toContain('No connected ${resourceMenu} resources.');
     expect(panel).toContain("addComposerInvocation({ kind: resourceMenu, ref: item.ref, label: item.label })");
   });
+
+  it('keeps active chat search direct inside the conversation', () => {
+    const panel = source();
+
+    expect(panel).toContain('Search this chat');
+    expect(panel).toContain('aria-label="Search active conversation"');
+    expect(panel).toContain('className="nl-chat-search"');
+    expect(panel).toContain('className={`nl-chat-search-hit${match.index === activeChatMatchIndex ?');
+    expect(panel).toContain('navigateChatSearch(event.shiftKey ? -1 : 1)');
+    expect(panel).toContain('Search chat</button>');
+  });
 });

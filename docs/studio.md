@@ -44,6 +44,7 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - Markdown and GitHub-flavored Markdown rendering
 - copy and edit actions
 - live generation status and stop control
+- active chat search with highlighted matches, result count, next/previous jump controls, Enter/Shift+Enter navigation, and clear state
 - searchable recent chats
 - session rows with continue, rename, pin, project attach, archive, and delete controls
 - per-session project, visibility, and last-updated metadata
