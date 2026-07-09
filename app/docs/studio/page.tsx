@@ -58,6 +58,8 @@ export default function StudioDocsPage() {
             <li>Markdown and GitHub-flavored Markdown rendering</li>
             <li>Live generation status, stop, and partial-output persistence</li>
             <li>Active chat search with highlighted matches, result count, next/previous jump controls, Enter/Shift+Enter navigation, and clear state</li>
+            <li>Context Overview drawer separating project context, session context, attached files, selected resources, installed assets, memory, workflow/app outputs, and Vault permission state</li>
+            <li>Vault context exposes secret names/status only; secret values are never displayed as normal context</li>
             <li>Recent-chat search and cross-project session reopening</li>
             <li>Session rows with continue, rename, pin, project attach, archive, and delete controls</li>
             <li>Per-session project, visibility, and last-updated metadata</li>

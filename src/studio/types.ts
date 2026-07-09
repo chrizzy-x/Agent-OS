@@ -1,6 +1,7 @@
 export type StudioMode = 'nl' | 'workflow' | 'code';
 
 export type StudioContextSection =
+  | 'overview'
   | 'apps'
   | 'skills'
   | 'subagents'

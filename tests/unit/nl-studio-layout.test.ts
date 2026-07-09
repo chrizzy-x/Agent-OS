@@ -6,6 +6,10 @@ function source() {
   return readFileSync(join(process.cwd(), 'components', 'studio', 'NLStudioPanel.tsx'), 'utf8');
 }
 
+function drawerSource() {
+  return readFileSync(join(process.cwd(), 'components', 'studio', 'StudioContextDrawer.tsx'), 'utf8');
+}
+
 describe('NL Studio layout contract', () => {
   it('keeps empty state separate from active conversation', () => {
     const panel = source();
@@ -58,5 +62,21 @@ describe('NL Studio layout contract', () => {
     expect(panel).toContain('className={`nl-chat-search-hit${match.index === activeChatMatchIndex ?');
     expect(panel).toContain('navigateChatSearch(event.shiftKey ? -1 : 1)');
     expect(panel).toContain('Search chat</button>');
+  });
+
+  it('exposes context engine categories without treating Vault secrets as normal context', () => {
+    const drawer = drawerSource();
+
+    expect(drawer).toContain('Project Context');
+    expect(drawer).toContain('Session Context');
+    expect(drawer).toContain('Attached Files And Assets');
+    expect(drawer).toContain('Selected Resources');
+    expect(drawer).toContain('Memory Context');
+    expect(drawer).toContain('Workflow Logs And App Outputs');
+    expect(drawer).toContain('Vault Permission State');
+    expect(drawer).toContain('Secret value hidden. Status:');
+    expect(drawer).toContain('redactContextText');
+    expect(drawer).toContain('removeComposerInvocation(item.id)');
+    expect(drawer).toContain('removeComposerAttachment(item.id)');
   });
 });

@@ -36,7 +36,7 @@ export default function StudioTopbar() {
       <div className="studio-switchbar-actions">
         {nlMode ? <button type="button" onClick={() => void startNewChat()}>New chat</button> : null}
         <button type="button" onClick={() => openContext('notifications')}>Alerts {notifications.filter(item => item.status === 'unread').length}</button>
-        <button type="button" onClick={() => openContext(nlMode ? 'memory' : 'logs')}>Context</button>
+        <button type="button" onClick={() => openContext(nlMode ? 'overview' : 'logs')}>Context</button>
         <span className="studio-switchbar-user">{browserSession?.agentName ?? 'User'} · {modelLabel}</span>
       </div>
       <style>{`

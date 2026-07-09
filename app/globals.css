@@ -3787,7 +3787,11 @@ nextjs-portal {
     bottom: 0;
     z-index: 130;
     width: min(88vw, 360px);
+    max-width: calc(100vw - 16px);
     height: calc(100dvh - 64px);
+    overflow-x: hidden;
+    visibility: hidden;
+    pointer-events: none;
     transition: transform 160ms ease;
   }
 
@@ -3804,6 +3808,8 @@ nextjs-portal {
   .agentos-global-shell[data-left-open="true"] .agentos-global-left,
   .agentos-global-shell[data-right-open="true"] .agentos-global-right {
     transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .agentos-global-shell[data-right-collapsed="true"] .agentos-global-context {
@@ -3841,8 +3847,16 @@ nextjs-portal {
 
   .agentos-global-sidebar,
   .agentos-global-context {
+    min-width: 0;
+    overflow-x: hidden;
     padding-top: 46px;
     padding-bottom: 24px;
+  }
+
+  .agentos-session-row,
+  .agentos-session-actions,
+  .agentos-session-attach {
+    max-width: 100%;
   }
 
   .agentos-mobile-bottom-nav {

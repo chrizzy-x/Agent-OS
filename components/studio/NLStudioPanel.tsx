@@ -517,6 +517,7 @@ export default function NLStudioPanel() {
             <div className="nl-resource-menu" role="menu" aria-label={`${resourceMenu} resources`}>
               {resourceMenu === 'context' ? (
                 <>
+                  <button type="button" onClick={() => { openContext('overview'); setResourceMenu(null); }}>Context overview</button>
                   <button type="button" onClick={() => { openContext('files'); setResourceMenu(null); }}>Attached files</button>
                   <button type="button" onClick={() => { openContext('memory'); setResourceMenu(null); }}>Memory</button>
                   <button type="button" onClick={() => { openContext('vault'); setResourceMenu(null); }}>Vault permissions</button>

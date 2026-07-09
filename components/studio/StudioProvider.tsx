@@ -315,7 +315,7 @@ export function StudioProvider(props: {
   const [mode, setModeState] = useState<StudioMode>(requestedMode);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
-  const [contextSection, setContextSection] = useState<StudioContextSection>('apps');
+  const [contextSection, setContextSection] = useState<StudioContextSection>('overview');
   const [session, setSession] = useState<StudioSessionRecord | null>(null);
   const [sessions, setSessions] = useState<StudioSessionRecord[]>([]);
   const [lineage, setLineage] = useState<StudioLineage>({ parent: null, children: [] });

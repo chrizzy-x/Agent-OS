@@ -19,9 +19,73 @@ function SectionList(props: { title: string; items: Array<{ id: string; title: s
   );
 }
 
+type ContextOverviewItem = {
+  id: string;
+  title: string;
+  body: string;
+  badges?: string[];
+  action?: {
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+    title?: string;
+  };
+};
+
+function ContextSourceGroup(props: {
+  title: string;
+  description: string;
+  items: ContextOverviewItem[];
+}) {
+  return (
+    <section className="studio-context-source-group">
+      <div>
+        <strong>{props.title}</strong>
+        <p>{props.description}</p>
+      </div>
+      {props.items.length > 0 ? props.items.map(item => (
+        <div key={item.id} className="studio-context-source-item">
+          <div>
+            <div style={{ fontWeight: 650 }}>{item.title}</div>
+            <div style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>{item.body}</div>
+          </div>
+          <div className="studio-context-source-side">
+            {item.badges?.length ? (
+              <div className="studio-context-source-badges">
+                {item.badges.map(badge => <Badge key={badge} tone="default">{badge}</Badge>)}
+              </div>
+            ) : null}
+            {item.action ? (
+              <button
+                type="button"
+                onClick={item.action.onClick}
+                disabled={item.action.disabled}
+                title={item.action.title ?? item.action.label}
+              >
+                {item.action.label}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )) : <span style={{ color: 'var(--text-secondary)' }}>Nothing attached.</span>}
+    </section>
+  );
+}
+
+function redactContextText(value: string): string {
+  return value
+    .replace(/(authorization|api[_-]?key|password|secret|token)\s*[:=]\s*[^,\s;]+/gi, '$1: [redacted]')
+    .replace(/sk-[a-zA-Z0-9_-]{16,}/g, '[redacted secret]')
+    .replace(/Bearer\s+[a-zA-Z0-9._-]+/g, 'Bearer [redacted]');
+}
+
+function textMentionsSecret(value: string | null | undefined): boolean {
+  return Boolean(value && /\b(vault|secret|token|credential|api key|password)\b/i.test(value));
+}
+
 function summarizeEventPayload(payload: unknown): string {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return typeof payload === 'string' && payload.trim() ? payload.trim().slice(0, 160) : 'Event recorded.';
+    return typeof payload === 'string' && payload.trim() ? redactContextText(payload.trim()).slice(0, 160) : 'Event recorded.';
   }
 
   const record = payload as Record<string, unknown>;
@@ -32,7 +96,7 @@ function summarizeEventPayload(payload: unknown): string {
       const value = record[key];
       if (value === null || value === undefined) return [];
       if (!['string', 'number', 'boolean'].includes(typeof value)) return [];
-      return [`${key}: ${String(value).slice(0, 96)}`];
+      return [`${key}: ${redactContextText(String(value)).slice(0, 96)}`];
     });
 
   return parts.length > 0 ? parts.join(' | ') : 'Event metadata recorded.';
@@ -72,6 +136,11 @@ export default function StudioContextDrawer() {
     markNotification,
     refresh,
     lineage,
+    composerAttachments,
+    composerInvocations,
+    removeComposerAttachment,
+    removeComposerInvocation,
+    pendingApproval,
   } = useStudio();
 
   async function previewFile(path: string) {
@@ -104,6 +173,16 @@ export default function StudioContextDrawer() {
     await refresh();
   }
 
+  async function updateSessionContext(patch: Record<string, unknown>) {
+    if (!session?.id) return;
+    await fetchWithBrowserSession(`/api/studio/sessions/${encodeURIComponent(session.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    await refresh();
+  }
+
   async function exportMemory() {
     const response = await fetchWithBrowserSession('/api/memory?export=1&limit=200', { cache: 'no-store' });
     const payload = await response.response.text();
@@ -129,7 +208,7 @@ export default function StudioContextDrawer() {
       .map(item => ({
         id: item.id,
         title: item.key,
-        body: `${item.namespaceType}${item.namespaceId ? `:${item.namespaceId}` : ''} | ${item.visibility} | ${item.content}`,
+        body: `${item.namespaceType}${item.namespaceId ? `:${item.namespaceId}` : ''} | ${item.visibility} | ${redactContextText(item.content)}`,
       })),
   })).filter(group => group.items.length > 0);
   const summary = [
@@ -170,6 +249,200 @@ export default function StudioContextDrawer() {
       ],
     },
   ];
+  const appName = (id: string | null | undefined) => installedApps.find(item => item.id === id || item.slug === id)?.name ?? id ?? 'Linked app';
+  const workflowName = (id: string | null | undefined) => workflows.find(item => item.id === id)?.name ?? id ?? 'Linked workflow';
+  const subagentName = (id: string | null | undefined) => subagents.find(item => item.id === id)?.name ?? id ?? 'Linked subagent';
+  const vaultPermissionNeeded = textMentionsSecret(pendingApproval?.reply)
+    || notifications.some(item => item.status === 'unread' && (textMentionsSecret(item.title) || textMentionsSecret(item.body)))
+    || executions.some(item => textMentionsSecret(item.title) || textMentionsSecret(JSON.stringify(item.failure ?? {})));
+  const appAndWorkflowOutputs = executions
+    .filter(item => ['app', 'skill', 'workflow', 'subagent', 'mcp', 'super_agent'].some(source => item.sourceType.toLowerCase().includes(source)))
+    .slice(0, 8);
+  const contextOverviewGroups = [
+    {
+      title: 'Project Context',
+      description: 'Workspace and project boundaries Super AgentOS can use for this Studio session.',
+      items: [
+        {
+          id: 'workspace-context',
+          title: 'Workspace',
+          body: currentProject?.workspaceId ? `Workspace ID ${currentProject.workspaceId}` : 'Workspace comes from the active browser session.',
+          badges: [currentProject ? 'active' : 'not selected'],
+        },
+        {
+          id: 'project-context',
+          title: currentProject?.name ?? 'No active project',
+          body: currentProject?.description ?? 'Project context is selected from Studio and can be changed from the composer.',
+          badges: [currentProject?.status ?? 'unselected'],
+        },
+      ],
+    },
+    {
+      title: 'Session Context',
+      description: 'Conversation state and session-scoped references currently attached to Super AgentOS.',
+      items: [
+        {
+          id: 'session-context',
+          title: session?.title ?? 'New chat',
+          body: session ? `Visibility ${session.visibility}; project ${currentProject?.name ?? 'none'}.` : 'No persisted session exists until the first message is sent.',
+          badges: [session?.visibility ?? 'draft'],
+        },
+        ...(session?.linkedSubagentId ? [{
+          id: 'linked-subagent',
+          title: subagentName(session.linkedSubagentId),
+          body: 'Private subagent linked to this session.',
+          badges: ['subagent'],
+          action: {
+            label: 'Detach',
+            onClick: () => void updateSessionContext({ linkedSubagentId: null }),
+          },
+        }] : []),
+        ...(session?.linkedAppId ? [{
+          id: 'linked-app',
+          title: appName(session.linkedAppId),
+          body: 'Agentic app linked to this session.',
+          badges: ['app'],
+          action: {
+            label: 'Detach',
+            onClick: () => void updateSessionContext({ linkedAppId: null }),
+          },
+        }] : []),
+        ...(session?.linkedWorkflowId ? [{
+          id: 'linked-workflow',
+          title: workflowName(session.linkedWorkflowId),
+          body: 'Workflow linked to this session.',
+          badges: ['workflow'],
+          action: {
+            label: 'Detach',
+            onClick: () => void updateSessionContext({ linkedWorkflowId: null }),
+          },
+        }] : []),
+      ],
+    },
+    {
+      title: 'Attached Files And Assets',
+      description: 'Files selected for the next request and files already visible to the current session.',
+      items: [
+        ...composerAttachments.map(item => ({
+          id: `composer-file-${item.id}`,
+          title: item.name,
+          body: item.path,
+          badges: ['selected file'],
+          action: {
+            label: 'Detach',
+            onClick: () => removeComposerAttachment(item.id),
+          },
+        })),
+        ...(session?.linkedFilePaths ?? []).map(path => ({
+          id: `linked-file-${path}`,
+          title: path,
+          body: 'Session-linked file path. File contents are not shown in context overview.',
+          badges: ['session file'],
+          action: {
+            label: 'Detach',
+            onClick: () => void updateSessionContext({
+              linkedFilePaths: (session?.linkedFilePaths ?? []).filter(item => item !== path),
+            }),
+          },
+        })),
+        ...fileEntries.slice(0, 6).map(item => ({
+          id: `visible-file-${item.id}`,
+          title: item.path,
+          body: `${String(item.metadata.kind ?? 'file')} | ${item.visibility}`,
+          badges: ['governed file'],
+        })),
+      ],
+    },
+    {
+      title: 'Selected Resources',
+      description: 'Apps, skills, workflows, subagents, and MCP resources selected for the next Super AgentOS request.',
+      items: composerInvocations.map(item => ({
+        id: `selected-${item.id}`,
+        title: item.label,
+        body: `${item.kind} selected in the composer.`,
+        badges: [item.kind],
+        action: {
+          label: 'Detach',
+          onClick: () => removeComposerInvocation(item.id),
+        },
+      })),
+    },
+    {
+      title: 'Installed Assets',
+      description: 'Installed assets Super AgentOS may route to when selected or requested.',
+      items: [
+        ...installedApps.slice(0, 4).map(item => ({ id: `asset-app-${item.id}`, title: item.name, body: item.description, badges: ['app'] })),
+        ...installedSkills.slice(0, 4).map(item => ({ id: `asset-skill-${item.id}`, title: item.name, body: item.description, badges: ['skill'] })),
+        ...workflows.slice(0, 4).map(item => ({ id: `asset-workflow-${item.id}`, title: item.name, body: item.summary ?? item.status, badges: ['workflow'] })),
+        ...subagents.slice(0, 4).map(item => ({ id: `asset-subagent-${item.id}`, title: item.name, body: item.description ?? item.status, badges: ['private subagent'] })),
+      ],
+    },
+    {
+      title: 'Memory Context',
+      description: 'Memory is separate from session and project context. Secrets must not become memory.',
+      items: [
+        ...memoryEntries.slice(0, 8).map(item => ({
+          id: `memory-${item.id}`,
+          title: item.key,
+          body: `${item.namespaceType}${item.namespaceId ? `:${item.namespaceId}` : ''} | ${item.visibility} | ${redactContextText(item.content)}`,
+          badges: [classifyMemoryEntry(item)],
+          action: (session?.linkedMemoryRefs ?? []).includes(item.id) ? {
+            label: 'Detach',
+            onClick: () => void updateSessionContext({
+              linkedMemoryRefs: (session?.linkedMemoryRefs ?? []).filter(ref => ref !== item.id),
+            }),
+          } : undefined,
+        })),
+        ...(session?.linkedMemoryRefs ?? [])
+          .filter(ref => !memoryEntries.some(item => item.id === ref))
+          .map(ref => ({
+            id: `memory-ref-${ref}`,
+            title: ref,
+            body: 'Session-linked memory reference. Content is unavailable in this context view.',
+            badges: ['memory reference'],
+            action: {
+              label: 'Detach',
+              onClick: () => void updateSessionContext({
+                linkedMemoryRefs: (session?.linkedMemoryRefs ?? []).filter(item => item !== ref),
+              }),
+            },
+          })),
+      ],
+    },
+    {
+      title: 'Workflow Logs And App Outputs',
+      description: 'Execution records are summarized without raw outputs, stack traces, or secret payloads.',
+      items: [
+        ...events.slice(-4).map(item => ({ id: `overview-event-${item.id}`, title: item.type, body: summarizeEventPayload(item.payload), badges: ['event'] })),
+        ...appAndWorkflowOutputs.map(item => ({
+          id: `overview-execution-${item.id}`,
+          title: item.title,
+          body: `${item.sourceType} | ${item.status}`,
+          badges: ['execution'],
+        })),
+      ],
+    },
+    {
+      title: 'Vault Permission State',
+      description: 'Vault exposes secret names and permission state only. Secret values never appear as normal context.',
+      items: [
+        {
+          id: 'vault-permission-needed',
+          title: vaultPermissionNeeded ? 'Vault permission needed now' : 'No Vault permission requested',
+          body: vaultPermissionNeeded
+            ? 'A pending approval, notification, or execution indicates secret access may be required.'
+            : 'Super AgentOS will ask before using a secret.',
+          badges: [vaultPermissionNeeded ? 'permission needed' : 'idle'],
+        },
+        ...vaultSecrets.map(item => ({
+          id: `vault-secret-${item.id}`,
+          title: item.name,
+          body: `Secret value hidden. Status: ${item.status}.`,
+          badges: ['metadata only'],
+        })),
+      ],
+    },
+  ];
 
   return (
     <Drawer
@@ -196,7 +469,7 @@ export default function StudioContextDrawer() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
-        {(['apps', 'skills', 'subagents', 'workflows', 'memory', 'files', 'vault', 'logs', 'recovery', 'notifications'] as const).map(section => (
+        {(['overview', 'apps', 'skills', 'subagents', 'workflows', 'memory', 'files', 'vault', 'logs', 'recovery', 'notifications'] as const).map(section => (
           <button
             key={section}
             type="button"
@@ -216,6 +489,18 @@ export default function StudioContextDrawer() {
         ))}
       </div>
 
+      {contextSection === 'overview' ? (
+        <div className="studio-context-overview">
+          {contextOverviewGroups.map(group => (
+            <ContextSourceGroup
+              key={group.title}
+              title={group.title}
+              description={group.description}
+              items={group.items}
+            />
+          ))}
+        </div>
+      ) : null}
       {contextSection === 'apps' ? <SectionList title="Installed Apps" items={installedApps.map(item => ({ id: item.id, title: item.name, body: item.description }))} /> : null}
       {contextSection === 'skills' ? <SectionList title="Installed Skills" items={installedSkills.map(item => ({ id: item.id, title: item.name, body: item.description }))} /> : null}
       {contextSection === 'subagents' ? <SectionList title="Subagents" items={subagents.map(item => ({
@@ -304,7 +589,7 @@ export default function StudioContextDrawer() {
         ...events.slice(-8).map(item => ({ id: `studio-${item.id}`, title: item.type, body: summarizeEventPayload(item.payload) })),
         ...executions.slice(0, 8).map(item => ({ id: `execution-${item.id}`, title: item.status, body: `${item.sourceType} | ${item.title}` })),
         ...(terminal ? [{ id: `terminal-status-${terminal.id}`, title: 'Terminal session', body: `${terminal.status} | ${terminal.cwd}` }] : []),
-        ...terminalEvents.slice(-8).map(item => ({ id: `terminal-${item.id}`, title: item.type, body: `${item.chunk ?? item.message ?? ''}${item.status ? ` | ${item.status}` : ''}` })),
+        ...terminalEvents.slice(-8).map(item => ({ id: `terminal-${item.id}`, title: item.type, body: redactContextText(`${item.chunk ?? item.message ?? ''}${item.status ? ` | ${item.status}` : ''}`) })),
       ]} /> : null}
       {contextSection === 'memory' ? (
         <div style={{ display: 'grid', gap: 18 }}>
@@ -314,6 +599,85 @@ export default function StudioContextDrawer() {
           )) : <SectionList title="Memory" items={[]} />}
         </div>
       ) : null}
+      <style>{`
+        .studio-context-overview {
+          display: grid;
+          gap: 14px;
+        }
+
+        .studio-context-source-group {
+          display: grid;
+          gap: 9px;
+          padding: 13px;
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          background: rgba(255,255,255,0.025);
+        }
+
+        .studio-context-source-group p {
+          margin: 4px 0 0;
+          color: var(--text-secondary);
+          font-size: 0.78rem;
+          line-height: 1.55;
+        }
+
+        .studio-context-source-item {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+          align-items: start;
+          padding: 10px 11px;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: rgba(255,255,255,0.03);
+        }
+
+        .studio-context-source-side {
+          display: grid;
+          justify-items: end;
+          gap: 7px;
+        }
+
+        .studio-context-source-badges {
+          display: flex;
+          justify-content: flex-end;
+          gap: 5px;
+          flex-wrap: wrap;
+        }
+
+        .studio-context-source-item button {
+          min-height: 30px;
+          padding: 0 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: rgba(255,255,255,0.04);
+          color: var(--text-secondary);
+          cursor: pointer;
+        }
+
+        .studio-context-source-item button:hover {
+          color: var(--text-primary);
+        }
+
+        .studio-context-source-item button:disabled {
+          opacity: 0.55;
+          cursor: default;
+        }
+
+        @media (max-width: 640px) {
+          .studio-context-source-item {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .studio-context-source-side {
+            justify-items: start;
+          }
+
+          .studio-context-source-badges {
+            justify-content: flex-start;
+          }
+        }
+      `}</style>
     </Drawer>
   );
 }
