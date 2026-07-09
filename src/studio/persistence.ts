@@ -586,6 +586,7 @@ export async function updateStudioSession(params: {
   title?: string;
   statePatch?: Record<string, unknown>;
   status?: string;
+  projectId?: string | null;
   pinned?: boolean;
   deleted?: boolean;
   visibility?: 'private' | 'workspace' | 'public';
@@ -616,6 +617,10 @@ export async function updateStudioSession(params: {
     if (patch.status === 'archived') {
       patch.archived_at = new Date().toISOString();
     }
+  }
+
+  if (params.projectId !== undefined) {
+    patch.project_id = params.projectId;
   }
 
   if (params.pinned !== undefined) {

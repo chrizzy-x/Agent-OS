@@ -244,6 +244,7 @@ type StudioContextValue = {
     exposedCapabilities?: string[];
   }) => Promise<SubagentRecord | null>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
+  attachSessionToProject: (sessionId: string, projectId: string | null) => Promise<void>;
   pinSession: (sessionId: string, pinned: boolean) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
@@ -677,6 +678,21 @@ export function StudioProvider(props: {
     setSessions(current => current.map(item => item.id === sessionId ? { ...item, title: nextTitle } : item));
     setSession(current => current && current.id === sessionId ? { ...current, title: nextTitle } : current);
   }, []);
+
+  const attachSessionToProject = useCallback(async (sessionId: string, projectId: string | null) => {
+    const response = await fetchWithBrowserSession(`/api/studio/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    });
+    if (!response.response.ok) return;
+    setSessions(current => current.map(item => item.id === sessionId ? { ...item, projectId } : item));
+    setSession(current => current && current.id === sessionId ? { ...current, projectId } : current);
+    if (session?.id === sessionId) {
+      pushRoute(mode, sessionId, projectId);
+    }
+    await refresh();
+  }, [mode, pushRoute, refresh, session?.id]);
 
   const pinSession = useCallback(async (sessionId: string, pinned: boolean) => {
     const response = await fetchWithBrowserSession(`/api/studio/sessions/${sessionId}`, {
@@ -1171,6 +1187,7 @@ export function StudioProvider(props: {
     focusSubagent,
     createSubagent,
     renameSession,
+    attachSessionToProject,
     pinSession,
     archiveSession,
     deleteSession,
@@ -1247,6 +1264,7 @@ export function StudioProvider(props: {
     removeComposerInvocation,
     createSession,
     renameSession,
+    attachSessionToProject,
     pinSession,
     archiveSession,
     deleteSession,

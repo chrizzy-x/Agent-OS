@@ -3397,20 +3397,72 @@ nextjs-portal {
 .agentos-session-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, 22px);
-  gap: 2px;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 7px;
+  overflow: hidden;
 }
 
-.agentos-session-row > button:not(:first-child) {
-  width: 22px;
-  padding: 0;
+.agentos-session-row > button:first-child {
+  display: grid;
+  gap: 1px;
+  min-height: 38px;
+  padding: 5px 8px;
+}
+
+.agentos-session-row > button:first-child span,
+.agentos-session-row > button:first-child small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-session-row > button:first-child small {
+  color: var(--text-tertiary);
+  font-size: 0.63rem;
+}
+
+.agentos-session-actions {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 0 4px 3px;
+}
+
+.agentos-session-actions button,
+.agentos-session-attach button {
+  width: auto;
+  min-width: 0;
+  min-height: 23px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.62rem;
   text-align: center;
-  opacity: 0;
+  text-overflow: ellipsis;
 }
 
-.agentos-session-row:hover > button:not(:first-child),
-.agentos-session-row:focus-within > button:not(:first-child) {
-  opacity: 1;
+.agentos-session-attach {
+  display: grid;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.025);
+}
+
+.agentos-session-attach span {
+  padding: 3px;
+  color: var(--text-tertiary);
+  font-size: 0.64rem;
+}
+
+.agentos-session-attach button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .agentos-global-quick button:hover,

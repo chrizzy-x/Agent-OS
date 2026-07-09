@@ -24,6 +24,7 @@ type SessionRef = {
   projectId: string | null;
   title: string;
   status: string;
+  visibility?: 'private' | 'workspace' | 'public';
   pinnedAt: string | null;
   archivedAt: string | null;
   updatedAt: string;
@@ -185,6 +186,14 @@ function formatNotificationTime(value: string): string {
   }
 }
 
+function formatSessionTime(value: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value));
+  } catch {
+    return 'Recent';
+  }
+}
+
 function tabletDefaultCollapsed() {
   if (typeof window === 'undefined') return false;
   return window.matchMedia('(min-width: 768px) and (max-width: 1279px)').matches;
@@ -291,10 +300,11 @@ function LeftSidebar(props: {
   onWorkspace: (id: string) => void;
   onProject: (id: string) => void;
   onSession: (id: string) => void;
-  onSessionAction: (session: SessionRef, action: 'rename' | 'pin' | 'archive' | 'delete' | 'continue') => void;
+  onSessionAction: (session: SessionRef, action: 'rename' | 'pin' | 'archive' | 'delete' | 'continue' | 'attach', projectId?: string) => void;
   onCloseMobile: () => void;
 }) {
   const router = useRouter();
+  const [attachSessionId, setAttachSessionId] = useState<string | null>(null);
   const workspaceProjects = props.payload.projects.filter(item => item.workspaceId === props.activeWorkspaceId);
   const workspaceSessions = props.payload.sessions.filter(item => item.workspaceId === props.activeWorkspaceId);
   const pinnedSessions = workspaceSessions.filter(item => item.pinnedAt && !item.archivedAt);
@@ -308,6 +318,59 @@ function LeftSidebar(props: {
     beginNavigationMetric();
     router.push(appendShellContextToHref(href, props.navigationContext));
   }
+
+  const projectName = (projectId: string | null) =>
+    projectId ? workspaceProjects.find(project => project.id === projectId)?.name ?? 'Project attached' : 'No project';
+
+  const renderSessionRow = (item: SessionRef, archived = false) => (
+    <div key={item.id} className="agentos-session-row" data-managed="true">
+      <button type="button" className={item.id === props.activeSessionId ? 'active' : ''} onClick={() => props.onSession(item.id)}>
+        <span>{item.pinnedAt ? 'Pinned: ' : ''}{item.title}</span>
+        <small>{projectName(item.projectId)} | {item.visibility ?? 'private'} | {formatSessionTime(item.updatedAt)}</small>
+      </button>
+      <div className="agentos-session-actions" aria-label={`${item.title} session actions`}>
+        {archived ? (
+          <>
+            <button type="button" onClick={() => props.onSessionAction(item, 'continue')} title="Continue this archived session">Continue</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'delete')} title="Delete this session">Delete</button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={() => props.onSession(item.id)} title="Continue this session">Open</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'rename')} title="Rename this session">Rename</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'pin')} title={item.pinnedAt ? 'Unpin this session' : 'Pin this session'}>{item.pinnedAt ? 'Unpin' : 'Pin'}</button>
+            <button
+              type="button"
+              onClick={() => setAttachSessionId(attachSessionId === item.id ? null : item.id)}
+              title={workspaceProjects.length > 0 ? 'Attach this session to a project' : 'No projects are available to attach'}
+            >
+              Attach
+            </button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'archive')} title="Archive this session">Archive</button>
+            <button type="button" onClick={() => props.onSessionAction(item, 'delete')} title="Delete this session">Delete</button>
+          </>
+        )}
+      </div>
+      {attachSessionId === item.id && !archived ? (
+        <div className="agentos-session-attach" role="menu" aria-label={`Attach ${item.title} to project`}>
+          {workspaceProjects.length > 0 ? workspaceProjects.map(project => (
+            <button
+              key={project.id}
+              type="button"
+              onClick={() => {
+                setAttachSessionId(null);
+                props.onSessionAction(item, 'attach', project.id);
+              }}
+              disabled={item.projectId === project.id}
+              title={item.projectId === project.id ? 'Already attached to this project' : `Attach to ${project.name}`}
+            >
+              {project.name}{item.projectId === project.id ? ' (current)' : ''}
+            </button>
+          )) : <span>No projects available.</span>}
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <div className="agentos-global-sidebar" data-collapsed={props.collapsed ? 'true' : 'false'}>
@@ -354,31 +417,11 @@ function LeftSidebar(props: {
       <section className="agentos-global-history">
         <h2>Chats</h2>
         {pinnedSessions.length > 0 ? <h3>Pinned Sessions</h3> : null}
-        {pinnedSessions.map(item => (
-          <div key={item.id} className="agentos-session-row">
-            <button type="button" className={item.id === props.activeSessionId ? 'active' : ''} onClick={() => props.onSession(item.id)}>{item.title}</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'rename')} aria-label={`Rename ${item.title}`}>R</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'pin')} aria-label={`Unpin ${item.title}`}>U</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'archive')} aria-label={`Archive ${item.title}`}>A</button>
-          </div>
-        ))}
+        {pinnedSessions.map(item => renderSessionRow(item))}
         <h3>Recent Sessions</h3>
-        {recentSessions.map(item => (
-          <div key={item.id} className="agentos-session-row">
-            <button type="button" className={item.id === props.activeSessionId ? 'active' : ''} onClick={() => props.onSession(item.id)}>{item.title}</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'rename')} aria-label={`Rename ${item.title}`}>R</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'pin')} aria-label={`Pin ${item.title}`}>P</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'archive')} aria-label={`Archive ${item.title}`}>A</button>
-          </div>
-        ))}
+        {recentSessions.map(item => renderSessionRow(item))}
         {archivedSessions.length > 0 ? <h3>Archived Sessions</h3> : null}
-        {archivedSessions.map(item => (
-          <div key={item.id} className="agentos-session-row">
-            <button type="button" onClick={() => props.onSession(item.id)}>{item.title}</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'continue')} aria-label={`Continue ${item.title}`}>C</button>
-            <button type="button" onClick={() => props.onSessionAction(item, 'delete')} aria-label={`Delete ${item.title}`}>D</button>
-          </div>
-        ))}
+        {archivedSessions.map(item => renderSessionRow(item, true))}
       </section>
 
       <section className="agentos-global-history">
@@ -592,7 +635,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     setLeftDrawerOpen(false);
   }, [payload.sessions, router]);
 
-  const manageSession = useCallback(async (target: SessionRef, action: 'rename' | 'pin' | 'archive' | 'delete' | 'continue') => {
+  const manageSession = useCallback(async (target: SessionRef, action: 'rename' | 'pin' | 'archive' | 'delete' | 'continue' | 'attach', projectId?: string) => {
     if (action === 'rename') {
       const title = window.prompt('Rename session', target.title)?.trim();
       if (!title) return;
@@ -614,13 +657,39 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
         body: JSON.stringify({ status: 'active' }),
       });
       setActiveSession(target.id);
+    } else if (action === 'attach') {
+      if (!projectId) return;
+      await fetchWithBrowserSession(`/api/studio/sessions/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      });
+      if (target.id === activeSessionId) {
+        setActiveProjectId(projectId);
+        writeStored(`agentos.shell.project.${target.workspaceId}`, projectId);
+        if (pathname === '/studio') {
+          const query = new URLSearchParams(searchParams.toString());
+          query.set('workspace', target.workspaceId);
+          query.set('session', target.id);
+          query.set('project', projectId);
+          router.replace(`/studio?${query.toString()}`);
+        }
+      }
     } else {
+      if (action === 'archive' && !window.confirm(`Archive ${target.title}?`)) return;
       if (action === 'delete' && !window.confirm(`Delete ${target.title}?`)) return;
       await fetchWithBrowserSession(`/api/studio/sessions/${target.id}?mode=${action === 'delete' ? 'delete' : 'archive'}`, { method: 'DELETE' });
-      if (target.id === activeSessionId) setActiveSessionId(null);
+      if (target.id === activeSessionId) {
+        setActiveSessionId(null);
+        if (pathname === '/studio') {
+          const query = new URLSearchParams(searchParams.toString());
+          query.delete('session');
+          router.replace(`/studio?${query.toString()}`);
+        }
+      }
     }
     await refreshShell();
-  }, [activeSessionId, refreshShell, setActiveSession]);
+  }, [activeSessionId, pathname, refreshShell, router, searchParams, setActiveSession]);
 
   const syncContext = useCallback((context: { workspaceId?: string | null; projectId?: string | null; sessionId?: string | null }) => {
     if (context.workspaceId !== undefined) {
@@ -810,7 +879,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             onWorkspace={setActiveWorkspace}
             onProject={setActiveProject}
             onSession={setActiveSession}
-            onSessionAction={(target, action) => void manageSession(target, action)}
+            onSessionAction={(target, action, projectId) => void manageSession(target, action, projectId)}
             onCloseMobile={() => setLeftDrawerOpen(false)}
           />
         </aside>

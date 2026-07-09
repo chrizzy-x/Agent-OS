@@ -58,6 +58,8 @@ export default function StudioDocsPage() {
             <li>Markdown and GitHub-flavored Markdown rendering</li>
             <li>Live generation status, stop, and partial-output persistence</li>
             <li>Recent-chat search and cross-project session reopening</li>
+            <li>Session rows with continue, rename, pin, project attach, archive, and delete controls</li>
+            <li>Per-session project, visibility, and last-updated metadata</li>
             <li>NL, Workflow, and Code mode switching</li>
             <li>Desktop and mobile conversation parity</li>
           </ul>

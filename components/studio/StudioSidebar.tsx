@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { fetchWithBrowserSession } from '@/src/auth/browser-session';
 import { useStudio } from '@/components/studio/StudioProvider';
 import { buildStudioRoute, STUDIO_MODES } from '@/src/studio/modes';
@@ -13,19 +13,31 @@ type ChatSearchMatch = {
   snippet: string;
 };
 
+type SessionListItem = ReturnType<typeof useStudio>['sessions'][number];
+
 export default function StudioSidebar() {
   const {
     sessions,
     session,
+    projects,
     selectSession,
     startNewChat,
     currentProject,
     mode,
     setMode,
+    renameSession,
+    attachSessionToProject,
+    pinSession,
+    archiveSession,
+    deleteSession,
   } = useStudio();
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<ChatSearchMatch[]>([]);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
+  const [projectMenuSessionId, setProjectMenuSessionId] = useState<string | null>(null);
+  const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const recentSessions = sessions
     .filter(item => !item.archivedAt && !item.deletedAt)
     .sort((left, right) => Number(Boolean(right.pinnedAt)) - Number(Boolean(left.pinnedAt))
@@ -64,11 +76,44 @@ export default function StudioSidebar() {
     workspaceId,
   });
 
+  const projectName = (projectId: string | null) =>
+    projectId ? projects.find(project => project.id === projectId)?.name ?? 'Project attached' : 'No project';
+
+  const formatSessionDate = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Updated';
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const runSessionAction = async (sessionId: string, action: () => Promise<void>) => {
+    setBusySessionId(sessionId);
+    try {
+      await action();
+    } finally {
+      setBusySessionId(null);
+    }
+  };
+
+  const beginRename = (item: SessionListItem) => {
+    setEditingSessionId(item.id);
+    setEditingTitle(item.title);
+    setProjectMenuSessionId(null);
+  };
+
+  const submitRename = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const sessionId = editingSessionId;
+    if (!sessionId) return;
+    await runSessionAction(sessionId, () => renameSession(sessionId, editingTitle));
+    setEditingSessionId(null);
+    setEditingTitle('');
+  };
+
   return (
     <div className="agentos-sidebar studio-chat-sidebar">
       <Link href={studioHomeHref} className="agentos-sidebar-brand">AgentOS Studio</Link>
       <button type="button" onClick={() => void startNewChat()} className="studio-sidebar-new">
-        <span>＋</span>
+        <span>+</span>
         New chat
       </button>
 
@@ -83,7 +128,7 @@ export default function StudioSidebar() {
           placeholder="Search chats"
           aria-label="Search chats"
         />
-        <button type="submit" aria-label="Search">{searching ? '…' : '⌕'}</button>
+        <button type="submit" aria-label="Search">{searching ? '...' : 'Search'}</button>
       </form>
 
       <nav className="studio-sidebar-modes" aria-label="Studio modes">
@@ -112,19 +157,97 @@ export default function StudioSidebar() {
       <nav className="studio-sidebar-sessions" aria-label="Recent chats">
         <span className="studio-sidebar-label">{searchResults.length > 0 ? 'Search results' : 'Recent chats'}</span>
         {searchResults.length > 0 ? searchResults.map(item => (
-          <button key={item.messageId} type="button" onClick={() => void selectSession(item.sessionId)}>
+          <button key={item.messageId} type="button" onClick={() => void selectSession(item.sessionId)} className="studio-session-search-result">
             <strong>{item.sessionTitle}</strong>
             <small>{item.snippet}</small>
           </button>
         )) : recentSessions.length > 0 ? recentSessions.map(item => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => void selectSession(item.id)}
-            className={item.id === session?.id ? 'active' : ''}
-          >
-            <strong>{item.pinnedAt ? '• ' : ''}{item.title}</strong>
-          </button>
+          <article key={item.id} className={`studio-session-row${item.id === session?.id ? ' active' : ''}`}>
+            {editingSessionId === item.id ? (
+              <form className="studio-session-rename" onSubmit={event => void submitRename(event)}>
+                <input
+                  aria-label={`Rename ${item.title}`}
+                  value={editingTitle}
+                  onChange={event => setEditingTitle(event.target.value)}
+                  autoFocus
+                />
+                <button type="submit" disabled={busySessionId === item.id} title="Save the new session name">Save</button>
+                <button type="button" onClick={() => setEditingSessionId(null)} title="Cancel rename">Cancel</button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void selectSession(item.id)}
+                className="studio-session-open"
+                title="Continue this session"
+              >
+                <strong>{item.pinnedAt ? 'Pinned: ' : ''}{item.title}</strong>
+                <small>{projectName(item.projectId)} | {item.visibility} | {formatSessionDate(item.updatedAt)}</small>
+              </button>
+            )}
+            <div className="studio-session-actions" aria-label={`${item.title} session actions`}>
+              <button type="button" onClick={() => void selectSession(item.id)} disabled={busySessionId === item.id} title="Continue this session">Open</button>
+              <button type="button" onClick={() => beginRename(item)} disabled={busySessionId === item.id} title="Rename this session">Rename</button>
+              <button
+                type="button"
+                onClick={() => void runSessionAction(item.id, () => pinSession(item.id, !item.pinnedAt))}
+                disabled={busySessionId === item.id}
+                title={item.pinnedAt ? 'Unpin this session' : 'Pin this session'}
+              >
+                {item.pinnedAt ? 'Unpin' : 'Pin'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setProjectMenuSessionId(projectMenuSessionId === item.id ? null : item.id)}
+                disabled={busySessionId === item.id}
+                title={projects.length > 0 ? 'Attach this session to a project' : 'No projects are available to attach'}
+              >
+                Attach
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Archive "${item.title}"?`)) {
+                    void runSessionAction(item.id, () => archiveSession(item.id));
+                  }
+                }}
+                disabled={busySessionId === item.id}
+                title="Archive this session"
+              >
+                Archive
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`Delete "${item.title}"? This removes it from Studio history.`)) {
+                    void runSessionAction(item.id, () => deleteSession(item.id));
+                  }
+                }}
+                disabled={busySessionId === item.id}
+                title="Delete this session"
+              >
+                Delete
+              </button>
+            </div>
+            {projectMenuSessionId === item.id ? (
+              <div className="studio-session-project-menu" role="menu" aria-label={`Attach ${item.title} to project`}>
+                {projects.length > 0 ? projects.map(project => (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => {
+                      setProjectMenuSessionId(null);
+                      void runSessionAction(item.id, () => attachSessionToProject(item.id, project.id));
+                    }}
+                    disabled={item.projectId === project.id || busySessionId === item.id}
+                    title={item.projectId === project.id ? 'Already attached to this project' : `Attach to ${project.name}`}
+                  >
+                    {project.name}{item.projectId === project.id ? ' (current)' : ''}
+                  </button>
+                )) : <span>No projects available.</span>}
+              </div>
+            ) : null}
+          </article>
         )) : <span className="studio-sidebar-empty">No chats yet</span>}
       </nav>
 
@@ -157,7 +280,7 @@ export default function StudioSidebar() {
 
         .studio-chat-search {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 32px;
+          grid-template-columns: minmax(0, 1fr) auto;
           border: 1px solid var(--border);
           border-radius: 9px;
           background: rgba(255,255,255,0.022);
@@ -177,8 +300,10 @@ export default function StudioSidebar() {
 
         .studio-chat-search button {
           border: 0;
+          padding: 0 8px;
           background: transparent;
           color: var(--text-tertiary);
+          font-size: 0.68rem;
           cursor: pointer;
         }
 
@@ -246,7 +371,8 @@ export default function StudioSidebar() {
           overflow-y: auto;
         }
 
-        .studio-sidebar-sessions button {
+        .studio-session-search-result,
+        .studio-session-open {
           width: 100%;
           min-height: 34px;
           display: grid;
@@ -260,10 +386,84 @@ export default function StudioSidebar() {
           cursor: pointer;
         }
 
-        .studio-sidebar-sessions button:hover,
-        .studio-sidebar-sessions button.active {
+        .studio-session-search-result:hover,
+        .studio-session-open:hover,
+        .studio-session-row.active .studio-session-open {
           background: rgba(255,255,255,0.055);
           color: var(--text-primary);
+        }
+
+        .studio-session-row {
+          display: grid;
+          gap: 4px;
+          padding: 3px;
+          border-radius: 9px;
+        }
+
+        .studio-session-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 3px;
+          padding: 0 4px 4px;
+        }
+
+        .studio-session-actions button,
+        .studio-session-project-menu button,
+        .studio-session-rename button {
+          min-height: 24px;
+          padding: 0 7px;
+          border: 1px solid var(--border);
+          border-radius: 7px;
+          background: rgba(255,255,255,0.025);
+          color: var(--text-tertiary);
+          font-size: 0.66rem;
+          cursor: pointer;
+        }
+
+        .studio-session-actions button:hover,
+        .studio-session-project-menu button:hover,
+        .studio-session-rename button:hover {
+          color: var(--text-primary);
+          border-color: rgba(255,255,255,0.2);
+        }
+
+        .studio-session-actions button:disabled,
+        .studio-session-project-menu button:disabled,
+        .studio-session-rename button:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+
+        .studio-session-project-menu {
+          display: grid;
+          gap: 3px;
+          padding: 5px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: rgba(0,0,0,0.18);
+        }
+
+        .studio-session-project-menu span {
+          padding: 4px;
+          color: var(--text-tertiary);
+          font-size: 0.68rem;
+        }
+
+        .studio-session-rename {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto auto;
+          gap: 3px;
+        }
+
+        .studio-session-rename input {
+          min-width: 0;
+          height: 28px;
+          padding: 0 7px;
+          border: 1px solid var(--border);
+          border-radius: 7px;
+          background: rgba(255,255,255,0.025);
+          color: var(--text-primary);
+          font-size: 0.72rem;
         }
 
         .studio-sidebar-sessions strong,

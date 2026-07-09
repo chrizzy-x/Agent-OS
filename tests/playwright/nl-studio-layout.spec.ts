@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const now = '2026-07-09T00:00:00.000Z';
 
@@ -30,8 +30,38 @@ function studioPayload(messages: Array<Record<string, unknown>>) {
   };
 }
 
+async function gotoAndExpect(page: Page, url: string, ready: ReturnType<Page['locator']>) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    if (await ready.isVisible().catch(() => false)) return;
+    await page.waitForTimeout(250);
+  }
+  await expect(ready).toBeVisible();
+}
+
 test.describe('NL Studio layout', () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('agentos.shell.leftCollapsed', 'false');
+      window.localStorage.setItem('agentos.shell.rightCollapsed', 'false');
+    });
+    await page.route(/\/api\/session(?:\/refresh)?(?:\?|$)/, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          authenticated: true,
+          session: {
+            agentName: 'Layout QA',
+            plan: 'pro',
+            planLabel: 'Pro',
+            accountType: 'retail',
+            capabilities: [],
+            expiresAt: '2030-01-01T00:00:00.000Z',
+          },
+        }),
+      });
+    });
     await page.route('**/api/session**', async route => {
       await route.fulfill({
         status: 200,
@@ -78,9 +108,7 @@ test.describe('NL Studio layout', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(studioPayload([])) });
     });
 
-    await page.goto('/studio?mode=nl', { waitUntil: 'domcontentloaded' });
-
-    await expect(page.getByRole('heading', { name: 'What should Super AgentOS do?' })).toBeVisible();
+    await gotoAndExpect(page, '/studio?mode=nl', page.getByRole('heading', { name: 'What should Super AgentOS do?' }));
     await expect(page.locator('.nl-message-list')).toHaveCount(0);
     await expect(page.locator('.nl-composer')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -104,7 +132,7 @@ test.describe('NL Studio layout', () => {
 
     for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
-      await page.goto('/studio?mode=nl&session=session-layout', { waitUntil: 'domcontentloaded' });
+      await gotoAndExpect(page, '/studio?mode=nl&session=session-layout', page.locator('.nl-message.user'));
 
       await expect(page.locator('.nl-empty-state')).toHaveCount(0);
       await expect(page.locator('.nl-message.user')).toBeVisible();

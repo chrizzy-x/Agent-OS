@@ -45,6 +45,8 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - copy and edit actions
 - live generation status and stop control
 - searchable recent chats
+- session rows with continue, rename, pin, project attach, archive, and delete controls
+- per-session project, visibility, and last-updated metadata
 - persistent NL Studio, Workflow Builder, and Code Studio modes
 - mobile drawer navigation and responsive conversation layout
 

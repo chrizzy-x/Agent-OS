@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 const now = '2026-07-09T00:00:00.000Z';
 
@@ -39,8 +39,38 @@ function studioPayload() {
   };
 }
 
+async function gotoAndExpect(page: Page, url: string, ready: ReturnType<Page['locator']>) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    if (await ready.isVisible().catch(() => false)) return;
+    await page.waitForTimeout(250);
+  }
+  await expect(ready).toBeVisible();
+}
+
 test.describe('NL Studio composer', () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('agentos.shell.leftCollapsed', 'false');
+      window.localStorage.setItem('agentos.shell.rightCollapsed', 'false');
+    });
+    await page.route(/\/api\/session(?:\/refresh)?(?:\?|$)/, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          authenticated: true,
+          session: {
+            agentName: 'Composer QA',
+            plan: 'pro',
+            planLabel: 'Pro',
+            accountType: 'retail',
+            capabilities: [],
+            expiresAt: '2030-01-01T00:00:00.000Z',
+          },
+        }),
+      });
+    });
     await page.route('**/api/session**', async route => {
       await route.fulfill({
         status: 200,
@@ -89,9 +119,7 @@ test.describe('NL Studio composer', () => {
   });
 
   test('selects subagents, projects, and context from the composer', async ({ page }) => {
-    await page.goto('/studio?mode=nl&session=session-composer', { waitUntil: 'domcontentloaded' });
-
-    await expect(page.getByText('Project: Alpha Project')).toBeVisible();
+    await gotoAndExpect(page, '/studio?mode=nl&session=session-composer', page.getByText('Project: Alpha Project'));
     await page.locator('.nl-composer-tools').getByRole('button', { name: 'Subagents' }).click();
     await page.getByRole('menu', { name: 'subagent resources' }).getByRole('button', { name: 'Research Operator' }).click();
     await expect(page.getByRole('button', { name: 'subagent: Research Operator x' })).toBeVisible();
@@ -109,7 +137,7 @@ test.describe('NL Studio composer', () => {
   });
 
   test('shows honest empty states for unavailable composer resources', async ({ page }) => {
-    await page.goto('/studio?mode=nl&session=session-composer', { waitUntil: 'domcontentloaded' });
+    await gotoAndExpect(page, '/studio?mode=nl&session=session-composer', page.getByText('Project: Alpha Project'));
 
     await page.locator('.nl-composer-tools').getByRole('button', { name: 'Skills' }).click();
     await expect(page.getByRole('menu', { name: 'skill resources' })).toContainText('No connected skill resources.');

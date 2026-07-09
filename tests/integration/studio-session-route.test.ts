@@ -3,6 +3,8 @@ import { NextRequest } from 'next/server';
 
 const routeMocks = vi.hoisted(() => ({
   requireRouteCapability: vi.fn(),
+  getStudioSessionBundle: vi.fn(),
+  resolveProjectForWorkspace: vi.fn(),
   updateStudioSession: vi.fn(),
 }));
 
@@ -11,8 +13,12 @@ vi.mock('../../src/auth/request.js', () => ({
 }));
 
 vi.mock('../../src/studio/persistence.js', () => ({
-  getStudioSessionBundle: vi.fn(),
+  getStudioSessionBundle: routeMocks.getStudioSessionBundle,
   updateStudioSession: routeMocks.updateStudioSession,
+}));
+
+vi.mock('../../src/projects/service.js', () => ({
+  resolveProjectForWorkspace: routeMocks.resolveProjectForWorkspace,
 }));
 
 import { DELETE, PATCH } from '../../app/api/studio/sessions/[id]/route.js';
@@ -21,12 +27,46 @@ describe('studio session route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     routeMocks.requireRouteCapability.mockResolvedValue({ agentId: 'agent-1' });
+    routeMocks.getStudioSessionBundle.mockResolvedValue({
+      session: {
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+        projectId: null,
+        title: 'Session',
+      },
+      messages: [],
+      events: [],
+      lineage: { parent: null, children: [] },
+    });
+    routeMocks.resolveProjectForWorkspace.mockResolvedValue({ id: 'project-2', workspaceId: 'workspace-1' });
     routeMocks.updateStudioSession.mockResolvedValue({
       id: 'session-1',
       title: 'Renamed session',
       status: 'active',
       state: { instructions: 'Use project context' },
     });
+  });
+
+  it('attaches the session to a validated project through PATCH', async () => {
+    const response = await PATCH(new NextRequest('http://localhost/api/studio/sessions/session-1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: 'project-2' }),
+    }), {
+      params: Promise.resolve({ id: 'session-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.resolveProjectForWorkspace).toHaveBeenCalledWith({
+      ownerAgentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      projectId: 'project-2',
+    });
+    expect(routeMocks.updateStudioSession).toHaveBeenCalledWith(expect.objectContaining({
+      ownerAgentId: 'agent-1',
+      sessionId: 'session-1',
+      projectId: 'project-2',
+    }));
   });
 
   it('updates title and session instructions through PATCH', async () => {

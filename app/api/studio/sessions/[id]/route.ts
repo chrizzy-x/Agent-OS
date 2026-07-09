@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
+import { resolveProjectForWorkspace } from '@/src/projects/service';
 import { getStudioSessionBundle, updateStudioSession } from '@/src/studio/persistence';
 import { toErrorResponse } from '@/src/utils/errors';
 
@@ -22,11 +23,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.update');
     const { id } = await params;
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const projectId = typeof body.projectId === 'string' ? body.projectId : body.projectId === null ? null : undefined;
+    if (typeof projectId === 'string') {
+      const bundle = await getStudioSessionBundle(ctx.agentId, id);
+      await resolveProjectForWorkspace({
+        ownerAgentId: ctx.agentId,
+        workspaceId: bundle.session.workspaceId,
+        projectId,
+      });
+    }
     const session = await updateStudioSession({
       ownerAgentId: ctx.agentId,
       sessionId: id,
       title: typeof body.title === 'string' ? body.title : undefined,
       status: typeof body.status === 'string' ? body.status : undefined,
+      projectId,
       pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
       deleted: body.deleted === true ? true : undefined,
       visibility: body.visibility === 'workspace' || body.visibility === 'public' ? body.visibility : body.visibility === 'private' ? 'private' : undefined,
