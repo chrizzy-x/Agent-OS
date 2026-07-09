@@ -226,10 +226,10 @@ type StudioContextValue = {
   setComposerValue: (value: string) => void;
   composerValue: string;
   composerAttachments: Array<{ id: string; name: string; path: string; contentType: string | null }>;
-  composerInvocations: Array<{ id: string; kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }>;
+  composerInvocations: Array<{ id: string; kind: 'skill' | 'app' | 'workflow' | 'mcp' | 'subagent'; ref: string; label: string }>;
   addComposerAttachment: (attachment: { id: string; name: string; path: string; contentType: string | null }) => void;
   removeComposerAttachment: (id: string) => void;
-  addComposerInvocation: (invocation: { kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }) => void;
+  addComposerInvocation: (invocation: { kind: 'skill' | 'app' | 'workflow' | 'mcp' | 'subagent'; ref: string; label: string }) => void;
   removeComposerInvocation: (id: string) => void;
   sendMessage: (message?: string) => Promise<void>;
   stopGeneration: () => Promise<void>;
@@ -344,7 +344,7 @@ export function StudioProvider(props: {
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
   const [composerValue, setComposerValue] = useState(props.initialPrompt ?? '');
   const [composerAttachments, setComposerAttachments] = useState<Array<{ id: string; name: string; path: string; contentType: string | null }>>([]);
-  const [composerInvocations, setComposerInvocations] = useState<Array<{ id: string; kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }>>([]);
+  const [composerInvocations, setComposerInvocations] = useState<Array<{ id: string; kind: 'skill' | 'app' | 'workflow' | 'mcp' | 'subagent'; ref: string; label: string }>>([]);
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamSettledRef = useRef<Promise<void> | null>(null);
   const activeStreamExecutionIdRef = useRef<string | null>(null);
@@ -586,7 +586,7 @@ export function StudioProvider(props: {
     setComposerAttachments(current => current.filter(item => item.id !== id));
   }, []);
 
-  const addComposerInvocation = useCallback((invocation: { kind: 'skill' | 'app' | 'workflow' | 'mcp'; ref: string; label: string }) => {
+  const addComposerInvocation = useCallback((invocation: { kind: 'skill' | 'app' | 'workflow' | 'mcp' | 'subagent'; ref: string; label: string }) => {
     const id = `${invocation.kind}:${invocation.ref}`;
     setComposerInvocations(current => [{ ...invocation, id }, ...current.filter(item => item.id !== id)]);
   }, []);

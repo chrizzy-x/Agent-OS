@@ -18,9 +18,13 @@ const SLASH_COMMANDS = [
   { command: '/skill ', label: 'Run a skill' },
   { command: '/app ', label: 'Run an app' },
   { command: '/workflow ', label: 'Run a workflow' },
+  { command: '/subagent ', label: 'Delegate to a private subagent' },
   { command: '/mcp ', label: 'Call an MCP tool' },
   { command: '/file ', label: 'Analyze an uploaded file' },
+  { command: '/project ', label: 'Switch project context' },
 ];
+
+type ResourceMenu = 'skill' | 'app' | 'workflow' | 'mcp' | 'subagent' | 'project' | 'context';
 
 const INTERNAL_JSON_KEYS = new Set([
   'executionId',
@@ -78,21 +82,25 @@ export default function NLStudioPanel() {
     activeExecutionId,
     session,
     currentProject,
+    projects,
     installedSkills,
     installedApps,
     workflows,
+    subagents,
     composerAttachments,
     composerInvocations,
     addComposerAttachment,
     removeComposerAttachment,
     addComposerInvocation,
     removeComposerInvocation,
+    selectProject,
+    openContext,
   } = useStudio();
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const [resourceMenu, setResourceMenu] = useState<'skill' | 'app' | 'workflow' | 'mcp' | null>(null);
+  const [resourceMenu, setResourceMenu] = useState<ResourceMenu | null>(null);
   const [uploading, setUploading] = useState(false);
   const activeConversation = messages.length > 0;
   const lastUserMessage = useMemo(
@@ -187,9 +195,13 @@ export default function NLStudioPanel() {
       ? installedApps.map(item => ({ ref: item.slug, label: item.name }))
       : resourceMenu === 'workflow'
         ? workflows.map(item => ({ ref: item.id, label: item.name }))
-        : resourceMenu === 'mcp'
-          ? [{ ref: 'universal-mcp', label: 'Universal MCP' }]
-          : [];
+        : resourceMenu === 'subagent'
+          ? subagents.map(item => ({ ref: item.id, label: item.name }))
+          : resourceMenu === 'project'
+            ? projects.map(item => ({ ref: item.id, label: item.name }))
+            : resourceMenu === 'mcp'
+              ? [{ ref: 'universal-mcp', label: 'Universal MCP' }]
+              : [];
 
   return (
     <div className={`nl-studio-panel${activeConversation ? ' active' : ' empty'}`} data-active-conversation={activeConversation ? 'true' : 'false'}>
@@ -307,6 +319,11 @@ export default function NLStudioPanel() {
           submitComposer();
         }}>
           <div className="nl-composer-meta">
+            {currentProject ? (
+              <button type="button" onClick={() => setResourceMenu(resourceMenu === 'project' ? null : 'project')} title="Change project context">
+                Project: {currentProject.name}
+              </button>
+            ) : null}
             {composerAttachments.map(item => (
               <button key={item.id} type="button" onClick={() => removeComposerAttachment(item.id)} title="Remove attachment">
                 {item.name} x
@@ -340,6 +357,9 @@ export default function NLStudioPanel() {
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'skill' ? null : 'skill')}>Skills</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'app' ? null : 'app')}>Apps</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'workflow' ? null : 'workflow')}>Workflow</button>
+            <button type="button" onClick={() => setResourceMenu(resourceMenu === 'subagent' ? null : 'subagent')}>Subagents</button>
+            <button type="button" onClick={() => setResourceMenu(resourceMenu === 'project' ? null : 'project')}>Project</button>
+            <button type="button" onClick={() => setResourceMenu(resourceMenu === 'context' ? null : 'context')}>Context</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'mcp' ? null : 'mcp')}>MCP</button>
           </div>
           {sending ? (
@@ -353,18 +373,29 @@ export default function NLStudioPanel() {
           )}
           {resourceMenu ? (
             <div className="nl-resource-menu" role="menu" aria-label={`${resourceMenu} resources`}>
-              {resourceItems.length > 0 ? resourceItems.map(item => (
+              {resourceMenu === 'context' ? (
+                <>
+                  <button type="button" onClick={() => { openContext('files'); setResourceMenu(null); }}>Attached files</button>
+                  <button type="button" onClick={() => { openContext('memory'); setResourceMenu(null); }}>Memory</button>
+                  <button type="button" onClick={() => { openContext('vault'); setResourceMenu(null); }}>Vault permissions</button>
+                  <button type="button" onClick={() => { openContext('logs'); setResourceMenu(null); }}>Execution logs</button>
+                </>
+              ) : resourceItems.length > 0 ? resourceItems.map(item => (
                 <button
                   key={item.ref}
                   type="button"
                   onClick={() => {
-                    addComposerInvocation({ kind: resourceMenu, ref: item.ref, label: item.label });
+                    if (resourceMenu === 'project') {
+                      selectProject(item.ref);
+                    } else {
+                      addComposerInvocation({ kind: resourceMenu, ref: item.ref, label: item.label });
+                    }
                     setResourceMenu(null);
                   }}
                 >
                   {item.label}
                 </button>
-              )) : <span>No connected resources.</span>}
+              )) : <span>{resourceMenu === 'project' ? 'No projects available.' : `No connected ${resourceMenu} resources.`}</span>}
             </div>
           ) : null}
           {composerValue.startsWith('/') ? (

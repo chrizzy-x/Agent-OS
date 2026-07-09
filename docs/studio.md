@@ -38,6 +38,8 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - compact execution status while Super AgentOS is streaming or using selected apps, skills, workflows, or MCP tools
 - stopped and failed response states with retry/regenerate controls
 - safe fallback copy when streaming is unavailable
+- composer pickers for files, images, apps, skills, workflows, private subagents, projects, context panels, and Universal MCP
+- honest picker empty states when no connected resource is available
 - Enter to send and Shift+Enter for a newline
 - Markdown and GitHub-flavored Markdown rendering
 - copy and edit actions

@@ -52,6 +52,8 @@ export default function StudioDocsPage() {
             <li>Compact execution status while Super AgentOS streams or uses selected resources</li>
             <li>Stopped, failed, retry, and regenerate response states</li>
             <li>Safe fallback copy when streaming is unavailable</li>
+            <li>Composer pickers for files, images, apps, skills, workflows, private subagents, projects, context panels, and Universal MCP</li>
+            <li>Honest picker empty states when no connected resource is available</li>
             <li>Enter to send and Shift+Enter for newlines</li>
             <li>Markdown and GitHub-flavored Markdown rendering</li>
             <li>Live generation status, stop, and partial-output persistence</li>

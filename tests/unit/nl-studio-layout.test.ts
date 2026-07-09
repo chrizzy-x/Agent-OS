@@ -36,4 +36,16 @@ describe('NL Studio layout contract', () => {
     expect(panel).toContain('Super AgentOS returned a structured execution result. Open Context logs for details.');
     expect(panel).toContain('INTERNAL_JSON_KEYS');
   });
+
+  it('keeps composer resource pickers available without fake resources', () => {
+    const panel = source();
+
+    expect(panel).toContain("type ResourceMenu = 'skill' | 'app' | 'workflow' | 'mcp' | 'subagent' | 'project' | 'context'");
+    expect(panel).toContain('Subagents</button>');
+    expect(panel).toContain('Project</button>');
+    expect(panel).toContain('Context</button>');
+    expect(panel).toContain('Attached files');
+    expect(panel).toContain('No connected ${resourceMenu} resources.');
+    expect(panel).toContain("addComposerInvocation({ kind: resourceMenu, ref: item.ref, label: item.label })");
+  });
 });
