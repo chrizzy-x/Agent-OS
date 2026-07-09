@@ -379,7 +379,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (error) {
         const stopped = request.signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
-        const safeReply = stopped ? partialReply : 'I couldn’t complete that response. Try again.';
+        const safeReply = stopped ? partialReply : 'I could not complete that response. Try again.';
 
         if (stopped && agentId && sessionId && userPersisted && partialReply.trim() && !assistantPersisted) {
           await appendStudioMessage({

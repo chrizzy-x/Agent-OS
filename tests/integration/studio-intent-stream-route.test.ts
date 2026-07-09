@@ -147,7 +147,7 @@ describe('POST /api/studio/intent/stream', () => {
     }));
     const body = await response.text();
 
-    expect(body).toContain('I couldn’t complete that response. Try again.');
+    expect(body).toContain('I could not complete that response. Try again.');
     expect(body).not.toContain('secret provider stack');
     expect(body).not.toContain('whatFailed');
   });

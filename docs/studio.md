@@ -35,6 +35,9 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - sticky responsive composer
 - compact empty state that disappears once conversation starts
 - readable active conversation column with separated user, assistant, system, streaming, stopped, and error states
+- compact execution status while Super AgentOS is streaming or using selected apps, skills, workflows, or MCP tools
+- stopped and failed response states with retry/regenerate controls
+- safe fallback copy when streaming is unavailable
 - Enter to send and Shift+Enter for a newline
 - Markdown and GitHub-flavored Markdown rendering
 - copy and edit actions

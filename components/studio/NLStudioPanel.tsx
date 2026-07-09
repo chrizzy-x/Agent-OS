@@ -22,6 +22,39 @@ const SLASH_COMMANDS = [
   { command: '/file ', label: 'Analyze an uploaded file' },
 ];
 
+const INTERNAL_JSON_KEYS = new Set([
+  'executionId',
+  'traceId',
+  'router',
+  'stack',
+  'payload',
+  'confirmToken',
+  'sourceType',
+  'whatFailed',
+  'possibleFix',
+]);
+
+function hasInternalJsonKey(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasInternalJsonKey);
+  return Object.entries(value as Record<string, unknown>).some(([key, child]) => (
+    INTERNAL_JSON_KEYS.has(key) || hasInternalJsonKey(child)
+  ));
+}
+
+function visibleMessageContent(message: { role: string; content: string }): string {
+  if (message.role === 'user') return message.content;
+  const trimmed = message.content.trim();
+  if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) return message.content;
+  try {
+    return hasInternalJsonKey(JSON.parse(trimmed))
+      ? 'Super AgentOS returned a structured execution result. Open Context logs for details.'
+      : message.content;
+  } catch {
+    return message.content;
+  }
+}
+
 async function fileData(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -42,6 +75,7 @@ export default function NLStudioPanel() {
     approvePending,
     sending,
     streamingStatus,
+    activeExecutionId,
     session,
     currentProject,
     installedSkills,
@@ -177,7 +211,9 @@ export default function NLStudioPanel() {
           </section>
         ) : (
           <div className="nl-message-list">
-            {messages.map(message => (
+            {messages.map(message => {
+              const visibleContent = visibleMessageContent(message);
+              return (
               <article key={message.id} className={`nl-message ${message.role} ${message.state ?? 'complete'}`}>
                 {message.role === 'assistant' ? (
                   <div className="nl-assistant-avatar">
@@ -186,7 +222,7 @@ export default function NLStudioPanel() {
                 ) : null}
                 <div className="nl-message-content">
                   {message.role === 'system' ? <div className="nl-system-label">System</div> : null}
-                  {message.content ? (
+                  {visibleContent ? (
                     <div className="nl-markdown">
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
@@ -196,17 +232,44 @@ export default function NLStudioPanel() {
                           ),
                         }}
                       >
-                        {message.content}
+                        {visibleContent}
                       </ReactMarkdown>
                     </div>
                   ) : message.state === 'streaming' ? (
                     <div className="nl-stream-status">{streamingStatus ?? 'Generating...'}</div>
                   ) : null}
+                  {message.role === 'assistant' && message.state === 'streaming' ? (
+                    <div className="nl-execution-card" role="status" aria-live="polite">
+                      <div>
+                        <strong>{streamingStatus ?? 'Generating...'}</strong>
+                        <span>{activeExecutionId ? 'Execution started' : 'Preparing Super AgentOS execution'}</span>
+                      </div>
+                      {composerInvocations.length > 0 ? (
+                        <div className="nl-execution-chips" aria-label="Selected execution resources">
+                          {composerInvocations.map(item => (
+                            <span key={item.id}>{item.kind}: {item.label}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <button type="button" onClick={() => void stopGeneration()}>Stop</button>
+                    </div>
+                  ) : null}
                   {message.state === 'streaming' ? <span className="nl-stream-cursor" aria-hidden="true" /> : null}
-                  {message.state === 'stopped' ? <div className="nl-message-state">Stopped</div> : null}
-                  {message.state !== 'streaming' && message.content ? (
+                  {message.state === 'stopped' ? (
+                    <div className="nl-response-state stopped">
+                      <strong>Response stopped</strong>
+                      <span>Partial output is kept when available. Retry or continue when ready.</span>
+                    </div>
+                  ) : null}
+                  {message.state === 'error' ? (
+                    <div className="nl-response-state error" role="alert">
+                      <strong>Response failed</strong>
+                      <span>Super AgentOS could not finish this response. Retry is available below.</span>
+                    </div>
+                  ) : null}
+                  {message.state !== 'streaming' && visibleContent ? (
                     <div className="nl-message-actions">
-                      <button type="button" onClick={() => void navigator.clipboard?.writeText(message.content)}>Copy</button>
+                      <button type="button" onClick={() => void navigator.clipboard?.writeText(visibleContent)}>Copy</button>
                       {message.role === 'user' ? (
                         <button type="button" onClick={() => setComposerValue(message.content)}>Edit</button>
                       ) : null}
@@ -226,7 +289,8 @@ export default function NLStudioPanel() {
                   ) : null}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
@@ -533,10 +597,74 @@ export default function NLStudioPanel() {
         }
 
         .nl-stream-status,
-        .nl-message-state,
         .nl-system-label {
           color: var(--text-tertiary);
           font-size: 0.78rem;
+        }
+
+        .nl-execution-card,
+        .nl-response-state {
+          width: fit-content;
+          max-width: 100%;
+          display: grid;
+          gap: 8px;
+          margin-top: 10px;
+          padding: 10px 12px;
+          border: 1px solid rgba(20, 184, 166, 0.24);
+          border-radius: 10px;
+          background: rgba(20, 184, 166, 0.075);
+          color: var(--text-secondary);
+          font-size: 0.76rem;
+        }
+
+        .nl-execution-card > div:first-child,
+        .nl-response-state {
+          line-height: 1.45;
+        }
+
+        .nl-execution-card strong,
+        .nl-response-state strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 0.78rem;
+        }
+
+        .nl-execution-card button {
+          width: fit-content;
+          min-height: 26px;
+          padding: 0 9px;
+          border: 1px solid rgba(248, 113, 113, 0.28);
+          border-radius: 8px;
+          background: rgba(248, 113, 113, 0.12);
+          color: #fecaca;
+          cursor: pointer;
+        }
+
+        .nl-execution-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+        }
+
+        .nl-execution-chips span {
+          max-width: 220px;
+          padding: 4px 7px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: var(--text-tertiary);
+        }
+
+        .nl-response-state.error {
+          border-color: rgba(248, 113, 113, 0.3);
+          background: rgba(248, 113, 113, 0.095);
+        }
+
+        .nl-response-state.stopped {
+          border-color: rgba(251, 191, 36, 0.3);
+          background: rgba(251, 191, 36, 0.095);
         }
 
         .nl-stream-cursor {

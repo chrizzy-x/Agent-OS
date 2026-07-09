@@ -175,6 +175,9 @@ type PendingApproval = {
   reply: string;
 };
 
+const RESPONSE_FAILURE_MESSAGE = 'I could not complete that response. Try again.';
+const STREAM_UNAVAILABLE_MESSAGE = 'Streaming is unavailable right now. Retry in a moment.';
+
 type StudioContextValue = {
   loading: boolean;
   sending: boolean;
@@ -764,7 +767,7 @@ export function StudioProvider(props: {
     }
     const executionSession = activeSession;
     setSending(true);
-    setStreamingStatus('Generating…');
+    setStreamingStatus('Generating...');
     setPendingApproval(null);
     const assistantMessageId = `streaming-assistant-${Date.now()}`;
     const abortController = new AbortController();
@@ -807,7 +810,7 @@ export function StudioProvider(props: {
         signal: abortController.signal,
       });
       if (!response.response.ok || !response.response.body) {
-        throw new Error('Stream unavailable');
+        throw new Error('STREAM_UNAVAILABLE');
       }
 
       await consumeStudioSseStream(response.response.body, event => {
@@ -836,7 +839,7 @@ export function StudioProvider(props: {
         if (event.event === 'error') {
           finalState = 'error';
           setMessages(current => current.map(item => item.id === assistantMessageId
-            ? { ...item, content: 'I couldn’t complete that response. Try again.', state: 'error' }
+            ? { ...item, content: RESPONSE_FAILURE_MESSAGE, state: 'error' }
             : item));
           return;
         }
@@ -853,17 +856,18 @@ export function StudioProvider(props: {
       setMessages(current => current.map(item => item.id === assistantMessageId
         ? {
           ...item,
-          content: item.content || (finalState === 'error' ? 'I couldn’t complete that response. Try again.' : ''),
+          content: item.content || (finalState === 'error' ? RESPONSE_FAILURE_MESSAGE : ''),
           state: finalState,
         }
         : item));
     } catch (error) {
       const stopped = abortController.signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
+      const streamUnavailable = error instanceof Error && error.message === 'STREAM_UNAVAILABLE';
       finalState = stopped ? 'stopped' : 'error';
       setMessages(current => current.map(item => item.id === assistantMessageId
         ? {
           ...item,
-          content: item.content || (stopped ? '' : 'I couldn’t complete that response. Try again.'),
+          content: item.content || (stopped ? '' : streamUnavailable ? STREAM_UNAVAILABLE_MESSAGE : RESPONSE_FAILURE_MESSAGE),
           state: finalState,
         }
         : item));
@@ -919,7 +923,7 @@ export function StudioProvider(props: {
       }).catch(() => undefined);
     }
     setActiveExecutionId(null);
-    setStreamingStatus('Stopping…');
+    setStreamingStatus('Stopping...');
     await streamSettled;
   }, []);
 

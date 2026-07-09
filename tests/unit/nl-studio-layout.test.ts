@@ -25,4 +25,15 @@ describe('NL Studio layout contract', () => {
     expect(panel).toContain('Generating...');
     expect(panel).toContain('Send');
   });
+
+  it('shows response states without exposing internal JSON payloads', () => {
+    const panel = source();
+
+    expect(panel).toContain('className="nl-execution-card"');
+    expect(panel).toContain('Preparing Super AgentOS execution');
+    expect(panel).toContain('Response stopped');
+    expect(panel).toContain('Response failed');
+    expect(panel).toContain('Super AgentOS returned a structured execution result. Open Context logs for details.');
+    expect(panel).toContain('INTERNAL_JSON_KEYS');
+  });
 });
