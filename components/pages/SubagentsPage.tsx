@@ -39,7 +39,7 @@ export default function SubagentsPage({
   basePath = '/subagents',
   eyebrow = 'Subagents',
   title = 'Subagents',
-  subtitle = 'Private workforce: roles, memory stance, skills, permissions, and operating status.',
+  subtitle = 'Incognito workforce: roles, memory stance, skills, permissions, and operating status.',
 }: SubagentsPageProps) {
   const shell = useApplicationShell();
   const [loading, setLoading] = useState(true);
@@ -126,7 +126,7 @@ export default function SubagentsPage({
               onChange={event => setDraft(current => ({ ...current, visibility: event.target.value as 'private' | 'workspace' | 'public' }))}
               style={{ minHeight: 34, borderRadius: 7, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', color: 'inherit', padding: '0 10px' }}
             >
-              <option value="private">private</option>
+              <option value="private">incognito</option>
               <option value="workspace">workspace</option>
               <option value="public">public</option>
             </select>
@@ -143,7 +143,7 @@ export default function SubagentsPage({
               checked={draft.visibility === 'private'}
               onChange={event => setDraft(current => ({ ...current, visibility: event.target.checked ? 'private' : 'workspace' }))}
             />
-            Private Mode
+            Incognito Mode
           </label>
         </div>
 
@@ -174,7 +174,7 @@ export default function SubagentsPage({
                       <div><dt>Role</dt><dd>{subagent.visibility} workforce agent</dd></div>
                       <div><dt>Memory</dt><dd>Workspace scoped</dd></div>
                       <div><dt>Skills</dt><dd>{subagent.exposedCapabilities?.join(', ') || 'None assigned'}</dd></div>
-                      <div><dt>Permissions</dt><dd>{subagent.visibility === 'private' ? 'Private only' : 'Workspace visible'}</dd></div>
+                      <div><dt>Permissions</dt><dd>{subagent.visibility === 'private' ? 'Incognito only' : 'Workspace visible'}</dd></div>
                     </dl>
                     <Link href={`${basePath}/${subagent.id}`} className="btn-ghost">Open</Link>
                   </article>

@@ -242,7 +242,7 @@ export default function SubagentDetailPage({
                         subagent: { ...current.subagent, visibility: event.target.checked ? 'private' : 'workspace' },
                       } : current)}
                     />
-                    Private Mode
+                    Incognito Mode
                   </label>
                 </div>
               </Card>

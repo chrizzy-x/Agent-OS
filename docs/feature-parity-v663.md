@@ -8,7 +8,7 @@
 | Library | apps, skills, workflows, subagents, files, downloads, activity | expose complete filters and workspace scoping |
 | Skills | installed management, discovery, install, detail | keep separate from App Store and add explicit module tabs |
 | App Store | discovery, install/open/update/remove, SDK discovery, developer data | keep separate from Skills and surface featured/developer views |
-| Subagents | create, edit, archive, visibility, capabilities, memory, Vault, sharing | add explicit Private Mode and workflow/memory assignments |
+| Subagents | create, edit, archive, visibility, capabilities, memory, Vault, sharing | add explicit Incognito Mode and workflow/memory assignments |
 | Universal MCP | connectors, tools, diagnostics, calls, external-agent registry | consolidate as one first-class module without mixing SDK apps |
 | Vault | secret CRUD, assignments, versions, runtime grants | preserve page actions and context panel |
 | Community | no current route | add factual links hub only |

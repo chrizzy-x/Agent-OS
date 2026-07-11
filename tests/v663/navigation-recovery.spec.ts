@@ -49,6 +49,6 @@ describe('v6.6.3 navigation and workspace recovery', () => {
     expect(projects).toContain('pinned: !item.pinned');
     expect(subagents).toContain('Workflow Assignment');
     expect(subagents).toContain('Memory Assignment');
-    expect(subagents).toContain('Private Mode');
+    expect(subagents).toContain('Incognito Mode');
   });
 });

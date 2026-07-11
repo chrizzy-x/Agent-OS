@@ -575,7 +575,7 @@ async function executePendingAction(params: {
       },
     });
     const subagent = (action.result as { subagent: { id: string; name: string } }).subagent;
-    const reply = `Created private agent ${subagent.name}.`;
+    const reply = `Created incognito agent ${subagent.name}.`;
     await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
     await recordStudioEvent(params.ctx.agentId, params.pending.sessionId, 'subagent_created', {
       subagentId: subagent.id,
@@ -1006,7 +1006,7 @@ export async function POST(req: NextRequest) {
         name: createAgentName,
         intent,
       } satisfies PendingStudioAction));
-      const reply = `Create private agent ${createAgentName}?`;
+      const reply = `Create incognito agent ${createAgentName}?`;
       await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
       return NextResponse.json({
         kind: 'approval_required',
