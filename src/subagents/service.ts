@@ -54,7 +54,7 @@ export async function listPrivateSubagents(params: {
   if (params.projectId) query = query.eq('project_id', params.projectId);
   const { data, error } = await query;
 
-  if (error) throw new Error(`Failed to list private subagents: ${error.message}`);
+  if (error) throw new Error(`Failed to list incognito subagents: ${error.message}`);
   return ((data ?? []) as Record<string, unknown>[]).map(mapSubagent);
 }
 
@@ -70,7 +70,7 @@ export async function listAccessibleSubagents(params: {
     .eq('status', 'active')
     .order('updated_at', { ascending: false });
 
-  if (error) throw new Error(`Failed to list private subagents: ${error.message}`);
+  if (error) throw new Error(`Failed to list incognito subagents: ${error.message}`);
   const all = ((data ?? []) as Record<string, unknown>[]).map(mapSubagent);
   const filtered = all
     .filter(item => !params.workspaceId || item.workspaceId === params.workspaceId)
@@ -90,8 +90,8 @@ export async function getPrivateSubagent(viewerAgentId: string, subagentId: stri
     .eq('id', subagentId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to load private subagent: ${error.message}`);
-  if (!data) throw new PermissionError('Private subagent not found or not accessible');
+  if (error) throw new Error(`Failed to load incognito subagent: ${error.message}`);
+  if (!data) throw new PermissionError('Incognito subagent not found or not accessible');
   const subagent = mapSubagent(data as Record<string, unknown>);
   const accessible = await filterAccessibleResources({
     viewer: { agentId: viewerAgentId },
@@ -99,7 +99,7 @@ export async function getPrivateSubagent(viewerAgentId: string, subagentId: stri
     sourceType: 'subagent',
     permission: 'agent:invoke',
   });
-  if (accessible.length === 0) throw new PermissionError('Private subagent not found or not accessible');
+  if (accessible.length === 0) throw new PermissionError('Incognito subagent not found or not accessible');
   return subagent;
 }
 
@@ -142,7 +142,7 @@ export async function createPrivateSubagent(params: {
     .select()
     .single();
 
-  if (error) throw new Error(`Failed to create private subagent: ${error.message}`);
+  if (error) throw new Error(`Failed to create incognito subagent: ${error.message}`);
   return mapSubagent(data as Record<string, unknown>);
 }
 
@@ -182,7 +182,7 @@ export async function updatePrivateSubagent(params: {
     .select()
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to update private subagent: ${error.message}`);
-  if (!data) throw new PermissionError('Private subagent not found or not accessible');
+  if (error) throw new Error(`Failed to update incognito subagent: ${error.message}`);
+  if (!data) throw new PermissionError('Incognito subagent not found or not accessible');
   return mapSubagent(data as Record<string, unknown>);
 }

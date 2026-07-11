@@ -152,7 +152,7 @@ export default function MemoryPage() {
     const groups: Array<{ key: MemoryGroupKey; title: string; items: MemoryEntry[] }> = [
       { key: 'my', title: 'My Memory', items: [] },
       { key: 'agent', title: 'Agent Memory', items: [] },
-      { key: 'privateSubagent', title: 'Private Subagent Memory', items: [] },
+      { key: 'privateSubagent', title: 'Incognito Subagent Memory', items: [] },
       { key: 'workspace', title: 'Workspace Memory', items: [] },
       { key: 'shared', title: 'Shared Memory', items: [] },
     ];

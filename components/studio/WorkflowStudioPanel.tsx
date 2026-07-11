@@ -78,7 +78,7 @@ function createNode(type: BuilderNodeType, order: number, seed?: Partial<Builder
     subagent: {
       type: 'subagent',
       label: 'Subagent step',
-      description: 'Delegate work to a private subagent.',
+      description: 'Delegate work to an incognito subagent.',
       tool: 'agentos.subagent.unconfigured.run',
       input: { instructions: 'Describe the delegated task.' },
       output: { expected: 'Subagent result.' },
@@ -442,7 +442,7 @@ export default function WorkflowStudioPanel() {
             <Button variant="secondary" onClick={() => addNode('prompt')}>Prompt</Button>
             <Button variant="secondary" onClick={() => addNode('skill')} disabled={installedSkills.length === 0} disabledReason="Install a skill before adding a skill node.">Skill</Button>
             <Button variant="secondary" onClick={() => addNode('app')} disabled={installedApps.length === 0} disabledReason="Install an app before adding an app node.">App</Button>
-            <Button variant="secondary" onClick={() => addNode('subagent')} disabled={subagents.length === 0} disabledReason="Create a private subagent before adding a subagent node.">Subagent</Button>
+          <Button variant="secondary" onClick={() => addNode('subagent')} disabled={subagents.length === 0} disabledReason="Create an incognito subagent before adding a subagent node.">Subagent</Button>
             <Button variant="secondary" onClick={() => addNode('vault')} disabled={vaultSecrets.length === 0} disabledReason="Add a Vault secret before adding a Vault permission node.">Vault</Button>
             <Button variant="secondary" onClick={() => addNode('mcp')} disabled disabledReason="Connect a Universal MCP tool before adding an MCP node.">MCP</Button>
             <Button variant="secondary" onClick={() => addNode('output')}>Output</Button>
@@ -515,8 +515,8 @@ export default function WorkflowStudioPanel() {
 
               {selectedNode.type === 'subagent' ? (
                 <label className="workflow-field">
-                  <span>Private subagent</span>
-                  <Select data-testid="workflow-subagent-resource" aria-label="Private subagent selector" value={text(selectedNode.input.subagentId)} onChange={event => updateNode(node => bindResource(node, event.target.value))}>
+                  <span>Incognito subagent</span>
+                  <Select data-testid="workflow-subagent-resource" aria-label="Incognito subagent selector" value={text(selectedNode.input.subagentId)} onChange={event => updateNode(node => bindResource(node, event.target.value))}>
                     <option value="">Select subagent</option>
                     {subagents.map(subagent => <option key={subagent.id} value={subagent.id}>{subagent.name}</option>)}
                   </Select>

@@ -35,7 +35,7 @@ const onboardingSurfaces = [
   { label: 'Library', href: '/library', detail: 'installed assets' },
   { label: 'Vault', href: '/vault', detail: 'secrets' },
   { label: 'Workflows', href: '/workflows', detail: 'execution graphs' },
-  { label: 'Subagents', href: '/subagents', detail: 'private operators' },
+  { label: 'Subagents', href: '/subagents', detail: 'incognito operators' },
 ];
 
 function ActionCard({ action, signedIn }: { action: OnboardingAction; signedIn: boolean }) {

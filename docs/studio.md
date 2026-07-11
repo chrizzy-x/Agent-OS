@@ -38,7 +38,7 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - compact execution status while Super AgentOS is streaming or using selected apps, skills, workflows, or MCP tools
 - stopped and failed response states with retry/regenerate controls
 - safe fallback copy when streaming is unavailable
-- composer pickers for files, images, apps, skills, workflows, private subagents, projects, context panels, and Universal MCP
+- composer pickers for files, images, apps, skills, workflows, incognito subagents, projects, context panels, and Universal MCP
 - honest picker empty states when no connected resource is available
 - Enter to send and Shift+Enter for a newline
 - Markdown and GitHub-flavored Markdown rendering
@@ -51,7 +51,7 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - session rows with continue, rename, pin, project attach, archive, and delete controls
 - per-session project, visibility, and last-updated metadata
 - persistent NL Studio, Workflow Builder, and Code Studio modes
-- Workflow Builder creates and edits canonical visual workflow graphs with prompt, skill, app, private subagent, Vault permission, trigger, output, and disabled Universal MCP node states
+- Workflow Builder creates and edits canonical visual workflow graphs with prompt, skill, app, incognito subagent, Vault permission, trigger, output, and disabled Universal MCP node states
 - mobile drawer navigation and responsive conversation layout
 
 ## Verification

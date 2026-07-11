@@ -9,6 +9,7 @@ import {
   syncWorkflowDocument,
   type WorkflowAuthoringMode,
 } from '@/src/workflows/canonical';
+import { sanitizeForkableWorkflow } from '@/src/workflows/discovery';
 import { getProject } from '@/src/projects/service';
 import { assertWorkspaceMembership, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 
@@ -44,12 +45,82 @@ function mapWorkflow(row: Record<string, unknown>): Record<string, unknown> {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+async function listDiscoveryMarkers(agentId: string): Promise<{ starred: Set<string>; forked: Set<string> }> {
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('library_items')
+      .select('source_type,source_id,metadata')
+      .eq('owner_agent_id', agentId)
+      .in('source_type', ['published_asset', 'forked_asset']);
+    if (error) throw error;
+    const starred = new Set<string>();
+    const forked = new Set<string>();
+    for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+      if (row.source_type === 'published_asset') starred.add(String(row.source_id));
+      if (row.source_type === 'forked_asset') {
+        const originalWorkflowId = asRecord(row.metadata).originalWorkflowId;
+        if (typeof originalWorkflowId === 'string') forked.add(originalWorkflowId);
+      }
+    }
+    return { starred, forked };
+  } catch {
+    return { starred: new Set(), forked: new Set() };
+  }
+}
+
+function publicWorkflowListing(row: Record<string, unknown>, markers: { starred: Set<string>; forked: Set<string> }) {
+  const sanitized = sanitizeForkableWorkflow(row);
+  const id = String(row.id);
+  return {
+    id,
+    name: String(row.name ?? 'Public workflow'),
+    summary: typeof row.summary === 'string' && row.summary ? row.summary : 'Shared workflow',
+    status: String(row.status ?? 'active'),
+    visibility: 'public',
+    schedule: typeof row.schedule === 'string' ? row.schedule : null,
+    version: typeof row.version === 'number' ? row.version : 1,
+    stepCount: sanitized.steps.length,
+    starred: markers.starred.has(id),
+    forked: markers.forked.has(id),
+    monetization: 'not_monetized',
+    pricingLabel: 'Not monetized',
+    requiresVaultConfiguration: sanitized.requiresVaultConfiguration,
+    privateContextRemoved: sanitized.privateContextRemoved,
+    privacyNote: 'Forks create a private copy without source project context or Vault secret values.',
+  };
+}
+
 // GET /api/agent/workflows
 export async function GET(req: NextRequest) {
   try {
     const ctx = await requireRouteCapability(req.headers, 'workflows.manage');
     const supabase = getSupabaseAdmin();
-    const workspaceId = new URL(req.url).searchParams.get('workspaceId');
+    const url = new URL(req.url);
+    const workspaceId = url.searchParams.get('workspaceId');
+    const publicDiscovery = url.searchParams.get('discover') === 'public' || url.searchParams.get('scope') === 'public';
+
+    if (publicDiscovery) {
+      const { data, error } = await supabase
+        .from('agent_workflows')
+        .select('id,name,summary,status,visibility,schedule,steps,graph_state,code_state,canonical_doc,version,updated_at,created_at')
+        .eq('visibility', 'public')
+        .order('updated_at', { ascending: false })
+        .limit(24);
+      if (error) throw error;
+      const markers = await listDiscoveryMarkers(ctx.agentId);
+      return NextResponse.json({
+        workflows: ((data ?? []) as Array<Record<string, unknown>>).map(row => publicWorkflowListing(row, markers)),
+        discovery: {
+          mode: 'public_workflows',
+          monetization: 'not_monetized',
+          privacy: 'Forking never copies private project data or Vault secrets from the source workflow.',
+        },
+      });
+    }
 
     let query = supabase
       .from('agent_workflows')

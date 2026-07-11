@@ -201,7 +201,7 @@ function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
           <Button href="/studio?mode=nl" variant="secondary">Open Super AgentOS</Button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-          {['Studio sessions', 'Projects', 'Installed apps', 'Installed skills', 'Workflows', 'Private subagents', 'Vault health', 'MCP status'].map(item => (
+          {['Studio sessions', 'Projects', 'Installed apps', 'Installed skills', 'Workflows', 'Incognito subagents', 'Vault health', 'MCP status'].map(item => (
             <Card key={item} style={{ padding: 14 }}>
               <div className="os-entity-title">{item}</div>
               <div className="os-entity-copy">Sign in required.</div>
@@ -315,7 +315,7 @@ export default function HomePage() {
           </div>
           <h1 style={{ margin: 0, fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.08, letterSpacing: 0 }}>{greeting}</h1>
           <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-            Home is your live command overview for sessions, projects, installed capabilities, private operators, Vault, MCP, and compute state.
+            Home is your live command overview for sessions, projects, installed capabilities, incognito operators, Vault, MCP, and compute state.
           </p>
         </div>
 
@@ -368,7 +368,7 @@ export default function HomePage() {
           <MetricCard label="Installed apps" value={countState(payload.summary.installedApps, 'app', 'apps', 'No apps')} hint="SDK-backed app surfaces" />
           <MetricCard label="Installed skills" value={countState(payload.summary.installedSkills, 'skill', 'skills', 'No skills')} hint="Reusable capabilities" />
           <MetricCard label="Workflows" value={countState(payload.summary.workflows, 'workflow', 'workflows', 'No workflows')} hint="Execution graphs" />
-          <MetricCard label="Private subagents" value={countState(payload.summary.privateSubagents, 'subagent', 'subagents', 'No subagents')} hint="Private user-created operators" />
+          <MetricCard label="Incognito subagents" value={countState(payload.summary.privateSubagents, 'subagent', 'subagents', 'No subagents')} hint="Incognito user-created operators" />
           <MetricCard label="Vault health" value={payload.vault.total > 0 ? `${payload.vault.active}/${payload.vault.total} active` : 'No secrets'} hint="Secrets stay permissioned" />
           <MetricCard label="MCP status" value={payload.mcp.connectorCount > 0 ? `${payload.mcp.activeConnectors}/${payload.mcp.connectorCount} active` : 'No connectors'} hint="External tool layer" />
           <MetricCard label={payload.credits.label} value={payload.credits.available ? String(payload.credits.balance ?? 'Available') : 'Not connected'} hint={payload.credits.message} />
@@ -438,7 +438,7 @@ export default function HomePage() {
             )}
           </Section>
 
-          <Section title="Private Subagents" actionHref="/subagents" actionLabel="Manage">
+          <Section title="Incognito Subagents" actionHref="/subagents" actionLabel="Manage">
             {payload.privateSubagents.length > 0 ? (
               <div style={{ display: 'grid', gap: 10 }}>
                 {payload.privateSubagents.slice(0, 4).map(item => (
@@ -446,13 +446,13 @@ export default function HomePage() {
                     key={item.id}
                     href={item.href}
                     title={item.name}
-                    body={item.description ?? 'Private operator'}
+                    body={item.description ?? 'Incognito operator'}
                     meta={<StatusPill status={item.visibility} />}
                   />
                 ))}
               </div>
             ) : (
-              <EmptyState title="No private subagents" body="Create private operators for scoped work inside your workspace." action={<Button href="/subagents">Create subagent</Button>} />
+              <EmptyState title="No incognito subagents" body="Create incognito operators for scoped work inside your workspace." action={<Button href="/subagents">Create subagent</Button>} />
             )}
           </Section>
         </div>

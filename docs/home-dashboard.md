@@ -9,7 +9,7 @@ Home is backed by `/api/dashboard` and renders only:
 - actionable error states when the dashboard cannot load
 - disabled states when a product capability is visible but no backend is connected
 
-The dashboard contract includes recent Studio sessions, active projects, installed SDK apps, installed skills, active workflows, private subagents, Vault health, Universal MCP status, recent events, plan metadata, recommended next actions, and compute visibility.
+The dashboard contract includes recent Studio sessions, active projects, installed SDK apps, installed skills, active workflows, incognito subagents, Vault health, Universal MCP status, recent events, plan metadata, recommended next actions, and compute visibility.
 
 Agent Credits are visible on Home only as a disabled state until real credit telemetry exists. Home must not invent credit balances, reset windows, usage history, earnings, workflow logs, validators, proof events, MCP calls, installs, ratings, or app usage.
 

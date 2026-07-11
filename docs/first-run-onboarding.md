@@ -8,7 +8,7 @@ Phase 08 defines onboarding as an action board, not a marketing page.
 - Create a project opens the project creation flow.
 - Install an app opens Appstore discovery.
 - Install a skill opens Skill Store discovery.
-- Create a subagent opens the private subagent creation surface.
+- Create a subagent opens the incognito subagent creation surface.
 - Connect a tool opens Universal MCP connector health and tool availability.
 
 ## Retail path

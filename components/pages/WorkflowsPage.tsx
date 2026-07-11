@@ -41,6 +41,24 @@ type Workflow = {
   version?: number;
 };
 
+type PublicWorkflow = {
+  id: string;
+  name: string;
+  summary: string;
+  status: string;
+  visibility: 'public';
+  schedule: string | null;
+  version: number;
+  stepCount: number;
+  starred: boolean;
+  forked: boolean;
+  monetization: 'not_monetized';
+  pricingLabel: string;
+  requiresVaultConfiguration: boolean;
+  privateContextRemoved: boolean;
+  privacyNote: string;
+};
+
 type WorkflowDrawer = 'workflow-spec' | 'workflow-runtime';
 
 type ExecutionStatus = 'QUEUED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
@@ -160,6 +178,8 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const [executionLogs, setExecutionLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState('');
+  const [publicWorkflows, setPublicWorkflows] = useState<PublicWorkflow[]>([]);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -168,6 +188,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
       setAuthState(sessionState.state);
       if (!sessionState.session) {
         setWorkflows([]);
+        setPublicWorkflows([]);
         return;
       }
       const { response, authState: nextAuthState } = await fetchWithBrowserSession(`/api/agent/workflows${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
@@ -178,8 +199,19 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
       if (!activeId && rows.length > 0) {
         setActiveId(selectedId ?? rows[0].id);
       }
+      setDiscoveryLoading(true);
+      try {
+        const { response: discoveryResponse } = await fetchWithBrowserSession('/api/agent/workflows?discover=public', { cache: 'no-store' });
+        const discoveryData = await discoveryResponse.json();
+        setPublicWorkflows(Array.isArray(discoveryData.workflows) ? discoveryData.workflows : []);
+      } catch {
+        setPublicWorkflows([]);
+      } finally {
+        setDiscoveryLoading(false);
+      }
     } catch {
       setWorkflows([]);
+      setPublicWorkflows([]);
     } finally {
       setLoading(false);
     }
@@ -370,6 +402,40 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
     }
   }
 
+  async function requestDiscoveryAction(workflow: PublicWorkflow, action: 'star' | 'fork') {
+    setWorking(true);
+    setNotice('');
+    try {
+      const { response: res } = await fetchWithBrowserSession(`/api/agent/workflows/${workflow.id}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotice(data.error ?? `${action} failed`);
+        return;
+      }
+      if (action === 'star') {
+        setPublicWorkflows(current => current.map(item => item.id === workflow.id ? { ...item, starred: true } : item));
+        setNotice('Workflow starred into your Library. Workflows are shared, not monetized.');
+        return;
+      }
+      const forkedId = typeof data.workflow?.id === 'string' ? data.workflow.id : '';
+      setPublicWorkflows(current => current.map(item => item.id === workflow.id ? { ...item, forked: true } : item));
+      setNotice('Workflow forked privately. Configure your own Vault secrets before running it.');
+      await load();
+      if (forkedId) {
+        setActiveId(forkedId);
+        router.push(`/workflows/${forkedId}`);
+      }
+    } catch {
+      setNotice(`${action} failed`);
+    } finally {
+      setWorking(false);
+    }
+  }
+
   function validateWorkflow() {
     if (!active) return;
     const issues: string[] = [];
@@ -392,6 +458,64 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
     if (!active) return;
     const prompt = `Review workflow "${active.name}" and improve reliability, validation, scheduling, and run safety. Current summary: ${active.summary || 'None'}. Current steps: ${(active.steps ?? []).map(step => step.tool).join(', ') || 'None'}.`;
     router.push(`/studio?prompt=${encodeURIComponent(prompt)}`);
+  }
+
+  function renderDiscovery() {
+    return (
+      <Card>
+        <div className="os-entity-head" style={{ marginBottom: 12 }}>
+          <div>
+            <div className="os-entity-title">Public workflow discovery</div>
+            <div className="os-entity-copy">Star or fork shared workflows. Workflows are not monetized assets.</div>
+          </div>
+          <Badge tone="default">not monetized</Badge>
+        </div>
+        {discoveryLoading ? (
+          <div className="os-empty-body">Loading public workflows.</div>
+        ) : publicWorkflows.length === 0 ? (
+          <EmptyState title="No public workflows yet" body="Public workflow sharing is ready, but no discoverable workflows are available in this workspace." />
+        ) : (
+          <div className="os-feed">
+            {publicWorkflows.map(workflow => (
+              <div className="os-feed-item" key={workflow.id}>
+                <div className="os-feed-head">
+                  <strong>{workflow.name}</strong>
+                  <Badge tone="success">public</Badge>
+                </div>
+                <div className="os-feed-subtitle">{workflow.summary}</div>
+                <div className="os-entity-copy" style={{ marginTop: 8 }}>
+                  {workflow.stepCount} steps | {scheduleLabel(workflow.schedule)} | {workflow.pricingLabel}
+                </div>
+                {workflow.requiresVaultConfiguration ? (
+                  <div className="os-entity-copy" style={{ marginTop: 8 }}>Fork requires your own Vault secret configuration.</div>
+                ) : null}
+                {workflow.privateContextRemoved ? (
+                  <div className="os-entity-copy" style={{ marginTop: 8 }}>Private project and workspace references are stripped on fork.</div>
+                ) : null}
+                <div className="os-inline-actions" style={{ marginTop: 12 }}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void requestDiscoveryAction(workflow, 'star')}
+                    disabled={working || workflow.starred}
+                    disabledReason={working ? 'Another workflow action is running.' : 'This workflow is already starred in your Library.'}
+                  >
+                    {workflow.starred ? 'Starred' : 'Star'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void requestDiscoveryAction(workflow, 'fork')}
+                    disabled={working || workflow.forked}
+                    disabledReason={working ? 'Another workflow action is running.' : 'This workflow is already forked into your Library.'}
+                  >
+                    {workflow.forked ? 'Forked' : 'Fork privately'}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    );
   }
 
   return (
@@ -453,7 +577,10 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         {loading ? <LoadingState label="Loading workflows" /> : authState === 'signed_out' || authState === 'expired' ? (
           <EmptyState title={authState === 'expired' ? 'Session expired' : 'Sign in required'} body="Sign in to manage workspace workflows." action={<Button href="/signin">{authState === 'expired' ? 'Sign in again' : 'Sign in'}</Button>} />
         ) : !active ? (
-          <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." action={<Button href="/studio?mode=workflow">Open Workflow Builder</Button>} />
+          <>
+            <EmptyState title="No workflows yet" body="Create your first workflow from Studio or the workflow API." action={<Button href="/studio?mode=workflow">Open Workflow Builder</Button>} />
+            {renderDiscovery()}
+          </>
         ) : (
           <>
             <WorkflowCard
@@ -609,6 +736,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
                 </Button>
               </div>
             </Card>
+            {renderDiscovery()}
           </>
         )}
       </WorkspaceShell>

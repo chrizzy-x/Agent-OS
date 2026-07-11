@@ -6,7 +6,7 @@ Current production behavior:
 
 - create a private workflow from Studio
 - edit an existing workflow
-- add prompt, skill, app, private subagent, Vault permission, trigger, and output nodes
+- add prompt, skill, app, incognito subagent, Vault permission, trigger, and output nodes
 - configure node labels, descriptions, runtime input instructions, and expected outputs
 - persist visual graphs through the canonical workflow document
 - preserve active workspace and project context when saving

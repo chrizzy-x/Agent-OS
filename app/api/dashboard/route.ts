@@ -212,7 +212,7 @@ export async function GET(request: NextRequest) {
       ...(filteredInstalledApps.length === 0 ? [{ id: 'install-app', label: 'Install an app', href: '/appstore', reason: 'Installed apps become available to Super AgentOS and Library.' }] : []),
       ...(installedSkills.length === 0 ? [{ id: 'install-skill', label: 'Install a skill', href: '/skillstore', reason: 'Skills add reusable capabilities to Studio and workflows.' }] : []),
       ...(workflows.length === 0 ? [{ id: 'build-workflow', label: 'Build a workflow', href: '/studio?mode=workflow', reason: 'Workflows turn repeatable work into reusable execution graphs.' }] : []),
-      ...(privateSubagentItems.length === 0 ? [{ id: 'create-subagent', label: 'Create a private subagent', href: '/subagents', reason: 'Subagents are private operators you control.' }] : []),
+      ...(privateSubagentItems.length === 0 ? [{ id: 'create-subagent', label: 'Create an incognito subagent', href: '/subagents', reason: 'Subagents are incognito operators you control.' }] : []),
       ...(vaultSecrets.length === 0 ? [{ id: 'setup-vault', label: 'Set up Vault', href: '/vault', reason: 'Vault keeps secrets permissioned and out of normal memory.' }] : []),
       ...(mcpServers.length === 0 ? [{ id: 'connect-mcp', label: 'Connect an MCP tool', href: '/mcp', reason: 'Universal MCP connects external tools without turning them into apps.' }] : []),
     ].slice(0, 8);

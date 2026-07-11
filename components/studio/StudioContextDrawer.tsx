@@ -198,7 +198,7 @@ export default function StudioContextDrawer() {
   const memoryGroups = [
     { key: 'my', title: 'My Memory' },
     { key: 'agent', title: 'Agent Memory' },
-    { key: 'privateSubagent', title: 'Private Subagent Memory' },
+    { key: 'privateSubagent', title: 'Incognito Subagent Memory' },
     { key: 'workspace', title: 'Workspace Memory' },
     { key: 'shared', title: 'Shared Memory' },
   ].map(group => ({
@@ -290,7 +290,7 @@ export default function StudioContextDrawer() {
         ...(session?.linkedSubagentId ? [{
           id: 'linked-subagent',
           title: subagentName(session.linkedSubagentId),
-          body: 'Private subagent linked to this session.',
+          body: 'Incognito subagent linked to this session.',
           badges: ['subagent'],
           action: {
             label: 'Detach',
@@ -374,7 +374,7 @@ export default function StudioContextDrawer() {
         ...installedApps.slice(0, 4).map(item => ({ id: `asset-app-${item.id}`, title: item.name, body: item.description, badges: ['app'] })),
         ...installedSkills.slice(0, 4).map(item => ({ id: `asset-skill-${item.id}`, title: item.name, body: item.description, badges: ['skill'] })),
         ...workflows.slice(0, 4).map(item => ({ id: `asset-workflow-${item.id}`, title: item.name, body: item.summary ?? item.status, badges: ['workflow'] })),
-        ...subagents.slice(0, 4).map(item => ({ id: `asset-subagent-${item.id}`, title: item.name, body: item.description ?? item.status, badges: ['private subagent'] })),
+        ...subagents.slice(0, 4).map(item => ({ id: `asset-subagent-${item.id}`, title: item.name, body: item.description ?? item.status, badges: ['incognito subagent'] })),
       ],
     },
     {

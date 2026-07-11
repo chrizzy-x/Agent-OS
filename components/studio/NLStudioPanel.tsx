@@ -18,7 +18,7 @@ const SLASH_COMMANDS = [
   { command: '/skill ', label: 'Run a skill' },
   { command: '/app ', label: 'Run an app' },
   { command: '/workflow ', label: 'Run a workflow' },
-  { command: '/subagent ', label: 'Delegate to a private subagent' },
+  { command: '/subagent ', label: 'Delegate to an incognito subagent' },
   { command: '/mcp ', label: 'Call an MCP tool' },
   { command: '/file ', label: 'Analyze an uploaded file' },
   { command: '/project ', label: 'Switch project context' },

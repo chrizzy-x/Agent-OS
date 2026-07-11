@@ -23,7 +23,7 @@ describe('Home dashboard baseline', () => {
     expect(page).toContain('Installed Apps');
     expect(page).toContain('Installed Skills');
     expect(page).toContain('Active Workflows');
-    expect(page).toContain('Private Subagents');
+    expect(page).toContain('Incognito Subagents');
     expect(page).toContain('Vault Health');
     expect(page).toContain('MCP Status');
     expect(page).toContain('Recommended Next Actions');

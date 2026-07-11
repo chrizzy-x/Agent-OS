@@ -148,7 +148,7 @@ export default function SubagentsPage({
         </div>
 
         {loading ? <LoadingState label="Loading subagents" /> : subagents.length === 0 ? (
-          <EmptyState title="No private subagents yet" body="Create a focused subagent for research, operations, or testing." action={<Button href="/studio?mode=nl&prompt=Create%20a%20private%20subagent">Create with Super AgentOS</Button>} />
+          <EmptyState title="No incognito subagents yet" body="Create a focused subagent for research, operations, or testing." action={<Button href="/studio?mode=nl&prompt=Create%20an%20incognito%20subagent">Create with Super AgentOS</Button>} />
         ) : (
           <div className="os-drawer-stack">
             <Tabs
@@ -166,7 +166,7 @@ export default function SubagentsPage({
                     <div className="os-inline-actions">
                       <div>
                         <div className="os-entity-title">{subagent.name}</div>
-                        <div className="os-entity-copy">{subagent.description ?? 'Private subagent'}</div>
+                        <div className="os-entity-copy">{subagent.description ?? 'Incognito subagent'}</div>
                       </div>
                       <span className="os-status-pill">{subagent.status}</span>
                     </div>
