@@ -177,7 +177,7 @@ Key constraints:
 ## Audit Logging
 
 Every primitive operation — success or failure — is written to the `audit_logs` table in Supabase. Each record includes:
-- private agent reference, `primitive`, `operation`
+- internal agent reference, `primitive`, `operation`
 - `success` (boolean)
 - `duration_ms`
 - `metadata` — sanitized input summary (no secrets, no full file contents)

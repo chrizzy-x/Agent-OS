@@ -1,4 +1,4 @@
--- AgentOS Migration 016: Studio-first plans, provisioning, Vault, and private subagents.
+-- AgentOS Migration 016: Studio-first plans, provisioning, Vault, and incognito subagent storage.
 -- Additive and backward-compatible with legacy tiers.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

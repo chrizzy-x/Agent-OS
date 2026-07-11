@@ -12,7 +12,7 @@ export default function AuthHomeRedirect() {
     void fetchBrowserSession()
       .then(session => {
         if (active && session) {
-          router.replace('/studio');
+          router.replace('/');
         }
       })
       .catch(() => undefined);

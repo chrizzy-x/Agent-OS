@@ -41,7 +41,7 @@ const endpoints: Endpoint[] = [
   },
   {
     method: 'GET', path: '/api/agents', auth: 'Browser Session or Bearer (Agent)',
-    desc: 'List deployed agents and subagents for the current operator. Private agent IDs are never returned; use the returned public action reference only when calling agent action routes.',
+    desc: 'List deployed agents and subagents for the current operator. Internal agent IDs are never returned; use the returned public action reference only when calling agent action routes.',
     response: '{ "agents": [{ "agentRef": "agref-...", "name": "Research Agent", "isSubagent": false, "status": "active" }] }',
   },
   {
@@ -50,7 +50,7 @@ const endpoints: Endpoint[] = [
     body: [
       { field: 'name', type: 'string', required: true, desc: 'Unique subagent display name' },
       { field: 'description', type: 'string', required: false, desc: 'Optional purpose summary' },
-      { field: 'parentAgentRef', type: 'string', required: false, desc: 'Public action reference from /api/agents; never a private agent ID' },
+      { field: 'parentAgentRef', type: 'string', required: false, desc: 'Public action reference from /api/agents; never an internal agent ID' },
     ],
     response: '{ "agent": { "agentRef": "agref-...", "name": "Research Subagent", "isSubagent": true, "status": "active" }, "apiKey": "eyJ..." }',
   },
@@ -65,7 +65,7 @@ const endpoints: Endpoint[] = [
       { field: 'selectedPlan', type: 'retail_free | retail_pro | enterprise_plus | enterprise_max', required: true, desc: 'Beta plan selected during signup' },
       { field: 'planSelectionSkipped', type: 'boolean', required: false, desc: 'Internal onboarding fallback. Defaults to false.' },
     ],
-    response: '{ "success": true, "redirectTo": "/studio", "credentials": { "bearerToken": "eyJ..." | null, "apiKey": "eyJ..." | null, "plan": "retail_pro", "planLabel": "Pro", "capabilities": ["use_nl_studio", "use_bearer_token"], "expiresIn": "90 days" } }',
+    response: '{ "success": true, "redirectTo": "/", "credentials": { "bearerToken": "eyJ..." | null, "apiKey": "eyJ..." | null, "plan": "retail_pro", "planLabel": "Pro", "capabilities": ["use_nl_studio", "use_bearer_token"], "expiresIn": "90 days" } }',
   },
   {
     method: 'POST', path: '/api/signin', auth: 'None',

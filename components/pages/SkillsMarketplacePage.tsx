@@ -199,7 +199,7 @@ export default function SkillsMarketplacePage() {
     <SurfaceShell
       activePath="/skillstore"
       title="Skill Store"
-      subtitle="Discover installable capabilities for Super AgentOS, apps, workflows, and private agents."
+      subtitle="Discover installable capabilities for Super AgentOS, apps, workflows, and incognito subagents."
       actions={session?.capabilities?.includes('create_skill') ? <Link href="/publish/skill" className="market-secondary-action">Publish Skill</Link> : undefined}
     >
       <div className="market-shell" data-surface="skills">

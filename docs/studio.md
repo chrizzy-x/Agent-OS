@@ -52,6 +52,7 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - per-session project, visibility, and last-updated metadata
 - persistent NL Studio, Workflow Builder, and Code Studio modes
 - Workflow Builder creates and edits canonical visual workflow graphs with prompt, skill, app, incognito subagent, Vault permission, trigger, output, and disabled Universal MCP node states
+- Code Studio keeps project files, terminal work, developer task prompts, test/build command staging, deployment readiness, and recent execution results inside the same Studio shell
 - mobile drawer navigation and responsive conversation layout
 
 ## Verification

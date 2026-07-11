@@ -92,15 +92,16 @@ await fetch(\`\${AGENT_OS_URL}/mcp\`, {
 });` : '';
   const nextLinks = accountIntent === 'enterprise'
     ? [
-        { href: '/studio', label: 'Open Studio', primary: true },
+        { href: '/', label: 'Home', primary: true },
+        { href: '/studio', label: 'Open Studio', primary: false },
         { href: '/developer', label: 'Developer Console', primary: false },
         { href: '/sdk', label: 'SDK', primary: false },
         { href: '/publish/app', label: 'Publish App', primary: false },
         { href: '/publish/skill', label: 'Publish Skill', primary: false },
       ]
     : [
-        { href: '/studio', label: 'Open Studio', primary: true },
-        { href: '/', label: 'Home', primary: false },
+        { href: '/', label: 'Home', primary: true },
+        { href: '/studio', label: 'Open Studio', primary: false },
         { href: '/appstore', label: 'Apps', primary: false },
         { href: '/skillstore', label: 'Skills', primary: false },
         { href: '/projects', label: 'Projects', primary: false },
@@ -531,7 +532,7 @@ export default function SignupPage() {
   useEffect(() => {
     let active = true;
     void fetchBrowserSession().then(session => {
-      if (active && session) router.replace('/studio');
+      if (active && session) router.replace('/');
     });
     return () => { active = false; };
   }, [router]);

@@ -46,7 +46,7 @@ export async function POST(
     const agentName = typeof body.agent_name === 'string' ? body.agent_name.trim() : '';
 
     if (typeof body.agent_id === 'string' && body.agent_id.trim()) {
-      throw new ValidationError('agent_name is required; private agent IDs are not accepted');
+      throw new ValidationError('agent_name is required; internal agent IDs are not accepted');
     }
 
     if (!agentName) {

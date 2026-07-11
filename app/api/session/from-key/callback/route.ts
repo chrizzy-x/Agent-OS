@@ -6,7 +6,7 @@ import { APP_URL } from '@/lib/config';
 export const runtime = 'nodejs';
 
 // GET /api/session/from-key/callback?st=<token>
-// Exchanges the one-time token for a browser session cookie and redirects to /studio
+// Exchanges the one-time token for a browser session cookie and redirects to Home.
 export async function GET(req: NextRequest) {
   const st = req.nextUrl.searchParams.get('st');
 
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     const { agentId } = JSON.parse(raw) as { agentId: string; apiKey: string };
 
-    const response = NextResponse.redirect(`${APP_URL}/studio`);
+    const response = NextResponse.redirect(`${APP_URL}/`);
     await issueBrowserSession(response, {
       agentId,
       request: req,

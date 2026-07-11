@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json(
     {
       success: true,
-      redirectTo: '/studio',
+      redirectTo: '/',
       provisioning,
       credentials: {
         bearerToken: canIssueBearerToken ? bearerToken : null,

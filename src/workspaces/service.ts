@@ -545,7 +545,7 @@ export async function addWorkspaceAgent(params: { workspaceId: string; agentId: 
 
   const nameMap = await getAgentNameMap([item.agentId]);
   item.agentName = nameMap.get(item.agentId) ?? null;
-  await appendAudit(item.workspaceId, params.actorId, 'workspace.agent_added', { agentName: item.agentName ?? 'Private agent' });
+  await appendAudit(item.workspaceId, params.actorId, 'workspace.agent_added', { agentName: item.agentName ?? 'Incognito subagent' });
   return item;
 }
 

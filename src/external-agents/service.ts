@@ -164,13 +164,13 @@ function normalizeAgentId(agentId: unknown, name: string): string {
   }
 
   if (typeof agentId !== 'string') {
-    throw new ValidationError('Private agent reference must be lowercase alphanumeric with hyphens only');
+    throw new ValidationError('Internal agent reference must be lowercase alphanumeric with hyphens only');
   }
 
   const normalized = agentId.trim();
 
   if (!AGENT_ID_PATTERN.test(normalized)) {
-    throw new ValidationError('Private agent reference must be lowercase alphanumeric with hyphens only');
+    throw new ValidationError('Internal agent reference must be lowercase alphanumeric with hyphens only');
   }
 
   return normalized;

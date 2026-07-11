@@ -183,13 +183,13 @@ export default function SubagentDetailPage({
         )}
       >
         {loading ? <LoadingState label="Loading agent" /> : !payload || !subagent ? (
-          <EmptyState title="Subagent not found" body="This private agent is unavailable or you do not have access." />
+          <EmptyState title="Subagent not found" body="This incognito subagent is unavailable or you do not have access." />
         ) : (
           <>
             <PageHeader
               eyebrow="Agent details"
               title={subagent.name}
-              subtitle={subagent.description ?? 'Private agent'}
+              subtitle={subagent.description ?? 'Incognito Mode subagent'}
               actions={(
                 <>
                   <Badge tone="success">{subagent.status}</Badge>
@@ -314,7 +314,7 @@ export default function SubagentDetailPage({
             {tab === 'Tools' ? (
               <div style={{ display: 'grid', gap: 12 }}>
                 {payload.profile.allowedTools.map(tool => (
-                  <PermissionCard key={tool} title={tool} description="Allowed MCP or primitive tool for this private agent." required />
+                  <PermissionCard key={tool} title={tool} description="Allowed MCP or primitive tool for this incognito subagent." required />
                 ))}
               </div>
             ) : null}

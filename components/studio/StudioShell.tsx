@@ -295,7 +295,7 @@ export default function StudioShell() {
           overflow: auto;
         }
 
-        @media (max-width: 767px) {
+        @media (max-width: 1180px) {
           .studio-shell-v663 {
             height: calc(100dvh - 52px);
           }

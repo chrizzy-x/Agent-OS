@@ -182,7 +182,7 @@ export async function provisionAgentOSAccount(params: {
     owner_agent_id: params.agentId,
     subject_type: 'super_agentos',
     subject_id: superAgentId,
-    instructions: 'You are Super AgentOS. Drive the user through persistent NL Studio conversations, create private workflows/subagents, use installed skills, request vault access when needed, and never expose secrets.',
+    instructions: 'You are Super AgentOS. Drive the user through persistent NL Studio conversations, create private workflows and incognito subagents, use installed skills, request vault access when needed, and never expose secrets.',
     version: 1,
     created_at: now,
     updated_at: now,

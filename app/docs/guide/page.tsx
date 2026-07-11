@@ -65,7 +65,7 @@ export default function GuidePage() {
           <ul className="list-disc ml-6 mt-2 space-y-1" style={{ color: 'var(--text-secondary)' }}>
             <li><strong>Browser session</strong> — always, so Studio and your workspace open immediately.</li>
             <li><strong>Bearer token</strong> — immediately on Pro, Enterprise, and Enterprise Max. Free upgrades later in <Link href="/settings?section=billing" style={{ color: 'var(--accent)' }}>Settings billing</Link>.</li>
-            <li><strong>Super AgentOS</strong> — your default workspace owner for sessions, memory, installed skills, connected apps, private workflows, and private agents.</li>
+            <li><strong>Super AgentOS</strong> — your default workspace owner for sessions, memory, installed skills, connected apps, private workflows, and incognito subagents.</li>
           </ul>
           <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Agent IDs are private internal identifiers. Use your agent name in the UI and your bearer token for API calls.</p>
           <p className="mt-3" style={{ color: 'var(--text-secondary)' }}>Lost your key? Sign in at <Link href="/signin" style={{ color: 'var(--accent)' }}>/signin</Link> to generate a new bearer token from your browser session.</p>

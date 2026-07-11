@@ -18,7 +18,7 @@ Authorization: Bearer <jwt-token>
 
 Tokens are issued via `POST /admin/agents` using the admin token. A token encodes the agent's private internal identity, allowed domains, and resource quotas. Tokens expire after 30 days by default.
 
-Private agent IDs are treated like secrets: public UI, browser sessions, docs, and marketplace/app responses should show agent names or public action refs instead of raw IDs.
+Internal agent IDs are treated like secrets: public UI, browser sessions, docs, and marketplace/app responses should show agent names or public action refs instead of raw IDs.
 
 **Create an agent token (admin only):**
 ```

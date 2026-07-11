@@ -103,7 +103,7 @@ const GROUPS: Record<GroupKey, GroupDefinition> = {
     name: 'Agentic App Store',
     badge: 'APP',
     description: 'Downloadable agentic apps with manifests, device targets, packaged workflows, and publisher metadata.',
-    competitor: 'Traditional app stores or private agent template folders',
+    competitor: 'Traditional app stores or incognito operator template folders',
     standout: 'Agent OS separates full agentic apps from individual skills so teams can ship complete workflows as downloadable packages.',
     useCaseTemplates: [
       'A retail user uses {name} to download a ready-made research or trading monitor app without assembling primitives manually.',
@@ -238,7 +238,7 @@ const PLATFORM_FEATURES: CatalogSeed[] = [
   { id: 2, slug: 'network', name: 'Network (net)', short: 'Make outbound HTTP requests with SSRF protection, limits, and timeouts.', group: 'core', kind: 'platform_feature' },
   { id: 3, slug: 'process-execution', name: 'Process Execution (proc)', short: 'Run Python, JavaScript, or Bash in a sandboxed execution environment.', group: 'core', kind: 'platform_feature' },
   { id: 4, slug: 'memory-cache', name: 'Memory Cache (mem)', short: 'Use Redis-backed key-value memory with fast reads and TTL support.', group: 'core', kind: 'platform_feature' },
-  { id: 5, slug: 'database', name: 'Database (db)', short: 'Use PostgreSQL-backed relational storage with private agent scoping.', group: 'core', kind: 'platform_feature' },
+  { id: 5, slug: 'database', name: 'Database (db)', short: 'Use PostgreSQL-backed relational storage with internal agent scoping.', group: 'core', kind: 'platform_feature' },
   { id: 6, slug: 'events', name: 'Events (events)', short: 'Publish and subscribe to realtime messages across agents.', group: 'core', kind: 'platform_feature' },
   { id: 7, slug: 'ffp-temp-routing', name: 'FFP Temp Routing', short: 'Route multi-agent work through the temporary FFP abstraction before the execution engine.', group: 'ffp', kind: 'platform_feature' },
   { id: 8, slug: 'reputation-tracking', name: 'Reputation Tracking', short: 'Track agent quality over time and feed that into multi-agent decisions.', group: 'ffp', kind: 'platform_feature' },

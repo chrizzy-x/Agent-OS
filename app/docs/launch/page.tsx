@@ -55,7 +55,7 @@ const changelog = [
   'Enabled free-beta self-serve plan transitions in Settings billing and POST /api/plans/transition across Free, Pro, Enterprise, and Enterprise Max.',
   'Removed public agent ID display/copy surfaces from signup, nav, dashboard, Studio, Connect, Workspaces, X/Social, Skill Store, App Store, FFP routes, and docs.',
   'Added display-redaction helpers for agentId, agent_id, child/subagent IDs, owner/publisher/author references, actor/user IDs, and agent_* string patterns.',
-  'Changed /api/session to return only authenticated session display fields; no private agent ID leaves the browser session endpoint.',
+  'Changed /api/session to return only authenticated session display fields; no internal agent ID leaves the browser session endpoint.',
   'Changed deployed-agent APIs to return agentRef, agent name, status, and metrics; command/activity/subagent routes resolve refs server-side.',
   'Updated Workspaces to add agents by name only and return public workspace/member/audit payloads.',
   'Renamed public FFP dynamic routes from [agentId] to [privateRef] and updated docs to private-reference language.',

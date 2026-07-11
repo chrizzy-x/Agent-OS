@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const description = typeof body.description === 'string' ? body.description.trim() : '';
     if (typeof body.parentAgentId === 'string' && body.parentAgentId.trim()) {
-      throw new ValidationError('parentAgentRef is required; private agent IDs are not accepted');
+      throw new ValidationError('parentAgentRef is required; internal agent IDs are not accepted');
     }
     const parentAgentRef = typeof body.parentAgentRef === 'string' ? body.parentAgentRef.trim() : '';
 

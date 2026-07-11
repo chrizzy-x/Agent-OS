@@ -60,7 +60,7 @@ describe('POST /api/signup', () => {
     const body = await response.json();
 
     expect(response.status).toBe(201);
-    expect(body.redirectTo).toBe('/studio');
+    expect(body.redirectTo).toBe('/');
     if (hasBearerAccess) {
       expect(body.credentials.bearerToken).toBeTruthy();
     } else {
