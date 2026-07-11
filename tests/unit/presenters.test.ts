@@ -20,4 +20,10 @@ describe('ui presenters', () => {
     expect(summarizeAgentResult({ result: { message: 'Completed task' } })).toBe('message: Completed task');
     expect(summarizeSkillCapability({ query: 'string', limit: 'number' }, 'records')).toBe('2 inputs | Returns records');
   });
+
+  it('redacts secret-like values in user-facing summaries', () => {
+    const summary = summarizeValue('token=sk-live-secret-value-1234567890');
+    expect(summary).toContain('[redacted]');
+    expect(summary).not.toContain('sk-live-secret-value');
+  });
 });

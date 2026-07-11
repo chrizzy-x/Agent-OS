@@ -11,6 +11,7 @@ import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionA
 import { summarizeValue, summarizeWorkflowRun } from '@/src/ui/presenters';
 import {
   ActivityFeed,
+  Badge,
   Button,
   Card,
   EmptyState,
@@ -39,6 +40,79 @@ type Workflow = {
 
 type WorkflowDrawer = 'workflow-spec' | 'workflow-runtime';
 
+type ExecutionStatus = 'QUEUED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+type ExecutionRecord = {
+  id: string;
+  title: string;
+  status: ExecutionStatus | string;
+  workflowId?: string | null;
+  output?: unknown;
+  error?: Record<string, unknown> | null;
+  failure?: Record<string, unknown> | null;
+  recoveryAction?: string | null;
+  recoveryRequestedAt?: string | null;
+  durationMs?: number | null;
+  startedAt?: string | null;
+  pausedAt?: string | null;
+  cancelledAt?: string | null;
+  completedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ExecutionLogRecord = {
+  id: string;
+  executionId: string;
+  level: 'debug' | 'info' | 'warning' | 'error';
+  message: string;
+  data?: Record<string, unknown>;
+  createdAt: string;
+};
+
+const ACTIVE_EXECUTION_STATUSES = new Set(['QUEUED', 'RUNNING', 'PAUSED']);
+const RETRYABLE_EXECUTION_STATUSES = new Set(['FAILED', 'CANCELLED']);
+
+function normalizeStatus(value: unknown): ExecutionStatus {
+  const upper = String(value ?? 'QUEUED').toUpperCase();
+  if (upper === 'RUNNING' || upper === 'PAUSED' || upper === 'COMPLETED' || upper === 'FAILED' || upper === 'CANCELLED') return upper;
+  return 'QUEUED';
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not recorded';
+  return date.toLocaleString();
+}
+
+function formatDuration(value?: number | null) {
+  if (typeof value !== 'number') return 'No duration recorded';
+  if (value < 1000) return `${value} ms`;
+  return `${(value / 1000).toFixed(1)} sec`;
+}
+
+function nextRunLabel(workflow: Workflow) {
+  if (!workflow.schedule) return 'Manual only';
+  return 'Scheduled by workflow runtime';
+}
+
+function lifecycleCloseLabel(status: ExecutionStatus) {
+  if (status === 'QUEUED') return 'Queued';
+  if (status === 'RUNNING') return 'Running';
+  if (status === 'PAUSED') return 'Paused';
+  if (status === 'FAILED') return 'Failed';
+  if (status === 'CANCELLED') return 'Cancelled';
+  return 'Completed';
+}
+
+function readableFailure(execution?: ExecutionRecord | null, workflow?: Workflow | null) {
+  const failure = execution?.failure ?? execution?.error;
+  if (failure) return summarizeWorkflowRun(failure);
+  if (workflow?.last_error) return workflow.last_error;
+  return '';
+}
+
 export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const shell = useApplicationShell();
   const router = useRouter();
@@ -50,6 +124,11 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const [working, setWorking] = useState(false);
+  const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
+  const [executionsLoading, setExecutionsLoading] = useState(false);
+  const [selectedExecutionId, setSelectedExecutionId] = useState('');
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLogRecord[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,6 +166,66 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
     () => filtered.find(item => item.id === activeId) ?? filtered[0] ?? null,
     [activeId, filtered],
   );
+  const selectedExecution = useMemo(
+    () => executions.find(item => item.id === selectedExecutionId) ?? executions[0] ?? null,
+    [executions, selectedExecutionId],
+  );
+  const latestExecution = executions[0] ?? null;
+  const selectedStatus = normalizeStatus(selectedExecution?.status);
+  const latestStatus = normalizeStatus(latestExecution?.status ?? active?.status);
+  const canRetrySelected = Boolean(selectedExecution && RETRYABLE_EXECUTION_STATUSES.has(selectedStatus));
+  const canCancelSelected = Boolean(selectedExecution && ACTIVE_EXECUTION_STATUSES.has(selectedStatus));
+
+  const loadExecutions = useCallback(async (workflowId: string) => {
+    setExecutionsLoading(true);
+    try {
+      const params = new URLSearchParams({ workflowId, sourceType: 'workflow', status: 'all', limit: '25' });
+      if (shell.activeWorkspaceId) params.set('workspaceId', shell.activeWorkspaceId);
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession(`/api/executions?${params.toString()}`, { cache: 'no-store' });
+      setAuthState(nextAuthState);
+      const data = await response.json();
+      const rows = Array.isArray(data.executions) ? data.executions : [];
+      setExecutions(rows);
+      setSelectedExecutionId(current => current && rows.some((item: ExecutionRecord) => item.id === current) ? current : rows[0]?.id ?? '');
+    } catch {
+      setExecutions([]);
+      setSelectedExecutionId('');
+    } finally {
+      setExecutionsLoading(false);
+    }
+  }, [shell.activeWorkspaceId]);
+
+  const loadExecutionLogs = useCallback(async (executionId: string) => {
+    if (!executionId) {
+      setExecutionLogs([]);
+      return;
+    }
+    setLogsLoading(true);
+    try {
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession(`/api/executions/${executionId}`, { cache: 'no-store' });
+      setAuthState(nextAuthState);
+      const data = await response.json();
+      setExecutionLogs(Array.isArray(data.logs) ? data.logs : []);
+    } catch {
+      setExecutionLogs([]);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!active?.id || authState === 'signed_out' || authState === 'expired') {
+      setExecutions([]);
+      setSelectedExecutionId('');
+      setExecutionLogs([]);
+      return;
+    }
+    void loadExecutions(active.id);
+  }, [active?.id, authState, loadExecutions]);
+
+  useEffect(() => {
+    void loadExecutionLogs(selectedExecution?.id ?? '');
+  }, [loadExecutionLogs, selectedExecution?.id]);
 
   async function runWorkflow() {
     if (!active) return;
@@ -99,10 +238,33 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
         body: JSON.stringify({ workflowId: active.id, force: true }),
       });
       const data = await res.json();
-      setNotice(res.ok ? `Run started (${data.ran ?? 0}).` : data.error ?? 'Run failed');
+      const executionId = typeof data.executionId === 'string' ? data.executionId : undefined;
+      setNotice(res.ok ? `Run recorded${executionId ? ` as ${executionId}` : ''}.` : data.error ?? 'Run failed');
       await load();
+      await loadExecutions(active.id);
+      if (executionId) setSelectedExecutionId(executionId);
     } catch {
       setNotice('Run failed');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function requestRunAction(execution: ExecutionRecord, action: 'retry' | 'cancel' | 'inspect') {
+    setWorking(true);
+    setNotice('');
+    try {
+      const { response: res } = await fetchWithBrowserSession(`/api/executions/${execution.id}/actions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      setNotice(res.ok ? `Execution ${action} requested.` : data.error ?? `Execution ${action} failed`);
+      if (active?.id) await loadExecutions(active.id);
+      await loadExecutionLogs(execution.id);
+    } catch {
+      setNotice(`Execution ${action} failed`);
     } finally {
       setWorking(false);
     }
@@ -175,14 +337,18 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
             </Card>
             <Card>
               <div className="os-entity-title" style={{ marginBottom: 12 }}>Recent runs</div>
-              <ActivityFeed
-                items={filtered.slice(0, 5).map(item => ({
-                  id: item.id,
-                  title: item.name,
-                  subtitle: item.last_error || 'Ready',
-                  status: item.last_error ? 'error' : item.status,
-                }))}
-              />
+              {active && executions.length > 0 ? (
+                <ActivityFeed
+                  items={executions.slice(0, 5).map(item => ({
+                    id: item.id,
+                    title: item.title,
+                    subtitle: formatDateTime(item.updatedAt),
+                    status: normalizeStatus(item.status),
+                  }))}
+                />
+              ) : (
+                <div className="os-empty-body">{executionsLoading ? 'Loading runs.' : 'No workflow runs recorded yet.'}</div>
+              )}
             </Card>
           </>
         )}
@@ -193,7 +359,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
           subtitle={active?.summary || 'Templates, my workflows, scheduled jobs, running jobs, failures, execution history, and public workflows.'}
           actions={active ? (
             <>
-              <Button variant="secondary" onClick={() => void runWorkflow()}>{working ? 'Working...' : 'Test Run'}</Button>
+              <Button variant="secondary" onClick={() => void runWorkflow()} loading={working} loadingLabel="Working...">Manual Run</Button>
               <Button variant="secondary" onClick={() => void toggleStatus()}>{working ? 'Working...' : active.status === 'paused' ? 'Resume' : 'Pause'}</Button>
               <Button variant="ghost" onClick={validateWorkflow}>Validate</Button>
               <Button variant="ghost" onClick={sendToStudio}>AI Assist</Button>
@@ -237,15 +403,82 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
             <Card>
               <div className="os-entity-head" style={{ marginBottom: 12 }}>
                 <div className="os-entity-title">Latest run</div>
-                <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime details</Button>
+                <div className="os-inline-actions">
+                  <Badge tone={latestStatus === 'FAILED' || active.last_error ? 'danger' : ACTIVE_EXECUTION_STATUSES.has(latestStatus) ? 'accent' : latestStatus === 'COMPLETED' ? 'success' : 'default'}>{latestStatus}</Badge>
+                  <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime details</Button>
+                </div>
               </div>
-              <div className="os-entity-copy">{summarizeWorkflowRun(active.last_result ?? { status: active.status, error: active.last_error })}</div>
-              {active.last_error ? <div className="os-entity-copy" style={{ marginTop: 12 }}>Last error: {active.last_error}</div> : null}
+              {executionsLoading ? (
+                <div className="os-entity-copy">Loading execution history.</div>
+              ) : latestExecution ? (
+                <ActivityFeed
+                  items={[
+                    {
+                      id: `${latestExecution.id}-started`,
+                      title: 'Started',
+                      subtitle: formatDateTime(latestExecution.startedAt ?? latestExecution.createdAt),
+                      status: normalizeStatus(latestExecution.status),
+                    },
+                    {
+                      id: `${latestExecution.id}-finished`,
+                      title: lifecycleCloseLabel(normalizeStatus(latestExecution.status)),
+                      subtitle: formatDateTime(latestExecution.completedAt ?? latestExecution.cancelledAt ?? latestExecution.updatedAt),
+                      status: normalizeStatus(latestExecution.status),
+                    },
+                    {
+                      id: `${latestExecution.id}-duration`,
+                      title: 'Duration',
+                      subtitle: formatDuration(latestExecution.durationMs),
+                    },
+                  ]}
+                />
+              ) : (
+                <div className="os-empty-body">No run has been recorded for this workflow yet. Manual Run will create a tracked execution.</div>
+              )}
+              <div className="os-entity-copy" style={{ marginTop: 12 }}>{summarizeWorkflowRun(latestExecution?.output ?? active.last_result ?? { status: active.status, error: active.last_error })}</div>
+              {readableFailure(latestExecution, active) ? <div className="os-entity-copy" style={{ marginTop: 12 }}>Failure: {readableFailure(latestExecution, active)}</div> : null}
+            </Card>
+
+            <Card>
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <div className="os-entity-title">Run history</div>
+                  <div className="os-entity-copy">Last run: {formatDateTime(latestExecution?.updatedAt ?? null)} | Next run: {nextRunLabel(active)}</div>
+                </div>
+                <Button variant="ghost" onClick={() => active.id && void loadExecutions(active.id)} loading={executionsLoading} loadingLabel="Refreshing...">Refresh</Button>
+              </div>
+              {executions.length === 0 ? (
+                <div className="os-empty-body">No execution records are available yet.</div>
+              ) : (
+                <div className="os-feed" data-testid="workflow-run-history">
+                  {executions.map(item => {
+                    const status = normalizeStatus(item.status);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`os-feed-item${item.id === selectedExecution?.id ? ' active' : ''}`}
+                        onClick={() => {
+                          setSelectedExecutionId(item.id);
+                          drawer.openDrawer('workflow-runtime');
+                        }}
+                      >
+                        <div className="os-feed-head">
+                          <strong>{item.title}</strong>
+                          <Badge tone={status === 'FAILED' ? 'danger' : ACTIVE_EXECUTION_STATUSES.has(status) ? 'accent' : status === 'COMPLETED' ? 'success' : 'default'}>{status}</Badge>
+                        </div>
+                        <div className="os-feed-subtitle">{formatDateTime(item.updatedAt)} | {formatDuration(item.durationMs)}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </Card>
 
             <Card>
               <div className="os-entity-title" style={{ marginBottom: 12 }}>Settings</div>
               <div className="os-entity-copy">Schedule: {active.schedule || 'Manual'}</div>
+              <div className="os-entity-copy">Next run: {nextRunLabel(active)}</div>
               <div className="os-entity-copy">Visibility: {active.visibility ?? 'private'}</div>
             </Card>
           </>
@@ -272,10 +505,115 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
             </Card>
           </div>
         ) : (
-          <Card>
-            <div className="os-entity-title" style={{ marginBottom: 12 }}>Latest run summary</div>
-            <div className="os-entity-copy">{summarizeWorkflowRun(active.last_result ?? { status: active.status, error: active.last_error })}</div>
-          </Card>
+          <div className="os-drawer-stack" data-testid="workflow-runtime-drawer">
+            <Card>
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <div className="os-entity-title">Run lifecycle</div>
+                  <div className="os-entity-copy">{selectedExecution?.title ?? active.name}</div>
+                </div>
+                <Badge tone={selectedStatus === 'FAILED' || active.last_error ? 'danger' : ACTIVE_EXECUTION_STATUSES.has(selectedStatus) ? 'accent' : selectedStatus === 'COMPLETED' ? 'success' : 'default'}>{selectedStatus}</Badge>
+              </div>
+              {selectedExecution ? (
+                <ActivityFeed
+                  items={[
+                    {
+                      id: `${selectedExecution.id}-queued`,
+                      title: 'Registered',
+                      subtitle: formatDateTime(selectedExecution.createdAt),
+                      status: 'QUEUED',
+                    },
+                    {
+                      id: `${selectedExecution.id}-started`,
+                      title: 'Executing',
+                      subtitle: formatDateTime(selectedExecution.startedAt),
+                      status: selectedStatus,
+                    },
+                    {
+                      id: `${selectedExecution.id}-closed`,
+                      title: lifecycleCloseLabel(selectedStatus),
+                      subtitle: formatDateTime(selectedExecution.completedAt ?? selectedExecution.cancelledAt ?? selectedExecution.pausedAt ?? selectedExecution.updatedAt),
+                      status: selectedStatus,
+                    },
+                  ]}
+                />
+              ) : (
+                <div className="os-empty-body">No execution record is available for this workflow yet.</div>
+              )}
+            </Card>
+
+            <Card>
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <div className="os-entity-title">Run actions</div>
+                  <div className="os-entity-copy">Retry and cancel requests are recorded through the execution service.</div>
+                </div>
+              </div>
+              <div className="os-inline-actions">
+                <Button
+                  variant="secondary"
+                  onClick={() => selectedExecution && void requestRunAction(selectedExecution, 'retry')}
+                  disabled={!selectedExecution || !canRetrySelected || working}
+                  disabledReason={!selectedExecution ? 'Select a run before retrying.' : !canRetrySelected ? 'Retry is available after a failed or cancelled run.' : 'Another workflow action is running.'}
+                >
+                  Retry
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => selectedExecution && void requestRunAction(selectedExecution, 'cancel')}
+                  disabled={!selectedExecution || !canCancelSelected || working}
+                  disabledReason={!selectedExecution ? 'Select a run before cancelling.' : !canCancelSelected ? 'Cancel is available only while a run is queued, running, or paused.' : 'Another workflow action is running.'}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => selectedExecution && void requestRunAction(selectedExecution, 'inspect')}
+                  disabled={!selectedExecution || working}
+                  disabledReason={!selectedExecution ? 'Select a run before inspecting.' : 'Another workflow action is running.'}
+                >
+                  Inspect
+                </Button>
+              </div>
+              {selectedExecution?.recoveryAction ? (
+                <div className="os-entity-copy" style={{ marginTop: 12 }}>Last requested action: {selectedExecution.recoveryAction} at {formatDateTime(selectedExecution.recoveryRequestedAt)}</div>
+              ) : null}
+            </Card>
+
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>Safe run summary</div>
+              <div className="os-entity-copy">{summarizeWorkflowRun(selectedExecution?.output ?? active.last_result ?? { status: active.status, error: active.last_error })}</div>
+              {readableFailure(selectedExecution, active) ? <div className="os-entity-copy" style={{ marginTop: 12 }}>Failure: {readableFailure(selectedExecution, active)}</div> : null}
+            </Card>
+
+            <Card>
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <div className="os-entity-title">Execution logs</div>
+                  <div className="os-entity-copy">Secrets and raw runtime payloads are summarized before display.</div>
+                </div>
+                <Button variant="ghost" onClick={() => selectedExecution && void loadExecutionLogs(selectedExecution.id)} loading={logsLoading} loadingLabel="Loading...">Reload logs</Button>
+              </div>
+              {logsLoading ? (
+                <div className="os-entity-copy">Loading logs.</div>
+              ) : executionLogs.length === 0 ? (
+                <div className="os-empty-body">No logs have been recorded for this execution yet.</div>
+              ) : (
+                <div className="os-log-list" data-testid="workflow-execution-logs">
+                  {executionLogs.map(log => (
+                    <details key={log.id} className="os-log-item">
+                      <summary>
+                        <span>{log.message || 'Workflow log event'}</span>
+                        <Badge tone={log.level === 'error' ? 'danger' : log.level === 'warning' ? 'warning' : 'default'}>{log.level}</Badge>
+                      </summary>
+                      <div className="os-entity-copy">{formatDateTime(log.createdAt)}</div>
+                      <div className="os-entity-copy">{summarizeValue(log.data ?? {}, 220)}</div>
+                    </details>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
         )}
       </Drawer>
     </div>

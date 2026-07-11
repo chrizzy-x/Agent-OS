@@ -1732,6 +1732,44 @@ textarea {
   background: rgba(255, 255, 255, 0.02);
 }
 
+button.os-feed-item {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.os-feed-item.active,
+button.os-feed-item:hover {
+  border-color: var(--border-active);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.os-log-list {
+  display: grid;
+  gap: 8px;
+}
+
+.os-log-item {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.os-log-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.os-log-item[open] summary {
+  margin-bottom: 8px;
+}
+
 .os-code-block {
   margin: 0;
   padding: 14px;

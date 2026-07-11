@@ -27,6 +27,14 @@ export function redactSecretsInString(value: string): string {
     .replace(
       /(([A-Z0-9_]*(?:SECRET|TOKEN|API_KEY|PASSWORD)[A-Z0-9_]*)=)([^\s]+)/g,
       '$1[redacted]',
+    )
+    .replace(
+      /\b(Bearer\s+)[a-zA-Z0-9._-]{16,}\b/g,
+      '$1[redacted]',
+    )
+    .replace(
+      /\b(sk-[a-zA-Z0-9_-]{16,}|gh[pousr]_[a-zA-Z0-9_]{20,})\b/g,
+      '[redacted]',
     );
 }
 

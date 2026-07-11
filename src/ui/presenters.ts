@@ -1,3 +1,5 @@
+import { redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
+
 type JsonRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -24,13 +26,13 @@ function parseJsonLike(value: unknown): unknown {
 }
 
 export function truncateText(value: string, max = 160): string {
-  const normalized = value.replace(/\s+/g, ' ').trim();
+  const normalized = redactSecretsInString(value).replace(/\s+/g, ' ').trim();
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, Math.max(0, max - 3))}...`;
 }
 
 export function summarizeValue(value: unknown, max = 160): string {
-  const parsed = parseJsonLike(value);
+  const parsed = redactSecretsDeep(parseJsonLike(value));
   if (parsed === null || parsed === undefined) return 'No details';
   if (typeof parsed === 'string') return truncateText(parsed, max);
   if (typeof parsed === 'number' || typeof parsed === 'boolean') return String(parsed);
