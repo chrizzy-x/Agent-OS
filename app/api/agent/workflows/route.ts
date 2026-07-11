@@ -9,6 +9,7 @@ import {
   syncWorkflowDocument,
   type WorkflowAuthoringMode,
 } from '@/src/workflows/canonical';
+import { getProject } from '@/src/projects/service';
 import { assertWorkspaceMembership, resolveDefaultWorkspaceForAgent } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
@@ -107,6 +108,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ code: 'BAD_REQUEST', error: 'workspace is required', message: 'workspace is required' }, { status: 400 });
     }
     await assertWorkspaceMembership(workspaceId, ctx.agentId);
+    const projectIdInput = typeof body.projectId === 'string' ? body.projectId.trim() : '';
+    let projectId: string | null = null;
+    if (projectIdInput) {
+      const project = await getProject({ ownerAgentId: ctx.agentId, projectId: projectIdInput });
+      if (project.workspaceId !== workspaceId) {
+        return NextResponse.json({ code: 'BAD_REQUEST', error: 'project must belong to the workflow workspace', message: 'project must belong to the workflow workspace' }, { status: 400 });
+      }
+      projectId = project.id;
+    }
 
     const synced = syncWorkflowDocument({
       mode,
@@ -122,6 +132,7 @@ export async function POST(req: NextRequest) {
       .insert({
         agent_id: ctx.agentId,
         workspace_id: workspaceId,
+        project_id: projectId,
         name: String(name).slice(0, 80),
         summary,
         steps: synced.steps,

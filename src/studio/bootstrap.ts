@@ -18,7 +18,7 @@ async function loadBootstrapWorkflows(ownerAgentId: string): Promise<Array<Recor
   const supabase = getSupabaseAdmin();
   const primary = await supabase
     .from('agent_workflows')
-    .select('id,name,summary,status,schedule,graph_state,code_state,canonical_doc,workspace_id,project_id,updated_at')
+    .select('id,name,summary,status,schedule,steps,graph_state,code_state,canonical_doc,workspace_id,project_id,updated_at')
     .eq('agent_id', ownerAgentId)
     .order('updated_at', { ascending: false });
 
@@ -32,7 +32,7 @@ async function loadBootstrapWorkflows(ownerAgentId: string): Promise<Array<Recor
 
   const legacy = await supabase
     .from('agent_workflows')
-    .select('id,name,summary,status,schedule,graph_state,code_state,canonical_doc,workspace_id,updated_at')
+    .select('id,name,summary,status,schedule,steps,graph_state,code_state,canonical_doc,workspace_id,updated_at')
     .eq('agent_id', ownerAgentId)
     .order('updated_at', { ascending: false });
 
@@ -194,6 +194,8 @@ export async function buildStudioBootstrap(params: {
       summary: typeof row.summary === 'string' ? row.summary : null,
       status: String(row.status ?? 'active'),
       schedule: typeof row.schedule === 'string' ? row.schedule : null,
+      project_id: typeof row.project_id === 'string' ? row.project_id : null,
+      steps: Array.isArray(row.steps) ? row.steps : [],
       graph_state: row.graph_state && typeof row.graph_state === 'object' ? row.graph_state : undefined,
       code_state: typeof row.code_state === 'string' ? row.code_state : null,
       canonical_doc: row.canonical_doc && typeof row.canonical_doc === 'object' ? row.canonical_doc : undefined,

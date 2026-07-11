@@ -86,6 +86,12 @@ type WorkflowRecord = {
   summary: string | null;
   status: string;
   visibility?: 'private' | 'workspace' | 'public';
+  schedule?: string | null;
+  project_id?: string | null;
+  steps?: Array<Record<string, unknown>>;
+  graph_state?: { nodes?: unknown[]; edges?: unknown[] };
+  code_state?: string | null;
+  canonical_doc?: Record<string, unknown>;
 };
 
 type VaultSecretRecord = {

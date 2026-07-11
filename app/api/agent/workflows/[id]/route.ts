@@ -5,6 +5,7 @@ import { requireRouteCapability } from '@/src/auth/request';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { toErrorResponse } from '@/src/utils/errors';
 import { hydrateWorkflowDocument, syncWorkflowDocument, type WorkflowAuthoringMode } from '@/src/workflows/canonical';
+import { getProject } from '@/src/projects/service';
 
 export const runtime = 'nodejs';
 
@@ -108,6 +109,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (typeof body.name === 'string') patch.name = body.name.slice(0, 80);
     if (typeof body.summary === 'string' || body.summary === null) patch.summary = body.summary;
     if (body.visibility === 'private' || body.visibility === 'workspace' || body.visibility === 'public') patch.visibility = body.visibility;
+    if (typeof body.projectId === 'string' && body.projectId.trim()) {
+      const project = await getProject({ ownerAgentId: ctx.agentId, projectId: body.projectId.trim() });
+      const workspaceId = typeof (existing as Record<string, unknown>).workspace_id === 'string' ? String((existing as Record<string, unknown>).workspace_id) : '';
+      if (workspaceId && project.workspaceId !== workspaceId) {
+        return NextResponse.json({ code: 'BAD_REQUEST', error: 'project must belong to the workflow workspace', message: 'project must belong to the workflow workspace' }, { status: 400 });
+      }
+      patch.project_id = project.id;
+    } else if (body.projectId === null) {
+      patch.project_id = null;
+    }
 
     const mode = pickMode(body);
     if (mode) {

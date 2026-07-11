@@ -51,6 +51,7 @@ Completed replies are persisted once. If cancellation occurs after partial outpu
 - session rows with continue, rename, pin, project attach, archive, and delete controls
 - per-session project, visibility, and last-updated metadata
 - persistent NL Studio, Workflow Builder, and Code Studio modes
+- Workflow Builder creates and edits canonical visual workflow graphs with prompt, skill, app, private subagent, Vault permission, trigger, output, and disabled Universal MCP node states
 - mobile drawer navigation and responsive conversation layout
 
 ## Verification

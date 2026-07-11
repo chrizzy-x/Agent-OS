@@ -7,15 +7,19 @@ export type WorkflowStep = {
   tool: string;
   description: string;
   input: Record<string, unknown>;
+  output: Record<string, unknown>;
 };
+
+export type WorkflowGraphNodeType = 'step' | 'trigger' | 'condition' | 'prompt' | 'skill' | 'app' | 'subagent' | 'vault' | 'mcp' | 'output';
 
 export type WorkflowGraphNode = {
   id: string;
-  type: 'step' | 'trigger' | 'condition' | 'output';
+  type: WorkflowGraphNodeType;
   label: string;
   tool: string;
   description: string;
   input: Record<string, unknown>;
+  output: Record<string, unknown>;
   order: number;
   position?: { x: number; y: number };
 };
@@ -58,6 +62,8 @@ export type SyncWorkflowInput = {
 };
 
 const MAX_STEPS = 200;
+const WORKFLOW_NODE_TYPES = new Set<WorkflowGraphNodeType>(['step', 'trigger', 'condition', 'prompt', 'skill', 'app', 'subagent', 'vault', 'mcp', 'output']);
+const EXECUTABLE_NODE_TYPES = new Set<WorkflowGraphNodeType>(['step', 'condition', 'prompt', 'skill', 'app', 'subagent', 'vault', 'mcp']);
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -96,6 +102,7 @@ function normalizeStep(raw: unknown, fallbackOrder: number): WorkflowStep {
     tool: normalizeToolName(toolRaw),
     description: descriptionRaw || `Step ${order}`,
     input: asRecord(row.input),
+    output: asRecord(row.output),
   };
 }
 
@@ -115,11 +122,12 @@ function normalizeGraphNode(raw: unknown, fallbackIndex: number): WorkflowGraphN
   const orderRaw = asNumber(row.order);
   const order = orderRaw && orderRaw > 0 ? Math.floor(orderRaw) : fallbackIndex + 1;
   const typeRaw = typeof row.type === 'string' ? row.type.trim().toLowerCase() : 'step';
-  const type = typeRaw === 'trigger' || typeRaw === 'condition' || typeRaw === 'output' ? typeRaw : 'step';
+  const type = WORKFLOW_NODE_TYPES.has(typeRaw as WorkflowGraphNodeType) ? typeRaw as WorkflowGraphNodeType : 'step';
   const label = typeof row.label === 'string' && row.label.trim() ? row.label.trim() : `Step ${order}`;
   const tool = normalizeToolName(typeof row.tool === 'string' ? row.tool : '');
   const description = typeof row.description === 'string' && row.description.trim() ? row.description.trim() : label;
   const input = asRecord(row.input);
+  const output = asRecord(row.output);
   const positionRecord = asRecord(row.position);
   const px = asNumber(positionRecord.x);
   const py = asNumber(positionRecord.y);
@@ -131,6 +139,7 @@ function normalizeGraphNode(raw: unknown, fallbackIndex: number): WorkflowGraphN
     tool,
     description,
     input,
+    output,
     order,
     position: px !== null && py !== null ? { x: px, y: py } : undefined,
   };
@@ -159,6 +168,7 @@ function stepsToGraph(steps: WorkflowStep[]): WorkflowGraphState {
     tool: step.tool,
     description: step.description,
     input: step.input,
+    output: step.output,
     order: step.order,
     position: { x: 80 + (index * 180), y: 120 },
   }));
@@ -217,13 +227,14 @@ function orderNodesByEdges(nodes: WorkflowGraphNode[], edges: WorkflowGraphEdge[
 
 function graphToSteps(graph: WorkflowGraphState): WorkflowStep[] {
   if (graph.nodes.length === 0) throw new ValidationError('Workflow graph must contain at least one node');
-  const ordered = orderNodesByEdges(graph.nodes, graph.edges).filter(node => node.type === 'step');
+  const ordered = orderNodesByEdges(graph.nodes, graph.edges).filter(node => EXECUTABLE_NODE_TYPES.has(node.type));
   if (ordered.length === 0) throw new ValidationError('Workflow graph must contain at least one executable step node');
   return ordered.map((node, index) => ({
     order: index + 1,
     tool: normalizeToolName(node.tool),
     description: node.description || node.label || `Step ${index + 1}`,
     input: asRecord(node.input),
+    output: asRecord(node.output),
   }));
 }
 
@@ -275,19 +286,18 @@ function fromConversation(input: SyncWorkflowInput): WorkflowSyncResult {
 function fromVisual(input: SyncWorkflowInput): WorkflowSyncResult {
   const graph = normalizeGraph(input.graph);
   const steps = graphToSteps(graph);
-  const normalizedGraph = stepsToGraph(steps);
   const canonical: CanonicalWorkflowDocument = {
     schemaVersion: '1.0.0',
     updatedFrom: 'visual',
     updatedAt: input.now ?? new Date().toISOString(),
     steps,
-    graph: normalizedGraph,
+    graph,
     metadata: input.metadata ?? {},
   };
   return {
     canonical,
     steps,
-    graphState: normalizedGraph,
+    graphState: graph,
     codeState: serializeWorkflowCode(canonical),
   };
 }
@@ -349,7 +359,7 @@ export function parseCanonicalWorkflowDocument(raw: unknown): CanonicalWorkflowD
       updatedFrom: row.updatedFrom === 'visual' || row.updatedFrom === 'code' ? row.updatedFrom : 'conversation',
       updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : new Date().toISOString(),
       steps,
-      graph: stepsToGraph(graphToSteps(graph)),
+      graph,
       metadata: asRecord(row.metadata),
     };
   } catch {
