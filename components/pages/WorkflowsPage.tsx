@@ -15,6 +15,7 @@ import {
   Button,
   Card,
   EmptyState,
+  Input,
   LoadingState,
   PageHeader,
   SearchBar,
@@ -33,8 +34,10 @@ type Workflow = {
   status: string;
   visibility?: 'private' | 'workspace' | 'public';
   schedule: string | null;
+  task_id?: string | null;
   last_result?: unknown;
   last_error?: string | null;
+  last_run_at?: string | null;
   version?: number;
 };
 
@@ -92,9 +95,36 @@ function formatDuration(value?: number | null) {
   return `${(value / 1000).toFixed(1)} sec`;
 }
 
+function scheduleIntervalMs(expression: string | null | undefined): number | null {
+  if (!expression) return null;
+  const everyMin = expression.match(/^\*\/([1-9]\d*)\s+\*\s+\*\s+\*\s+\*$/);
+  if (everyMin) return Number(everyMin[1]) * 60 * 1000;
+  const everyHour = expression.match(/^0\s+\*\/([1-9]\d*)\s+\*\s+\*\s+\*$/);
+  if (everyHour) return Number(everyHour[1]) * 60 * 60 * 1000;
+  if (/^0\s+\*\s+\*\s+\*\s+\*$/.test(expression) || expression === '@hourly') return 60 * 60 * 1000;
+  if (/^0\s+0\s+\*\s+\*\s+\*$/.test(expression) || expression === '@daily' || expression === '@midnight') return 24 * 60 * 60 * 1000;
+  return null;
+}
+
+function scheduleLabel(expression: string | null | undefined) {
+  if (!expression) return 'Manual';
+  const everyMin = expression.match(/^\*\/([1-9]\d*)\s+\*\s+\*\s+\*\s+\*$/);
+  if (everyMin) return `Every ${everyMin[1]} minute${everyMin[1] === '1' ? '' : 's'}`;
+  const everyHour = expression.match(/^0\s+\*\/([1-9]\d*)\s+\*\s+\*\s+\*$/);
+  if (everyHour) return `Every ${everyHour[1]} hour${everyHour[1] === '1' ? '' : 's'}`;
+  if (expression === '@hourly' || expression === '0 * * * *') return 'Hourly';
+  if (expression === '@daily' || expression === '@midnight' || expression === '0 0 * * *') return 'Daily';
+  return expression;
+}
+
 function nextRunLabel(workflow: Workflow) {
   if (!workflow.schedule) return 'Manual only';
-  return 'Scheduled by workflow runtime';
+  if (workflow.status === 'paused') return 'Paused until recurring is enabled';
+  const interval = scheduleIntervalMs(workflow.schedule);
+  if (!interval) return 'Schedule saved; backend cron support required';
+  if (!workflow.last_run_at) return 'Due on next scheduler pass';
+  const next = new Date(new Date(workflow.last_run_at).getTime() + interval);
+  return Number.isNaN(next.getTime()) ? 'Due on next scheduler pass' : formatDateTime(next.toISOString());
 }
 
 function lifecycleCloseLabel(status: ExecutionStatus) {
@@ -129,6 +159,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const [selectedExecutionId, setSelectedExecutionId] = useState('');
   const [executionLogs, setExecutionLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,6 +206,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   const latestStatus = normalizeStatus(latestExecution?.status ?? active?.status);
   const canRetrySelected = Boolean(selectedExecution && RETRYABLE_EXECUTION_STATUSES.has(selectedStatus));
   const canCancelSelected = Boolean(selectedExecution && ACTIVE_EXECUTION_STATUSES.has(selectedStatus));
+  const scheduleChanged = scheduleDraft.trim() !== (active?.schedule ?? '');
 
   const loadExecutions = useCallback(async (workflowId: string) => {
     setExecutionsLoading(true);
@@ -226,6 +258,10 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
   useEffect(() => {
     void loadExecutionLogs(selectedExecution?.id ?? '');
   }, [loadExecutionLogs, selectedExecution?.id]);
+
+  useEffect(() => {
+    setScheduleDraft(active?.schedule ?? '');
+  }, [active?.id, active?.schedule]);
 
   async function runWorkflow() {
     if (!active) return;
@@ -291,6 +327,49 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
     }
   }
 
+  async function saveSchedule(nextSchedule = scheduleDraft) {
+    if (!active) return;
+    setWorking(true);
+    setNotice('');
+    const schedule = nextSchedule.trim();
+    try {
+      const { response: res } = await fetchWithBrowserSession(`/api/agent/workflows/${active.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedule: schedule || null, status: schedule ? 'active' : active.status }),
+      });
+      const data = await res.json();
+      setNotice(res.ok ? (schedule ? 'Recurring schedule saved.' : 'Recurring schedule removed.') : data.error ?? 'Schedule update failed');
+      await load();
+      if (active.id) await loadExecutions(active.id);
+    } catch {
+      setNotice('Schedule update failed');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function toggleRecurring() {
+    if (!active || !active.schedule) return;
+    setWorking(true);
+    setNotice('');
+    const nextStatus = active.status === 'paused' ? 'active' : 'paused';
+    try {
+      const { response: res } = await fetchWithBrowserSession(`/api/agent/workflows/${active.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      setNotice(res.ok ? (nextStatus === 'active' ? 'Recurring workflow enabled.' : 'Recurring workflow disabled.') : data.error ?? 'Recurring update failed');
+      await load();
+    } catch {
+      setNotice('Recurring update failed');
+    } finally {
+      setWorking(false);
+    }
+  }
+
   function validateWorkflow() {
     if (!active) return;
     const issues: string[] = [];
@@ -329,7 +408,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
                 <SidebarNav items={filtered.map(item => ({
                   href: `/workflows/${item.id}`,
                   label: item.name,
-                  subtitle: item.schedule || `${item.steps.length} steps`,
+                  subtitle: item.schedule ? scheduleLabel(item.schedule) : `${item.steps.length} steps`,
                   active: item.id === active?.id,
                   badge: item.last_error ? 'error' : item.status,
                 }))} />
@@ -381,7 +460,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
               title={active.name}
               description={active.summary || 'No summary provided.'}
               status={active.last_error ? 'error' : active.status}
-              footer={<div className="os-entity-copy">{active.steps.length} steps | {active.schedule || 'Manual'} | Version {active.version ?? 1}</div>}
+              footer={<div className="os-entity-copy">{active.steps.length} steps | {scheduleLabel(active.schedule)} | Version {active.version ?? 1}</div>}
             />
 
             <Card>
@@ -476,10 +555,59 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
             </Card>
 
             <Card>
-              <div className="os-entity-title" style={{ marginBottom: 12 }}>Settings</div>
-              <div className="os-entity-copy">Schedule: {active.schedule || 'Manual'}</div>
+              <div className="os-entity-head" style={{ marginBottom: 12 }}>
+                <div>
+                  <div className="os-entity-title">Recurring schedule</div>
+                  <div className="os-entity-copy">Enable, disable, or edit recurring workflow execution.</div>
+                </div>
+                <Badge tone={!active.schedule ? 'default' : active.status === 'paused' ? 'warning' : 'success'}>{!active.schedule ? 'manual' : active.status === 'paused' ? 'disabled' : 'enabled'}</Badge>
+              </div>
+              <div className="os-entity-copy">Current schedule: {scheduleLabel(active.schedule)}</div>
+              <div className="os-entity-copy">Last run: {formatDateTime(active.last_run_at ?? latestExecution?.updatedAt ?? null)}</div>
               <div className="os-entity-copy">Next run: {nextRunLabel(active)}</div>
+              {active.last_error ? <div className="os-entity-copy">Failure state: {active.last_error}</div> : null}
               <div className="os-entity-copy">Visibility: {active.visibility ?? 'private'}</div>
+              <div className="os-inline-actions" style={{ marginTop: 12 }}>
+                <Button variant="ghost" onClick={() => setScheduleDraft('@hourly')}>Hourly</Button>
+                <Button variant="ghost" onClick={() => setScheduleDraft('@daily')}>Daily</Button>
+                <Button variant="ghost" onClick={() => setScheduleDraft('*/15 * * * *')}>15 min</Button>
+                <Button variant="ghost" onClick={() => setScheduleDraft('')}>Manual</Button>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <Input
+                  aria-label="Workflow schedule"
+                  value={scheduleDraft}
+                  onChange={event => setScheduleDraft(event.target.value)}
+                  placeholder="@hourly, @daily, */15 * * * *"
+                />
+                <div className="os-entity-copy" style={{ marginTop: 8 }}>Supported schedules: @hourly, @daily, */N * * * *, 0 * * * *, 0 */N * * *, 0 0 * * *.</div>
+              </div>
+              <div className="os-inline-actions" style={{ marginTop: 12 }}>
+                <Button
+                  variant="secondary"
+                  onClick={() => void saveSchedule()}
+                  disabled={working || !scheduleChanged}
+                  disabledReason={working ? 'Another workflow action is running.' : 'Change the schedule before saving.'}
+                >
+                  Save schedule
+                </Button>
+                <Button
+                  variant={active.status === 'paused' ? 'secondary' : 'destructive'}
+                  onClick={() => void toggleRecurring()}
+                  disabled={working || !active.schedule}
+                  disabledReason={working ? 'Another workflow action is running.' : 'Add a schedule before enabling or disabling recurring runs.'}
+                >
+                  {active.status === 'paused' ? 'Enable recurring' : 'Disable recurring'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => void saveSchedule('')}
+                  disabled={working || !active.schedule}
+                  disabledReason={working ? 'Another workflow action is running.' : 'No recurring schedule is saved.'}
+                >
+                  Remove schedule
+                </Button>
+              </div>
             </Card>
           </>
         )}

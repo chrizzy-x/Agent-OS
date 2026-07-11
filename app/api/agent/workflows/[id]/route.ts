@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { assertResourceAccess, normalizeVisibility } from '@/src/access/service';
 import { omitAgentIdentifierFields } from '@/src/auth/display-redaction';
 import { requireRouteCapability } from '@/src/auth/request';
@@ -38,6 +39,61 @@ function mapWorkflow(row: Record<string, unknown>): Record<string, unknown> {
   } catch {
     return row;
   }
+}
+
+function isSupportedSchedule(expression: string): boolean {
+  return /^\*\/([1-9]\d*)\s+\*\s+\*\s+\*\s+\*$/.test(expression)
+    || /^0\s+\*\/([1-9]\d*)\s+\*\s+\*\s+\*$/.test(expression)
+    || /^0\s+\*\s+\*\s+\*\s+\*$/.test(expression)
+    || /^0\s+0\s+\*\s+\*\s+\*$/.test(expression)
+    || expression === '@hourly'
+    || expression === '@daily'
+    || expression === '@midnight';
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function normalizeToolName(tool: string): string {
+  return tool.replace(/^agentos\./, '');
+}
+
+function runnableFromWorkflow(row: Record<string, unknown>): { tool: string; input: Record<string, unknown> } | null {
+  let steps: unknown[] = Array.isArray(row.steps) ? row.steps : [];
+  try {
+    const hydrated = hydrateWorkflowDocument({
+      canonicalDoc: row.canonical_doc,
+      steps: row.steps,
+      graphState: row.graph_state,
+      codeState: typeof row.code_state === 'string' ? row.code_state : null,
+    });
+    steps = hydrated.steps;
+  } catch {
+    // fall back to stored legacy steps
+  }
+
+  for (const rawStep of [...steps].reverse()) {
+    const step = asObject(rawStep);
+    if (!step || typeof step.tool !== 'string') continue;
+    const input = asObject(step.input) ?? {};
+    if (normalizeToolName(step.tool) !== 'proc_schedule') continue;
+
+    const nestedTool = typeof input.tool === 'string' ? input.tool : '';
+    if (nestedTool) return { tool: nestedTool, input: asObject(input.input) ?? {} };
+  }
+
+  for (const rawStep of [...steps].reverse()) {
+    const step = asObject(rawStep);
+    if (!step || typeof step.tool !== 'string') continue;
+    const tool = normalizeToolName(step.tool);
+    if (tool === 'proc_schedule') continue;
+    return { tool: step.tool, input: asObject(step.input) ?? {} };
+  }
+
+  return null;
 }
 
 // GET /api/agent/workflows/:id
@@ -105,7 +161,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.status === 'string') patch.status = body.status;
-    if (body.schedule !== undefined) patch.schedule = typeof body.schedule === 'string' ? body.schedule : null;
+    const requestedSchedule = typeof body.schedule === 'string' ? body.schedule.trim() : null;
+    if (body.schedule !== undefined && requestedSchedule && !isSupportedSchedule(requestedSchedule)) {
+      return NextResponse.json({
+        code: 'BAD_REQUEST',
+        error: 'schedule must be @hourly, @daily, */N * * * *, 0 * * * *, 0 */N * * *, or 0 0 * * *',
+        message: 'schedule must be @hourly, @daily, */N * * * *, 0 * * * *, 0 */N * * *, or 0 0 * * *',
+      }, { status: 400 });
+    }
+    if (body.schedule !== undefined) patch.schedule = requestedSchedule || null;
     if (typeof body.name === 'string') patch.name = body.name.slice(0, 80);
     if (typeof body.summary === 'string' || body.summary === null) patch.summary = body.summary;
     if (body.visibility === 'private' || body.visibility === 'workspace' || body.visibility === 'public') patch.visibility = body.visibility;
@@ -146,6 +210,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       patch.version = Number((existing as Record<string, unknown>).version ?? 1) + 1;
     }
 
+    const prospectiveWorkflow = {
+      ...(existing as Record<string, unknown>),
+      ...patch,
+    };
+    const scheduleAfterPatch = typeof prospectiveWorkflow.schedule === 'string' && prospectiveWorkflow.schedule.trim()
+      ? prospectiveWorkflow.schedule.trim()
+      : null;
+    const runnable = scheduleAfterPatch ? runnableFromWorkflow(prospectiveWorkflow) : null;
+    if (scheduleAfterPatch && !runnable) {
+      return NextResponse.json({
+        code: 'BAD_REQUEST',
+        error: 'Scheduled workflows require at least one runnable step before recurring execution can be enabled.',
+        message: 'Scheduled workflows require at least one runnable step before recurring execution can be enabled.',
+      }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('agent_workflows')
       .update(patch)
@@ -157,15 +237,55 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (error) throw error;
     if (!data) return NextResponse.json({ code: 'NOT_FOUND', error: 'Workflow not found', message: 'Workflow not found' }, { status: 404 });
 
-    if (body.status !== undefined && typeof data.task_id === 'string' && data.task_id.length > 0) {
-      await supabase
+    let taskId = typeof data.task_id === 'string' && data.task_id.length > 0 ? data.task_id : null;
+    const shouldSyncSchedule = body.schedule !== undefined || body.status !== undefined;
+    if (shouldSyncSchedule && scheduleAfterPatch && runnable) {
+      const taskCode = JSON.stringify({ tool: runnable.tool, input: runnable.input });
+      if (taskId) {
+        const { error: taskError } = await supabase
+          .from('scheduled_tasks')
+          .update({
+            code: taskCode,
+            language: 'tool',
+            cron_expression: scheduleAfterPatch,
+            enabled: data.status === 'active',
+            workflow_id: data.id,
+          })
+          .eq('id', taskId)
+          .eq('agent_id', ctx.agentId);
+        if (taskError) throw taskError;
+      } else {
+        taskId = crypto.randomUUID();
+        const { error: taskError } = await supabase
+          .from('scheduled_tasks')
+          .insert({
+            id: taskId,
+            agent_id: ctx.agentId,
+            code: taskCode,
+            language: 'tool',
+            cron_expression: scheduleAfterPatch,
+            enabled: data.status === 'active',
+            workflow_id: data.id,
+          });
+        if (taskError) throw taskError;
+        const { error: workflowTaskError } = await supabase
+          .from('agent_workflows')
+          .update({ task_id: taskId })
+          .eq('id', id)
+          .eq('agent_id', ctx.agentId);
+        if (workflowTaskError) throw workflowTaskError;
+      }
+    } else if (shouldSyncSchedule && taskId) {
+      const { error: taskError } = await supabase
         .from('scheduled_tasks')
-        .update({ enabled: body.status === 'active' })
-        .eq('id', data.task_id)
+        .update({ enabled: false })
+        .eq('id', taskId)
         .eq('agent_id', ctx.agentId);
+      if (taskError) throw taskError;
     }
 
-    return NextResponse.json({ workflow: omitAgentIdentifierFields(mapWorkflow(data as Record<string, unknown>)) });
+    const responseWorkflow = taskId ? { ...(data as Record<string, unknown>), task_id: taskId } : data as Record<string, unknown>;
+    return NextResponse.json({ workflow: omitAgentIdentifierFields(mapWorkflow(responseWorkflow)) });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
