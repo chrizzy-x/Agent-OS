@@ -14,6 +14,7 @@ async function findMemory(ctxAgentId: string, id: string) {
     viewerAgentId: ctxAgentId,
     ownerAgentId: ctxAgentId,
     visibility: 'all',
+    includeDisabled: true,
     limit: 200,
   });
   const entry = entries.find(item => item.id === id);
@@ -27,18 +28,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
     const current = await findMemory(ctx.agentId, id);
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const metadata = body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+      ? body.metadata as Record<string, unknown>
+      : current.metadata;
+    const nextMetadata = { ...metadata };
+    if (typeof body.disabled === 'boolean') {
+      nextMetadata.disabled = body.disabled;
+      nextMetadata.disabledAt = body.disabled ? new Date().toISOString() : null;
+      nextMetadata.disabledReason = body.disabled && typeof body.disabledReason === 'string'
+        ? body.disabledReason.slice(0, 160)
+        : null;
+    }
     const entry = await upsertMemoryEntry({
       ownerAgentId: ctx.agentId,
-      key: typeof body.key === 'string' ? body.key : current.key,
+      key: current.key,
       content: typeof body.content === 'string' ? body.content : current.content,
       tags: body.tags !== undefined ? stringArray(body.tags) : current.tags,
       namespaceType: current.namespaceType,
       namespaceId: current.namespaceId,
       workspaceId: current.workspaceId,
       visibility: body.visibility === 'workspace' || body.visibility === 'public' || body.visibility === 'private' ? body.visibility : current.visibility,
-      metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
-        ? body.metadata as Record<string, unknown>
-        : current.metadata,
+      metadata: nextMetadata,
     });
     return NextResponse.json({ entry });
   } catch (error) {

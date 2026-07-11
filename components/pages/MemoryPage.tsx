@@ -22,9 +22,13 @@ type MemoryEntry = {
   ownerAgentId: string;
   key: string;
   content: string;
+  tags: string[];
   visibility: 'private' | 'workspace' | 'public';
   namespaceType: string;
   namespaceId: string | null;
+  metadata: Record<string, unknown>;
+  disabled: boolean;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -45,6 +49,9 @@ type Draft = {
   shareTargetAgentId: string;
 };
 
+type StatusFilter = 'active' | 'disabled' | 'all';
+type ScopeFilter = 'all' | 'user' | 'agent' | 'subagent' | 'workspace' | 'workflow' | 'app' | 'skill';
+
 const EMPTY_DRAFT: Draft = {
   key: '',
   content: '',
@@ -62,6 +69,21 @@ function toneForVisibility(value: string): 'default' | 'accent' | 'success' {
 
 type MemoryGroupKey = 'my' | 'agent' | 'privateSubagent' | 'workspace' | 'shared';
 
+function hasSecretLikeMemoryText(value: string): boolean {
+  return /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|secret|token|password|authorization)\s*[:=]\s*["']?)([^"'\s,}]{6,})/i.test(value)
+    || /([A-Z0-9_]*(?:SECRET|TOKEN|API_KEY|PASSWORD)[A-Z0-9_]*=)([^\s]{6,})/.test(value)
+    || /\b(sk-[a-zA-Z0-9_-]{16,}|Bearer\s+[a-zA-Z0-9._-]{16,}|gh[pousr]_[a-zA-Z0-9_]{20,})\b/.test(value);
+}
+
+function memoryContainsSecret(entry: Pick<MemoryEntry, 'key' | 'content' | 'tags' | 'metadata'>): boolean {
+  return hasSecretLikeMemoryText([entry.key, entry.content, ...entry.tags, JSON.stringify(entry.metadata ?? {})].join('\n'));
+}
+
+function scopeLabel(entry: Pick<MemoryEntry, 'namespaceType' | 'namespaceId'>): string {
+  if (entry.namespaceType === 'workspace' && entry.namespaceId) return `project/workspace:${entry.namespaceId}`;
+  return `${entry.namespaceType}${entry.namespaceId ? `:${entry.namespaceId}` : ''}`;
+}
+
 function classifyMemoryEntry(entry: MemoryEntry, viewerAgentId: string | null): MemoryGroupKey {
   if (viewerAgentId && entry.ownerAgentId !== viewerAgentId) return 'shared';
   if (entry.namespaceType === 'user') return 'my';
@@ -76,6 +98,8 @@ export default function MemoryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
   const [viewerAgentId, setViewerAgentId] = useState<string | null>(null);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
   const [incomingGrants, setIncomingGrants] = useState<PermissionGrant[]>([]);
@@ -86,7 +110,7 @@ export default function MemoryPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const memoryRes = await fetch(`/api/memory?limit=100${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
+      const memoryRes = await fetch(`/api/memory?limit=100&includeDisabled=1${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
       const memoryBody = memoryRes.ok ? await memoryRes.json() : {};
       setViewerAgentId(typeof memoryBody.viewerAgentId === 'string' ? memoryBody.viewerAgentId : null);
       setMemoryEntries(memoryBody.entries ?? []);
@@ -106,11 +130,23 @@ export default function MemoryPage() {
 
   const filteredMemory = useMemo(() => {
     const search = query.trim().toLowerCase();
-    if (!search) return memoryEntries;
-    return memoryEntries.filter(entry =>
-      `${entry.key} ${entry.content} ${entry.namespaceType} ${entry.namespaceId ?? ''}`.toLowerCase().includes(search),
-    );
-  }, [memoryEntries, query]);
+    return memoryEntries.filter(entry => {
+      if (statusFilter === 'active' && entry.disabled) return false;
+      if (statusFilter === 'disabled' && !entry.disabled) return false;
+      if (scopeFilter !== 'all' && entry.namespaceType !== scopeFilter) return false;
+      if (!search) return true;
+      return `${entry.key} ${entry.content} ${entry.namespaceType} ${entry.namespaceId ?? ''} ${entry.tags.join(' ')}`.toLowerCase().includes(search);
+    });
+  }, [memoryEntries, query, scopeFilter, statusFilter]);
+
+  const memorySummary = useMemo(() => {
+    const active = memoryEntries.filter(entry => !entry.disabled).length;
+    const disabled = memoryEntries.filter(entry => entry.disabled).length;
+    const projectScoped = memoryEntries.filter(entry => entry.namespaceType === 'workspace' && entry.namespaceId).length;
+    return { active, disabled, projectScoped, total: memoryEntries.length };
+  }, [memoryEntries]);
+
+  const draftSecretBlocked = hasSecretLikeMemoryText(`${draft.key}\n${draft.content}\n${draft.namespaceId}`);
 
   const memoryGroups = useMemo(() => {
     const groups: Array<{ key: MemoryGroupKey; title: string; items: MemoryEntry[] }> = [
@@ -147,11 +183,15 @@ export default function MemoryPage() {
 
   async function saveDraft() {
     if (!draft.key.trim() || !draft.content.trim()) return;
+    if (draftSecretBlocked) {
+      setNotice('Secrets must be stored in Vault, not memory.');
+      return;
+    }
     setSaving(true);
     setNotice('');
     try {
-      const response = await fetch('/api/memory', {
-        method: 'POST',
+      const response = await fetch(editingId ? `/api/memory/${encodeURIComponent(editingId)}` : '/api/memory', {
+        method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           key: draft.key.trim(),
@@ -160,7 +200,7 @@ export default function MemoryPage() {
           namespaceType: draft.namespaceType,
           namespaceId: draft.namespaceId.trim() || undefined,
           workspaceId: shell.activeWorkspaceId,
-          shareTargetAgentId: draft.shareTargetAgentId.trim() || undefined,
+          shareTargetAgentId: editingId ? undefined : draft.shareTargetAgentId.trim() || undefined,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -174,6 +214,33 @@ export default function MemoryPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function useActiveProjectScope() {
+    if (!shell.activeProjectId) {
+      setNotice('Select a project before creating project-scoped memory.');
+      return;
+    }
+    setDraft(current => ({ ...current, namespaceType: 'workspace', namespaceId: shell.activeProjectId ?? '' }));
+    setNotice('Draft scoped to the active project.');
+  }
+
+  async function toggleEntryDisabled(entry: MemoryEntry) {
+    const disabled = !entry.disabled;
+    const confirmed = disabled ? window.confirm(`Disable memory "${entry.key}"? Super AgentOS will stop recalling it.`) : true;
+    if (!confirmed) return;
+    setNotice('');
+    const response = await fetch(`/api/memory/${encodeURIComponent(entry.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        disabled,
+        disabledReason: disabled ? 'Disabled from Memory controls' : undefined,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setNotice(response.ok ? disabled ? 'Memory disabled.' : 'Memory enabled.' : payload.error ?? payload.message ?? 'Memory status update failed');
+    if (response.ok) await load();
   }
 
   async function removeEntry(entry: MemoryEntry) {
@@ -217,11 +284,29 @@ export default function MemoryPage() {
 
           <Card>
             <div className="os-entity-head" style={{ marginBottom: 12 }}>
+              <div className="os-entity-title">Memory settings</div>
+              <Badge tone="accent">{memorySummary.active} active</Badge>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+              <div className="os-entity-copy">Disabled memory stays visible here but is excluded from normal Super AgentOS recall.</div>
+              <div className="os-entity-copy">Project-scoped memory uses the active project as its namespace boundary.</div>
+              <div className="os-entity-copy">Secret-looking values are blocked. Store credentials in Vault.</div>
+            </div>
+            <div className="os-inline-actions" style={{ marginTop: 14 }}>
+              <Badge tone="success">{memorySummary.active} recallable</Badge>
+              <Badge tone="default">{memorySummary.disabled} disabled</Badge>
+              <Badge tone="accent">{memorySummary.projectScoped} project scoped</Badge>
+              <Badge tone="default">{memorySummary.total} total</Badge>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="os-entity-head" style={{ marginBottom: 12 }}>
               <div className="os-entity-title">{editingId ? 'Edit memory' : 'Create memory'}</div>
               <Badge tone="accent">{editingId ? 'Update' : 'New'}</Badge>
             </div>
             <div style={{ display: 'grid', gap: 12 }}>
-              <Input placeholder="Memory key" value={draft.key} onChange={event => setDraft(current => ({ ...current, key: event.target.value }))} />
+              <Input placeholder="Memory key" value={draft.key} onChange={event => setDraft(current => ({ ...current, key: event.target.value }))} disabled={Boolean(editingId)} title={editingId ? 'Memory keys are durable identifiers.' : undefined} />
               <Textarea placeholder="What should AgentOS remember?" value={draft.content} onChange={event => setDraft(current => ({ ...current, content: event.target.value }))} rows={5} />
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                 <Select value={draft.namespaceType} onChange={event => setDraft(current => ({ ...current, namespaceType: event.target.value as Draft['namespaceType'] }))}>
@@ -242,15 +327,47 @@ export default function MemoryPage() {
               <Input placeholder="Namespace id (optional for user or agent memory)" value={draft.namespaceId} onChange={event => setDraft(current => ({ ...current, namespaceId: event.target.value }))} />
               <Input placeholder="Share target agent id (optional, advanced)" value={draft.shareTargetAgentId} onChange={event => setDraft(current => ({ ...current, shareTargetAgentId: event.target.value }))} />
               <div className="os-inline-actions">
-                <Button onClick={() => void saveDraft()} disabled={saving || !draft.key.trim() || !draft.content.trim()}>{saving ? 'Saving...' : editingId ? 'Update memory' : 'Create memory'}</Button>
+                <Button
+                  onClick={() => void saveDraft()}
+                  disabled={saving || !draft.key.trim() || !draft.content.trim() || draftSecretBlocked}
+                  disabledReason={draftSecretBlocked ? 'Secrets belong in Vault, not memory.' : undefined}
+                >
+                  {saving ? 'Saving...' : editingId ? 'Update memory' : 'Create memory'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={useActiveProjectScope}
+                  disabled={Boolean(editingId) || !shell.activeProjectId}
+                  disabledReason={editingId ? 'Scope is fixed for existing memory.' : !shell.activeProjectId ? 'Select a project first.' : undefined}
+                >
+                  Use active project scope
+                </Button>
                 {editingId ? <Button variant="secondary" onClick={resetDraft}>Cancel</Button> : null}
               </div>
               <div className="os-entity-copy">Sharing uses the governed memory grant route. Super AgentOS reads these records with permission-aware context.</div>
+              {draftSecretBlocked ? <div className="os-entity-copy">Detected credential-shaped text. Move that value to Vault before saving memory.</div> : null}
               {notice ? <div className="os-entity-copy">{notice}</div> : null}
             </div>
           </Card>
 
-          <SearchBar value={query} onChange={event => setQuery(event.target.value)} placeholder="Search memory timeline and collections" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            <SearchBar value={query} onChange={event => setQuery(event.target.value)} placeholder="Search memory timeline and collections" />
+            <Select value={statusFilter} onChange={event => setStatusFilter(event.target.value as StatusFilter)} aria-label="Memory status filter">
+              <option value="active">Active recall</option>
+              <option value="disabled">Disabled</option>
+              <option value="all">All memory</option>
+            </Select>
+            <Select value={scopeFilter} onChange={event => setScopeFilter(event.target.value as ScopeFilter)} aria-label="Memory scope filter">
+              <option value="all">All scopes</option>
+              <option value="user">User</option>
+              <option value="agent">Agent</option>
+              <option value="subagent">Subagent</option>
+              <option value="workspace">Workspace/project</option>
+              <option value="workflow">Workflow</option>
+              <option value="app">App</option>
+              <option value="skill">Skill</option>
+            </Select>
+          </div>
 
           {loading ? <LoadingState label="Loading memory" /> : filteredMemory.length === 0 ? (
             <EmptyState title="Nothing stored yet" body="Create memory entries from Studio, workflows, or subagents." />
@@ -268,18 +385,23 @@ export default function MemoryPage() {
                   </div>
                   <div style={{ display: 'grid', gap: 12 }}>
                     {group.items.map(entry => (
-                      <div key={entry.id} style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
+                      <div key={entry.id} className="memory-entry-card" data-memory-key={entry.key} style={{ padding: '14px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
                           <strong>{entry.key}</strong>
                           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <Badge tone={entry.disabled ? 'warning' : 'success'}>{entry.disabled ? 'disabled' : 'active'}</Badge>
                             <Badge tone={toneForVisibility(entry.visibility)}>{entry.visibility}</Badge>
-                            <Badge tone="default">{entry.namespaceType}{entry.namespaceId ? `:${entry.namespaceId}` : ''}</Badge>
+                            <Badge tone="default">{scopeLabel(entry)}</Badge>
                           </div>
                         </div>
                         <div style={{ color: 'var(--text-secondary)', marginBottom: 8, whiteSpace: 'pre-wrap' }}>{entry.content}</div>
-                        <div style={{ color: 'var(--text-tertiary)', fontSize: 13, marginBottom: 10 }}>{new Date(entry.updatedAt).toLocaleString()}</div>
+                        {memoryContainsSecret(entry) ? <div style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 8 }}>Credential-shaped text detected. Move this value to Vault.</div> : null}
+                        <div style={{ color: 'var(--text-tertiary)', fontSize: 13, marginBottom: 10 }}>
+                          Updated {new Date(entry.updatedAt).toLocaleString()} | Created {new Date(entry.createdAt).toLocaleString()}
+                        </div>
                         <div className="os-inline-actions">
                           <Button variant="secondary" onClick={() => startEdit(entry)}>Edit</Button>
+                          <Button variant="secondary" onClick={() => void toggleEntryDisabled(entry)}>{entry.disabled ? 'Enable' : 'Disable'}</Button>
                           <Button variant="danger" onClick={() => void removeEntry(entry)}>Delete</Button>
                         </div>
                       </div>

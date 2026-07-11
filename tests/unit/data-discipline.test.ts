@@ -8,6 +8,7 @@ import {
   formatMoneyMetric,
   formatRatingLabel,
 } from '../../src/data/discipline.js';
+import { hasSecretLikeValue } from '../../src/security/secret-redaction.js';
 
 function source(...parts: string[]) {
   return readFileSync(join(process.cwd(), ...parts), 'utf8');
@@ -82,6 +83,25 @@ describe('real data and empty-state discipline', () => {
     expect(developerConsole).not.toContain("analytics?.app_totals?.installs ?? apps.reduce");
     expect(developerConsole).not.toContain("`$${earnings?.all_time ?? '0.00'}`");
     expect(developerConsole).not.toContain("detail.manifest?.version ?? '1.0.0'");
+  });
+
+  it('keeps secrets out of durable memory controls', () => {
+    expect(hasSecretLikeValue('api_key=sk-test1234567890abcdef')).toBe(true);
+    expect(hasSecretLikeValue('Remember that the user prefers concise reports.')).toBe(false);
+
+    const memoryService = source('src', 'memory', 'service.ts');
+    const memoryRoute = source('app', 'api', 'memory', 'route.ts');
+    const memoryItemRoute = source('app', 'api', 'memory', '[id]', 'route.ts');
+    const memoryPage = source('components', 'pages', 'MemoryPage.tsx');
+
+    expect(memoryService).toContain('Secrets must be stored in Vault, not memory');
+    expect(memoryService).toContain('includeDisabled');
+    expect(memoryRoute).toContain('includeDisabled');
+    expect(memoryItemRoute).toContain('disabledReason');
+    expect(memoryPage).toContain('Disabled memory stays visible here');
+    expect(memoryPage).toContain('Use active project scope');
+    expect(memoryPage).toContain('Credential-shaped text detected');
+    expect(source('docs', 'memory-controls.md')).toContain('Secrets must be stored in Vault, not memory');
   });
 
   it('documents the production data law', () => {

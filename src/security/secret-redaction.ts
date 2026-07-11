@@ -12,6 +12,12 @@ const SECRET_VALUE_KEYS = new Set([
   'private_key',
 ]);
 
+export function hasSecretLikeValue(value: string): boolean {
+  return /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key|secret|token|password|authorization)\s*[:=]\s*["']?)([^"'\s,}]{6,})/i.test(value)
+    || /([A-Z0-9_]*(?:SECRET|TOKEN|API_KEY|PASSWORD)[A-Z0-9_]*=)([^\s]{6,})/.test(value)
+    || /\b(sk-[a-zA-Z0-9_-]{16,}|Bearer\s+[a-zA-Z0-9._-]{16,}|gh[pousr]_[a-zA-Z0-9_]{20,})\b/.test(value);
+}
+
 export function redactSecretsInString(value: string): string {
   return value
     .replace(

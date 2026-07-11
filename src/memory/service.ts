@@ -1,4 +1,5 @@
 import { filterAccessibleResources, normalizeVisibility, type ResourceVisibility } from '../access/service.js';
+import { hasSecretLikeValue } from '../security/secret-redaction.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { ValidationError, PermissionError } from '../utils/errors.js';
 
@@ -15,6 +16,7 @@ export type MemoryEntry = {
   namespaceId: string;
   visibility: ResourceVisibility;
   metadata: Record<string, unknown>;
+  disabled: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -24,6 +26,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function mapMemoryEntry(row: Record<string, unknown>): MemoryEntry {
+  const metadata = asRecord(row.metadata);
   return {
     id: String(row.id ?? `${row.agent_id}:${row.key}`),
     ownerAgentId: String(row.agent_id),
@@ -34,7 +37,8 @@ function mapMemoryEntry(row: Record<string, unknown>): MemoryEntry {
     namespaceType: (row.namespace_type as MemoryNamespaceType) ?? 'agent',
     namespaceId: typeof row.namespace_id === 'string' ? row.namespace_id : '',
     visibility: normalizeVisibility(row.visibility),
-    metadata: asRecord(row.metadata),
+    metadata,
+    disabled: metadata.disabled === true,
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
   };
@@ -45,6 +49,14 @@ function normalizeNamespaceId(namespaceType: MemoryNamespaceType, namespaceId: s
   if (trimmed) return trimmed;
   if (namespaceType === 'agent' || namespaceType === 'user') return ownerAgentId;
   return '';
+}
+
+function assertMemoryIsSafe(params: { key: string; content: string; tags?: string[]; metadata?: Record<string, unknown> }) {
+  const metadataText = params.metadata ? JSON.stringify(params.metadata) : '';
+  const text = [params.key, params.content, ...(params.tags ?? []), metadataText].join('\n');
+  if (hasSecretLikeValue(text)) {
+    throw new ValidationError('Secrets must be stored in Vault, not memory');
+  }
 }
 
 export async function upsertMemoryEntry(params: {
@@ -61,6 +73,7 @@ export async function upsertMemoryEntry(params: {
   const key = params.key.trim();
   if (!key) throw new ValidationError('Memory key is required');
   if (!params.content.trim()) throw new ValidationError('Memory content is required');
+  assertMemoryIsSafe({ key, content: params.content, tags: params.tags, metadata: params.metadata });
 
   const namespaceType = params.namespaceType ?? 'agent';
   const namespaceId = normalizeNamespaceId(namespaceType, params.namespaceId, params.ownerAgentId);
@@ -117,6 +130,7 @@ export async function listAccessibleMemoryEntries(params: {
   search?: string;
   tags?: string[];
   visibility?: ResourceVisibility | 'all';
+  includeDisabled?: boolean;
   limit?: number;
 }): Promise<MemoryEntry[]> {
   const limit = Math.max(1, Math.min(params.limit ?? 100, 200));
@@ -130,6 +144,7 @@ export async function listAccessibleMemoryEntries(params: {
   if (error) throw new Error(`Failed to list memory: ${error.message}`);
 
   let entries = ((data ?? []) as Record<string, unknown>[]).map(mapMemoryEntry);
+  if (!params.includeDisabled) entries = entries.filter(entry => !entry.disabled);
   if (params.ownerAgentId) entries = entries.filter(entry => entry.ownerAgentId === params.ownerAgentId);
   if (params.workspaceId) entries = entries.filter(entry => entry.workspaceId === params.workspaceId);
   if (params.namespaceType) entries = entries.filter(entry => entry.namespaceType === params.namespaceType);

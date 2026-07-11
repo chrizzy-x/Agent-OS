@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const namespaceId = url.searchParams.get('namespaceId') ?? undefined;
     const workspaceId = url.searchParams.get('workspaceId') ?? undefined;
     const visibility = (url.searchParams.get('visibility') ?? 'all') as 'private' | 'workspace' | 'public' | 'all';
+    const includeDisabled = url.searchParams.get('includeDisabled') === '1';
     const limit = Number(url.searchParams.get('limit') ?? 100);
     const entries = await listAccessibleMemoryEntries({
       viewerAgentId: ctx.agentId,
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
       namespaceId,
       search,
       visibility,
+      includeDisabled,
       limit,
     });
 
