@@ -259,13 +259,12 @@ export default function HomePage() {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [command, setCommand] = useState('');
   const [payload, setPayload] = useState<DashboardPayload | null>(null);
 
   const load = useCallback(async (isActive: () => boolean = () => true) => {
-    setLoading(true);
     setError(null);
     try {
       const current = await withTimeout(
@@ -277,9 +276,11 @@ export default function HomePage() {
       setAuthState(current.state);
       if (!current.session) {
         setPayload(null);
+        setLoading(false);
         return;
       }
 
+      setLoading(true);
       const { response, authState: nextAuthState } = await fetchDashboardResponse(dashboardUrl(shell.activeWorkspaceId));
       if (!isActive()) return;
       setAuthState(nextAuthState);
