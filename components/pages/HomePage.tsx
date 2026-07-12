@@ -166,7 +166,7 @@ function Section(props: { title: string; actionHref?: string; actionLabel?: stri
 function LinkCard(props: { href: string; title: string; body: string; meta?: ReactNode }) {
   return (
     <Link href={props.href} className="os-card-link">
-      <Card style={{ padding: 14, minHeight: 104 }}>
+      <Card style={{ padding: 'var(--home-card-padding, 14px)', minHeight: 'var(--home-link-card-min-height, 104px)' }}>
         <div className="os-entity-head" style={{ alignItems: 'flex-start', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div className="os-entity-title">{props.title}</div>
@@ -202,7 +202,7 @@ function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
   ];
   return (
     <SurfaceShell activePath="/">
-      <section style={{ display: 'grid', gap: 20, padding: '28px 0 56px' }}>
+      <section style={{ display: 'grid', gap: 'var(--home-section-gap, 20px)', padding: 'var(--home-page-padding, 28px 0 56px)' }}>
         <div style={{ display: 'grid', gap: 10, maxWidth: 760 }}>
           <Badge tone="accent">AgentOS Home</Badge>
           <h1 style={{ margin: 0, fontSize: 'clamp(30px, 5vw, 48px)', lineHeight: 1.05, letterSpacing: 0 }}>
@@ -230,7 +230,7 @@ function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
         <Section title="Workspace Data">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
             {lockedWorkspaceSurfaces.map(item => (
-              <Card key={item} style={{ padding: 14 }}>
+              <Card key={item} style={{ padding: 'var(--home-card-padding, 14px)' }}>
                 <div className="os-entity-title">{item}</div>
                 <div className="os-entity-copy">Personal data hidden until sign-in.</div>
               </Card>
@@ -238,7 +238,7 @@ function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
           </div>
         </Section>
 
-        <Card style={{ padding: 16 }}>
+        <Card style={{ padding: 'var(--home-card-padding-lg, 16px)' }}>
           <div className="os-entity-head" style={{ alignItems: 'flex-start', gap: 12 }}>
             <div>
               <div className="os-entity-title">Data discipline</div>
@@ -500,7 +500,7 @@ export default function HomePage() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 16 }}>
-          <Card style={{ padding: 16 }}>
+          <Card style={{ padding: 'var(--home-card-padding-lg, 16px)' }}>
             <div className="os-entity-head" style={{ marginBottom: 12 }}>
               <div>
                 <div className="os-entity-title">Vault Health</div>
@@ -516,7 +516,7 @@ export default function HomePage() {
             </div>
           </Card>
 
-          <Card style={{ padding: 16 }}>
+          <Card style={{ padding: 'var(--home-card-padding-lg, 16px)' }}>
             <div className="os-entity-head" style={{ marginBottom: 12 }}>
               <div>
                 <div className="os-entity-title">MCP Status</div>
@@ -532,7 +532,7 @@ export default function HomePage() {
             </div>
           </Card>
 
-          <Card style={{ padding: 16 }}>
+          <Card style={{ padding: 'var(--home-card-padding-lg, 16px)' }}>
             <div className="os-entity-head" style={{ marginBottom: 12 }}>
               <div>
                 <div className="os-entity-title">{payload.credits.label}</div>

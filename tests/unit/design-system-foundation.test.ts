@@ -54,6 +54,22 @@ describe('design system foundation', () => {
     expect(css).not.toContain('border-radius: 16px');
   });
 
+  it('keeps the glass UI layer centralized in global primitives', () => {
+    const css = source('app', 'globals.css');
+    expect(css).toContain('--glass-surface');
+    expect(css).toContain('--glass-border');
+    expect(css).toContain('--glass-blur');
+    expect(css).toContain('/* Glass UI system layer */');
+    expect(css).toContain('.agentos-global-header,');
+    expect(css).toContain('.os-card,');
+    expect(css).toContain('backdrop-filter: blur(var(--glass-blur)) saturate(135%);');
+    expect(css).toContain('@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))');
+    expect(css).toContain('@media (max-width: 767px)');
+    expect(css).toContain('--home-card-padding: 9px;');
+    expect(css).toContain('--home-link-card-min-height: 74px;');
+    expect(css).toContain('padding: 8px !important;');
+  });
+
   it('keeps FFP UI aligned to disabled backend state', () => {
     expect(source('components', 'pages', 'FfpPage.tsx')).toContain('DisabledState');
     expect(source('components', 'pages', 'FfpPage.tsx')).toContain('ComingSoonState');

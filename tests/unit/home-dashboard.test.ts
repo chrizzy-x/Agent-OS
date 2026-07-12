@@ -39,6 +39,8 @@ describe('Home dashboard baseline', () => {
     expect(page).toContain('Personal data hidden until sign-in.');
     expect(page).toContain('Public Home shows the product map only. It does not invent sessions, installs, ratings, logs, secrets, credits, validators, or usage.');
     expect(page).toContain('const [loading, setLoading] = useState(false);');
+    expect(page).toContain('var(--home-card-padding, 14px)');
+    expect(page).toContain('var(--home-link-card-min-height, 104px)');
   });
 
   it('documents Home data discipline', () => {
