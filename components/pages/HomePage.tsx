@@ -166,7 +166,7 @@ function Section(props: { title: string; actionHref?: string; actionLabel?: stri
 function LinkCard(props: { href: string; title: string; body: string; meta?: ReactNode }) {
   return (
     <Link href={props.href} className="os-card-link">
-      <Card style={{ padding: 'var(--home-card-padding, 14px)', minHeight: 'var(--home-link-card-min-height, 104px)' }}>
+      <Card className="home-link-card" style={{ padding: 'var(--home-card-padding, 14px)', minHeight: 'var(--home-link-card-min-height, 104px)' }}>
         <div className="os-entity-head" style={{ alignItems: 'flex-start', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div className="os-entity-title">{props.title}</div>
@@ -190,55 +190,55 @@ function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
     { label: 'FFP', href: '/ffp', body: 'View the disabled coming-soon protocol surface without fake validator activity.' },
   ];
   const lockedWorkspaceSurfaces = [
-    'Recent sessions',
-    'Active projects',
-    'Installed apps',
-    'Installed skills',
-    'Workflows',
-    'Incognito subagents',
-    'Vault health',
-    'MCP status',
-    'Agent Credits',
+    { label: 'Recent sessions', body: 'Personal data hidden until sign-in.' },
+    { label: 'Active projects', body: 'Personal data hidden until sign-in.' },
+    { label: 'Installed apps', body: 'Personal data hidden until sign-in.' },
+    { label: 'Installed skills', body: 'Personal data hidden until sign-in.' },
+    { label: 'Workflows', body: 'Personal data hidden until sign-in.' },
+    { label: 'Incognito subagents', body: 'Personal data hidden until sign-in.' },
+    { label: 'Vault health', body: 'Secret status hidden until sign-in.' },
+    { label: 'MCP status', body: 'Connection status hidden until sign-in.' },
+    { label: 'Agent Credits', body: 'Compute balance hidden until sign-in.' },
   ];
   return (
     <SurfaceShell activePath="/">
-      <section style={{ display: 'grid', gap: 'var(--home-section-gap, 20px)', padding: 'var(--home-page-padding, 28px 0 56px)' }}>
-        <div style={{ display: 'grid', gap: 10, maxWidth: 760 }}>
+      <section className="home-public-shell" style={{ display: 'grid', gap: 'var(--home-section-gap, 20px)', padding: 'var(--home-page-padding, 28px 0 56px)' }}>
+        <div className="home-public-hero" style={{ display: 'grid', gap: 10, maxWidth: 760 }}>
           <Badge tone="accent">AgentOS Home</Badge>
-          <h1 style={{ margin: 0, fontSize: 'clamp(30px, 5vw, 48px)', lineHeight: 1.05, letterSpacing: 0 }}>
+          <h1 style={{ margin: 0, fontSize: 'var(--home-hero-title-size, clamp(30px, 5vw, 48px))', lineHeight: 'var(--home-hero-title-line-height, 1.05)', letterSpacing: 0 }}>
             Workspace command overview
           </h1>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 16, lineHeight: 1.7 }}>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--home-hero-copy-size, 16px)', lineHeight: 'var(--home-hero-copy-line-height, 1.7)' }}>
             {expired
               ? 'Your session expired, but Home stays available. Sign in again when you want your real workspace activity, Vault permissions, MCP connections, and compute state.'
               : 'Home is public. Everyone can see the AgentOS command map here; personal workspace data appears only after sign-in.'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div className="home-public-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Button href="/studio?mode=nl">Open Super AgentOS</Button>
           <Button href="/signin" variant="secondary">{expired ? 'Sign in again' : 'Sign in'}</Button>
           <Button href="/signup" variant="secondary">Create account</Button>
         </div>
         <Section title="Open AgentOS Surfaces">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+          <div className="home-surface-grid" style={{ display: 'grid', gridTemplateColumns: 'var(--home-surface-grid, repeat(auto-fit, minmax(210px, 1fr)))', gap: 'var(--home-card-grid-gap, 12px)' }}>
             {publicSurfaces.map(item => (
-              <LinkCard key={item.label} href={item.href} title={item.label} body={item.body} meta={<span style={{ color: 'var(--text-tertiary)' }}>Open</span>} />
+              <LinkCard key={item.label} href={item.href} title={item.label} body={item.body} meta={<span className="home-card-meta-label" style={{ color: 'var(--text-tertiary)' }}>Open</span>} />
             ))}
           </div>
         </Section>
 
         <Section title="Workspace Data">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <div className="home-workspace-grid" style={{ display: 'grid', gridTemplateColumns: 'var(--home-workspace-grid, repeat(auto-fit, minmax(180px, 1fr)))', gap: 'var(--home-card-grid-gap, 12px)' }}>
             {lockedWorkspaceSurfaces.map(item => (
-              <Card key={item} style={{ padding: 'var(--home-card-padding, 14px)' }}>
-                <div className="os-entity-title">{item}</div>
-                <div className="os-entity-copy">Personal data hidden until sign-in.</div>
+              <Card key={item.label} className="home-workspace-card" style={{ padding: 'var(--home-card-padding, 14px)' }}>
+                <div className="os-entity-title">{item.label}</div>
+                <div className="os-entity-copy">{item.body}</div>
               </Card>
             ))}
           </div>
         </Section>
 
-        <Card style={{ padding: 'var(--home-card-padding-lg, 16px)' }}>
+        <Card className="home-discipline-card" style={{ padding: 'var(--home-card-padding-lg, 16px)' }}>
           <div className="os-entity-head" style={{ alignItems: 'flex-start', gap: 12 }}>
             <div>
               <div className="os-entity-title">Data discipline</div>

@@ -65,9 +65,17 @@ describe('design system foundation', () => {
     expect(css).toContain('backdrop-filter: blur(var(--glass-blur)) saturate(135%);');
     expect(css).toContain('@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)))');
     expect(css).toContain('@media (max-width: 767px)');
-    expect(css).toContain('--home-card-padding: 9px;');
-    expect(css).toContain('--home-link-card-min-height: 74px;');
-    expect(css).toContain('padding: 8px !important;');
+    expect(css).toContain('--home-card-padding: 6px;');
+    expect(css).toContain('--home-link-card-min-height: 44px;');
+    expect(css).toContain('--home-surface-grid: repeat(2, minmax(0, 1fr));');
+    expect(css).toContain('padding: 6px !important;');
+    expect(css).toContain('.home-link-card .os-entity-copy');
+    expect(css).toContain('.home-card-meta-label::after');
+    expect(css).toContain('.agentos-global-primary-action-label');
+    expect(css).toContain('.agentos-shell-mobile-icon.menu');
+    expect(css).toContain('grid-template-rows: 52px minmax(0, 1fr);');
+    expect(source('components', 'os', 'application-shell.tsx')).toContain('agentos-global-primary-action-icon');
+    expect(source('components', 'os', 'application-shell.tsx')).toContain('agentos-shell-mobile-icon context');
   });
 
   it('keeps FFP UI aligned to disabled backend state', () => {

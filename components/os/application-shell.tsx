@@ -813,7 +813,10 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
         data-shell-instance={SHELL_INSTANCE_ID}
       >
         <header className="agentos-global-header">
-          <button type="button" className="agentos-shell-mobile-button left" onClick={() => setLeftDrawerOpen(true)} aria-label="Open navigation">Menu</button>
+          <button type="button" className="agentos-shell-mobile-button left" onClick={() => setLeftDrawerOpen(true)} aria-label="Open navigation">
+            <span className="agentos-shell-mobile-icon menu" aria-hidden="true" />
+            <span className="agentos-sr-only">Open navigation</span>
+          </button>
           <Link href="/" className="agentos-global-brand" aria-label="AgentOS Home">
             <Image src="/logo.png" alt="" width={26} height={26} />
             <strong>AgentOS</strong>
@@ -830,7 +833,12 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             <form className="agentos-global-search" role="search" onSubmit={submitShellSearch}>
               <input value={shellSearch} onChange={event => setShellSearch(event.target.value)} placeholder="Search" aria-label="Search AgentOS" />
             </form>
-            {primaryAction ? <Link className="agentos-global-primary-action" href={appendShellContextToHref(primaryAction.href, navigationContext)}>{primaryAction.label}</Link> : null}
+            {primaryAction ? (
+              <Link className="agentos-global-primary-action" href={appendShellContextToHref(primaryAction.href, navigationContext)}>
+                <span className="agentos-global-primary-action-icon" aria-hidden="true" />
+                <span className="agentos-global-primary-action-label">{primaryAction.label}</span>
+              </Link>
+            ) : null}
             <button
               type="button"
               className="agentos-notification-bell"
@@ -860,7 +868,10 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
               </details>
             ) : <Link href="/signin">Sign in</Link>}
           </div>
-          <button type="button" className="agentos-shell-mobile-button right" onClick={() => setRightDrawerOpen(true)} aria-label="Open context">Context</button>
+          <button type="button" className="agentos-shell-mobile-button right" onClick={() => setRightDrawerOpen(true)} aria-label="Open context">
+            <span className="agentos-shell-mobile-icon context" aria-hidden="true" />
+            <span className="agentos-sr-only">Open context</span>
+          </button>
         </header>
 
         <aside className="agentos-global-left" aria-label="Navigation sidebar">
