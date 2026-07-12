@@ -181,6 +181,25 @@ function LinkCard(props: { href: string; title: string; body: string; meta?: Rea
 
 function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
   const expired = props.authState === 'expired';
+  const publicSurfaces = [
+    { label: 'Studio', href: '/studio?mode=nl', body: 'Start with Super AgentOS, then route work into NL Studio, Workflow Builder, or Code Studio.' },
+    { label: 'Appstore', href: '/appstore', body: 'Browse SDK-backed apps when listings are available.' },
+    { label: 'Skill Store', href: '/skillstore', body: 'Browse modular capabilities for Super AgentOS and workflows.' },
+    { label: 'Docs', href: '/resources', body: 'Read product, developer, Vault, MCP, workflow, and FFP documentation.' },
+    { label: 'Community', href: '/community', body: 'Open the community and discovery surface.' },
+    { label: 'FFP', href: '/ffp', body: 'View the disabled coming-soon protocol surface without fake validator activity.' },
+  ];
+  const lockedWorkspaceSurfaces = [
+    'Recent sessions',
+    'Active projects',
+    'Installed apps',
+    'Installed skills',
+    'Workflows',
+    'Incognito subagents',
+    'Vault health',
+    'MCP status',
+    'Agent Credits',
+  ];
   return (
     <SurfaceShell activePath="/">
       <section style={{ display: 'grid', gap: 20, padding: '28px 0 56px' }}>
@@ -191,23 +210,45 @@ function SignedOutHome(props: { authState: BrowserSessionAuthState }) {
           </h1>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 16, lineHeight: 1.7 }}>
             {expired
-              ? 'Your session expired. Sign in again to view real workspace activity.'
-              : 'Sign in to view real sessions, projects, installed apps, skills, workflows, subagents, Vault health, MCP status, and compute state.'}
+              ? 'Your session expired, but Home stays available. Sign in again when you want your real workspace activity, Vault permissions, MCP connections, and compute state.'
+              : 'Home is public. Everyone can see the AgentOS command map here; personal workspace data appears only after sign-in.'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <Button href="/signin">{expired ? 'Sign in again' : 'Sign in'}</Button>
+          <Button href="/studio?mode=nl">Open Super AgentOS</Button>
+          <Button href="/signin" variant="secondary">{expired ? 'Sign in again' : 'Sign in'}</Button>
           <Button href="/signup" variant="secondary">Create account</Button>
-          <Button href="/studio?mode=nl" variant="secondary">Open Super AgentOS</Button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-          {['Studio sessions', 'Projects', 'Installed apps', 'Installed skills', 'Workflows', 'Incognito subagents', 'Vault health', 'MCP status'].map(item => (
-            <Card key={item} style={{ padding: 14 }}>
-              <div className="os-entity-title">{item}</div>
-              <div className="os-entity-copy">Sign in required.</div>
-            </Card>
-          ))}
-        </div>
+        <Section title="Open AgentOS Surfaces">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+            {publicSurfaces.map(item => (
+              <LinkCard key={item.label} href={item.href} title={item.label} body={item.body} meta={<span style={{ color: 'var(--text-tertiary)' }}>Open</span>} />
+            ))}
+          </div>
+        </Section>
+
+        <Section title="Workspace Data">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            {lockedWorkspaceSurfaces.map(item => (
+              <Card key={item} style={{ padding: 14 }}>
+                <div className="os-entity-title">{item}</div>
+                <div className="os-entity-copy">Personal data hidden until sign-in.</div>
+              </Card>
+            ))}
+          </div>
+        </Section>
+
+        <Card style={{ padding: 16 }}>
+          <div className="os-entity-head" style={{ alignItems: 'flex-start', gap: 12 }}>
+            <div>
+              <div className="os-entity-title">Data discipline</div>
+              <div className="os-entity-copy">
+                Public Home shows the product map only. It does not invent sessions, installs, ratings, logs, secrets, credits, validators, or usage.
+              </div>
+            </div>
+            <Badge>Public</Badge>
+          </div>
+        </Card>
       </section>
     </SurfaceShell>
   );

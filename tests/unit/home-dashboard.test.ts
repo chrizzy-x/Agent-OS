@@ -35,7 +35,9 @@ describe('Home dashboard baseline', () => {
     expect(page).not.toContain('Your AI operating system.');
     expect(page).not.toContain('Talk to it. Build with it. Install what it needs.');
     expect(page).toContain('Open Super AgentOS');
-    expect(page).toContain('Sign in to view real sessions, projects, installed apps, skills, workflows, subagents, Vault health, MCP status, and compute state.');
+    expect(page).toContain('Home is public. Everyone can see the AgentOS command map here; personal workspace data appears only after sign-in.');
+    expect(page).toContain('Personal data hidden until sign-in.');
+    expect(page).toContain('Public Home shows the product map only. It does not invent sessions, installs, ratings, logs, secrets, credits, validators, or usage.');
   });
 
   it('documents Home data discipline', () => {
