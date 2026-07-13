@@ -41,6 +41,7 @@ describe('design system foundation', () => {
 
   it('keeps shared primitives compact in CSS', () => {
     const css = source('app', 'globals.css');
+    const sharedCss = css.split('/* AgentOS production landing page */')[0];
     expect(css).toContain('.os-button.primary');
     expect(css).toContain('.os-button.secondary');
     expect(css).toContain('.os-button.ghost');
@@ -48,10 +49,10 @@ describe('design system foundation', () => {
     expect(css).toContain('.os-state-panel');
     expect(css).toContain('body[data-agentos-drawer-open="true"]');
     expect(css).toContain('border-radius: 8px;');
-    expect(css).not.toContain('.market-store-card,\n.market-app-card,\n.market-skill-card,\n.market-update-card {\n  border-radius: 20px;');
-    expect(css).not.toContain('border-radius: 24px');
-    expect(css).not.toContain('border-radius: 20px');
-    expect(css).not.toContain('border-radius: 16px');
+    expect(sharedCss).not.toContain('.market-store-card,\n.market-app-card,\n.market-skill-card,\n.market-update-card {\n  border-radius: 20px;');
+    expect(sharedCss).not.toContain('border-radius: 24px');
+    expect(sharedCss).not.toContain('border-radius: 20px');
+    expect(sharedCss).not.toContain('border-radius: 16px');
   });
 
   it('keeps the glass UI layer centralized in global primitives', () => {

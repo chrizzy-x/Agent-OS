@@ -90,7 +90,7 @@ const ApplicationShellContext = createContext<ApplicationShellContextValue>({
   setRightCollapsed: () => undefined,
 });
 const SHELL_INSTANCE_ID = 'agentos-global-shell-root';
-const EXCLUDED_PREFIXES = ['/signin', '/signup', '/login', '/forgot-password'];
+const EXCLUDED_PREFIXES = ['/', '/signin', '/signup', '/login', '/forgot-password'];
 
 const ACCOUNT_MENU_LINKS = [
   { label: 'Profile', href: '/settings?section=account' },

@@ -5,7 +5,7 @@ const artifactDir = 'agentos-artifacts/v663-browser';
 
 test('desktop shell navigation, collapse, persistence, and FFP state', async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile');
-  await page.goto('/');
+  await page.goto('/studio');
   const left = page.locator('.agentos-global-left');
   const right = page.locator('.agentos-global-right');
   await expect(left).toBeVisible();
@@ -32,7 +32,7 @@ test('desktop shell navigation, collapse, persistence, and FFP state', async ({ 
 });
 
 test('every first-class module renders inside the persistent shell', async ({ page }) => {
-  const routes = ['/', '/studio', '/search', '/tasks', '/projects', '/library', '/skills', '/appstore', '/skillstore', '/subagents', '/mcp', '/vault', '/community', '/resources', '/ffp', '/settings'];
+  const routes = ['/studio', '/search', '/tasks', '/projects', '/library', '/skills', '/appstore', '/skillstore', '/subagents', '/mcp', '/vault', '/community', '/resources', '/ffp', '/settings'];
   for (const route of routes) {
     await page.goto(route, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.agentos-global-shell')).toBeVisible();
@@ -53,7 +53,7 @@ test('Studio modes retain the global shell', async ({ page }, testInfo) => {
 
 test('mobile uses left and right drawers', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile');
-  await page.goto('/');
+  await page.goto('/studio');
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await expect(page.locator('.agentos-global-shell')).toHaveAttribute('data-left-open', 'true');
   await expect(page.locator('body')).toHaveAttribute('data-agentos-drawer-open', 'true');

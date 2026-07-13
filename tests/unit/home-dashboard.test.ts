@@ -9,7 +9,7 @@ function source(...parts: string[]) {
 describe('Home dashboard baseline', () => {
   it('uses the dashboard backend contract instead of browser-side product synthesis', () => {
     const page = source('components', 'pages', 'HomePage.tsx');
-    expect(source('app', 'page.tsx')).toContain("import HomePage from '@/components/pages/HomePage'");
+    expect(source('app', 'page.tsx')).toContain("import LandingPage from '@/components/landing/LandingPage'");
     expect(page).toContain('fetchDashboardResponse(dashboardUrl(shell.activeWorkspaceId))');
     expect(page).toContain("type DashboardPayload =");
     expect(page).not.toContain("fetchWithBrowserSession('/api/studio/sessions");
