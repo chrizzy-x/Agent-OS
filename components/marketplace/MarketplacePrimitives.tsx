@@ -44,6 +44,7 @@ export function MarketplaceHero(props: {
   const developer = props.developerHref
     ? <Link href={props.developerHref}>{props.developerName}</Link>
     : <span>{props.developerName}</span>;
+  const primaryAction = /open|use|run/i.test(props.primaryLabel) ? 'open' : /add/i.test(props.primaryLabel) ? 'add' : /install|review/i.test(props.primaryLabel) ? 'review' : 'details';
   return (
     <section className="market-featured-hero">
       <ListingBanner name={props.name} imageUrl={props.bannerUrl} className="market-featured-backdrop" />
@@ -59,10 +60,10 @@ export function MarketplaceHero(props: {
           </div>
         </div>
         <div className="market-hero-actions">
-          <button type="button" className="market-primary-action" disabled={props.primaryDisabled} onClick={props.onPrimary}>
+          <button type="button" className="market-primary-action" data-action={primaryAction} disabled={props.primaryDisabled} onClick={props.onPrimary}>
             {props.primaryLabel}
           </button>
-          <Link href={props.secondaryHref} className="market-secondary-action">{props.secondaryLabel}</Link>
+          <Link href={props.secondaryHref} className="market-secondary-action" data-action="details">{props.secondaryLabel}</Link>
         </div>
       </div>
     </section>

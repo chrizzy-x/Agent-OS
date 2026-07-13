@@ -34,4 +34,36 @@ describe('Appstore product flow', () => {
     expect(detail).toContain('Review and approve the requested permissions before adding this app to Library.');
     expect(detail).toContain('No Vault secret required.');
   });
+
+  it('uses clearer shared marketplace labels for Skill Store actions', () => {
+    const skillStore = source('components', 'pages', 'SkillsMarketplacePage.tsx');
+    const skillDetail = source('components', 'pages', 'SkillDetailPage.tsx');
+
+    expect(skillStore).toContain('Use skill');
+    expect(skillStore).toContain('Add skill');
+    expect(skillStore).toContain('Add skill failed');
+    expect(skillStore).toContain('Library');
+    expect(skillDetail).toContain('Run skill');
+    expect(skillDetail).toContain('Save access');
+    expect(skillDetail).toContain('Revoke access');
+    expect(skillDetail).not.toContain('>Manage<');
+  });
+
+  it('removes vague Manage labels from Home and Library action surfaces', () => {
+    const home = source('components', 'pages', 'HomePage.tsx');
+    const library = source('components', 'pages', 'LibraryPage.tsx');
+
+    expect(home).toContain('Open Subagents');
+    expect(home).not.toContain('actionLabel="Manage"');
+    expect(library).toContain('data-action="configure"');
+    expect(library).not.toContain('>Manage<');
+  });
+
+  it('uses clear global add labels for App Store and Skill Store surfaces', () => {
+    const surfaces = source('src', 'product', 'surfaces.ts');
+
+    expect(surfaces).toContain("primaryAction: { label: 'Add app', href: '/appstore' }");
+    expect(surfaces).toContain("primaryAction: { label: 'Add skill', href: '/skillstore' }");
+    expect(surfaces).not.toContain("primaryAction: { label: 'Install', href: '/skillstore' }");
+  });
 });

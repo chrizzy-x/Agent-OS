@@ -281,7 +281,7 @@ export default function AppDetailPage({
           <div className="market-empty">
             <h2>App not found</h2>
             <p>This app is private, unavailable, or unpublished.</p>
-            <Link href="/appstore" className="market-secondary-action">Back to App Store</Link>
+            <Link href="/appstore" className="market-secondary-action" data-action="back">Back to App Store</Link>
           </div>
         ) : (
           <>
@@ -302,13 +302,14 @@ export default function AppDetailPage({
                 </div>
               </div>
               <div className="market-detail-actions">
-                <button type="button" className="market-primary-action" disabled={working === 'workspace' || !installReady} title={!installReady ? 'Review permissions before adding this app to Library.' : undefined} onClick={() => void installToWorkspace()}>
+                <button type="button" className="market-primary-action" data-action={installed ? 'update' : 'add'} disabled={working === 'workspace' || !installReady} title={!installReady ? 'Review permissions before adding this app to Library.' : undefined} onClick={() => void installToWorkspace()}>
                   {working === 'workspace' ? 'Working...' : installed ? 'Update in Library' : 'Add to Library'}
                 </button>
-                {installed ? <Link href={`/library?type=apps&q=${encodeURIComponent(app.name)}`} className="market-secondary-action">Configure in Library</Link> : null}
+                {installed ? <Link href={`/library?type=apps&q=${encodeURIComponent(app.name)}`} className="market-secondary-action" data-action="configure">Configure in Library</Link> : null}
                 <button
                   type="button"
                   className="market-secondary-action"
+                  data-action="device"
                   disabled={!installed || working === 'device'}
                   title={!installed ? 'Add this app to Library before installing it to a device.' : undefined}
                   onClick={() => void installToDevice()}
@@ -318,6 +319,7 @@ export default function AppDetailPage({
                 <button
                   type="button"
                   className="market-secondary-action"
+                  data-action="open"
                   disabled={!installed || working === 'launch'}
                   title={!installed ? 'Add this app to Library before opening it.' : undefined}
                   onClick={() => void launch()}
@@ -325,12 +327,12 @@ export default function AppDetailPage({
                   {working === 'launch' ? 'Opening...' : 'Open app'}
                 </button>
                 {installed ? (
-                  <button type="button" className="market-secondary-action" disabled={working === 'configure'} onClick={() => void updateLibraryConfiguration()}>
+                  <button type="button" className="market-secondary-action" data-action="save" disabled={working === 'configure'} onClick={() => void updateLibraryConfiguration()}>
                     {working === 'configure' ? 'Saving...' : 'Save permissions'}
                   </button>
                 ) : null}
                 {installed ? (
-                  <button type="button" className="market-secondary-action danger" disabled={working === 'remove'} onClick={() => void removeFromLibrary()}>
+                  <button type="button" className="market-secondary-action danger" data-action="remove" disabled={working === 'remove'} onClick={() => void removeFromLibrary()}>
                     {working === 'remove' ? 'Removing...' : 'Remove from Library'}
                   </button>
                 ) : null}

@@ -5312,3 +5312,242 @@ body:has(.market-shell) .surface-shell-main {
     background: var(--bg-secondary);
   }
 }
+
+/* Shared clickable polish layer */
+.os-button,
+.os-chip,
+.os-sidebar-link,
+.btn-ghost,
+.market-primary-action,
+.market-secondary-action,
+.market-chip-row button,
+.market-filter-row button,
+.agentos-global-header-actions > a,
+.agentos-global-header-actions > button,
+.agentos-shell-mobile-button {
+  min-height: 34px;
+  border-radius: 8px;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.58) inset, 0 8px 18px rgba(15, 23, 42, 0.07);
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.os-button:hover:not(:disabled):not([aria-disabled="true"]),
+.os-chip:hover,
+.os-sidebar-link:hover,
+.btn-ghost:hover,
+.market-primary-action:hover:not(:disabled),
+.market-secondary-action:hover:not(:disabled),
+.market-chip-row button:hover,
+.market-filter-row button:hover,
+.agentos-global-header-actions > a:hover,
+.agentos-global-header-actions > button:hover,
+.agentos-shell-mobile-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72) inset, 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+.os-button:active:not(:disabled):not([aria-disabled="true"]),
+.os-chip:active,
+.os-sidebar-link:active,
+.btn-ghost:active,
+.market-primary-action:active:not(:disabled),
+.market-secondary-action:active:not(:disabled),
+.market-chip-row button:active,
+.market-filter-row button:active,
+.agentos-global-header-actions > a:active,
+.agentos-global-header-actions > button:active,
+.agentos-shell-mobile-button:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.52) inset, 0 5px 14px rgba(15, 23, 42, 0.09);
+}
+
+.os-button.primary,
+.market-primary-action {
+  border-color: color-mix(in srgb, var(--accent) 62%, #ffffff 24%);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, #ffffff 8%), var(--accent));
+  color: #ffffff;
+}
+
+.os-button.secondary,
+.btn-ghost,
+.market-secondary-action,
+.market-chip-row button,
+.market-filter-row button,
+.agentos-global-header-actions > a,
+.agentos-global-header-actions > button,
+.agentos-shell-mobile-button {
+  border-color: var(--glass-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.5)),
+    var(--glass-surface);
+  color: var(--text-primary);
+}
+
+.os-button.ghost,
+.os-chip,
+.os-sidebar-link {
+  background: color-mix(in srgb, var(--glass-surface) 70%, transparent);
+}
+
+.market-secondary-action.danger,
+.os-button.destructive,
+.os-button.danger {
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--glass-border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--glass-surface));
+  color: var(--danger);
+}
+
+.market-primary-action[data-action],
+.market-secondary-action[data-action],
+.btn-ghost[data-action] {
+  gap: 8px;
+}
+
+.market-primary-action[data-action]::before,
+.market-secondary-action[data-action]::before,
+.btn-ghost[data-action]::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.market-primary-action[data-action="add"]::before,
+.market-primary-action[data-action="review"]::before,
+.market-primary-action[data-action="update"]::before,
+.btn-ghost[data-action="update"]::before,
+.btn-ghost[data-action="enable"]::before {
+  background:
+    linear-gradient(currentColor 0 0) center / 12px 2px no-repeat,
+    linear-gradient(currentColor 0 0) center / 2px 12px no-repeat;
+}
+
+.market-primary-action[data-action="open"]::before,
+.market-secondary-action[data-action="open"]::before,
+.btn-ghost[data-action="open"]::before {
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(45deg) translate(-1px, 1px);
+}
+
+.market-secondary-action[data-action="details"]::before {
+  content: "i";
+  display: grid;
+  place-items: center;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.market-secondary-action[data-action="library"]::before,
+.market-secondary-action[data-action="configure"]::before,
+.market-secondary-action[data-action="save"]::before,
+.market-secondary-action[data-action="updates"]::before,
+.market-secondary-action[data-action="publish"]::before,
+.market-secondary-action[data-action="device"]::before,
+.btn-ghost[data-action="library"]::before,
+.btn-ghost[data-action="configure"]::before,
+.btn-ghost[data-action="save"]::before,
+.btn-ghost[data-action="device"]::before {
+  border: 1.8px solid currentColor;
+  border-radius: 4px;
+  box-shadow: inset 0 -5px 0 color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.market-secondary-action[data-action="back"]::before {
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translate(2px, -1px);
+}
+
+.market-secondary-action[data-action="remove"]::before,
+.btn-ghost[data-action="remove"]::before {
+  background: linear-gradient(currentColor 0 0) center / 12px 2px no-repeat;
+}
+
+.market-card-actions {
+  align-items: center;
+}
+
+.market-store-card .market-primary-action,
+.market-store-card .market-secondary-action {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.74rem;
+}
+
+.os-card-link .os-card {
+  position: relative;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.os-card-link:hover .os-card {
+  transform: translateY(-1px);
+}
+
+.os-card-link .os-card::after {
+  content: ">";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.home-link-card::after {
+  display: none;
+}
+
+:where(.os-button, .os-chip, .os-sidebar-link, .market-primary-action, .market-secondary-action, .market-chip-row button, .market-filter-row button, .agentos-global-header-actions > a, .agentos-global-header-actions > button, .agentos-shell-mobile-button):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .market-primary-action,
+  .market-secondary-action,
+  .os-button {
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 0.72rem;
+  }
+
+  .market-detail-actions {
+    gap: 6px;
+  }
+
+  .market-primary-action[data-action],
+  .market-secondary-action[data-action] {
+    gap: 6px;
+  }
+
+  .market-primary-action[data-action]::before,
+  .market-secondary-action[data-action]::before {
+    width: 12px;
+    height: 12px;
+  }
+}

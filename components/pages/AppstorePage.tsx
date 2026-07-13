@@ -108,15 +108,16 @@ function AppCard(props: {
           <button
             type="button"
             className="market-primary-action"
+            data-action="open"
             disabled={working}
             onClick={() => props.onOpen(app)}
           >
             {working ? 'Opening...' : actionLabel(true)}
           </button>
         ) : (
-          <Link href={`/appstore/${app.slug}`} className="market-primary-action">{actionLabel(false)}</Link>
+          <Link href={`/appstore/${app.slug}`} className="market-primary-action" data-action="review">{actionLabel(false)}</Link>
         )}
-        <Link href={installed ? '/library?type=apps' : `/appstore/${app.slug}`} className="market-secondary-action">
+        <Link href={installed ? '/library?type=apps' : `/appstore/${app.slug}`} className="market-secondary-action" data-action={installed ? 'library' : 'details'}>
           {installed ? 'Library' : 'Details'}
         </Link>
       </div>
@@ -290,8 +291,8 @@ export default function AppstorePage() {
       subtitle="Install SDK-backed apps into Library. Universal MCP connectors stay separate from App Store apps."
       actions={(
         <>
-          <Link href="/appstore/updates" className="market-secondary-action">App updates</Link>
-          {session?.capabilities?.includes('create_app') ? <Link href="/publish/app" className="market-secondary-action">Publish app</Link> : null}
+          <Link href="/appstore/updates" className="market-secondary-action" data-action="updates">App updates</Link>
+          {session?.capabilities?.includes('create_app') ? <Link href="/publish/app" className="market-secondary-action" data-action="publish">Publish app</Link> : null}
         </>
       )}
     >
@@ -354,7 +355,7 @@ export default function AppstorePage() {
           <div className="market-empty">
             <h2>No matching apps</h2>
             <p>{search.trim() || filter !== 'all' || category !== 'All' ? 'No accessible App Store listings match the current search and filters.' : 'No published AgentOS apps are available from the backend yet.'}</p>
-            <Link href="/studio" className="market-secondary-action">Open Super AgentOS</Link>
+            <Link href="/studio" className="market-secondary-action" data-action="open">Open Super AgentOS</Link>
           </div>
         ) : search.trim() ? (
           <AppRow

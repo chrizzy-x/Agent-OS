@@ -71,6 +71,11 @@ describe('design system foundation', () => {
     expect(css).toContain('padding: 6px !important;');
     expect(css).toContain('.home-link-card .os-entity-copy');
     expect(css).toContain('.home-card-meta-label::after');
+    expect(css).toContain('/* Shared clickable polish layer */');
+    expect(css).toContain('.os-card-link .os-card::after');
+    expect(css).toContain('.btn-ghost[data-action]::before');
+    expect(css).toContain('.market-primary-action[data-action="add"]::before');
+    expect(css).toContain('.market-secondary-action[data-action="library"]::before');
     expect(css).toContain('.agentos-global-primary-action-label');
     expect(css).toContain('.agentos-shell-mobile-icon.menu');
     expect(css).toContain('grid-template-rows: 52px minmax(0, 1fr);');

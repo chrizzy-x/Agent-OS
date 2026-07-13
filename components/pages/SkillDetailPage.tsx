@@ -163,7 +163,7 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
       const payload = await response.json().catch(() => ({}));
       setMessage(response.ok
         ? `${skill.name} installed. ${payload.dependenciesInstalled?.length ?? 0} dependencies resolved.`
-        : payload.error ?? payload.message ?? 'Install failed');
+        : payload.error ?? payload.message ?? 'Add skill failed');
     } finally {
       setInstalling(false);
     }
@@ -235,7 +235,7 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
           <div className="market-empty">
             <h2>Skill not found</h2>
             <p>This capability is private, unavailable, or unpublished.</p>
-            <Link href="/skillstore" className="market-secondary-action">Back to Skill Store</Link>
+            <Link href="/skillstore" className="market-secondary-action" data-action="back">Back to Skill Store</Link>
           </div>
         ) : (
           <>
@@ -253,23 +253,24 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
                 </div>
               </div>
               <div className="market-detail-actions">
-                <button type="button" className="market-primary-action" disabled={installing} onClick={() => void install()}>
-                  {installing ? 'Installing' : 'Install'}
+                <button type="button" className="market-primary-action" data-action="add" disabled={installing} onClick={() => void install()}>
+                  {installing ? 'Adding...' : 'Add skill'}
                 </button>
                 <button
                   type="button"
                   className="market-secondary-action"
+                  data-action="open"
                   disabled={working === 'use' || !(skill.capabilities ?? [])[0]?.name}
                   title={!(skill.capabilities ?? [])[0]?.name ? 'No executable capability is published for this skill.' : undefined}
                   onClick={() => void useSkill()}
                 >
-                  {working === 'use' ? 'Using' : 'Use'}
+                  {working === 'use' ? 'Running...' : 'Run skill'}
                 </button>
-                <button type="button" className="market-secondary-action" disabled={working === 'save'} onClick={() => void saveAccess()}>
-                  {working === 'save' ? 'Saving' : 'Manage'}
+                <button type="button" className="market-secondary-action" data-action="save" disabled={working === 'save'} onClick={() => void saveAccess()}>
+                  {working === 'save' ? 'Saving...' : 'Save access'}
                 </button>
-                <button type="button" className="market-secondary-action danger" disabled={working === 'revoke'} onClick={() => setConfirmRevoke(true)}>
-                  {working === 'revoke' ? 'Revoking' : 'Revoke Access'}
+                <button type="button" className="market-secondary-action danger" data-action="remove" disabled={working === 'revoke'} onClick={() => setConfirmRevoke(true)}>
+                  {working === 'revoke' ? 'Revoking...' : 'Revoke access'}
                 </button>
               </div>
             </section>

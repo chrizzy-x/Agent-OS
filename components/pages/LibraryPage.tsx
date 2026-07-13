@@ -197,12 +197,12 @@ export default function LibraryPage() {
                     <span>{formatDate(item.updatedAt)}</span>
                   </div>
                   <div className="os-inline-actions">
-                    <Link href={item.href} className="btn-ghost">{item.kind === 'installed_skill' ? 'Configure' : 'Open'}</Link>
-                    {item.kind === 'installed_app' ? <Link href={item.href} className="btn-ghost">Manage</Link> : null}
+                    <Link href={item.href} className="btn-ghost" data-action={item.kind === 'installed_skill' ? 'configure' : 'open'}>{item.kind === 'installed_skill' ? 'Configure' : 'Open'}</Link>
+                    {item.kind === 'installed_app' ? <Link href={item.href} className="btn-ghost" data-action="configure">Configure</Link> : null}
                     {item.kind === 'installed_app' && Array.isArray(item.metadata?.supportedDeviceTargets) && item.metadata.supportedDeviceTargets.length > 0 ? (
-                      <button type="button" className="btn-ghost" onClick={() => void installToDevice(item)}>Update</button>
+                      <button type="button" className="btn-ghost" data-action="update" onClick={() => void installToDevice(item)}>Update</button>
                     ) : null}
-                    {item.kind === 'installed_skill' ? <Link href={item.href} className="btn-ghost">Enable</Link> : null}
+                    {item.kind === 'installed_skill' ? <Link href={item.href} className="btn-ghost" data-action="enable">Enable</Link> : null}
                   </div>
                 </div>
               </Card>
@@ -220,9 +220,9 @@ export default function LibraryPage() {
               <Badge key={`${item.id}-visibility`} tone={item.visibility === 'public' ? 'success' : item.visibility === 'workspace' ? 'accent' : 'default'}>{item.visibility}</Badge>,
               formatDate(item.updatedAt),
               <div key={`${item.id}-actions`} className="os-inline-actions">
-                <Link href={item.href} className="btn-ghost">Open</Link>
+                <Link href={item.href} className="btn-ghost" data-action="open">Open</Link>
                 {item.kind === 'installed_app' && Array.isArray(item.metadata?.supportedDeviceTargets) && item.metadata.supportedDeviceTargets.length > 0 ? (
-                  <button type="button" className="btn-ghost" onClick={() => void installToDevice(item)}>Install device</button>
+                  <button type="button" className="btn-ghost" data-action="device" onClick={() => void installToDevice(item)}>Install device</button>
                 ) : null}
               </div>,
             ])}

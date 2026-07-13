@@ -480,7 +480,7 @@ export default function HomePage() {
             )}
           </Section>
 
-          <Section title="Incognito Subagents" actionHref="/subagents" actionLabel="Manage">
+          <Section title="Incognito Subagents" actionHref="/subagents" actionLabel="Open Subagents">
             {payload.privateSubagents.length > 0 ? (
               <div style={{ display: 'grid', gap: 10 }}>
                 {payload.privateSubagents.slice(0, 4).map(item => (

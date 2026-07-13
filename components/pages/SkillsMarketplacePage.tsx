@@ -70,17 +70,18 @@ function SkillCard(props: {
       <div className="market-card-actions">
         {installed ? (
           <>
-            <Link href={`/skills/${skill.slug}`} className="market-primary-action">Use</Link>
-            <Link href="/skills" className="market-secondary-action">Manage</Link>
+            <Link href={`/skills/${skill.slug}`} className="market-primary-action" data-action="open">Use skill</Link>
+            <Link href="/skills" className="market-secondary-action" data-action="library">Library</Link>
           </>
         ) : (
           <button
             type="button"
             className="market-primary-action"
+            data-action="add"
             disabled={working}
             onClick={() => props.onInstall(skill)}
           >
-            {working ? 'Installing' : 'Install'}
+            {working ? 'Adding...' : 'Add skill'}
           </button>
         )}
       </div>
@@ -184,7 +185,7 @@ export default function SkillsMarketplacePage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setNotice(payload.error ?? payload.message ?? 'Install failed');
+        setNotice(payload.error ?? payload.message ?? 'Add skill failed');
         return;
       }
       cache.current.clear();
@@ -200,7 +201,7 @@ export default function SkillsMarketplacePage() {
       activePath="/skillstore"
       title="Skill Store"
       subtitle="Discover installable capabilities for Super AgentOS, apps, workflows, and incognito subagents."
-      actions={session?.capabilities?.includes('create_skill') ? <Link href="/publish/skill" className="market-secondary-action">Publish Skill</Link> : undefined}
+      actions={session?.capabilities?.includes('create_skill') ? <Link href="/publish/skill" className="market-secondary-action" data-action="publish">Publish Skill</Link> : undefined}
     >
       <div className="market-shell" data-surface="skills">
         <div className="market-search-panel">
@@ -230,7 +231,7 @@ export default function SkillsMarketplacePage() {
             developerHref={`/developer/${hero.developer_handle}`}
             developerName={hero.author_name}
             metadata={[hero.category, capabilityLabel(hero), formatCountLabel(hero.total_installs, 'install', 'installs')]}
-            primaryLabel={workingSlug === hero.slug ? 'Installing' : installed.has(hero.slug) ? 'Use' : 'Install'}
+            primaryLabel={workingSlug === hero.slug ? 'Adding...' : installed.has(hero.slug) ? 'Use skill' : 'Add skill'}
             primaryDisabled={workingSlug === hero.slug}
             secondaryHref={`/skills/${hero.slug}`}
             secondaryLabel="Details"
@@ -248,7 +249,7 @@ export default function SkillsMarketplacePage() {
           <div className="market-empty">
             <h2>No skills found</h2>
             <p>{search.trim() ? 'No accessible capabilities matched this search.' : 'No published skills are available from the backend yet.'}</p>
-            <Link href="/studio" className="market-secondary-action">Open Super AgentOS</Link>
+            <Link href="/studio" className="market-secondary-action" data-action="open">Open Super AgentOS</Link>
           </div>
         ) : search.trim() ? (
           <SkillRow title="Search Results" skills={discovery.skills} installed={installed} workingSlug={workingSlug} onInstall={skill => void installSkill(skill)} />
