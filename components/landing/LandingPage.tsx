@@ -6,7 +6,7 @@ export default function LandingPage() {
   return (
     <div className="agentos-landing-page">
       <LandingNavigation entryHref={AGENTOS_ENTRY_ROUTE} homeHref={AGENTOS_HOME_ROUTE} />
-      <AgentOSHero entryHref={AGENTOS_ENTRY_ROUTE} />
+      <AgentOSHero entryHref={AGENTOS_ENTRY_ROUTE} homeHref={AGENTOS_HOME_ROUTE} />
     </div>
   );
 }

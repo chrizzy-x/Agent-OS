@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { COMMAND_DEMOS, STATUS_DEMOS } from './constants';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { COMMAND_DEMOS } from './constants';
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
@@ -18,11 +18,20 @@ function useReducedMotion() {
   return reduced;
 }
 
+function ArrowIcon() {
+  return (
+    <svg viewBox="0 0 22 22" aria-hidden="true" focusable="false">
+      <path d="M6.5 15.5 15.5 6.5M8.5 6.5h7v7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" />
+    </svg>
+  );
+}
+
 export default function CommandDemonstration({ entryHref }: { entryHref: string }) {
+  const router = useRouter();
   const reducedMotion = useReducedMotion();
   const [typedText, setTypedText] = useState('');
-  const [statusIndex, setStatusIndex] = useState(0);
-  const [statusVisible, setStatusVisible] = useState(true);
+  const [rippling, setRippling] = useState(false);
+  const navigationTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (reducedMotion) {
@@ -43,24 +52,24 @@ export default function CommandDemonstration({ entryHref }: { entryHref: string 
       if (cancelled) return;
       setTypedText(text.slice(0, position));
       if (position < text.length) {
-        schedule(() => typeCommand(text, position + 1), 44);
+        schedule(() => typeCommand(text, position + 1), 42);
         return;
       }
-      schedule(() => deleteCommand(text, text.length), 1500);
+      schedule(() => deleteCommand(text, text.length), 1600);
     }
 
     function deleteCommand(text: string, position: number) {
       if (cancelled) return;
       setTypedText(text.slice(0, position));
       if (position > 0) {
-        schedule(() => deleteCommand(text, position - 1), 24);
+        schedule(() => deleteCommand(text, position - 1), 22);
         return;
       }
       commandIndex = (commandIndex + 1) % COMMAND_DEMOS.length;
-      schedule(() => typeCommand(COMMAND_DEMOS[commandIndex], 0), 120);
+      schedule(() => typeCommand(COMMAND_DEMOS[commandIndex], 0), 250);
     }
 
-    schedule(() => typeCommand(COMMAND_DEMOS[0], 0), 1600);
+    schedule(() => typeCommand(COMMAND_DEMOS[0], 0), 1800);
 
     return () => {
       cancelled = true;
@@ -69,52 +78,34 @@ export default function CommandDemonstration({ entryHref }: { entryHref: string 
   }, [reducedMotion]);
 
   useEffect(() => {
-    if (reducedMotion) {
-      setStatusVisible(true);
-      setStatusIndex(0);
-      return;
-    }
-
-    let transitionTimer = 0;
-    const interval = window.setInterval(() => {
-      setStatusVisible(false);
-      transitionTimer = window.setTimeout(() => {
-        setStatusIndex(index => (index + 1) % STATUS_DEMOS.length);
-        setStatusVisible(true);
-      }, 210);
-    }, 1500);
-
     return () => {
-      window.clearInterval(interval);
-      window.clearTimeout(transitionTimer);
+      if (navigationTimer.current) window.clearTimeout(navigationTimer.current);
     };
-  }, [reducedMotion]);
+  }, []);
 
-  const visibleStatus = reducedMotion
-    ? { label: 'Ready to enter AgentOS', color: '#28B36F' }
-    : STATUS_DEMOS[statusIndex];
+  const openAgentOS = () => {
+    if (rippling) return;
+    setRippling(true);
+    navigationTimer.current = window.setTimeout(() => {
+      router.push(entryHref);
+    }, reducedMotion ? 0 : 390);
+  };
 
   return (
-    <div className="agentos-command-demo">
+    <div className={`agentos-command-demo ${rippling ? 'is-submitting' : ''}`}>
       <p className="agentos-sr-only">
-        Command demonstration examples show Super AgentOS receiving a goal, planning execution, using capabilities and delivering the result.
+        Command examples show Super AgentOS receiving a goal, planning execution, using workspace capabilities and delivering a finished result.
       </p>
-      <div className="agentos-command-shell">
+      <div className="agentos-command-shell agentos-liquid-glass">
+        <span className="agentos-command-ripple" aria-hidden="true" />
+        <span className="agentos-command-energy" aria-hidden="true" />
         <div className="agentos-command-text" aria-hidden="true">
           <span>{typedText || '\u00A0'}</span>
           {!reducedMotion ? <i className="agentos-command-cursor" /> : null}
         </div>
-        <Link href={entryHref} className="agentos-command-submit" aria-label="Open AgentOS">
-          <span aria-hidden="true">↗</span>
-        </Link>
-      </div>
-      <div
-        className={`agentos-status-indicator ${statusVisible ? 'visible' : 'hidden'}`}
-        style={{ '--status-color': visibleStatus.color } as React.CSSProperties}
-        aria-hidden="true"
-      >
-        <span />
-        <strong>{visibleStatus.label}</strong>
+        <button type="button" className="agentos-command-submit" aria-label="Open AgentOS" onClick={openAgentOS}>
+          <ArrowIcon />
+        </button>
       </div>
     </div>
   );

@@ -1,5 +1,9 @@
 export const AGENTOS_ENTRY_ROUTE = '/studio?mode=nl';
 export const AGENTOS_HOME_ROUTE = '/dashboard';
+export const AGENTOS_APPSTORE_ROUTE = '/appstore';
+export const AGENTOS_DEVELOPER_ROUTE = '/developer';
+export const AGENTOS_HERO_ASSET = '/agentos-landing-hero.webp';
+export const AGENTOS_NAV_MARK_ASSET = '/agentos-landing-mark.webp';
 
 export const COMMAND_DEMOS = [
   'Build and launch a complete product campaign.',
@@ -8,8 +12,39 @@ export const COMMAND_DEMOS = [
 ] as const;
 
 export const STATUS_DEMOS = [
-  { label: 'Understanding your command', color: '#765FFF' },
-  { label: 'Planning the execution', color: '#44A3FF' },
-  { label: 'Using workspace capabilities', color: '#31C698' },
-  { label: 'Delivering the completed result', color: '#FF806A' },
+  { lead: 'Understanding', detail: 'your command', label: 'Understanding your command', color: '#9868F5' },
+  { lead: 'Planning', detail: 'the execution', label: 'Planning the execution', color: '#3D91F4' },
+  { lead: 'Using', detail: 'workspace capabilities', label: 'Using workspace capabilities', color: '#33C8A4' },
+  { lead: 'Delivering', detail: 'the completed result', label: 'Delivering the completed result', color: '#FF8354' },
+] as const;
+
+export const EXECUTION_NODES = [
+  {
+    title: 'Understand',
+    body: 'Interprets your outcome.',
+    tone: '#9868F5',
+    position: 'understand',
+    icon: 'target',
+  },
+  {
+    title: 'Plan',
+    body: 'Builds the execution path.',
+    tone: '#3D91F4',
+    position: 'plan',
+    icon: 'path',
+  },
+  {
+    title: 'Execute',
+    body: 'Uses apps, skills and tools.',
+    tone: '#33C8A4',
+    position: 'execute',
+    icon: 'bolt',
+  },
+  {
+    title: 'Deliver',
+    body: 'Returns the finished result.',
+    tone: '#FF8354',
+    position: 'deliver',
+    icon: 'check',
+  },
 ] as const;

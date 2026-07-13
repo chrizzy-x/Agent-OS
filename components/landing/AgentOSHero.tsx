@@ -1,81 +1,39 @@
-import Image from 'next/image';
-import AnimatedSignalField from './AnimatedSignalField';
 import CommandDemonstration from './CommandDemonstration';
-import ExecutionNode from './ExecutionNode';
+import ExecutionStatusStrip from './ExecutionStatusStrip';
+import LandingDescriptorDroplet from './LandingDescriptorDroplet';
+import LiquidGlassExecutionStage from './LiquidGlassExecutionStage';
 
-const EXECUTION_NODES = [
-  {
-    title: 'Understand',
-    body: 'Interprets the outcome.',
-    tone: '#9D87FF',
-    position: 'understand',
-    delay: '1.1s',
-  },
-  {
-    title: 'Plan',
-    body: 'Breaks down the work.',
-    tone: '#44A3FF',
-    position: 'plan',
-    delay: '2.3s',
-  },
-  {
-    title: 'Execute',
-    body: 'Uses apps, skills and tools.',
-    tone: '#31C698',
-    position: 'execute',
-    delay: '3.5s',
-  },
-  {
-    title: 'Deliver',
-    body: 'Returns the finished result.',
-    tone: '#FF806A',
-    position: 'deliver',
-    delay: '4.7s',
-  },
-] as const;
+function SparkleMark() {
+  return (
+    <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+      <path d="M9 1.8 10.7 7.3 16.2 9 10.7 10.7 9 16.2 7.3 10.7 1.8 9 7.3 7.3 9 1.8Z" fill="currentColor" />
+    </svg>
+  );
+}
 
-export default function AgentOSHero({ entryHref }: { entryHref: string }) {
+export default function AgentOSHero({ entryHref, homeHref }: { entryHref: string; homeHref: string }) {
   return (
     <main className="agentos-landing-main">
       <section className="agentos-landing-hero" aria-labelledby="agentos-landing-heading">
         <div className="agentos-super-badge">
-          <span className="agentos-badge-spark" aria-hidden="true">✦</span>
+          <SparkleMark />
           <span>Super AgentOS</span>
         </div>
         <h1 id="agentos-landing-heading" className="agentos-landing-headline">
-          <span>One command.</span>
+          <span className="agentos-headline-primary">One command.</span>
           <span className="agentos-gradient-line">Super AgentOS handles the task end to end.</span>
         </h1>
         <p className="agentos-landing-copy">
           Describe the outcome. Super AgentOS understands the goal, plans the work, uses the right capabilities and delivers the finished result.
         </p>
-        <div id="product-demo" className="agentos-logo-stage" aria-label="Super AgentOS execution demonstration">
-          <div className="agentos-logo-halo" aria-hidden="true" />
-          <AnimatedSignalField />
-          <div className="agentos-hero-logo-wrap">
-            <Image
-              src="/agentos-landing-hero.webp"
-              alt="AgentOS visual identity"
-              width={600}
-              height={600}
-              priority
-              className="agentos-hero-logo"
-            />
-          </div>
-          {EXECUTION_NODES.map(node => (
-            <ExecutionNode
-              key={node.title}
-              title={node.title}
-              body={node.body}
-              tone={node.tone}
-              position={node.position}
-              delay={node.delay}
-            />
-          ))}
-        </div>
+        <LiquidGlassExecutionStage />
         <CommandDemonstration entryHref={entryHref} />
+        <ExecutionStatusStrip />
+        <div className="agentos-descriptor-row" aria-hidden="true">
+          <LandingDescriptorDroplet tone="#9868F5" label="Built for everything you want to achieve." />
+          <LandingDescriptorDroplet tone="#3D91F4" label="The default doorway into AgentOS" href={homeHref} />
+        </div>
       </section>
-      <div className="agentos-landing-descriptor">The default doorway into AgentOS</div>
     </main>
   );
 }

@@ -6363,3 +6363,1660 @@ body:has(.agentos-landing-page) .panic-button {
     transform: translate(-50%, -50%);
   }
 }
+
+/* AgentOS liquid-glass landing upgrade */
+body:has(.agentos-landing-page) {
+  margin: 0;
+  background: #fbfbfd;
+  color: #0b0d12;
+}
+
+body:has(.agentos-landing-page) .panic-button {
+  display: none;
+}
+
+.agentos-landing-page {
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background:
+    radial-gradient(circle at 10% 48%, rgba(255, 83, 188, 0.16), transparent 34%),
+    radial-gradient(circle at 91% 45%, rgba(65, 154, 255, 0.18), transparent 35%),
+    radial-gradient(circle at 52% 94%, rgba(112, 91, 255, 0.1), transparent 29%),
+    radial-gradient(circle at 40% 58%, rgba(255, 192, 104, 0.08), transparent 26%),
+    #fbfbfd;
+  color: #0b0d12;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.agentos-landing-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 220 220' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+.agentos-liquid-glass {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.26));
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.95),
+    inset 0 -1px 1px rgba(76, 91, 145, 0.1),
+    0 22px 60px rgba(36, 48, 84, 0.13);
+  backdrop-filter: blur(24px) saturate(145%);
+  -webkit-backdrop-filter: blur(24px) saturate(145%);
+}
+
+.agentos-liquid-glass::before,
+.agentos-liquid-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.agentos-liquid-glass::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0) 46%);
+  opacity: 0.72;
+  clip-path: inset(1px 1px 52% 1px round inherit);
+}
+
+.agentos-liquid-glass::after {
+  padding: 1px;
+  background: linear-gradient(120deg, rgba(241, 138, 239, 0.22), rgba(146, 121, 255, 0.16), rgba(100, 185, 255, 0.2), rgba(94, 229, 221, 0.15));
+  opacity: 0.5;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .agentos-liquid-glass {
+    background: rgba(255, 255, 255, 0.9);
+  }
+}
+
+.agentos-landing-nav {
+  position: relative;
+  z-index: 20;
+  width: min(1180px, calc(100vw - 72px));
+  height: 70px;
+  margin: 14px auto 0;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-radius: 30px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-12px);
+  animation: agentosLandingEnter 0.8s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-landing-nav::before {
+  z-index: 0;
+}
+
+.agentos-landing-nav::after {
+  z-index: 0;
+  background:
+    linear-gradient(100deg, transparent 12%, rgba(255, 255, 255, 0.55) 28%, transparent 44%),
+    linear-gradient(120deg, rgba(241, 138, 239, 0.2), rgba(100, 185, 255, 0.18), rgba(94, 229, 221, 0.12));
+  opacity: 0.26;
+  transform: translateX(-95%);
+  animation: agentosNavReflection 9s 1.2s ease-in-out infinite;
+  -webkit-mask: none;
+  mask: none;
+}
+
+.agentos-landing-brand,
+.agentos-landing-links,
+.agentos-landing-actions {
+  position: relative;
+  z-index: 2;
+}
+
+.agentos-landing-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #0b0d12;
+  text-decoration: none;
+  flex: 0 0 auto;
+}
+
+.agentos-landing-brand img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+}
+
+.agentos-landing-brand span {
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.agentos-landing-links {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 34px;
+  margin-left: auto;
+}
+
+.agentos-landing-links a {
+  color: #4e5260;
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.agentos-landing-links a:hover {
+  color: #0b0d12;
+  transform: translateY(-1px);
+}
+
+.agentos-landing-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agentos-landing-home,
+.agentos-landing-open {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  border-radius: 17px;
+  font-size: 14px;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.agentos-landing-home {
+  min-width: 112px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.54);
+  color: #2b3040;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.85), 0 12px 26px rgba(36, 48, 84, 0.1);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+}
+
+.agentos-landing-open {
+  width: 152px;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, #1a1d26, #090b10);
+  box-shadow: 0 14px 30px rgba(10, 12, 20, 0.2);
+}
+
+.agentos-landing-open::before {
+  content: "";
+  position: absolute;
+  inset: 1px 1px auto;
+  height: 45%;
+  border-radius: 16px 16px 8px 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent);
+  pointer-events: none;
+}
+
+.agentos-landing-open svg {
+  width: 16px;
+  height: 16px;
+}
+
+.agentos-landing-home:hover,
+.agentos-landing-open:hover {
+  transform: translateY(-2px);
+}
+
+.agentos-landing-home:hover {
+  border-color: rgba(100, 185, 255, 0.32);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 18px 34px rgba(36, 48, 84, 0.15);
+}
+
+.agentos-landing-open:hover {
+  box-shadow: 0 18px 36px rgba(10, 12, 20, 0.26);
+}
+
+.agentos-landing-home:focus-visible,
+.agentos-landing-open:focus-visible,
+.agentos-landing-links a:focus-visible,
+.agentos-landing-brand:focus-visible,
+.agentos-command-submit:focus-visible,
+.agentos-descriptor-droplet:focus-visible {
+  outline: 3px solid rgba(61, 145, 244, 0.42);
+  outline-offset: 4px;
+}
+
+.agentos-landing-main {
+  position: relative;
+  z-index: 1;
+  min-height: max(620px, calc(100dvh - 84px));
+  display: grid;
+  place-items: center;
+  padding: 8px 40px 22px;
+}
+
+.agentos-landing-hero {
+  width: min(1220px, 94vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.agentos-super-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid rgba(89, 92, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(239, 240, 255, 0.75);
+  color: #343b77;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8), 0 10px 24px rgba(78, 83, 150, 0.08);
+  backdrop-filter: blur(12px) saturate(135%);
+  -webkit-backdrop-filter: blur(12px) saturate(135%);
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 0.8s 0.3s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-super-badge svg {
+  width: 13px;
+  height: 13px;
+  color: #7b67f8;
+}
+
+.agentos-landing-headline {
+  width: min(1050px, 100%);
+  margin: 12px 0 0;
+  color: #0b0d12;
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.065em;
+}
+
+.agentos-landing-headline span {
+  display: block;
+}
+
+.agentos-headline-primary {
+  font-size: clamp(50px, 5.1vw, 80px);
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 0.85s 0.5s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-gradient-line {
+  margin-top: 2px;
+  font-size: clamp(42px, 4.35vw, 66px);
+  line-height: 0.94;
+  letter-spacing: -0.06em;
+  background: linear-gradient(90deg, #f04491 5%, #c84edd 28%, #7b67f8 55%, #428ff1 80%, #14bee5 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 0.85s 0.7s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-landing-copy {
+  width: min(680px, 94vw);
+  margin: 12px 0 0;
+  color: #5f6472;
+  font-size: clamp(16px, 1.35vw, 18px);
+  font-weight: 400;
+  line-height: 1.5;
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 0.8s 0.95s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-logo-stage {
+  position: relative;
+  width: min(1160px, 94vw);
+  height: 330px;
+  margin-top: 6px;
+  overflow: visible;
+  scroll-margin-top: 24px;
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 1s 1.1s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-signal-field {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 1400px;
+  height: 340px;
+  overflow: visible;
+  transform: translate(calc(-50% + var(--agentos-signal-x, 0px)), calc(-50% + var(--agentos-signal-y, 0px)));
+  transform-origin: center;
+  opacity: 0.86;
+  filter: drop-shadow(0 18px 30px rgba(88, 96, 255, 0.08));
+  z-index: 1;
+}
+
+.agentos-signal-group {
+  animation: agentosSignalPulse 4.8s var(--signal-delay) ease-in-out infinite;
+}
+
+.agentos-signal-line,
+.agentos-signal-line-blur {
+  fill: none;
+  stroke-linecap: round;
+  stroke-dasharray: 15 10;
+  animation: agentosSignalDash 5s var(--signal-delay) linear infinite;
+}
+
+.agentos-signal-line {
+  stroke-width: 2.7;
+  opacity: 0.72;
+}
+
+.agentos-signal-line-blur {
+  stroke-width: 8;
+  opacity: 0.16;
+  filter: blur(8px);
+}
+
+.agentos-signal-particle {
+  opacity: 0.35;
+  filter: blur(0.2px) drop-shadow(0 0 8px currentColor);
+}
+
+.agentos-connector-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  overflow: visible;
+}
+
+.agentos-connector-line {
+  fill: none;
+  stroke: rgba(103, 112, 160, 0.24);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-dasharray: 5 9;
+  animation: agentosConnectorPulse 6.4s ease-in-out infinite;
+}
+
+.agentos-connector-line.plan {
+  animation-delay: 1.4s;
+}
+
+.agentos-connector-line.execute {
+  animation-delay: 2.8s;
+}
+
+.agentos-connector-line.deliver {
+  animation-delay: 4.2s;
+}
+
+.agentos-lens-caustic {
+  position: absolute;
+  left: 50%;
+  top: 70%;
+  z-index: 1;
+  width: 390px;
+  height: 78px;
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at 24% 48%, rgba(240, 68, 145, 0.22), transparent 40%),
+    radial-gradient(ellipse at 50% 45%, rgba(123, 103, 248, 0.24), transparent 45%),
+    radial-gradient(ellipse at 76% 52%, rgba(20, 190, 229, 0.2), transparent 42%);
+  filter: blur(22px);
+  opacity: 0.22;
+  transform: translate(calc(-50% + var(--agentos-reflect-x, 0px)), var(--agentos-reflect-y, 0px)) scale(0.96);
+  animation: agentosCausticMove 5.4s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+.agentos-glass-lens {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  width: min(420px, 40vw);
+  height: 310px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 46% 54% 49% 51% / 52% 45% 55% 48%;
+  box-shadow:
+    inset 0 2px 2px rgba(255, 255, 255, 0.96),
+    inset 0 -6px 16px rgba(74, 91, 168, 0.16),
+    0 34px 75px rgba(30, 48, 96, 0.18);
+  transform: translate(calc(-50% + var(--agentos-lens-x, 0px)), calc(-50% + var(--agentos-lens-y, 0px))) translateY(-5px) rotate(-0.4deg) scale(0.99);
+  animation: agentosLensFloat 5.4s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  will-change: transform, border-radius;
+}
+
+.agentos-glass-lens::before {
+  z-index: 5;
+  width: 34%;
+  height: 140%;
+  left: -45%;
+  inset-block: -20%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  opacity: 0.46;
+  transform: translateX(var(--agentos-reflect-x, 0px)) rotate(18deg);
+  clip-path: none;
+  animation: agentosLensSweep 7.5s 1.8s ease-in-out infinite;
+}
+
+.agentos-glass-lens::after {
+  z-index: 3;
+}
+
+.agentos-lens-inner {
+  position: absolute;
+  inset: 16px;
+  z-index: 1;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 34% 20%, rgba(255, 255, 255, 0.62), transparent 34%),
+    radial-gradient(circle at 52% 58%, rgba(255, 255, 255, 0.28), transparent 58%);
+  box-shadow: inset 0 0 44px rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+.agentos-lens-signal-refraction {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  border-radius: inherit;
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+  filter: saturate(1.32) blur(0.2px);
+}
+
+.agentos-signal-field-refracted {
+  left: 50%;
+  top: 50%;
+  width: 620px;
+  height: 210px;
+  opacity: 0.8;
+  transform: translate(calc(-50% + 11px), calc(-50% + 2px)) scale(1.06);
+}
+
+.agentos-hero-logo {
+  position: relative;
+  z-index: 6;
+  width: min(365px, 88%);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 24px 32px rgba(20, 64, 160, 0.18));
+  transform: translate(var(--agentos-logo-x, 0px), var(--agentos-logo-y, 0px));
+  animation: agentosLogoDepth 5.4s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+.agentos-execution-node {
+  position: absolute;
+  z-index: 5;
+  width: 230px;
+  min-height: 100px;
+  display: grid;
+  grid-template-columns: 45px 1fr;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 17px;
+  color: #0b0d12;
+  text-align: left;
+  border-radius: 46% 54% 51% 49% / 53% 45% 55% 47%;
+  transform: translate(var(--agentos-drop-x, 0px), var(--agentos-drop-y, 0px));
+  animation:
+    agentosDropletFloat 6.2s var(--float-delay) ease-in-out infinite alternate,
+    agentosDropletActive 6.4s var(--node-delay) ease-in-out infinite;
+  will-change: transform, border-radius;
+}
+
+.agentos-execution-node.understand {
+  left: 1.5%;
+  top: 11%;
+}
+
+.agentos-execution-node.plan {
+  left: 0.5%;
+  bottom: 8%;
+  border-radius: 54% 46% 48% 52% / 47% 56% 44% 53%;
+}
+
+.agentos-execution-node.execute {
+  right: 1.5%;
+  top: 11%;
+  border-radius: 52% 48% 54% 46% / 46% 54% 47% 53%;
+}
+
+.agentos-execution-node.deliver {
+  right: 0.5%;
+  bottom: 8%;
+  border-radius: 48% 52% 46% 54% / 55% 47% 53% 45%;
+}
+
+.agentos-execution-icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 42% 58% 50% 50% / 52% 44% 56% 48%;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 35% 22%, rgba(255, 255, 255, 0.5), transparent 34%),
+    var(--node-tone);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--node-tone) 26%, transparent);
+}
+
+.agentos-execution-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.agentos-execution-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.agentos-execution-copy strong {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.agentos-execution-copy span {
+  color: #5f6472;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.agentos-execution-connector {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--node-tone);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--node-tone) 13%, transparent);
+  animation: agentosConnectorNode 6.4s var(--node-delay) ease-in-out infinite;
+}
+
+.agentos-execution-node.understand .agentos-execution-connector,
+.agentos-execution-node.plan .agentos-execution-connector {
+  right: -5px;
+}
+
+.agentos-execution-node.execute .agentos-execution-connector,
+.agentos-execution-node.deliver .agentos-execution-connector {
+  left: -5px;
+}
+
+.agentos-execution-node.understand .agentos-execution-connector,
+.agentos-execution-node.execute .agentos-execution-connector {
+  top: 50%;
+}
+
+.agentos-execution-node.plan .agentos-execution-connector,
+.agentos-execution-node.deliver .agentos-execution-connector {
+  bottom: 34%;
+}
+
+.agentos-command-demo {
+  position: relative;
+  z-index: 8;
+  width: min(830px, 88vw);
+  margin-top: -4px;
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 0.9s 2.1s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-command-shell {
+  position: relative;
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px 0 28px;
+  overflow: hidden;
+  border-radius: 38px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.67), rgba(248, 250, 255, 0.27));
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.96),
+    inset 0 -2px 3px rgba(79, 105, 180, 0.1),
+    0 25px 65px rgba(41, 52, 92, 0.17);
+  backdrop-filter: blur(28px) saturate(155%);
+  -webkit-backdrop-filter: blur(28px) saturate(155%);
+  transition: transform 160ms ease;
+}
+
+.agentos-command-demo.is-submitting .agentos-command-shell {
+  transform: scale(0.988);
+}
+
+.agentos-command-text {
+  position: relative;
+  z-index: 3;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #252a35;
+  font-size: 18px;
+  line-height: 1;
+  text-align: left;
+}
+
+.agentos-command-text span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentos-command-cursor {
+  width: 2px;
+  height: 24px;
+  flex: 0 0 2px;
+  background: #8065ff;
+  animation: agentosCursorBlink 0.8s step-end infinite;
+}
+
+.agentos-command-submit {
+  position: relative;
+  z-index: 4;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
+  color: #ffffff;
+  background: radial-gradient(circle at 35% 20%, #303440, #11131a 55%, #05070b 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.25), 0 16px 32px rgba(8, 10, 18, 0.24);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.agentos-command-submit:hover {
+  transform: translateY(-2px) scale(1.025);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.28), 0 21px 38px rgba(8, 10, 18, 0.29);
+}
+
+.agentos-command-submit:active {
+  transform: scale(0.94);
+}
+
+.agentos-command-submit svg {
+  width: 23px;
+  height: 23px;
+}
+
+.agentos-command-ripple {
+  position: absolute;
+  right: 32px;
+  top: 50%;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(128, 101, 255, 0.28), rgba(20, 190, 229, 0.12), transparent 70%);
+  opacity: 0;
+  transform: translateY(-50%) scale(0.1);
+  pointer-events: none;
+}
+
+.agentos-command-energy {
+  position: absolute;
+  right: 52px;
+  top: 50%;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #7b67f8;
+  box-shadow: 0 0 18px rgba(123, 103, 248, 0.48);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.agentos-command-demo.is-submitting .agentos-command-ripple {
+  animation: agentosCommandRipple 380ms ease-out forwards;
+}
+
+.agentos-command-demo.is-submitting .agentos-command-energy {
+  animation: agentosCommandEnergy 390ms ease-out forwards;
+}
+
+.agentos-status-strip {
+  position: relative;
+  width: min(790px, 86vw);
+  min-height: 50px;
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+  border-radius: 25px;
+  padding: 8px 10px;
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 0.8s 2.4s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-status-step {
+  position: relative;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #747a89;
+  animation: agentosStatusActive 6.4s var(--status-delay) ease-in-out infinite;
+}
+
+.agentos-status-step:not(:last-of-type)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 1px;
+  background: rgba(103, 112, 160, 0.18);
+}
+
+.agentos-status-marker {
+  position: relative;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--status-color);
+  background: rgba(255, 255, 255, 0.36);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-color) 0%, transparent);
+  animation: agentosStatusMarker 6.4s var(--status-delay) ease-in-out infinite;
+}
+
+.agentos-status-label {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+}
+
+.agentos-status-label strong {
+  font-size: 12px;
+  line-height: 1.05;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.agentos-status-label em {
+  font-size: 11px;
+  line-height: 1.05;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.agentos-status-complete {
+  position: absolute;
+  left: 50%;
+  bottom: -21px;
+  color: #2cbf78;
+  font-size: 11px;
+  font-weight: 750;
+  opacity: 0;
+  transform: translateX(-50%) translateY(4px);
+  animation: agentosCompletedState 6.4s ease-in-out infinite;
+}
+
+.agentos-descriptor-row {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: min(1160px, 94vw);
+  margin-top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.agentos-descriptor-droplet {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(330px, 42vw);
+  padding: 12px 16px;
+  border-radius: 42% 58% 51% 49% / 55% 47% 53% 45%;
+  color: rgba(72, 77, 91, 0.82);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(18px);
+  animation: agentosLandingEnter 0.75s 2.6s cubic-bezier(0.2, 0.75, 0.2, 1) forwards;
+}
+
+.agentos-descriptor-droplet > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--descriptor-tone);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--descriptor-tone) 10%, transparent);
+}
+
+.agentos-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes agentosLandingEnter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes agentosNavReflection {
+  0%,
+  64% {
+    transform: translateX(-95%);
+  }
+
+  88%,
+  100% {
+    transform: translateX(95%);
+  }
+}
+
+@keyframes agentosSignalDash {
+  to {
+    stroke-dashoffset: -145;
+  }
+}
+
+@keyframes agentosSignalPulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scaleY(0.96);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleY(1.06);
+  }
+}
+
+@keyframes agentosConnectorPulse {
+  0%,
+  24%,
+  100% {
+    stroke: rgba(103, 112, 160, 0.22);
+    stroke-dashoffset: 0;
+  }
+
+  12% {
+    stroke: rgba(123, 103, 248, 0.62);
+    stroke-dashoffset: -22;
+  }
+}
+
+@keyframes agentosCausticMove {
+  0% {
+    opacity: 0.16;
+    transform: translate(calc(-50% + var(--agentos-reflect-x, 0px)), var(--agentos-reflect-y, 0px)) scale(0.92);
+  }
+
+  100% {
+    opacity: 0.28;
+    transform: translate(calc(-50% + var(--agentos-reflect-x, 0px)), calc(5px + var(--agentos-reflect-y, 0px))) scale(1.06);
+  }
+}
+
+@keyframes agentosLensFloat {
+  0% {
+    transform: translate(calc(-50% + var(--agentos-lens-x, 0px)), calc(-50% + var(--agentos-lens-y, 0px))) translateY(-5px) rotate(-0.4deg) scale(0.99);
+    border-radius: 46% 54% 49% 51% / 52% 45% 55% 48%;
+  }
+
+  50% {
+    transform: translate(calc(-50% + var(--agentos-lens-x, 0px)), calc(-50% + var(--agentos-lens-y, 0px))) translateY(7px) rotate(0.35deg) scale(1.012);
+    border-radius: 52% 48% 54% 46% / 46% 54% 47% 53%;
+  }
+
+  100% {
+    transform: translate(calc(-50% + var(--agentos-lens-x, 0px)), calc(-50% + var(--agentos-lens-y, 0px))) translateY(-3px) rotate(-0.2deg) scale(1);
+    border-radius: 49% 51% 46% 54% / 55% 47% 53% 45%;
+  }
+}
+
+@keyframes agentosLogoDepth {
+  0%,
+  100% {
+    transform: translate(var(--agentos-logo-x, 0px), calc(var(--agentos-logo-y, 0px) - 2px)) scale(1);
+  }
+
+  50% {
+    transform: translate(var(--agentos-logo-x, 0px), calc(var(--agentos-logo-y, 0px) + 3px)) scale(1.004);
+  }
+}
+
+@keyframes agentosLensSweep {
+  0%,
+  58% {
+    left: -45%;
+    opacity: 0;
+  }
+
+  66% {
+    opacity: 0.45;
+  }
+
+  82%,
+  100% {
+    left: 115%;
+    opacity: 0;
+  }
+}
+
+@keyframes agentosDropletFloat {
+  0% {
+    transform: translate(var(--agentos-drop-x, 0px), var(--agentos-drop-y, 0px)) translate(-2px, -4px) rotate(-0.25deg);
+    border-radius: 46% 54% 51% 49% / 53% 45% 55% 47%;
+  }
+
+  100% {
+    transform: translate(var(--agentos-drop-x, 0px), var(--agentos-drop-y, 0px)) translate(2px, 5px) rotate(0.3deg);
+    border-radius: 54% 46% 48% 52% / 47% 56% 44% 53%;
+  }
+}
+
+@keyframes agentosDropletActive {
+  0%,
+  26%,
+  100% {
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.95),
+      inset 0 -1px 1px rgba(76, 91, 145, 0.1),
+      0 22px 60px rgba(36, 48, 84, 0.13);
+  }
+
+  12% {
+    border-color: color-mix(in srgb, var(--node-tone) 42%, rgba(255, 255, 255, 0.82));
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.96),
+      inset 0 -2px 5px color-mix(in srgb, var(--node-tone) 14%, transparent),
+      0 28px 62px color-mix(in srgb, var(--node-tone) 18%, rgba(36, 48, 84, 0.13));
+    filter: saturate(1.08);
+  }
+}
+
+@keyframes agentosConnectorNode {
+  0%,
+  26%,
+  100% {
+    transform: scale(1);
+    opacity: 0.72;
+  }
+
+  12% {
+    transform: scale(1.32);
+    opacity: 1;
+  }
+}
+
+@keyframes agentosCommandRipple {
+  0% {
+    opacity: 0.72;
+    transform: translateY(-50%) scale(0.1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-50%) scale(18);
+  }
+}
+
+@keyframes agentosCommandEnergy {
+  0% {
+    right: 52px;
+    opacity: 0;
+    transform: translateY(-50%) scale(0.5);
+  }
+
+  22% {
+    opacity: 1;
+  }
+
+  100% {
+    right: 50%;
+    opacity: 0;
+    transform: translateY(-50%) scale(1.4);
+  }
+}
+
+@keyframes agentosStatusActive {
+  0%,
+  27%,
+  100% {
+    color: #747a89;
+    transform: translateY(0);
+  }
+
+  13% {
+    color: #0b0d12;
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes agentosStatusMarker {
+  0%,
+  27%,
+  100% {
+    background: rgba(255, 255, 255, 0.36);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-color) 0%, transparent);
+  }
+
+  13% {
+    background: var(--status-color);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--status-color) 12%, transparent), 0 0 18px color-mix(in srgb, var(--status-color) 36%, transparent);
+  }
+}
+
+@keyframes agentosCompletedState {
+  0%,
+  82%,
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+
+  90% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes agentosCursorBlink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1160px) {
+  .agentos-execution-node {
+    width: 220px;
+  }
+
+  .agentos-execution-node.understand,
+  .agentos-execution-node.execute {
+    top: 9%;
+  }
+
+  .agentos-execution-node.plan,
+  .agentos-execution-node.deliver {
+    bottom: 6%;
+  }
+}
+
+@media (max-height: 790px) and (min-width: 901px) {
+  .agentos-landing-main {
+    min-height: 680px;
+    padding-top: 8px;
+    padding-bottom: 24px;
+  }
+
+  .agentos-super-badge {
+    padding: 7px 13px;
+  }
+
+  .agentos-headline-primary {
+    font-size: clamp(46px, 5vw, 72px);
+  }
+
+  .agentos-gradient-line {
+    font-size: clamp(40px, 4.5vw, 62px);
+  }
+
+  .agentos-landing-copy {
+    margin-top: 12px;
+    font-size: 16px;
+  }
+
+  .agentos-logo-stage {
+    height: 330px;
+    margin-top: 6px;
+  }
+
+  .agentos-glass-lens {
+    width: 400px;
+    height: 302px;
+  }
+
+  .agentos-command-shell {
+    min-height: 72px;
+  }
+
+  .agentos-status-strip {
+    min-height: 50px;
+  }
+
+  .agentos-descriptor-row {
+    margin-top: 18px;
+  }
+}
+
+@media (max-height: 940px) and (min-width: 901px) {
+  .agentos-descriptor-row {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .agentos-landing-page {
+    overflow-x: hidden;
+  }
+
+  .agentos-landing-nav {
+    width: min(100vw - 28px, 720px);
+    height: 64px;
+    margin-top: 10px;
+    padding: 0 14px;
+    gap: 10px;
+    border-radius: 24px;
+  }
+
+  .agentos-landing-links {
+    display: none;
+  }
+
+  .agentos-landing-brand img {
+    width: 38px;
+    height: 38px;
+  }
+
+  .agentos-landing-brand span {
+    font-size: 21px;
+  }
+
+  .agentos-landing-actions {
+    gap: 8px;
+  }
+
+  .agentos-landing-home,
+  .agentos-landing-open {
+    height: 42px;
+    border-radius: 15px;
+    font-size: 12.5px;
+  }
+
+  .agentos-landing-home {
+    min-width: 94px;
+    padding: 0 12px;
+  }
+
+  .agentos-landing-open {
+    width: 132px;
+  }
+
+  .agentos-landing-main {
+    min-height: calc(100dvh - 74px);
+    padding: 20px 14px 38px;
+    place-items: start center;
+  }
+
+  .agentos-landing-hero {
+    width: min(100%, 720px);
+  }
+
+  .agentos-headline-primary {
+    font-size: clamp(44px, 9.2vw, 54px);
+    line-height: 0.98;
+    letter-spacing: -0.058em;
+  }
+
+  .agentos-gradient-line {
+    font-size: clamp(38px, 8.2vw, 48px);
+    line-height: 0.98;
+    letter-spacing: -0.054em;
+  }
+
+  .agentos-landing-copy {
+    width: min(600px, 94vw);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  .agentos-logo-stage {
+    width: 100%;
+    height: 470px;
+    margin-top: 10px;
+  }
+
+  .agentos-signal-field {
+    width: 960px;
+    max-width: 230vw;
+    top: 45%;
+  }
+
+  .agentos-glass-lens {
+    top: 46%;
+    width: min(370px, 78vw);
+    height: min(300px, 62vw);
+    backdrop-filter: blur(18px) saturate(135%);
+    -webkit-backdrop-filter: blur(18px) saturate(135%);
+  }
+
+  .agentos-hero-logo {
+    width: min(330px, 88%);
+  }
+
+  .agentos-lens-caustic {
+    top: 60%;
+    width: min(360px, 80vw);
+  }
+
+  .agentos-execution-node {
+    width: min(210px, 45vw);
+    min-height: 96px;
+    grid-template-columns: 38px 1fr;
+    gap: 10px;
+    padding: 13px 14px;
+    backdrop-filter: blur(16px) saturate(130%);
+    -webkit-backdrop-filter: blur(16px) saturate(130%);
+  }
+
+  .agentos-execution-icon {
+    width: 37px;
+    height: 37px;
+  }
+
+  .agentos-execution-icon svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .agentos-execution-copy strong {
+    font-size: 13px;
+  }
+
+  .agentos-execution-copy span {
+    font-size: 11px;
+  }
+
+  .agentos-execution-node.understand {
+    left: 0;
+    top: 0;
+  }
+
+  .agentos-execution-node.execute {
+    right: 0;
+    top: 0;
+  }
+
+  .agentos-execution-node.plan {
+    left: 0;
+    bottom: 0;
+  }
+
+  .agentos-execution-node.deliver {
+    right: 0;
+    bottom: 0;
+  }
+
+  .agentos-connector-field {
+    display: none;
+  }
+
+  .agentos-command-demo {
+    width: 94vw;
+    margin-top: 4px;
+  }
+
+  .agentos-command-shell {
+    min-height: 72px;
+    padding: 0 8px 0 18px;
+    border-radius: 30px;
+    gap: 10px;
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+  }
+
+  .agentos-command-text {
+    font-size: 15px;
+  }
+
+  .agentos-command-submit {
+    width: 54px;
+    height: 54px;
+    flex-basis: 54px;
+    border-radius: 21px;
+  }
+
+  .agentos-status-strip {
+    width: 94vw;
+    min-height: 74px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px 0;
+    padding: 8px;
+    border-radius: 24px;
+  }
+
+  .agentos-status-step {
+    justify-content: flex-start;
+    padding-left: 12px;
+  }
+
+  .agentos-status-step:not(:last-of-type)::after {
+    display: none;
+  }
+
+  .agentos-descriptor-row {
+    position: static;
+    transform: none;
+    width: 94vw;
+    margin-top: 26px;
+  }
+}
+
+@media (max-width: 560px) {
+  .agentos-landing-nav {
+    width: calc(100vw - 20px);
+    height: 60px;
+    padding: 0 10px;
+  }
+
+  .agentos-landing-brand {
+    gap: 7px;
+  }
+
+  .agentos-landing-brand img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .agentos-landing-brand span {
+    font-size: 18px;
+  }
+
+  .agentos-landing-home {
+    min-width: 0;
+    width: 38px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .agentos-landing-home::after {
+    content: "Home";
+    font-size: 11px;
+  }
+
+  .agentos-landing-open {
+    width: auto;
+    min-width: 112px;
+    padding: 0 10px;
+    font-size: 11.5px;
+  }
+
+  .agentos-landing-open svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .agentos-landing-main {
+    padding: 18px 10px 32px;
+  }
+
+  .agentos-super-badge {
+    padding: 7px 12px;
+  }
+
+  .agentos-headline-primary {
+    font-size: clamp(34px, 10vw, 41px);
+    letter-spacing: -0.054em;
+  }
+
+  .agentos-gradient-line {
+    font-size: clamp(29px, 8.6vw, 36px);
+    letter-spacing: -0.048em;
+  }
+
+  .agentos-landing-copy {
+    width: min(345px, 94vw);
+    margin-top: 12px;
+    font-size: 13.5px;
+    line-height: 1.36;
+  }
+
+  .agentos-logo-stage {
+    height: 318px;
+    margin-top: 4px;
+  }
+
+  .agentos-signal-field {
+    width: 720px;
+    top: 50%;
+    opacity: 0.72;
+  }
+
+  .agentos-signal-line-blur {
+    display: none;
+  }
+
+  .agentos-glass-lens {
+    top: 50%;
+    width: min(270px, 76vw);
+    height: min(220px, 62vw);
+  }
+
+  .agentos-hero-logo {
+    width: min(245px, 88%);
+  }
+
+  .agentos-lens-caustic {
+    top: 62%;
+  }
+
+  .agentos-execution-node {
+    width: min(130px, 41vw);
+    min-height: 68px;
+    grid-template-columns: 26px 1fr;
+    padding: 8px;
+    gap: 7px;
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.9),
+      inset 0 -1px 1px rgba(76, 91, 145, 0.08),
+      0 13px 32px rgba(36, 48, 84, 0.11);
+  }
+
+  .agentos-execution-icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .agentos-execution-icon svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .agentos-execution-copy {
+    gap: 3px;
+  }
+
+  .agentos-execution-copy strong {
+    font-size: 11px;
+  }
+
+  .agentos-execution-copy span {
+    font-size: 9px;
+    line-height: 1.15;
+  }
+
+  .agentos-execution-connector {
+    display: none;
+  }
+
+  .agentos-command-shell {
+    min-height: 58px;
+    padding-left: 15px;
+  }
+
+  .agentos-command-text {
+    font-size: 13px;
+  }
+
+  .agentos-command-submit {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+    border-radius: 17px;
+  }
+
+  .agentos-status-strip {
+    min-height: 68px;
+    margin-top: 8px;
+  }
+
+  .agentos-status-step {
+    padding-left: 7px;
+    gap: 7px;
+  }
+
+  .agentos-status-label strong {
+    font-size: 11px;
+  }
+
+  .agentos-status-label em {
+    font-size: 10px;
+  }
+
+  .agentos-descriptor-row {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .agentos-landing-brand span {
+    font-size: 17px;
+  }
+
+  .agentos-landing-open {
+    min-width: 104px;
+    font-size: 11px;
+  }
+
+  .agentos-logo-stage {
+    height: 310px;
+  }
+
+  .agentos-execution-node {
+    width: min(150px, 44vw);
+  }
+
+  .agentos-headline-primary {
+    font-size: 38px;
+  }
+
+  .agentos-gradient-line {
+    font-size: 33px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agentos-landing-nav,
+  .agentos-super-badge,
+  .agentos-headline-primary,
+  .agentos-gradient-line,
+  .agentos-landing-copy,
+  .agentos-logo-stage,
+  .agentos-command-demo,
+  .agentos-status-strip,
+  .agentos-descriptor-droplet {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+
+  .agentos-landing-nav::after,
+  .agentos-signal-group,
+  .agentos-signal-line,
+  .agentos-signal-line-blur,
+  .agentos-signal-particle,
+  .agentos-glass-lens,
+  .agentos-glass-lens::before,
+  .agentos-hero-logo,
+  .agentos-lens-caustic,
+  .agentos-execution-node,
+  .agentos-execution-connector,
+  .agentos-connector-line,
+  .agentos-command-cursor,
+  .agentos-status-step,
+  .agentos-status-marker,
+  .agentos-status-complete {
+    animation: none;
+  }
+
+  .agentos-glass-lens {
+    transform: translate(-50%, -50%);
+  }
+
+  .agentos-hero-logo {
+    transform: none;
+  }
+
+  .agentos-status-step {
+    color: #0b0d12;
+  }
+
+  .agentos-status-marker {
+    background: var(--status-color);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--status-color) 10%, transparent);
+  }
+
+  .agentos-status-complete {
+    display: none;
+  }
+}
