@@ -17,6 +17,7 @@ import {
 } from '@/components/marketplace/MarketplacePrimitives';
 
 type StoreApp = AgentAppListing;
+type AppFilter = 'all' | 'installed' | 'available' | 'verified' | 'web';
 
 const FALLBACK_DISCOVERY: AppDiscoveryPayload = {
   apps: [],
@@ -32,12 +33,39 @@ function platformLabel(app: StoreApp): string {
 }
 
 function actionLabel(installed: boolean): string {
-  return installed ? 'Open' : 'Install';
+  return installed ? 'Open' : 'Review install';
 }
 
-function platformBadges(app: StoreApp): string[] {
+function textValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function pricingLabel(app: StoreApp): string {
+  const model = textValue(app.pricing.model ?? app.pricing.type ?? app.pricing.plan);
+  const amount = Number(app.pricing.amount ?? app.pricing.price ?? app.pricing.monthly);
+  if (!model) return 'Pricing not listed';
+  if (/^free$/i.test(model)) return 'Free';
+  if (Number.isFinite(amount) && amount > 0) return `$${amount.toFixed(2)}`;
+  return model.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function verificationLabel(app: StoreApp): string {
+  if (app.verified) return 'SDK verified';
+  if (app.source === 'external_sdk') return 'SDK registered';
+  return 'AgentOS app';
+}
+
+function healthLabel(app: StoreApp): string {
+  if (app.disabled) return 'Disabled';
+  if (app.healthStatus === 'online') return 'Online';
+  if (app.healthStatus === 'degraded') return 'Degraded';
+  if (app.healthStatus === 'offline') return 'Offline';
+  return 'Health unknown';
+}
+
+function supportsWeb(app: StoreApp): boolean {
   const values = new Set((app.platforms.length ? app.platforms : app.deviceTargets).map(item => item.toLowerCase()));
-  return ['Web', 'Desktop', 'Android', 'iOS'].filter(item => values.has(item.toLowerCase()) || (item === 'Web' && values.has('agentos cloud')));
+  return Boolean(app.distribution.webUrl || app.appUrl || values.has('web') || values.has('agentos cloud'));
 }
 
 function AppCard(props: {
@@ -49,9 +77,13 @@ function AppCard(props: {
 }) {
   const { app, installed, working } = props;
   return (
-    <article className="market-store-card">
+    <article className="market-store-card" data-installed={installed ? 'true' : 'false'}>
       <Link href={`/appstore/${app.slug}`} className="market-store-card-link">
         <ListingBanner name={app.name} imageUrl={app.bannerUrl ?? app.screenshots[0] ?? null} />
+        <div className="market-card-badges" aria-label={`${app.name} store labels`}>
+          <span>{pricingLabel(app)}</span>
+          {installed ? <span>In Library</span> : <span>Available</span>}
+        </div>
         <div className="market-store-card-main">
           <ListingMark name={app.name} imageUrl={app.logoUrl} />
           <div>
@@ -60,33 +92,51 @@ function AppCard(props: {
           </div>
         </div>
       </Link>
-      <Link href={`/developer/${app.developerHandle}`} className="market-card-developer">{app.publisherName || 'AgentOS Developer'}</Link>
+      <Link href={`/developer/${app.developerHandle}`} className="market-card-developer">By {app.publisherName || 'AgentOS Developer'}</Link>
       <div className="market-card-facts">
-        <span>{formatRatingLabel(app.rating, app.reviewCount)}</span>
+        <span>{verificationLabel(app)}</span>
+        <span>{supportsWeb(app) ? 'Web-ready' : platformLabel(app)}</span>
+        <span>{healthLabel(app)}</span>
+      </div>
+      <div className="market-card-facts">
         <span>v{app.manifest.version}</span>
         <span>{formatCountLabel(app.installCount, 'install', 'installs')}</span>
-        <span>{platformLabel(app)}</span>
-      </div>
-      <div className="market-card-facts" aria-label={`${app.name} compatibility`}>
-        <span>{app.runtimeType}</span>
-        <span>{app.healthStatus}</span>
-      </div>
-      <div className="market-card-facts" aria-label={`${app.name} platform badges`}>
-        {platformBadges(app).map(platform => <span key={platform}>{platform}</span>)}
+        <span>{formatRatingLabel(app.rating, app.reviewCount)}</span>
       </div>
       <div className="market-card-actions">
-        <button
-          type="button"
-          className="market-primary-action"
-          disabled={working}
-          onClick={() => installed ? props.onOpen(app) : props.onInstall(app)}
-        >
-          {working ? 'Working' : actionLabel(installed)}
-        </button>
-        {installed ? <Link href="/apps" className="market-secondary-action">Manage</Link> : null}
+        {installed ? (
+          <button
+            type="button"
+            className="market-primary-action"
+            disabled={working}
+            onClick={() => props.onOpen(app)}
+          >
+            {working ? 'Opening...' : actionLabel(true)}
+          </button>
+        ) : (
+          <Link href={`/appstore/${app.slug}`} className="market-primary-action">{actionLabel(false)}</Link>
+        )}
+        <Link href={installed ? '/library?type=apps' : `/appstore/${app.slug}`} className="market-secondary-action">
+          {installed ? 'Library' : 'Details'}
+        </Link>
       </div>
     </article>
   );
+}
+
+function sectionTitle(title: string): string {
+  if (title === 'Recommended For You') return 'Recommended';
+  if (title === 'Because You Use AgentOS') return 'Built for AgentOS';
+  if (title === 'Top Installed') return 'Most installed';
+  return title;
+}
+
+function appMatchesFilter(app: StoreApp, installed: boolean, filter: AppFilter): boolean {
+  if (filter === 'installed') return installed;
+  if (filter === 'available') return !installed;
+  if (filter === 'verified') return app.verified;
+  if (filter === 'web') return supportsWeb(app);
+  return true;
 }
 
 function AppRow(props: {
@@ -128,6 +178,7 @@ export default function AppstorePage() {
   const [notice, setNotice] = useState('');
   const [workingSlug, setWorkingSlug] = useState('');
   const [heroIndex, setHeroIndex] = useState(0);
+  const [filter, setFilter] = useState<AppFilter>('all');
 
   const loadDiscovery = useCallback(async () => {
     const key = `${search.trim()}::${category}`;
@@ -172,6 +223,17 @@ export default function AppstorePage() {
   const categories = useMemo(() => ['All', ...discovery.categories], [discovery.categories]);
   const installedSlugs = useMemo(() => new Set(discovery.installedSlugs), [discovery.installedSlugs]);
   const hero = discovery.hero[heroIndex % Math.max(discovery.hero.length, 1)] ?? discovery.apps[0] ?? null;
+  const visibleApps = useMemo(
+    () => discovery.apps.filter(app => appMatchesFilter(app, installedSlugs.has(app.slug), filter)),
+    [discovery.apps, filter, installedSlugs],
+  );
+  const filters = useMemo(() => [
+    { id: 'all' as const, label: 'All apps', count: discovery.apps.length },
+    { id: 'installed' as const, label: 'In Library', count: discovery.apps.filter(app => installedSlugs.has(app.slug)).length },
+    { id: 'available' as const, label: 'Available', count: discovery.apps.filter(app => !installedSlugs.has(app.slug)).length },
+    { id: 'verified' as const, label: 'SDK verified', count: discovery.apps.filter(app => app.verified).length },
+    { id: 'web' as const, label: 'Web-ready', count: discovery.apps.filter(supportsWeb).length },
+  ], [discovery.apps, installedSlugs]);
 
   async function installToWorkspace(app: StoreApp) {
     setWorkingSlug(app.slug);
@@ -225,11 +287,11 @@ export default function AppstorePage() {
     <SurfaceShell
       activePath="/appstore"
       title="App Store"
-      subtitle="Discover AgentOS products for research, trading, productivity, development, and enterprise workflows."
+      subtitle="Install SDK-backed apps into Library. Universal MCP connectors stay separate from App Store apps."
       actions={(
         <>
-          <Link href="/appstore/updates" className="market-secondary-action">Updates</Link>
-          {session?.capabilities?.includes('create_app') ? <Link href="/publish/app" className="market-secondary-action">Publish App</Link> : null}
+          <Link href="/appstore/updates" className="market-secondary-action">App updates</Link>
+          {session?.capabilities?.includes('create_app') ? <Link href="/publish/app" className="market-secondary-action">Publish app</Link> : null}
         </>
       )}
     >
@@ -238,9 +300,22 @@ export default function AppstorePage() {
           <input
             value={search}
             onChange={event => setSearch(event.target.value)}
-            placeholder="Search apps, developers, categories, tags, keywords"
+            placeholder="Search apps by name, developer, task, or category"
             aria-label="Search apps"
           />
+        </div>
+
+        <div className="market-filter-row" aria-label="App filters">
+          {filters.map(item => (
+            <button key={item.id} type="button" className={filter === item.id ? 'active' : ''} onClick={() => setFilter(item.id)}>
+              <span>{item.label}</span>
+              <b>{item.count}</b>
+            </button>
+          ))}
+        </div>
+
+        <div className="market-result-summary" aria-live="polite">
+          {loading ? 'Loading App Store listings...' : `${visibleApps.length} ${visibleApps.length === 1 ? 'app' : 'apps'} shown from live discovery`}
         </div>
 
         <div className="market-chip-row" aria-label="App categories">
@@ -260,12 +335,12 @@ export default function AppstorePage() {
             description={hero.longDescription || hero.description}
             developerHref={`/developer/${hero.developerHandle}`}
             developerName={hero.publisherName || 'AgentOS Developer'}
-            metadata={[platformLabel(hero), formatRatingLabel(hero.rating, hero.reviewCount), formatCountLabel(hero.installCount, 'install', 'installs')]}
-            primaryLabel={workingSlug === hero.slug ? 'Working' : installedSlugs.has(hero.slug) ? 'Open' : 'Install'}
+            metadata={[pricingLabel(hero), verificationLabel(hero), supportsWeb(hero) ? 'Web-ready' : platformLabel(hero), formatRatingLabel(hero.rating, hero.reviewCount), formatCountLabel(hero.installCount, 'install', 'installs')]}
+            primaryLabel={workingSlug === hero.slug ? 'Working...' : installedSlugs.has(hero.slug) ? 'Open' : 'Review install'}
             primaryDisabled={workingSlug === hero.slug}
             secondaryHref={`/appstore/${hero.slug}`}
             secondaryLabel="Details"
-            onPrimary={() => installedSlugs.has(hero.slug) ? void openApp(hero) : void installToWorkspace(hero)}
+            onPrimary={() => installedSlugs.has(hero.slug) ? void openApp(hero) : window.location.assign(`/appstore/${hero.slug}`)}
           />
         ) : null}
 
@@ -275,16 +350,16 @@ export default function AppstorePage() {
           <div className="market-skeleton-grid">
             {Array.from({ length: 6 }).map((_, index) => <div key={index} className="market-skeleton" />)}
           </div>
-        ) : discovery.apps.length === 0 ? (
+        ) : visibleApps.length === 0 ? (
           <div className="market-empty">
-            <h2>No apps found</h2>
-            <p>{search.trim() ? 'No accessible AgentOS apps matched this search.' : 'No published AgentOS apps are available from the backend yet.'}</p>
+            <h2>No matching apps</h2>
+            <p>{search.trim() || filter !== 'all' || category !== 'All' ? 'No accessible App Store listings match the current search and filters.' : 'No published AgentOS apps are available from the backend yet.'}</p>
             <Link href="/studio" className="market-secondary-action">Open Super AgentOS</Link>
           </div>
         ) : search.trim() ? (
           <AppRow
             title="Search Results"
-            apps={discovery.apps}
+            apps={visibleApps}
             installedSlugs={installedSlugs}
             workingSlug={workingSlug}
             onInstall={app => void installToWorkspace(app)}
@@ -295,9 +370,9 @@ export default function AppstorePage() {
             {discovery.sections.map(section => (
               <AppRow
                 key={section.id}
-                title={section.title}
+                title={sectionTitle(section.title)}
                 reason={section.reason}
-                apps={section.apps}
+                apps={section.apps.filter(app => appMatchesFilter(app, installedSlugs.has(app.slug), filter))}
                 installedSlugs={installedSlugs}
                 workingSlug={workingSlug}
                 onInstall={app => void installToWorkspace(app)}
