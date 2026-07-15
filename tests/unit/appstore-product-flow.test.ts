@@ -52,6 +52,12 @@ describe('Appstore product flow', () => {
     expect(skillDetail).toContain('Run skill');
     expect(skillDetail).toContain('Save access');
     expect(skillDetail).toContain('Revoke access');
+    expect(skillDetail).toContain('Install Review');
+    expect(skillDetail).toContain('Supported Surfaces');
+    expect(skillDetail).toContain('Vault Requirements');
+    expect(skillDetail).toContain('Example Tasks');
+    expect(skillDetail).toContain('No screenshots or design attachments published.');
+    expect(skillDetail).toContain('No public reviews yet.');
     expect(skillDetail).not.toContain('>Manage<');
   });
 

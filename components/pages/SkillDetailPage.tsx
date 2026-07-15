@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import SurfaceShell from '@/components/os/surface-shell';
 import { ConfirmationDialog } from '@/components/os/ui';
-import { formatCountLabel, formatRatingLabel } from '@/src/data/discipline';
+import { formatCountLabel, formatMetricCount, formatRatingLabel } from '@/src/data/discipline';
 import type { SkillMarketplaceRecord } from '@/src/skills/marketplace';
 import { ListingBanner, ListingMark } from '@/components/marketplace/MarketplacePrimitives';
 
-export type SkillDetailRecord = SkillMarketplaceRecord;
+export type SkillDetailRecord = SkillMarketplaceRecord & {
+  reviews?: Array<Record<string, unknown>>;
+};
 
 type SkillPreview = {
   dataState?: 'published_example' | 'schema_only';
@@ -19,12 +21,47 @@ type SkillPreview = {
   expectedResults?: unknown;
 };
 
-function pretty(value: unknown): string {
-  return JSON.stringify(value, null, 2);
-}
-
 function stringList(values: string[]): string {
   return values.length ? values.join(', ') : 'None';
+}
+
+function textValue(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+function pricingLabel(skill: Pick<SkillMarketplaceRecord, 'pricing_model' | 'price_per_call'>): string {
+  const model = textValue(skill.pricing_model) || 'free';
+  const price = Number(skill.price_per_call ?? 0);
+  if (model === 'free') return 'Free';
+  if (model === 'per_call' && Number.isFinite(price) && price > 0) return `$${price.toFixed(2)}/call`;
+  if (!Number.isFinite(price) || price <= 0) return 'Usage priced';
+  return model.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function mediaUrls(skill: SkillMarketplaceRecord): string[] {
+  const gallery = skill.gallery ?? [];
+  const assets = (skill.media_assets ?? [])
+    .map(asset => textValue(asset.url ?? asset.src ?? asset.href))
+    .filter(Boolean);
+  return [...new Set([...gallery, ...assets])];
+}
+
+function exampleTaskLabels(skill: SkillMarketplaceRecord): string[] {
+  return (skill.examples ?? [])
+    .map(example => textValue(example.title ?? example.task ?? example.prompt ?? example.description ?? example.name))
+    .filter(Boolean);
+}
+
+function schemaSummary(records: Array<Record<string, unknown>>, fallback: unknown): string[] {
+  const source = records.length ? records : Array.isArray(fallback) ? fallback.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>> : [];
+  return source.map((item, index) => {
+    const name = textValue(item.name ?? item.key ?? item.field ?? item.type) || `Field ${index + 1}`;
+    const description = textValue(item.description ?? item.label ?? item.summary);
+    const required = item.required === true ? 'Required' : item.required === false ? 'Optional' : '';
+    return [name, description, required].filter(Boolean).join(' - ');
+  });
 }
 
 function compatibilityGroup(skill: SkillMarketplaceRecord, names: string[]): string[] {
@@ -54,7 +91,7 @@ function CapabilityList({ skill }: { skill: SkillMarketplaceRecord }) {
 export default function SkillDetailPage({ initialSkill = null }: { initialSkill?: SkillDetailRecord | null }) {
   const params = useParams<{ slug: string }>();
   const slug = params?.slug ?? '';
-  const [skill, setSkill] = useState<SkillMarketplaceRecord | null>(initialSkill);
+  const [skill, setSkill] = useState<SkillDetailRecord | null>(initialSkill);
   const [preview, setPreview] = useState<SkillPreview | null>(null);
   const [loading, setLoading] = useState(initialSkill === null);
   const [installing, setInstalling] = useState(false);
@@ -66,52 +103,53 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
   const [dependencyPermissions, setDependencyPermissions] = useState<Record<string, string[]>>({});
   const [confirmRevoke, setConfirmRevoke] = useState(false);
 
+  const loadDependencyRecords = useCallback(async (nextSkill: SkillMarketplaceRecord | null) => {
+    if (!nextSkill) {
+      setDependencyRecords([]);
+      setDependencyPermissions({});
+      return;
+    }
+    const refs = [...new Set([...(nextSkill.required_skills ?? []), ...(nextSkill.optional_skills ?? [])])];
+    const dependencies = await Promise.all(refs.map(async ref => {
+      const res = await fetch(`/api/skills/${encodeURIComponent(ref)}`, { cache: 'no-store' }).catch(() => null);
+      const data = res?.ok ? await res.json().catch(() => ({})) : {};
+      return data.skill ?? null;
+    }));
+    const records = dependencies.filter((item): item is SkillMarketplaceRecord => Boolean(item));
+    setDependencyRecords(records);
+    setDependencyPermissions(Object.fromEntries(records.map(item => [item.slug, item.permissions_required ?? []])));
+  }, []);
+
   const load = useCallback(async (withLoading = true) => {
     if (!slug) return;
     if (withLoading) setLoading(true);
     try {
-      const [skillRes, previewRes] = await Promise.all([
-        fetch(`/api/skills/${slug}`, { cache: 'no-store' }),
-        fetch(`/api/skills/${slug}/preview`, { cache: 'no-store' }).catch(() => null),
-      ]);
+      const skillRes = await fetch(`/api/skills/${slug}`, { cache: 'no-store' });
       const skillData = await skillRes.json().catch(() => ({}));
       const nextSkill = skillData.skill ?? null;
-      const previewData = previewRes ? await previewRes.json().catch(() => ({})) : {};
       setSkill(nextSkill);
-      setPreview(previewData.preview ?? null);
+      setPreview(null);
       if (nextSkill) setApprovedPermissions(nextSkill.permissions_required ?? []);
-      if (nextSkill) {
-        const refs = [...new Set([...(nextSkill.required_skills ?? []), ...(nextSkill.optional_skills ?? [])])];
-        const dependencies = await Promise.all(refs.map(async ref => {
-          const res = await fetch(`/api/skills/${encodeURIComponent(ref)}`, { cache: 'no-store' }).catch(() => null);
-          const data = res?.ok ? await res.json().catch(() => ({})) : {};
-          return data.skill ?? null;
-        }));
-        const records = dependencies.filter((item): item is SkillMarketplaceRecord => Boolean(item));
-        setDependencyRecords(records);
-        setDependencyPermissions(Object.fromEntries(records.map(item => [item.slug, item.permissions_required ?? []])));
-      } else {
-        setDependencyRecords([]);
-        setDependencyPermissions({});
-      }
+      await loadDependencyRecords(nextSkill);
     } catch {
       setSkill(null);
       setPreview(null);
     } finally {
       if (withLoading) setLoading(false);
     }
-  }, [slug]);
+  }, [loadDependencyRecords, slug]);
 
   useEffect(() => {
     if (initialSkill && initialSkill.slug === slug) {
       setSkill(initialSkill);
       setApprovedPermissions(initialSkill.permissions_required ?? []);
+      setPreview(null);
       setLoading(false);
-      void load(false);
+      void loadDependencyRecords(initialSkill);
       return;
     }
     void load(true);
-  }, [initialSkill, load, slug]);
+  }, [initialSkill, load, loadDependencyRecords, slug]);
 
   const versionHistory = useMemo(() => {
     if (!skill) return [];
@@ -119,6 +157,13 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
     if (Array.isArray(raw)) return raw.filter(item => item && typeof item === 'object') as Array<Record<string, unknown>>;
     return [];
   }, [skill]);
+
+  const screenshots = useMemo(() => skill ? mediaUrls(skill) : [], [skill]);
+  const requiredSecrets = useMemo(() => skill?.required_secrets ?? [], [skill]);
+  const permissions = useMemo(() => skill?.permissions_required ?? [], [skill]);
+  const inputSummaries = useMemo(() => schemaSummary(skill?.inputs ?? [], preview?.inputExample), [preview?.inputExample, skill?.inputs]);
+  const outputSummaries = useMemo(() => schemaSummary(skill?.outputs ?? [], preview?.outputExample), [preview?.outputExample, skill?.outputs]);
+  const exampleTasks = useMemo(() => skill ? exampleTaskLabels(skill) : [], [skill]);
 
   function togglePermission(permission: string) {
     setApprovedPermissions(current => current.includes(permission)
@@ -249,7 +294,10 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
                 <div className="market-hero-meta">
                   <span>{skill.category}</span>
                   <span>Version {skill.version}</span>
+                  <span>{pricingLabel(skill)}</span>
+                  <span>{skill.verified ? 'SDK verified' : 'Verification not published'}</span>
                   <span>{(skill.compatibility ?? []).join(' / ')}</span>
+                  <span>Updated {new Date(skill.updated_at).toLocaleDateString()}</span>
                 </div>
               </div>
               <div className="market-detail-actions">
@@ -278,15 +326,57 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
             {message ? <div className="market-notice">{message}</div> : null}
 
             <section className="market-section">
+              <div className="market-section-head">
+                <h2>Install Review</h2>
+                <p>Review pricing, permissions, Vault needs, and supported surfaces before adding this skill to Library.</p>
+              </div>
+              <div className="market-info-grid">
+                <div><span>Pricing</span><strong>{pricingLabel(skill)}</strong></div>
+                <div><span>Permissions</span><strong>{permissions.length ? `${permissions.length} requested` : 'No special permissions requested'}</strong></div>
+                <div><span>Vault</span><strong>{requiredSecrets.length ? `${requiredSecrets.length} secret ${requiredSecrets.length === 1 ? 'required' : 'requirements'}` : 'No Vault secret required'}</strong></div>
+                <div><span>Supported Surfaces</span><strong>{stringList(skill.compatibility ?? [])}</strong></div>
+                <div><span>Status</span><strong>{skill.published ? 'Published' : 'Unavailable'}</strong></div>
+                <div><span>Verification</span><strong>{skill.verified ? 'SDK verified' : 'Verification not published'}</strong></div>
+              </div>
+            </section>
+
+            <section className="market-section">
+              <div className="market-info-grid">
+                <div><span>Calls</span><strong>{formatMetricCount(skill.total_calls, 'No calls yet')}</strong></div>
+                <div><span>Installs</span><strong>{formatCountLabel(skill.total_installs, 'install', 'installs')}</strong></div>
+                <div><span>Rating</span><strong>{formatRatingLabel(skill.rating, skill.review_count)}</strong></div>
+                <div><span>Reviews</span><strong>{formatCountLabel(skill.review_count, 'review', 'reviews')}</strong></div>
+              </div>
+            </section>
+
+            <section className="market-section">
               <div className="market-section-head"><h2>Overview</h2></div>
               <div className="market-info-grid">
                 <div><span>Developer</span><strong>{skill.author_name}</strong></div>
+                <div><span>Developer Handle</span><strong>@{skill.developer_handle}</strong></div>
                 <div><span>Category</span><strong>{skill.category}</strong></div>
-                <div><span>Installs</span><strong>{formatCountLabel(skill.total_installs, 'install', 'installs')}</strong></div>
-                <div><span>Rating</span><strong>{formatRatingLabel(skill.rating, skill.review_count)}</strong></div>
+                <div><span>Version</span><strong>{skill.version}</strong></div>
+                <div><span>Pricing</span><strong>{pricingLabel(skill)}</strong></div>
+                <div><span>Last Updated</span><strong>{new Date(skill.updated_at).toLocaleDateString()}</strong></div>
                 <div><span>Website</span><strong>{skill.website_url ? <a href={skill.website_url} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
                 <div><span>Documentation</span><strong>{skill.documentation_url ? <a href={skill.documentation_url} target="_blank" rel="noreferrer">Open</a> : 'Not published'}</strong></div>
               </div>
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Screenshots</h2><p>Published visuals and design attachments for this skill.</p></div>
+              {screenshots.length ? (
+                <div className="market-screenshot-row">
+                  {screenshots.map((url, index) => (
+                    <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" aria-label={`Open screenshot ${index + 1}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`${skill.name} screenshot ${index + 1}`} />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No screenshots or design attachments published.</p></div>
+              )}
             </section>
 
             {skill.video_url ? (
@@ -307,7 +397,7 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
               <div className="market-section-head"><h2>Permissions</h2><p>Review access before installation or execution.</p></div>
               <div className="market-permission-grid">
                 {['Internet', 'Browser', 'Filesystem', 'External APIs', 'Wallet Access', 'MCP Access'].map(permission => {
-                  const requiredPermissions = skill.permissions_required ?? [];
+                  const requiredPermissions = permissions;
                   const actualPermission = requiredPermissions.find(item => item.toLowerCase() === permission.toLowerCase()) ?? permission;
                   const declared = actualPermission !== permission || requiredPermissions.includes(permission);
                   return (
@@ -323,7 +413,7 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
                     </label>
                   );
                 })}
-                {(skill.permissions_required ?? []).filter(permission => !['internet', 'browser', 'filesystem', 'external apis', 'wallet access', 'mcp access'].includes(permission.toLowerCase())).map(permission => (
+                {permissions.filter(permission => !['internet', 'browser', 'filesystem', 'external apis', 'wallet access', 'mcp access'].includes(permission.toLowerCase())).map(permission => (
                   <label key={permission} className="required">
                     <input type="checkbox" checked={approvedPermissions.includes(permission)} onChange={() => togglePermission(permission)} />
                     <span>{permission}</span>
@@ -334,11 +424,22 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
             </section>
 
             <section className="market-section">
+              <div className="market-section-head"><h2>Vault Requirements</h2><p>Secrets stay in Vault and are never copied into normal skill context.</p></div>
+              {requiredSecrets.length ? (
+                <div className="market-skill-tags">
+                  {requiredSecrets.map(secret => <span key={secret}>{secret}</span>)}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No Vault secret required.</p></div>
+              )}
+            </section>
+
+            <section className="market-section">
               <div className="market-section-head"><h2>Inputs & Outputs</h2></div>
-              {((skill.inputs ?? []).length || (skill.outputs ?? []).length || preview?.inputExample || preview?.outputExample) ? (
-                <div className="market-code-grid">
-                  <pre>{pretty((skill.inputs ?? []).length ? skill.inputs : preview?.inputExample ?? 'No input schema published.')}</pre>
-                  <pre>{pretty((skill.outputs ?? []).length ? skill.outputs : preview?.outputExample ?? 'No output schema published.')}</pre>
+              {(inputSummaries.length || outputSummaries.length) ? (
+                <div className="market-info-grid">
+                  <div><span>Inputs</span><strong>{inputSummaries.length ? inputSummaries.join(', ') : 'No input schema published.'}</strong></div>
+                  <div><span>Outputs</span><strong>{outputSummaries.length ? outputSummaries.join(', ') : 'No output schema published.'}</strong></div>
                 </div>
               ) : (
                 <div className="market-empty compact"><p>No input or output schema published.</p></div>
@@ -348,9 +449,9 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
             <section className="market-section">
               <div className="market-section-head"><h2>Execution Preview</h2></div>
               {preview?.executionExample || preview?.expectedResults ? (
-                <div className="market-code-grid">
-                  <pre>{pretty(preview?.executionExample ?? 'No execution request example published.')}</pre>
-                  <pre>{preview?.expectedResults ? pretty(preview.expectedResults) : 'No expected result published. Run the skill to produce real output.'}</pre>
+                <div className="market-info-grid">
+                  <div><span>Request Example</span><strong>{preview?.executionExample ? 'Published' : 'Not published'}</strong></div>
+                  <div><span>Expected Result</span><strong>{preview?.expectedResults ? 'Published' : 'Run the skill to produce real output.'}</strong></div>
                 </div>
               ) : (
                 <div className="market-empty compact"><p>No execution preview published. Run the skill after install to produce real output.</p></div>
@@ -358,13 +459,15 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
             </section>
 
             <section className="market-section">
-              <div className="market-section-head"><h2>Examples</h2></div>
-              {(skill.examples ?? []).length ? (
-                <div className="market-code-grid">
-                  {(skill.examples ?? []).map((example, index) => <pre key={index}>{pretty(example)}</pre>)}
+              <div className="market-section-head"><h2>Example Tasks</h2></div>
+              {exampleTasks.length ? (
+                <div className="market-info-grid">
+                  {exampleTasks.map((example, index) => (
+                    <div key={`${example}-${index}`}><span>Task {index + 1}</span><strong>{example}</strong></div>
+                  ))}
                 </div>
               ) : (
-                <div className="market-empty compact"><p>No examples published.</p></div>
+                <div className="market-empty compact"><p>No example tasks published.</p></div>
               )}
             </section>
 
@@ -414,10 +517,14 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
             </section>
 
             <section className="market-section">
-              <div className="market-section-head"><h2>Compatibility</h2></div>
-              <div className="market-skill-tags">
-                {(skill.compatibility ?? []).map(item => <span key={item}>{item}</span>)}
-              </div>
+              <div className="market-section-head"><h2>Supported Surfaces</h2></div>
+              {(skill.compatibility ?? []).length ? (
+                <div className="market-skill-tags">
+                  {(skill.compatibility ?? []).map(item => <span key={item}>{item}</span>)}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No supported surfaces published.</p></div>
+              )}
             </section>
 
             {[
@@ -454,7 +561,7 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
                     createdAt: skill.updated_at,
                     id: `${skill.id}-changelog-${index}`,
                   })) : versionHistory).map((entry, index) => (
-                    <article key={String(entry.version ?? index)}>
+                    <article key={String(entry.id ?? `${entry.version ?? skill.version}-${index}`)}>
                       <strong>Version {String(entry.version ?? skill.version)}</strong>
                       <p>{String(entry.notes ?? ('changeSummary' in entry ? entry.changeSummary : undefined) ?? 'Release notes not provided.')}</p>
                       <span>{new Date(String(entry.createdAt ?? skill.updated_at)).toLocaleDateString()}</span>
@@ -463,6 +570,23 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
                 </div>
               ) : (
                 <div className="market-empty compact"><p>No version history published.</p></div>
+              )}
+            </section>
+
+            <section className="market-section">
+              <div className="market-section-head"><h2>Reviews</h2></div>
+              {(skill.reviews ?? []).length ? (
+                <div className="market-timeline">
+                  {(skill.reviews ?? []).map((review, index) => (
+                    <article key={String(review.id ?? `${skill.slug}-review-${index}`)}>
+                      <strong>{textValue(review.author ?? review.user ?? 'Reviewer')}</strong>
+                      <p>{textValue(review.body ?? review.comment ?? review.summary) || 'No review text published.'}</p>
+                      <span>{textValue(review.rating) ? `${textValue(review.rating)} rating` : 'Rating not published'}</span>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="market-empty compact"><p>No public reviews yet.</p></div>
               )}
             </section>
           </>
