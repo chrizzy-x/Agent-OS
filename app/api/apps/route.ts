@@ -14,6 +14,15 @@ function stringBodyValue(body: Record<string, unknown>, camel: string, snake: st
   return typeof value === 'string' ? value : undefined;
 }
 
+function requestsLivePublish(body: Record<string, unknown>): boolean {
+  const visibility = stringBodyValue(body, 'visibility', 'visibility');
+  const publishState = stringBodyValue(body, 'publishState', 'publish_state');
+  return visibility === 'public'
+    || publishState === 'published'
+    || publishState === 'approved'
+    || body.published === true;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -87,6 +96,9 @@ export async function POST(request: NextRequest) {
       body = await request.json();
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body', message: 'Invalid JSON body' }, { status: 400 });
+    }
+    if (requestsLivePublish(body)) {
+      await requireRouteCapability(request.headers, 'apps.publish');
     }
 
     const publisherAccount = await findAccountById(agentCtx.agentId);

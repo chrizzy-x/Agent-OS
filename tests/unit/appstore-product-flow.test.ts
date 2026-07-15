@@ -66,4 +66,25 @@ describe('Appstore product flow', () => {
     expect(surfaces).toContain("primaryAction: { label: 'Add skill', href: '/skillstore' }");
     expect(surfaces).not.toContain("primaryAction: { label: 'Install', href: '/skillstore' }");
   });
+
+  it('keeps enterprise app publishing gated, previewable, and honest about review support', () => {
+    const page = source('components', 'pages', 'PublishWizardPage.tsx');
+    const route = source('app', 'api', 'apps', 'route.ts');
+
+    expect(page).toContain("session?.capabilities?.includes('create_app')");
+    expect(page).toContain("session?.capabilities?.includes('publish_app')");
+    expect(page).toContain('Save draft');
+    expect(page).toContain('Submit Review');
+    expect(page).toContain('Submit Update');
+    expect(page).toContain('Publish public');
+    expect(page).toContain('Automated reviewer decisions are not connected yet.');
+    expect(page).toContain('Review backend disabled');
+    expect(page).toContain('Upload screenshots or design attachments');
+    expect(page).toContain('Android build link optional');
+    expect(page).toContain('iOS build link optional');
+    expect(page).toContain('Desktop build link optional');
+    expect(page).toContain('App manifest preview');
+    expect(route).toContain('function requestsLivePublish');
+    expect(route).toContain("await requireRouteCapability(request.headers, 'apps.publish');");
+  });
 });

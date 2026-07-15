@@ -39,6 +39,11 @@ type WizardState = {
   supportUrl: string;
   privacyPolicyUrl: string;
   termsUrl: string;
+  appUrl: string;
+  repositoryUrl: string;
+  androidBuildUrl: string;
+  iosBuildUrl: string;
+  desktopBuildUrl: string;
   pricing: string;
   releaseNotes: string;
   changelog: string;
@@ -75,6 +80,11 @@ const DEFAULT_STATE: WizardState = {
   supportUrl: '',
   privacyPolicyUrl: '',
   termsUrl: '',
+  appUrl: '',
+  repositoryUrl: '',
+  androidBuildUrl: '',
+  iosBuildUrl: '',
+  desktopBuildUrl: '',
   pricing: 'Free',
   releaseNotes: '',
   changelog: '',
@@ -107,7 +117,9 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
   const [saving, setSaving] = useState(false);
   const [pendingDestructive, setPendingDestructive] = useState<null | { type: 'unpublish' | 'delete-screenshot' | 'delete-gallery'; path?: string }>(null);
   const canPublishApp = session?.capabilities?.includes('create_app') === true;
+  const canPublishLive = session?.capabilities?.includes('publish_app') === true;
   const accessState = resolveBrowserAccessState(session, sessionLoading, 'create_app', authState);
+  const reviewBackendReady = false;
 
   useEffect(() => {
     let active = true;
@@ -155,6 +167,11 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
           supportUrl: app.supportUrl ?? '',
           privacyPolicyUrl: app.privacyPolicyUrl ?? '',
           termsUrl: app.termsUrl ?? '',
+          appUrl: app.appUrl ?? app.manifest?.distribution?.webUrl ?? '',
+          repositoryUrl: app.repositoryUrl ?? '',
+          androidBuildUrl: app.manifest?.distribution?.androidUrl ?? '',
+          iosBuildUrl: app.manifest?.distribution?.iosUrl ?? '',
+          desktopBuildUrl: app.manifest?.distribution?.desktopUrl ?? '',
           pricing: typeof app.pricing?.model === 'string' ? app.pricing.model : 'Free',
           releaseNotes: app.releaseNotes ?? '',
           changelog: (app.changelog ?? []).join('\n'),
@@ -193,6 +210,13 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
         version: state.version,
         runtime: state.runtime,
         entrypoint: state.entrypoint,
+        distribution: {
+          webUrl: state.appUrl || null,
+          androidUrl: state.androidBuildUrl || null,
+          iosUrl: state.iosBuildUrl || null,
+          desktopUrl: state.desktopBuildUrl || null,
+          repositoryUrl: state.repositoryUrl || null,
+        },
         primitives: state.primitives.split(',').map(item => item.trim()).filter(Boolean),
         skills: state.skills.split(',').map(item => item.trim()).filter(Boolean),
         permissions: state.permissions.split(',').map(item => item.trim()).filter(Boolean),
@@ -203,6 +227,31 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
       return 'Invalid command JSON';
     }
   }, [state]);
+
+  const draftRequiredFields = useMemo(() => [
+    state.name.trim() ? null : 'App name',
+    state.slug.trim() ? null : 'Slug',
+    state.category.trim() ? null : 'Category',
+    state.description.trim() ? null : 'Short description',
+  ].filter(Boolean) as string[], [state]);
+
+  const requiredPublishingFields = useMemo(() => [
+    ...draftRequiredFields,
+    state.longDescription.trim() ? null : 'Full description',
+    state.logoUrl.trim() ? null : 'Icon URL',
+    state.version.trim() ? null : 'Version',
+    state.entrypoint.trim() ? null : 'Entrypoint',
+    state.permissions.trim() ? null : 'Permissions',
+  ].filter(Boolean) as string[], [draftRequiredFields, state]);
+
+  const draftBlockedReason = draftRequiredFields.length
+    ? `Missing: ${draftRequiredFields.join(', ')}`
+    : undefined;
+  const publishBlockedReason = requiredPublishingFields.length
+    ? `Missing: ${requiredPublishingFields.join(', ')}`
+    : undefined;
+
+  const reviewBackendMessage = 'Automated reviewer decisions are not connected yet. Submit Review records a submitted listing state for enterprise review; approval must happen outside this UI.';
 
   const galleryItems = useMemo(
     () => state.gallery.split('\n').map(item => item.trim()).filter(Boolean),
@@ -224,6 +273,11 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
     setMessage('');
     try {
       const commands = JSON.parse(state.commands || '[]');
+      const effectiveVisibility = publishState === 'published'
+        ? 'public'
+        : publishState === 'unpublished'
+          ? 'private'
+          : state.visibility;
       const payload = {
         name: state.name,
         slug: state.slug || undefined,
@@ -239,6 +293,8 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
         supportUrl: state.supportUrl || undefined,
         privacyPolicyUrl: state.privacyPolicyUrl || undefined,
         termsUrl: state.termsUrl || undefined,
+        appUrl: state.appUrl || undefined,
+        repositoryUrl: state.repositoryUrl || undefined,
         pricing: { model: state.pricing },
         releaseNotes: state.releaseNotes || undefined,
         changelog: state.changelog.split('\n').map(item => item.trim()).filter(Boolean),
@@ -248,13 +304,20 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
         platforms: state.platforms.split(',').map(item => item.trim()).filter(Boolean),
         publisherName: state.developer || undefined,
         device_targets: state.deviceTargets.split(',').map(item => item.trim()).filter(Boolean),
-        visibility: state.visibility,
+        visibility: effectiveVisibility,
         publish_state: publishState,
         manifest: {
           schemaVersion: 'agentos.app.v1',
           version: state.version,
           runtime: state.runtime,
           entrypoint: state.entrypoint,
+          distribution: {
+            webUrl: state.appUrl || null,
+            androidUrl: state.androidBuildUrl || null,
+            iosUrl: state.iosBuildUrl || null,
+            desktopUrl: state.desktopBuildUrl || null,
+            repositoryUrl: state.repositoryUrl || null,
+          },
           primitives: state.primitives.split(',').map(item => item.trim()).filter(Boolean),
           skills: state.skills.split(',').map(item => item.trim()).filter(Boolean),
           permissions: state.permissions.split(',').map(item => item.trim()).filter(Boolean),
@@ -400,7 +463,7 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
             eyebrow="Publish App"
             title={slug ? 'Edit app listing' : 'Publish App'}
             subtitle="Build, configure, preview, and publish an App Store listing."
-            actions={<Button onClick={() => void publish('published')} loading={saving}>Publish</Button>}
+            actions={<Button onClick={() => void publish('published')} loading={saving} disabled={!canPublishLive || Boolean(publishBlockedReason)} disabledReason={!canPublishLive ? 'Live publishing requires Enterprise publish permission.' : publishBlockedReason}>Publish</Button>}
           />
         ) : accessState === 'signed_out' ? (
           <PageHeader
@@ -486,12 +549,18 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
                   <Input value={state.termsUrl} onChange={event => setState(current => ({ ...current, termsUrl: event.target.value }))} placeholder="Terms" />
                   <Input value={state.pricing} onChange={event => setState(current => ({ ...current, pricing: event.target.value }))} placeholder="Pricing" />
                   <Input value={state.documentationUrl} onChange={event => setState(current => ({ ...current, documentationUrl: event.target.value }))} placeholder="Documentation" />
+                  <Input value={state.appUrl} onChange={event => setState(current => ({ ...current, appUrl: event.target.value }))} placeholder="Web app URL" />
+                  <Input value={state.repositoryUrl} onChange={event => setState(current => ({ ...current, repositoryUrl: event.target.value }))} placeholder="Repository or build source URL" />
+                  <Input value={state.androidBuildUrl} onChange={event => setState(current => ({ ...current, androidBuildUrl: event.target.value }))} placeholder="Android build link optional" />
+                  <Input value={state.iosBuildUrl} onChange={event => setState(current => ({ ...current, iosBuildUrl: event.target.value }))} placeholder="iOS build link optional" />
+                  <Input value={state.desktopBuildUrl} onChange={event => setState(current => ({ ...current, desktopBuildUrl: event.target.value }))} placeholder="Desktop build link optional" />
                   <Input value={state.platforms} onChange={event => setState(current => ({ ...current, platforms: event.target.value }))} placeholder="Platforms" />
                   <Textarea value={state.features} onChange={event => setState(current => ({ ...current, features: event.target.value }))} placeholder="Features, one per line" />
                   <Textarea value={state.gallery} onChange={event => setState(current => ({ ...current, gallery: event.target.value }))} placeholder="Gallery URLs, one per line" />
                   <Textarea value={state.releaseNotes} onChange={event => setState(current => ({ ...current, releaseNotes: event.target.value }))} placeholder="Release notes" />
                   <Textarea value={state.changelog} onChange={event => setState(current => ({ ...current, changelog: event.target.value }))} placeholder="Changelog, one entry per line" />
-                  <input type="file" multiple accept="image/png,image/jpeg,image/webp" disabled={!state.slug} onChange={event => void uploadScreenshots(event.target.files)} />
+                  <div className="os-entity-title">Screenshots and design attachments</div>
+                  <input aria-label="Upload screenshots or design attachments" type="file" multiple accept="image/png,image/jpeg,image/webp" disabled={!state.slug} onChange={event => void uploadScreenshots(event.target.files)} />
                   {state.slug ? null : <div className="os-entity-copy">Save the app first to upload screenshots.</div>}
                   <Badge tone={mediaValidation.includes('validates') ? 'success' : 'warning'}>{mediaValidation}</Badge>
                   {state.screenshots.length ? state.screenshots.map((path, index) => (
@@ -556,13 +625,25 @@ export default function PublishWizardPage({ initialSlug }: { initialSlug?: strin
                     <option value="workspace">Workspace</option>
                     <option value="public">Public</option>
                   </Select>
-                  <div className="os-entity-copy">Internal apps default to private. Change to workspace or public when you are ready.</div>
+                  <div className="os-entity-copy">Internal apps default to private. Change to workspace for team testing or public only when the listing is approved for Appstore visibility.</div>
+                  <div className="os-state-panel disabled">
+                    <div className="os-entity-title">Review readiness</div>
+                    <div className="os-entity-copy">{requiredPublishingFields.length ? `Complete these fields first: ${requiredPublishingFields.join(', ')}.` : 'Required listing, manifest, permission, and media fields are present.'}</div>
+                    <div className="os-entity-copy">{reviewBackendMessage}</div>
+                    <div className="os-inline-actions">
+                      <Badge tone={requiredPublishingFields.length ? 'warning' : 'success'}>{requiredPublishingFields.length ? 'Needs metadata' : 'Ready to save'}</Badge>
+                      <Badge tone={reviewBackendReady ? 'success' : 'warning'}>{reviewBackendReady ? 'Review backend live' : 'Review backend disabled'}</Badge>
+                      <Badge tone={canPublishLive ? 'success' : 'warning'}>{canPublishLive ? 'Live publish permission' : 'Publish permission missing'}</Badge>
+                    </div>
+                  </div>
+                  <Textarea value={manifestPreview} readOnly aria-label="App manifest preview" />
                   <div className="os-inline-actions">
-                    <Button variant="secondary" onClick={() => void publish('draft')}>{saving ? 'Saving...' : 'Draft'}</Button>
-                    <Button variant="secondary" onClick={() => void publish('submitted')}>{saving ? 'Submitting...' : 'Submit Review'}</Button>
-                    <Button variant="secondary" onClick={() => void publish('update_pending')}>{saving ? 'Updating...' : 'Update'}</Button>
-                    <Button variant="danger" onClick={() => setPendingDestructive({ type: 'unpublish' })}>Unpublish</Button>
-                    <Button onClick={() => void publish('published')} loading={saving}>Publish</Button>
+                    <Button variant="secondary" onClick={() => void publish('draft')} loading={saving} disabled={Boolean(draftBlockedReason)} disabledReason={draftBlockedReason}>Save draft</Button>
+                    <Button variant="secondary" onClick={() => void publish('submitted')} loading={saving} disabled={Boolean(publishBlockedReason)} disabledReason={publishBlockedReason}>Submit Review</Button>
+                    <Button variant="secondary" onClick={() => void publish('update_pending')} loading={saving} disabled={!slug || Boolean(publishBlockedReason)} disabledReason={!slug ? 'Save this app before submitting an update.' : publishBlockedReason}>Submit Update</Button>
+                    <Button variant="secondary" disabled disabledReason={reviewBackendReady ? undefined : 'Automated approve/reject review actions are not connected yet.'}>Approve Review</Button>
+                    <Button variant="danger" onClick={() => setPendingDestructive({ type: 'unpublish' })} disabled={!slug} disabledReason={!slug ? 'Save this app before unpublishing.' : undefined}>Unpublish</Button>
+                    <Button onClick={() => void publish('published')} loading={saving} disabled={!canPublishLive || Boolean(publishBlockedReason)} disabledReason={!canPublishLive ? 'Live publishing requires Enterprise publish permission.' : publishBlockedReason}>Publish public</Button>
                   </div>
                 </div>
               </Card>
