@@ -13,7 +13,7 @@ test.describe('AgentOS V6.6.7 marketplace experience routes', () => {
     await expect(page.locator('.surface-shell-main').getByRole('heading', { name: 'App Store' })).toBeVisible();
     await expect(page.getByLabel('Search apps')).toBeVisible();
     await expect(page.locator('.market-shell').first()).not.toHaveCSS('background-color', 'rgb(0, 0, 0)');
-    const appstoreSurface = page.locator('.surface-shell-main').first();
+    const appstoreSurface = page.locator('.surface-shell-main:visible').first();
     await expect(appstoreSurface).toBeVisible();
     const appstoreWidth = await appstoreSurface.evaluate(element => element.clientWidth);
     const viewportWidth = await page.evaluate(() => window.innerWidth);
@@ -24,6 +24,11 @@ test.describe('AgentOS V6.6.7 marketplace experience routes', () => {
     await page.goto('/skillstore', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.surface-shell-main').getByRole('heading', { name: 'Skill Store' })).toBeVisible();
     await expect(page.getByLabel('Search skills')).toBeVisible();
+    const skillFilterRow = page.locator('.market-filter-row').filter({ hasText: 'Filter' });
+    await expect(skillFilterRow.locator('select').first()).toBeVisible();
+    await expect(skillFilterRow.locator('select').last()).toBeVisible();
+    await expect(skillFilterRow).toContainText('Needs permission');
+    await expect(skillFilterRow).toContainText('Recent');
     await expect(page.locator('.market-shell').first()).not.toHaveCSS('background-color', 'rgb(0, 0, 0)');
   });
 

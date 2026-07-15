@@ -43,6 +43,12 @@ describe('Appstore product flow', () => {
     expect(skillStore).toContain('Add skill');
     expect(skillStore).toContain('Add skill failed');
     expect(skillStore).toContain('Library');
+    expect(skillStore).toContain('SKILL_FILTERS');
+    expect(skillStore).toContain('SKILL_SORTS');
+    expect(skillStore).toContain('Vault required');
+    expect(skillStore).toContain('No permissions');
+    expect(skillStore).toContain('pricingLabel');
+    expect(skillStore).toContain('Skill discovery is unavailable right now.');
     expect(skillDetail).toContain('Run skill');
     expect(skillDetail).toContain('Save access');
     expect(skillDetail).toContain('Revoke access');

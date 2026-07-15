@@ -23,6 +23,12 @@ const EMPTY_DISCOVERY: SkillDiscoveryPayload = {
   developerSpotlight: [],
 };
 
+const SKILL_FILTERS = ['All', 'Free', 'Paid', 'Needs permission', 'Vault required', 'Verified', 'Installed'] as const;
+const SKILL_SORTS = ['Recommended', 'Recent', 'Name', 'Installs'] as const;
+
+type SkillFilter = typeof SKILL_FILTERS[number];
+type SkillSort = typeof SKILL_SORTS[number];
+
 function capabilityLabel(skill: SkillMarketplaceRecord): string {
   const count = skill.capabilities.length;
   return `${count} ${count === 1 ? 'capability' : 'capabilities'}`;
@@ -33,6 +39,18 @@ function capabilityTags(skill: SkillMarketplaceRecord): string[] {
     .map(item => typeof item.name === 'string' ? item.name : '')
     .filter(Boolean);
   return (names.length ? names : skill.tags).slice(0, 3);
+}
+
+function pricingLabel(skill: SkillMarketplaceRecord): string {
+  if (skill.pricing_model === 'free' || skill.price_per_call <= 0) return 'Free';
+  if (skill.pricing_model === 'per_call') return `$${skill.price_per_call.toFixed(2)}/call`;
+  return 'Usage priced';
+}
+
+function permissionLabel(skill: SkillMarketplaceRecord): string {
+  if (skill.required_secrets.length > 0) return 'Vault required';
+  if (skill.permissions_required.length > 0) return `${skill.permissions_required.length} permission${skill.permissions_required.length === 1 ? '' : 's'}`;
+  return 'No permissions';
 }
 
 function SkillCard(props: {
@@ -55,6 +73,12 @@ function SkillCard(props: {
         </div>
       </Link>
       <Link href={`/developer/${skill.developer_handle}`} className="market-card-developer">{skill.author_name}</Link>
+      <div className="market-card-badges" aria-label={`${skill.name} status`}>
+        {installed ? <span>Installed</span> : null}
+        {skill.verified ? <span>Verified</span> : null}
+        <span>{pricingLabel(skill)}</span>
+        <span>{permissionLabel(skill)}</span>
+      </div>
       <div className="market-card-facts">
         <span>{skill.category}</span>
         <span>v{skill.version}</span>
@@ -122,6 +146,9 @@ export default function SkillsMarketplacePage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState<SkillFilter>('All');
+  const [sort, setSort] = useState<SkillSort>('Recommended');
   const [workingSlug, setWorkingSlug] = useState('');
   const [notice, setNotice] = useState('');
   const [heroIndex, setHeroIndex] = useState(0);
@@ -135,6 +162,7 @@ export default function SkillsMarketplacePage() {
       return;
     }
     setLoading(true);
+    setError('');
     try {
       const query = new URLSearchParams();
       if (search.trim()) query.set('search', search.trim());
@@ -143,11 +171,16 @@ export default function SkillsMarketplacePage() {
         fetch(`/api/skills/discovery?${query.toString()}`, { cache: 'no-store' }),
         fetchBrowserSession().catch(() => null),
       ]);
-      const payload = res.ok ? await res.json() as SkillDiscoveryPayload : EMPTY_DISCOVERY;
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({})) as { error?: string; message?: string };
+        throw new Error(payload.error ?? payload.message ?? 'Skill discovery unavailable');
+      }
+      const payload = await res.json() as SkillDiscoveryPayload;
       cache.current.set(key, payload);
       setDiscovery(payload);
       setSession(currentSession);
     } catch {
+      setError('Skill discovery is unavailable right now.');
       setDiscovery(EMPTY_DISCOVERY);
     } finally {
       setLoading(false);
@@ -168,6 +201,26 @@ export default function SkillsMarketplacePage() {
   const categories = useMemo(() => ['All', ...discovery.categories], [discovery.categories]);
   const installed = useMemo(() => new Set(discovery.installedSlugs), [discovery.installedSlugs]);
   const hero = discovery.hero[heroIndex % Math.max(discovery.hero.length, 1)] ?? discovery.skills[0] ?? null;
+  const displayedSkills = useMemo(() => {
+    const filtered = discovery.skills.filter(skill => {
+      if (filter === 'Free') return skill.pricing_model === 'free' || skill.price_per_call <= 0;
+      if (filter === 'Paid') return skill.pricing_model !== 'free' && skill.price_per_call > 0;
+      if (filter === 'Needs permission') return skill.permissions_required.length > 0;
+      if (filter === 'Vault required') return skill.required_secrets.length > 0;
+      if (filter === 'Verified') return skill.verified;
+      if (filter === 'Installed') return installed.has(skill.slug);
+      return true;
+    });
+    return [...filtered].sort((left, right) => {
+      if (sort === 'Recent') return right.updated_at.localeCompare(left.updated_at);
+      if (sort === 'Name') return left.name.localeCompare(right.name);
+      if (sort === 'Installs') return right.total_installs - left.total_installs;
+      const installedDelta = (installed.has(right.slug) ? 1 : 0) - (installed.has(left.slug) ? 1 : 0);
+      if (installedDelta !== 0) return installedDelta;
+      return (right.verified ? 1 : 0) - (left.verified ? 1 : 0) || right.total_installs - left.total_installs;
+    });
+  }, [discovery.skills, filter, installed, sort]);
+  const focusedDiscovery = search.trim() || filter !== 'All' || sort !== 'Recommended';
 
   async function installSkill(skill: SkillMarketplaceRecord) {
     setWorkingSlug(skill.slug);
@@ -221,6 +274,21 @@ export default function SkillsMarketplacePage() {
           ))}
         </div>
 
+        <div className="market-filter-row" aria-label="Skill filters and sorting">
+          <label>
+            <span>Filter</span>
+            <select value={filter} onChange={event => setFilter(event.target.value as SkillFilter)}>
+              {SKILL_FILTERS.map(item => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select value={sort} onChange={event => setSort(event.target.value as SkillSort)}>
+              {SKILL_SORTS.map(item => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+        </div>
+
         {hero ? (
           <MarketplaceHero
             bannerUrl={hero.banner_url}
@@ -230,7 +298,7 @@ export default function SkillsMarketplacePage() {
             description={hero.long_description || hero.description}
             developerHref={`/developer/${hero.developer_handle}`}
             developerName={hero.author_name}
-            metadata={[hero.category, capabilityLabel(hero), formatCountLabel(hero.total_installs, 'install', 'installs')]}
+            metadata={[hero.category, pricingLabel(hero), permissionLabel(hero), capabilityLabel(hero), formatCountLabel(hero.total_installs, 'install', 'installs')]}
             primaryLabel={workingSlug === hero.slug ? 'Adding...' : installed.has(hero.slug) ? 'Use skill' : 'Add skill'}
             primaryDisabled={workingSlug === hero.slug}
             secondaryHref={`/skills/${hero.slug}`}
@@ -240,19 +308,20 @@ export default function SkillsMarketplacePage() {
         ) : null}
 
         {notice ? <div className="market-notice">{notice}</div> : null}
+        {error ? <div className="market-notice error" role="alert">{error}</div> : null}
 
         {loading ? (
           <div className="market-skeleton-grid">
             {Array.from({ length: 6 }).map((_, index) => <div key={index} className="market-skeleton" />)}
           </div>
-        ) : discovery.skills.length === 0 ? (
+        ) : displayedSkills.length === 0 ? (
           <div className="market-empty">
             <h2>No skills found</h2>
-            <p>{search.trim() ? 'No accessible capabilities matched this search.' : 'No published skills are available from the backend yet.'}</p>
+            <p>{search.trim() || filter !== 'All' ? 'No accessible capabilities matched the current search and filters.' : 'No published skills are available from the backend yet.'}</p>
             <Link href="/studio" className="market-secondary-action" data-action="open">Open Super AgentOS</Link>
           </div>
-        ) : search.trim() ? (
-          <SkillRow title="Search Results" skills={discovery.skills} installed={installed} workingSlug={workingSlug} onInstall={skill => void installSkill(skill)} />
+        ) : focusedDiscovery ? (
+          <SkillRow title="Skill Results" skills={displayedSkills} installed={installed} workingSlug={workingSlug} onInstall={skill => void installSkill(skill)} />
         ) : (
           <>
             {discovery.sections.map(section => (

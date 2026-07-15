@@ -59,6 +59,9 @@ export type SkillMarketplaceRecord = {
   compatible_workflows: string[];
   rejection_reason: string | null;
   spotlight: boolean;
+  pricing_model: string;
+  price_per_call: number;
+  free_tier_calls: number;
   total_installs: number;
   total_calls: number;
   rating: number;
@@ -153,6 +156,9 @@ export function mapSkillMarketplaceRecord(row: Record<string, unknown>): SkillMa
     compatible_workflows: stringArray(row.compatible_workflows),
     rejection_reason: typeof row.rejection_reason === 'string' ? row.rejection_reason : null,
     spotlight: row.spotlight === true,
+    pricing_model: typeof row.pricing_model === 'string' ? row.pricing_model : 'free',
+    price_per_call: Number(row.price_per_call ?? 0),
+    free_tier_calls: Number(row.free_tier_calls ?? 0),
     total_installs: Number(row.total_installs ?? 0),
     total_calls: Number(row.total_calls ?? 0),
     rating: Number(row.rating ?? 0),
