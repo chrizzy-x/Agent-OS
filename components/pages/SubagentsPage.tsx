@@ -26,6 +26,13 @@ type Subagent = {
   exposedCapabilities?: string[];
 };
 
+type InstalledSkill = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+};
+
 type SubagentsPageProps = {
   activePath?: string;
   basePath?: string;
@@ -44,27 +51,54 @@ export default function SubagentsPage({
   const shell = useApplicationShell();
   const [loading, setLoading] = useState(true);
   const [subagents, setSubagents] = useState<Subagent[]>([]);
+  const [installedSkills, setInstalledSkills] = useState<InstalledSkill[]>([]);
   const [view, setView] = useState<'grid' | 'org'>('grid');
   const [draft, setDraft] = useState({
     workspaceId: '',
     name: '',
     description: '',
     instructions: '',
-    visibility: 'private',
+    visibility: 'private' as 'private' | 'workspace' | 'public',
     exposedCapabilities: '',
+    attachedSkills: [] as string[],
   });
   const [message, setMessage] = useState('');
+  const [savingSubagentId, setSavingSubagentId] = useState('');
+
+  function skillToken(slug: string): string {
+    return `skill:${slug}`;
+  }
+
+  function manualCapabilities(values: string[] = []): string[] {
+    return values.filter(item => !item.startsWith('skill:'));
+  }
+
+  function attachedSkillLabels(values: string[] = []): string {
+    const labels = values
+      .filter(item => item.startsWith('skill:'))
+      .map(item => item.slice('skill:'.length))
+      .map(slug => installedSkills.find(skill => skill.slug === slug)?.name ?? slug);
+    return labels.length ? labels.join(', ') : 'None assigned';
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [subagentsRes, workspacesRes] = await Promise.all([
+      const [subagentsRes, workspacesRes, skillsRes] = await Promise.all([
         fetch(`/api/subagents${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
         fetch('/api/workspaces', { cache: 'no-store' }),
+        fetch('/api/skills/installed', { cache: 'no-store' }),
       ]);
       const subagentsData = await subagentsRes.json();
       const workspacesData = await workspacesRes.json();
+      const skillsData = await skillsRes.json();
       setSubagents(subagentsData.subagents ?? []);
+      setInstalledSkills((skillsData.installed_skills ?? []).map((entry: { skill?: Record<string, unknown> }) => ({
+        id: String(entry.skill?.id ?? ''),
+        name: String(entry.skill?.name ?? 'Skill'),
+        slug: String(entry.skill?.slug ?? entry.skill?.id ?? ''),
+        description: String(entry.skill?.description ?? 'Installed skill'),
+      })).filter((skill: InstalledSkill) => skill.id && skill.slug));
       setDraft(current => ({ ...current, workspaceId: shell.activeWorkspaceId || current.workspaceId || workspacesData.workspaces?.[0]?.id || '' }));
     } catch {
       setSubagents([]);
@@ -84,17 +118,48 @@ export default function SubagentsPage({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...draft,
-        exposedCapabilities: draft.exposedCapabilities
-          .split(',')
-          .map(item => item.trim())
-          .filter(Boolean),
+        exposedCapabilities: [
+          ...draft.exposedCapabilities.split(',').map(item => item.trim()).filter(Boolean),
+          ...draft.attachedSkills.map(skillToken),
+        ],
       }),
     });
     const payload = await response.json();
     setMessage(response.ok ? 'Subagent created' : payload.error ?? 'Create failed');
     if (response.ok) {
-      setDraft(current => ({ ...current, name: '', description: '', instructions: '', exposedCapabilities: '' }));
+      setDraft(current => ({ ...current, name: '', description: '', instructions: '', exposedCapabilities: '', attachedSkills: [] }));
       await load();
+    }
+  }
+
+  async function toggleDraftSkill(slug: string) {
+    setDraft(current => ({
+      ...current,
+      attachedSkills: current.attachedSkills.includes(slug)
+        ? current.attachedSkills.filter(item => item !== slug)
+        : [...current.attachedSkills, slug],
+    }));
+  }
+
+  async function toggleSubagentSkill(subagent: Subagent, slug: string) {
+    const token = skillToken(slug);
+    const current = subagent.exposedCapabilities ?? [];
+    const next = current.includes(token)
+      ? current.filter(item => item !== token)
+      : [...current, token];
+    setSavingSubagentId(subagent.id);
+    setMessage('');
+    try {
+      const response = await fetch(`/api/subagents/${encodeURIComponent(subagent.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exposedCapabilities: next }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Skill attachments updated.' : payload.error ?? payload.message ?? 'Skill attachment update failed.');
+      if (response.ok) await load();
+    } finally {
+      setSavingSubagentId('');
     }
   }
 
@@ -133,8 +198,27 @@ export default function SubagentsPage({
             <Input
               value={draft.exposedCapabilities}
               onChange={event => setDraft(current => ({ ...current, exposedCapabilities: event.target.value }))}
-              placeholder="Capabilities, comma-separated"
+              placeholder="Manual capabilities, comma-separated"
             />
+          </div>
+          <div className="os-drawer-stack">
+            <div className="os-entity-title">Attach installed skills</div>
+            {installedSkills.length ? (
+              <div className="os-inline-actions">
+                {installedSkills.map(skill => (
+                  <label key={skill.id} className="os-inline-actions">
+                    <input
+                      type="checkbox"
+                      checked={draft.attachedSkills.includes(skill.slug)}
+                      onChange={() => void toggleDraftSkill(skill.slug)}
+                    />
+                    {skill.name}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="os-entity-copy">Install a skill before attaching one to a subagent.</div>
+            )}
           </div>
           <Textarea value={draft.instructions} onChange={event => setDraft(current => ({ ...current, instructions: event.target.value }))} placeholder="Instructions" />
           <label className="os-inline-actions">
@@ -173,9 +257,28 @@ export default function SubagentsPage({
                     <dl className="subagent-facts">
                       <div><dt>Role</dt><dd>{subagent.visibility} workforce agent</dd></div>
                       <div><dt>Memory</dt><dd>Workspace scoped</dd></div>
-                      <div><dt>Skills</dt><dd>{subagent.exposedCapabilities?.join(', ') || 'None assigned'}</dd></div>
+                      <div><dt>Manual capabilities</dt><dd>{manualCapabilities(subagent.exposedCapabilities).join(', ') || 'None assigned'}</dd></div>
+                      <div><dt>Attached skills</dt><dd>{attachedSkillLabels(subagent.exposedCapabilities)}</dd></div>
                       <div><dt>Permissions</dt><dd>{subagent.visibility === 'private' ? 'Incognito only' : 'Workspace visible'}</dd></div>
                     </dl>
+                    {installedSkills.length ? (
+                      <div className="os-drawer-stack">
+                        <div className="os-entity-copy">Skill attachments</div>
+                        <div className="os-inline-actions">
+                          {installedSkills.map(skill => (
+                            <label key={`${subagent.id}-${skill.id}`} className="os-inline-actions">
+                              <input
+                                type="checkbox"
+                                checked={(subagent.exposedCapabilities ?? []).includes(skillToken(skill.slug))}
+                                disabled={savingSubagentId === subagent.id}
+                                onChange={() => void toggleSubagentSkill(subagent, skill.slug)}
+                              />
+                              {skill.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     <Link href={`${basePath}/${subagent.id}`} className="btn-ghost">Open</Link>
                   </article>
                 ))}

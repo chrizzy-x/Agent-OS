@@ -21,6 +21,16 @@ type SkillPreview = {
   expectedResults?: unknown;
 };
 
+type InstalledSkillEntry = {
+  id?: string;
+  status?: string;
+  skill?: {
+    id?: string;
+    slug?: string;
+    name?: string;
+  } | null;
+};
+
 function stringList(values: string[]): string {
   return values.length ? values.join(', ') : 'None';
 }
@@ -102,6 +112,23 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
   const [dependencyRecords, setDependencyRecords] = useState<SkillMarketplaceRecord[]>([]);
   const [dependencyPermissions, setDependencyPermissions] = useState<Record<string, string[]>>({});
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [confirmUninstall, setConfirmUninstall] = useState(false);
+  const [installedEntry, setInstalledEntry] = useState<InstalledSkillEntry | null>(null);
+
+  const refreshInstalledState = useCallback(async (nextSkill: SkillDetailRecord | SkillMarketplaceRecord | null) => {
+    if (!nextSkill) {
+      setInstalledEntry(null);
+      return;
+    }
+    const response = await fetch('/api/skills/installed', { cache: 'no-store' }).catch(() => null);
+    if (!response?.ok) {
+      setInstalledEntry(null);
+      return;
+    }
+    const payload = await response.json().catch(() => ({})) as { installed_skills?: InstalledSkillEntry[] };
+    const entries = payload.installed_skills ?? [];
+    setInstalledEntry(entries.find(entry => entry.skill?.id === nextSkill.id || entry.skill?.slug === nextSkill.slug) ?? null);
+  }, []);
 
   const loadDependencyRecords = useCallback(async (nextSkill: SkillMarketplaceRecord | null) => {
     if (!nextSkill) {
@@ -130,14 +157,16 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
       setSkill(nextSkill);
       setPreview(null);
       if (nextSkill) setApprovedPermissions(nextSkill.permissions_required ?? []);
+      await refreshInstalledState(nextSkill);
       await loadDependencyRecords(nextSkill);
     } catch {
       setSkill(null);
       setPreview(null);
+      setInstalledEntry(null);
     } finally {
       if (withLoading) setLoading(false);
     }
-  }, [loadDependencyRecords, slug]);
+  }, [loadDependencyRecords, refreshInstalledState, slug]);
 
   useEffect(() => {
     if (initialSkill && initialSkill.slug === slug) {
@@ -145,11 +174,12 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
       setApprovedPermissions(initialSkill.permissions_required ?? []);
       setPreview(null);
       setLoading(false);
+      void refreshInstalledState(initialSkill);
       void loadDependencyRecords(initialSkill);
       return;
     }
     void load(true);
-  }, [initialSkill, load, loadDependencyRecords, slug]);
+  }, [initialSkill, load, loadDependencyRecords, refreshInstalledState, slug]);
 
   const versionHistory = useMemo(() => {
     if (!skill) return [];
@@ -207,10 +237,29 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
       });
       const payload = await response.json().catch(() => ({}));
       setMessage(response.ok
-        ? `${skill.name} installed. ${payload.dependenciesInstalled?.length ?? 0} dependencies resolved.`
+        ? `${skill.name} added to Library. It is now available in NL Studio, Workflow Builder, and subagent skill attachments. ${payload.dependenciesInstalled?.length ?? 0} dependencies resolved.`
         : payload.error ?? payload.message ?? 'Add skill failed');
+      if (response.ok) await refreshInstalledState(skill);
     } finally {
       setInstalling(false);
+    }
+  }
+
+  async function uninstall() {
+    if (!skill) return;
+    setWorking('uninstall');
+    setMessage('');
+    try {
+      const response = await fetch('/api/skills/uninstall', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill_id: skill.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? `${skill.name} removed from Library and Studio pickers.` : payload.error ?? payload.message ?? 'Remove skill failed');
+      if (response.ok) setInstalledEntry(null);
+    } finally {
+      setWorking('');
     }
   }
 
@@ -251,6 +300,10 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
 
   async function useSkill() {
     if (!skill) return;
+    if (!installedEntry) {
+      setMessage('Add this skill before running it. Installed skills become available in Studio, workflows, subagents, and Library.');
+      return;
+    }
     const capability = String((skill.capabilities ?? [])[0]?.name ?? '');
     if (!capability) {
       setMessage('No executable capability is published for this skill.');
@@ -301,24 +354,28 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
                 </div>
               </div>
               <div className="market-detail-actions">
-                <button type="button" className="market-primary-action" data-action="add" disabled={installing} onClick={() => void install()}>
-                  {installing ? 'Adding...' : 'Add skill'}
+                <button type="button" className="market-primary-action" data-action="add" disabled={installing || Boolean(installedEntry)} title={installedEntry ? 'This skill is already in Library.' : undefined} onClick={() => void install()}>
+                  {installing ? 'Adding...' : installedEntry ? 'In Library' : 'Add skill'}
                 </button>
                 <button
                   type="button"
                   className="market-secondary-action"
                   data-action="open"
-                  disabled={working === 'use' || !(skill.capabilities ?? [])[0]?.name}
-                  title={!(skill.capabilities ?? [])[0]?.name ? 'No executable capability is published for this skill.' : undefined}
+                  disabled={working === 'use' || !installedEntry || !(skill.capabilities ?? [])[0]?.name}
+                  title={!installedEntry ? 'Add this skill before running it.' : !(skill.capabilities ?? [])[0]?.name ? 'No executable capability is published for this skill.' : undefined}
                   onClick={() => void useSkill()}
                 >
                   {working === 'use' ? 'Running...' : 'Run skill'}
                 </button>
+                <Link href="/library?view=skills" className="market-secondary-action" data-action="library">Open in Library</Link>
                 <button type="button" className="market-secondary-action" data-action="save" disabled={working === 'save'} onClick={() => void saveAccess()}>
                   {working === 'save' ? 'Saving...' : 'Save access'}
                 </button>
                 <button type="button" className="market-secondary-action danger" data-action="remove" disabled={working === 'revoke'} onClick={() => setConfirmRevoke(true)}>
                   {working === 'revoke' ? 'Revoking...' : 'Revoke access'}
+                </button>
+                <button type="button" className="market-secondary-action danger" data-action="uninstall" disabled={!installedEntry || working === 'uninstall'} title={!installedEntry ? 'This skill is not installed.' : undefined} onClick={() => setConfirmUninstall(true)}>
+                  {working === 'uninstall' ? 'Removing...' : 'Remove from Library'}
                 </button>
               </div>
             </section>
@@ -602,6 +659,18 @@ export default function SkillDetailPage({ initialSkill = null }: { initialSkill?
         onConfirm={() => {
           setConfirmRevoke(false);
           void revokeAccess();
+        }}
+      />
+      <ConfirmationDialog
+        open={confirmUninstall}
+        title="Remove skill from Library"
+        body={`Remove ${skill?.name ?? 'this skill'} from Library, Studio pickers, workflow skill nodes, and subagent skill attachment choices?`}
+        confirmLabel="Remove"
+        busy={working === 'uninstall'}
+        onCancel={() => setConfirmUninstall(false)}
+        onConfirm={() => {
+          setConfirmUninstall(false);
+          void uninstall();
         }}
       />
     </SurfaceShell>

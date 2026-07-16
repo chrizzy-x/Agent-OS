@@ -77,6 +77,32 @@ function groupItems(items: LibraryItem[]): LibraryPayload {
   };
 }
 
+function libraryItemIdentity(item: LibraryItem): string {
+  if (item.kind === 'installed_skill') {
+    const slug = typeof item.metadata.slug === 'string' ? item.metadata.slug : '';
+    const skillId = typeof item.metadata.skillId === 'string' ? item.metadata.skillId : '';
+    const sourceId = typeof item.metadata.sourceId === 'string' ? item.metadata.sourceId : '';
+    return `installed_skill:${slug || skillId || sourceId || item.id}`;
+  }
+  if (item.kind === 'installed_app') {
+    const slug = typeof item.metadata.slug === 'string' ? item.metadata.slug : '';
+    const appId = typeof item.metadata.appId === 'string' ? item.metadata.appId : '';
+    const sourceId = typeof item.metadata.sourceId === 'string' ? item.metadata.sourceId : '';
+    return `installed_app:${slug || appId || sourceId || item.id}`;
+  }
+  return `${item.kind}:${item.id}`;
+}
+
+function dedupeLibraryItems(items: LibraryItem[]): LibraryItem[] {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const identity = libraryItemIdentity(item);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+}
+
 function assetTypeForLibraryItem(item: LibraryItem): MarketplaceAssetType | null {
   if (item.kind === 'installed_app') return 'app';
   if (item.kind === 'installed_skill') return 'skill';
@@ -115,35 +141,64 @@ async function syncItemsToWorkspaceAssetRegistry(ownerAgentId: string, items: Li
 }
 
 async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
+  const mapRows = (rows: Array<Record<string, unknown>>): LibraryItem[] => rows.flatMap(row => {
+    const skill = row.skill && typeof row.skill === 'object' ? row.skill as Record<string, unknown> : null;
+    if (!skill) return [];
+    const slug = String(skill.slug ?? skill.id);
+    return [{
+      id: String(row.id ?? skill.id),
+      kind: 'installed_skill' as const,
+      name: String(skill.name ?? 'Skill'),
+      description: String(skill.description ?? skill.category ?? 'Installed skill'),
+      href: `/skills/${slug}`,
+      workspaceId: typeof row.workspace_id === 'string' ? row.workspace_id : null,
+      projectId: null,
+      visibility: 'private' as const,
+      updatedAt: String(row.updated_at ?? row.installed_at ?? ''),
+      metadata: {
+        skillId: skill.id,
+        slug,
+        category: skill.category ?? null,
+        version: skill.version ?? null,
+        status: row.status ?? null,
+        capabilities: Array.isArray(skill.capabilities) ? skill.capabilities : [],
+        permissionsRequired: Array.isArray(skill.permissions_required) ? skill.permissions_required : [],
+        permissionsApproved: Array.isArray(row.permissions_approved) ? row.permissions_approved : [],
+        requiredSecrets: Array.isArray(skill.required_secrets) ? skill.required_secrets : [],
+        compatibility: Array.isArray(skill.compatibility) ? skill.compatibility : [],
+      },
+    }];
+  });
+
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
       .from('skill_installations')
       .select(`
         id,
+        workspace_id,
+        status,
+        permissions_approved,
+        dependency_install,
         installed_at,
-        skill:skills(id,name,slug,category,description,visibility,published,updated_at,created_at)
+        updated_at,
+        skill:skills(id,name,slug,version,category,description,icon,pricing_model,price_per_call,capabilities,primitives_required,permissions_required,required_secrets,required_skills,optional_skills,compatibility,total_calls,rating,verified)
       `)
       .eq('agent_id', agentId)
       .order('installed_at', { ascending: false });
-    if (!error) {
-      return ((data ?? []) as Array<Record<string, unknown>>).flatMap(row => {
-        const skill = row.skill && typeof row.skill === 'object' ? row.skill as Record<string, unknown> : null;
-        if (!skill) return [];
-        const slug = String(skill.slug ?? skill.id);
-        return [{
-          id: String(row.id ?? skill.id),
-          kind: 'installed_skill' as const,
-          name: String(skill.name ?? 'Skill'),
-          description: String(skill.description ?? skill.category ?? 'Installed skill'),
-          href: `/skills/${slug}`,
-          workspaceId: null,
-          projectId: null,
-          visibility: normalizeVisibility(skill.visibility ?? (skill.published === true ? 'public' : 'private')),
-          updatedAt: String(row.installed_at ?? skill.updated_at ?? skill.created_at ?? ''),
-          metadata: { skillId: skill.id, slug, category: skill.category ?? null },
-        }];
-      });
-    }
+    if (!error) return mapRows((data ?? []) as Array<Record<string, unknown>>);
+
+    const legacy = await supabase
+      .from('skill_installations')
+      .select(`
+        id,
+        workspace_id,
+        installed_at,
+        skill:skills(id,name,slug,category,description,icon,pricing_model,price_per_call,capabilities,primitives_required,total_calls,rating,verified)
+      `)
+      .eq('agent_id', agentId)
+      .order('installed_at', { ascending: false });
+    if (!legacy.error) return mapRows((legacy.data ?? []) as Array<Record<string, unknown>>);
   } catch {
     // Fall through to local state.
   }
@@ -162,7 +217,17 @@ async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
       projectId: null,
       visibility: normalizeVisibility((skill as { visibility?: unknown }).visibility ?? (skill.published ? 'public' : 'private')),
       updatedAt: installation.installed_at,
-      metadata: { skillId: skill.id, slug: skill.slug, category: skill.category },
+      metadata: {
+        skillId: skill.id,
+        slug: skill.slug,
+        category: skill.category,
+        status: installation.status,
+        capabilities: Array.isArray(skill.capabilities) ? skill.capabilities : [],
+        permissionsRequired: Array.isArray(skill.permissions_required) ? skill.permissions_required : [],
+        permissionsApproved: Array.isArray(installation.permissions_approved) ? installation.permissions_approved : [],
+        requiredSecrets: Array.isArray(skill.required_secrets) ? skill.required_secrets : [],
+        compatibility: Array.isArray(skill.compatibility) ? skill.compatibility : [],
+      },
     }];
   });
 }
@@ -378,7 +443,7 @@ export async function listLibrary(params: {
 
   const search = params.search?.trim().toLowerCase() ?? '';
   const limit = Math.max(1, Math.min(params.limit ?? 100, 250));
-  const items = [...explicit, ...appItems, ...installedSkills, ...workflows, ...subagentItems, ...memoryItems, ...fileItems, ...publishedAssets, ...recentActivity]
+  const items = dedupeLibraryItems([...appItems, ...installedSkills, ...workflows, ...subagentItems, ...memoryItems, ...fileItems, ...publishedAssets, ...explicit, ...recentActivity])
     .filter(item => !params.workspaceId || !item.workspaceId || item.workspaceId === params.workspaceId)
     .filter(item => !params.projectId || !item.projectId || item.projectId === params.projectId)
     .filter(item => matchesSearch(item, search))

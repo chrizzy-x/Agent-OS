@@ -6,7 +6,7 @@ import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
-import { Badge, Button, Card, DataTable, EmptyState, FilterChips, LoadingState, PageHeader, SearchBar } from '@/components/os/ui';
+import { Badge, Button, Card, ConfirmationDialog, DataTable, EmptyState, FilterChips, LoadingState, PageHeader, SearchBar } from '@/components/os/ui';
 
 type LibraryKind =
   | 'installed_app'
@@ -75,6 +75,8 @@ export default function LibraryPage() {
   const [filter, setFilter] = useState('all');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [message, setMessage] = useState('');
+  const [workingAssetId, setWorkingAssetId] = useState('');
+  const [removeSkillItem, setRemoveSkillItem] = useState<LibraryItem | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,6 +141,58 @@ export default function LibraryPage() {
     await load();
   }
 
+  function firstCapability(item: LibraryItem): string {
+    const capabilities = Array.isArray(item.metadata?.capabilities) ? item.metadata.capabilities : [];
+    const first = capabilities.find((capability): capability is Record<string, unknown> => Boolean(capability) && typeof capability === 'object' && !Array.isArray(capability));
+    return typeof first?.name === 'string' ? first.name : '';
+  }
+
+  async function runSkill(item: LibraryItem) {
+    const slug = typeof item.metadata?.slug === 'string' ? item.metadata.slug : '';
+    const capability = firstCapability(item);
+    if (!slug || !capability) {
+      setMessage('This installed skill has no executable capability published.');
+      return;
+    }
+    setWorkingAssetId(item.id);
+    setMessage('');
+    try {
+      const response = await fetch('/api/skills/use', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill_slug: slug, capability, params: {} }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string; execution_time_ms?: number };
+      setMessage(response.ok ? `${item.name} ran successfully${typeof payload.execution_time_ms === 'number' ? ` in ${payload.execution_time_ms}ms` : ''}.` : payload.error ?? payload.message ?? 'Skill run failed.');
+    } finally {
+      setWorkingAssetId('');
+    }
+  }
+
+  async function removeSkill(item: LibraryItem) {
+    const skillId = typeof item.metadata?.skillId === 'string' ? item.metadata.skillId : '';
+    if (!skillId) return;
+    setWorkingAssetId(item.id);
+    setMessage('');
+    try {
+      const response = await fetch('/api/skills/uninstall', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ skill_id: skillId }),
+      });
+      const payload = await response.json().catch(() => ({})) as { error?: string; message?: string };
+      setMessage(response.ok ? `${item.name} removed from Library, Studio, workflows, and subagent attachment choices.` : payload.error ?? payload.message ?? 'Remove skill failed.');
+      if (response.ok) {
+        setRemoveSkillItem(null);
+        await load();
+      }
+    } finally {
+      setWorkingAssetId('');
+    }
+  }
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath="/library" />
@@ -199,10 +253,16 @@ export default function LibraryPage() {
                   <div className="os-inline-actions">
                     <Link href={item.href} className="btn-ghost" data-action={item.kind === 'installed_skill' ? 'configure' : 'open'}>{item.kind === 'installed_skill' ? 'Configure' : 'Open'}</Link>
                     {item.kind === 'installed_app' ? <Link href={item.href} className="btn-ghost" data-action="configure">Configure</Link> : null}
+                    {item.kind === 'installed_skill' ? (
+                      <button type="button" className="btn-ghost" data-action="run-skill" disabled={workingAssetId === item.id || !firstCapability(item)} title={!firstCapability(item) ? 'This skill has no executable capability published.' : undefined} onClick={() => void runSkill(item)}>
+                        {workingAssetId === item.id ? 'Running' : 'Run skill'}
+                      </button>
+                    ) : null}
                     {item.kind === 'installed_app' && Array.isArray(item.metadata?.supportedDeviceTargets) && item.metadata.supportedDeviceTargets.length > 0 ? (
                       <button type="button" className="btn-ghost" data-action="update" onClick={() => void installToDevice(item)}>Update</button>
                     ) : null}
-                    {item.kind === 'installed_skill' ? <Link href={item.href} className="btn-ghost" data-action="enable">Enable</Link> : null}
+                    {item.kind === 'installed_skill' ? <Link href="/studio?mode=nl" className="btn-ghost" data-action="use-in-studio">Use in Studio</Link> : null}
+                    {item.kind === 'installed_skill' ? <button type="button" className="btn-ghost danger" data-action="remove-skill" disabled={workingAssetId === item.id} onClick={() => setRemoveSkillItem(item)}>Remove</button> : null}
                   </div>
                 </div>
               </Card>
@@ -221,14 +281,31 @@ export default function LibraryPage() {
               formatDate(item.updatedAt),
               <div key={`${item.id}-actions`} className="os-inline-actions">
                 <Link href={item.href} className="btn-ghost" data-action="open">Open</Link>
+                {item.kind === 'installed_skill' ? (
+                  <button type="button" className="btn-ghost" data-action="run-skill" disabled={workingAssetId === item.id || !firstCapability(item)} title={!firstCapability(item) ? 'This skill has no executable capability published.' : undefined} onClick={() => void runSkill(item)}>
+                    {workingAssetId === item.id ? 'Running' : 'Run skill'}
+                  </button>
+                ) : null}
                 {item.kind === 'installed_app' && Array.isArray(item.metadata?.supportedDeviceTargets) && item.metadata.supportedDeviceTargets.length > 0 ? (
                   <button type="button" className="btn-ghost" data-action="device" onClick={() => void installToDevice(item)}>Install device</button>
                 ) : null}
+                {item.kind === 'installed_skill' ? <button type="button" className="btn-ghost danger" data-action="remove-skill" disabled={workingAssetId === item.id} onClick={() => setRemoveSkillItem(item)}>Remove</button> : null}
               </div>,
             ])}
           />
         )}
       </WorkspaceShell>
+      <ConfirmationDialog
+        open={Boolean(removeSkillItem)}
+        title="Remove skill from Library"
+        body={`Remove ${removeSkillItem?.name ?? 'this skill'} from Library, Studio skill picker, workflow skill nodes, and subagent skill attachments?`}
+        confirmLabel="Remove"
+        busy={Boolean(removeSkillItem && workingAssetId === removeSkillItem.id)}
+        onCancel={() => setRemoveSkillItem(null)}
+        onConfirm={() => {
+          if (removeSkillItem) void removeSkill(removeSkillItem);
+        }}
+      />
     </div>
   );
 }

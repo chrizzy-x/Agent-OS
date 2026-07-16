@@ -52,6 +52,10 @@ describe('Appstore product flow', () => {
     expect(skillDetail).toContain('Run skill');
     expect(skillDetail).toContain('Save access');
     expect(skillDetail).toContain('Revoke access');
+    expect(skillDetail).toContain('Open in Library');
+    expect(skillDetail).toContain('Remove from Library');
+    expect(skillDetail).toContain('Add this skill before running it.');
+    expect(skillDetail).toContain('available in NL Studio, Workflow Builder, and subagent skill attachments');
     expect(skillDetail).toContain('Install Review');
     expect(skillDetail).toContain('Supported Surfaces');
     expect(skillDetail).toContain('Vault Requirements');
@@ -59,6 +63,36 @@ describe('Appstore product flow', () => {
     expect(skillDetail).toContain('No screenshots or design attachments published.');
     expect(skillDetail).toContain('No public reviews yet.');
     expect(skillDetail).not.toContain('>Manage<');
+  });
+
+  it('connects installed skills to Library, Studio, workflows, and subagents', () => {
+    const library = source('components', 'pages', 'LibraryPage.tsx');
+    const libraryService = source('src', 'library', 'service.ts');
+    const skillMarketplace = source('src', 'skills', 'marketplace.ts');
+    const nlStudio = source('components', 'studio', 'NLStudioPanel.tsx');
+    const workflow = source('components', 'studio', 'WorkflowStudioPanel.tsx');
+    const studioBootstrap = source('src', 'studio', 'bootstrap.ts');
+    const subagents = source('components', 'pages', 'SubagentsPage.tsx');
+
+    expect(library).toContain("data-action=\"run-skill\"");
+    expect(library).toContain("data-action=\"remove-skill\"");
+    expect(library).toContain('/api/skills/use');
+    expect(library).toContain('/api/skills/uninstall');
+    expect(libraryService).toContain('permissionsRequired');
+    expect(libraryService).toContain('requiredSecrets');
+    expect(libraryService).toContain('dedupeLibraryItems');
+    expect(libraryService).toContain('installed_skill:${slug || skillId || sourceId || item.id}');
+    expect(skillMarketplace).toContain('skills.length > 0 || !allowLocalSkillMarketplaceFallback()');
+    expect(nlStudio).toContain("resourceMenu === 'skill'");
+    expect(nlStudio).toContain('installedSkills.map(item => ({ ref: item.slug, label: item.name }))');
+    expect(workflow).toContain('Installed skill selector');
+    expect(workflow).toContain('skill.${skill.slug}.run');
+    expect(studioBootstrap).toContain('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK');
+    expect(studioBootstrap).toContain('readLocalRuntimeState');
+    expect(subagents).toContain('Attach installed skills');
+    expect(subagents).toContain('Skill attachments');
+    expect(subagents).toContain('/api/skills/installed');
+    expect(subagents).toContain('skill:${slug}');
   });
 
   it('removes vague Manage labels from Home and Library action surfaces', () => {

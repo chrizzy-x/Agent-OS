@@ -191,7 +191,10 @@ async function loadSkills(): Promise<SkillMarketplaceRecord[]> {
       .from('skills')
       .select('*')
       .eq('published', true);
-    if (!error) return ((data ?? []) as Array<Record<string, unknown>>).map(mapSkillMarketplaceRecord);
+    if (!error) {
+      const skills = ((data ?? []) as Array<Record<string, unknown>>).map(mapSkillMarketplaceRecord);
+      if (skills.length > 0 || !allowLocalSkillMarketplaceFallback()) return skills;
+    }
   } catch {
     // Fall through to local state.
   }

@@ -7,12 +7,14 @@ import { resolveProjectForWorkspace, listProjects } from '../projects/service.js
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { listStudioSessions, createStudioSession, getStudioSessionBundle } from './persistence.js';
 import { listAccessibleSubagents } from '../subagents/service.js';
+import { allowLocalDataFallback } from '../data/discipline.js';
 import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
 import { listVaultSecrets } from '../vault/service.js';
 import { listProjectFiles } from './files.js';
 import { studioModeInitialState } from './modes.js';
 import type { StudioMode } from './types.js';
 import type { StudioSessionRecord } from './persistence.js';
+import { readLocalRuntimeState } from '../storage/local-state.js';
 
 async function loadBootstrapWorkflows(ownerAgentId: string): Promise<Array<Record<string, unknown>>> {
   const supabase = getSupabaseAdmin();
@@ -54,7 +56,31 @@ async function loadBootstrapInstalledSkills(ownerAgentId: string): Promise<Array
     .order('installed_at', { ascending: false });
 
   if (result.error) {
-    return [];
+    if (!allowLocalDataFallback('AGENTOS_ALLOW_LOCAL_SKILL_FALLBACK')) return [];
+    const state = await readLocalRuntimeState();
+    const installed: Array<Record<string, unknown>> = [];
+    for (const installation of state.skills.installations[ownerAgentId] ?? []) {
+      if (installation.status === 'removed' || installation.status === 'disabled') continue;
+      const skill = state.skills.catalog.find(item => item.id === installation.skill_id);
+      if (!skill) continue;
+      installed.push({
+          id: installation.id,
+          workspace_id: installation.workspace_id ?? null,
+          status: installation.status ?? 'active',
+          permissions_approved: installation.permissions_approved ?? [],
+          dependency_install: installation.dependency_install === true,
+          installed_at: installation.installed_at,
+          updated_at: installation.updated_at ?? installation.installed_at,
+          skill: {
+            id: skill.id,
+            name: skill.name,
+            slug: skill.slug,
+            category: skill.category,
+            description: skill.description,
+          },
+      });
+    }
+    return installed;
   }
 
   return (result.data ?? []) as Array<Record<string, unknown>>;
