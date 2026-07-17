@@ -68,7 +68,7 @@ export const DOCS_CATALOG: DocsCatalogEntry[] = [
     href: '/docs/launch',
     title: 'Launch Notes',
     subtitle: 'Release notes for home, Studio, apps, skills, and workflows.',
-    keywords: ['launch', 'release', 'v6', 'v6.6.7'],
+    keywords: ['launch', 'release', 'v6', 'V6.6.8'],
   },
   {
     id: 'docs-features',
@@ -90,5 +90,12 @@ export const DOCS_CATALOG: DocsCatalogEntry[] = [
     title: 'Social Ops Module',
     subtitle: 'Reference module for teams building social automation.',
     keywords: ['social', 'ops', 'module', 'reference'],
+  },
+  {
+    id: 'docs-provenance',
+    href: '/docs/provenance',
+    title: 'Official Provenance',
+    subtitle: 'Canonical AgentOS domain, repository, release, and $sAGENT contract identifiers.',
+    keywords: ['official', 'provenance', 'contract', 'sagent', 'github'],
   },
 ];

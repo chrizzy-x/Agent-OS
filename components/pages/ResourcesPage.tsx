@@ -20,6 +20,7 @@ const RESOURCE_LINKS: ResourceLink[] = [
   { title: 'Tutorials', href: '/docs/templates', group: 'Learn', description: 'Runnable examples and setup walkthroughs.' },
   { title: 'Changelog', href: '/docs/launch', group: 'Release', description: 'Product changes by release.' },
   { title: 'Release Notes', href: '/docs/launch', group: 'Release', description: 'Current release notes and rollout notes.' },
+  { title: 'Official Provenance', href: '/docs/provenance', group: 'Release', description: 'Canonical AgentOS domain, repository, release, and $sAGENT contract identifiers.' },
   { title: 'Roadmap', href: '/ffp', group: 'Plan', description: 'Upcoming architecture and disabled future surfaces.' },
   { title: 'Status', href: '/mcp', group: 'Operate', description: 'Connectivity and runtime health checks.' },
   { title: 'Community', href: '/community', group: 'Explore', description: 'Builders, showcases, and public ecosystem activity.' },
