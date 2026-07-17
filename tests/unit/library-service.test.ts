@@ -5,7 +5,9 @@ const libraryMocks = vi.hoisted(() => ({
   listInstalledAgentApps: vi.fn(),
   getAgentAppPackageCacheStatus: vi.fn(),
   resolveSupportedDeviceTargets: vi.fn(),
+  listExecutions: vi.fn(),
   listAccessibleFiles: vi.fn(),
+  listProjects: vi.fn(),
   listAccessibleSubagents: vi.fn(),
   readLocalRuntimeState: vi.fn(),
 }));
@@ -18,6 +20,14 @@ vi.mock('../../src/appstore/service.js', () => ({
 
 vi.mock('../../src/files/service.js', () => ({
   listAccessibleFiles: libraryMocks.listAccessibleFiles,
+}));
+
+vi.mock('../../src/execution/service.js', () => ({
+  listExecutions: libraryMocks.listExecutions,
+}));
+
+vi.mock('../../src/projects/service.js', () => ({
+  listProjects: libraryMocks.listProjects,
 }));
 
 vi.mock('../../src/subagents/service.js', () => ({
@@ -34,6 +44,7 @@ function chain(data: unknown) {
   return {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     then(resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) {
       return Promise.resolve({ data, error: null }).then(resolve, reject);
@@ -47,6 +58,62 @@ describe('library service', () => {
     libraryMocks.readLocalRuntimeState.mockResolvedValue({ skills: { catalog: [], installations: {} }, libraryItems: [] });
     libraryMocks.getAgentAppPackageCacheStatus.mockResolvedValue({ cached: true, packageRef: 'agentos://workspace/workspace-1/apps/research-kit/1.0.0' });
     libraryMocks.resolveSupportedDeviceTargets.mockReturnValue(['pwa']);
+    libraryMocks.listProjects.mockResolvedValue([{
+      id: 'project-1',
+      workspaceId: 'workspace-1',
+      ownerAgentId: 'agent-1',
+      name: 'Market Research Project',
+      slug: 'market-research',
+      description: 'Durable project context',
+      status: 'active',
+      metadata: {},
+      createdAt: '2026-06-01T05:30:00Z',
+      updatedAt: '2026-06-01T05:30:00Z',
+    }]);
+    libraryMocks.listExecutions.mockResolvedValue([{
+      id: 'execution-1',
+      agentId: 'agent-1',
+      userId: 'agent-1',
+      workspaceId: 'workspace-1',
+      projectId: 'project-1',
+      sessionId: 'session-1',
+      type: 'workflow',
+      sourceType: 'workflow',
+      sourceId: 'workflow-1',
+      workflowId: 'workflow-1',
+      appId: null,
+      skillId: null,
+      mcpServer: null,
+      mcpTool: null,
+      title: 'Research output',
+      status: 'COMPLETED',
+      input: {},
+      output: { summary: 'Finished report' },
+      logs: [],
+      error: null,
+      failure: null,
+      rollback: null,
+      actionType: null,
+      actionSource: null,
+      notificationId: null,
+      deepLink: '/tasks?execution=execution-1',
+      recoveryAction: null,
+      recoveryRequestedAt: null,
+      statusDetail: {},
+      metadata: {},
+      model: null,
+      tokenPrompt: 0,
+      tokenCompletion: 0,
+      tokenTotal: 0,
+      estimatedCost: 0,
+      durationMs: 120,
+      startedAt: null,
+      pausedAt: null,
+      cancelledAt: null,
+      completedAt: '2026-06-01T05:45:00Z',
+      createdAt: '2026-06-01T05:40:00Z',
+      updatedAt: '2026-06-01T05:45:00Z',
+    }]);
     libraryMocks.listInstalledAgentApps.mockResolvedValue([{
       app: {
         id: 'app-1',
@@ -126,6 +193,20 @@ describe('library service', () => {
           metadata: { href: '/library/templates/brief' },
         }]);
       }
+      if (table === 'app_package_cache') {
+        return chain([{
+          id: 'package-1',
+          app_id: 'app-1',
+          workspace_id: 'workspace-1',
+          package_ref: 'agentos://workspace/workspace-1/apps/research-kit/1.0.0',
+          package_payload: { name: 'Research Kit package' },
+          version: '1.0.0',
+          status: 'cached',
+          cached_at: '2026-06-01T10:30:00Z',
+          updated_at: '2026-06-01T10:30:00Z',
+          app: { name: 'Research Kit', slug: 'research-kit', description: 'Research app' },
+        }]);
+      }
       return chain([]);
     });
   });
@@ -137,12 +218,18 @@ describe('library service', () => {
       installed_app: 1,
       installed_skill: 1,
       saved_workflow: 1,
+      project: 1,
       subagent: 1,
+      saved_output: 1,
       file: 1,
+      download: 1,
       template: 1,
     });
     expect(library.items.map(item => item.kind)).toContain('installed_app');
     expect(library.groups.template[0].href).toBe('/library/templates/brief');
+    expect(library.groups.project[0].href).toBe('/projects/project-1');
+    expect(library.groups.saved_output[0].description).toBe('Saved output containing summary.');
+    expect(library.groups.download[0].metadata.packageRef).toBe('agentos://workspace/workspace-1/apps/research-kit/1.0.0');
   });
 
   it('filters by project and search from one library surface', async () => {
@@ -154,7 +241,7 @@ describe('library service', () => {
     });
 
     expect(library.items.every(item => !item.projectId || item.projectId === 'project-1')).toBe(true);
-    expect(library.items.map(item => item.kind)).toEqual(expect.arrayContaining(['subagent', 'saved_workflow']));
+    expect(library.items.map(item => item.kind)).toEqual(expect.arrayContaining(['subagent', 'saved_workflow', 'project', 'saved_output']));
     expect(library.items.find(item => item.kind === 'template')).toBeUndefined();
   });
 });

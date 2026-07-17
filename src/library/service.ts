@@ -1,6 +1,8 @@
 import { getAgentAppPackageCacheStatus, listInstalledAgentApps, resolveSupportedDeviceTargets } from '../appstore/service.js';
+import { listExecutions } from '../execution/service.js';
 import { listAccessibleFiles } from '../files/service.js';
 import { listAccessibleMemoryEntries } from '../memory/service.js';
+import { listProjects } from '../projects/service.js';
 import { listAccessibleSubagents } from '../subagents/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
@@ -10,8 +12,10 @@ export type LibraryItemKind =
   | 'installed_app'
   | 'installed_skill'
   | 'saved_workflow'
+  | 'project'
   | 'subagent'
   | 'memory_collection'
+  | 'saved_output'
   | 'template'
   | 'file'
   | 'published_asset'
@@ -58,8 +62,10 @@ function groupItems(items: LibraryItem[]): LibraryPayload {
     installed_app: [],
     installed_skill: [],
     saved_workflow: [],
+    project: [],
     subagent: [],
     memory_collection: [],
+    saved_output: [],
     template: [],
     file: [],
     published_asset: [],
@@ -138,6 +144,30 @@ async function syncItemsToWorkspaceAssetRegistry(ownerAgentId: string, items: Li
       metadata: { ...item.metadata, libraryKind: item.kind },
     });
   })).catch(() => undefined);
+}
+
+function hasSavedOutput(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+}
+
+function outputDescription(value: unknown): string {
+  if (typeof value === 'string') return value.length > 140 ? `${value.slice(0, 137)}...` : value;
+  if (Array.isArray(value)) return `Saved output with ${value.length} item${value.length === 1 ? '' : 's'}.`;
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value as Record<string, unknown>).slice(0, 4);
+    return keys.length ? `Saved output containing ${keys.join(', ')}.` : 'Saved execution output.';
+  }
+  return 'Saved execution output.';
+}
+
+function outputShape(value: unknown): Record<string, unknown> {
+  if (Array.isArray(value)) return { type: 'array', count: value.length };
+  if (value && typeof value === 'object') return { type: 'object', keys: Object.keys(value as Record<string, unknown>).slice(0, 12) };
+  return { type: typeof value };
 }
 
 async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
@@ -232,6 +262,27 @@ async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
   });
 }
 
+async function listProjectItems(agentId: string, workspaceId?: string | null): Promise<LibraryItem[]> {
+  const projects = await listProjects({ ownerAgentId: agentId, workspaceId, status: 'all' }).catch(() => []);
+  return projects.map(project => ({
+    id: project.id,
+    kind: 'project' as const,
+    name: project.name,
+    description: project.description ?? `${project.status} project context`,
+    href: `/projects/${project.id}`,
+    workspaceId: project.workspaceId,
+    projectId: project.id,
+    visibility: 'private' as const,
+    updatedAt: project.updatedAt,
+    metadata: {
+      status: project.status,
+      slug: project.slug,
+      system: project.metadata.system === true,
+      assetRole: 'context-container',
+    },
+  }));
+}
+
 async function listWorkflows(agentId: string): Promise<LibraryItem[]> {
   try {
     const { data, error } = await getSupabaseAdmin()
@@ -255,6 +306,107 @@ async function listWorkflows(agentId: string): Promise<LibraryItem[]> {
   } catch {
     return [];
   }
+}
+
+async function listSavedOutputs(agentId: string, workspaceId?: string | null): Promise<LibraryItem[]> {
+  const executions = await listExecutions({
+    agentId,
+    workspaceId,
+    status: 'COMPLETED',
+    sourceType: 'all',
+    limit: 50,
+  }).catch(() => []);
+
+  return executions
+    .filter(execution => hasSavedOutput(execution.output))
+    .map(execution => ({
+      id: execution.id,
+      kind: 'saved_output' as const,
+      name: execution.title,
+      description: outputDescription(execution.output),
+      href: execution.deepLink ?? `/tasks?execution=${encodeURIComponent(execution.id)}`,
+      workspaceId: execution.workspaceId,
+      projectId: execution.projectId,
+      visibility: 'private' as const,
+      updatedAt: execution.updatedAt,
+      metadata: {
+        executionId: execution.id,
+        sourceType: execution.sourceType,
+        sourceId: execution.sourceId,
+        workflowId: execution.workflowId,
+        appId: execution.appId,
+        skillId: execution.skillId,
+        durationMs: execution.durationMs,
+        outputShape: outputShape(execution.output),
+      },
+    }));
+}
+
+async function listDownloadedAppPackages(agentId: string): Promise<LibraryItem[]> {
+  const mapPackageRow = (row: Record<string, unknown>): LibraryItem => {
+    const app = row.app && typeof row.app === 'object' && !Array.isArray(row.app) ? row.app as Record<string, unknown> : {};
+    const payload = asRecord(row.package_payload);
+    const manifest = asRecord(payload.manifest);
+    const appId = String(row.app_id ?? payload.id ?? 'app');
+    const slug = typeof app.slug === 'string'
+      ? app.slug
+      : typeof payload.slug === 'string'
+        ? payload.slug
+        : typeof manifest.slug === 'string'
+          ? manifest.slug
+          : '';
+    const version = String(row.version ?? manifest.version ?? '1.0.0');
+    return {
+      id: String(row.id ?? `${appId}:${version}`),
+      kind: 'download' as const,
+      name: String(app.name ?? payload.name ?? manifest.name ?? `Downloaded app package ${appId}`),
+      description: String(app.description ?? payload.description ?? `Cached app package ${version}`),
+      href: slug ? `/appstore/${slug}` : '/appstore',
+      workspaceId: typeof row.workspace_id === 'string' ? row.workspace_id : null,
+      projectId: null,
+      visibility: 'private' as const,
+      updatedAt: String(row.updated_at ?? row.cached_at ?? ''),
+      metadata: {
+        sourceType: 'app_package',
+        appId,
+        slug,
+        version,
+        status: row.status ?? 'cached',
+        packageRef: row.package_ref ?? null,
+      },
+    };
+  };
+
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from('app_package_cache')
+      .select('id,app_id,workspace_id,package_ref,package_payload,version,status,cached_at,updated_at,app:agent_apps(name,slug,description)')
+      .eq('owner_agent_id', agentId)
+      .neq('status', 'removed')
+      .order('cached_at', { ascending: false });
+    if (!error) return ((data ?? []) as Array<Record<string, unknown>>).map(mapPackageRow);
+  } catch {
+    // Fall through to local state.
+  }
+
+  const state = await readLocalRuntimeState();
+  return state.appPackageCache
+    .filter(item => item.ownerAgentId === agentId && item.status !== 'removed')
+    .map(item => {
+      const app = state.agentApps.catalog.find(entry => entry.id === item.appId);
+      return mapPackageRow({
+        id: item.id,
+        app_id: item.appId,
+        workspace_id: item.workspaceId,
+        package_ref: item.packageRef,
+        package_payload: item.packagePayload,
+        version: item.version,
+        status: item.status,
+        cached_at: item.cachedAt,
+        updated_at: item.updatedAt,
+        app: app ? { name: app.name, slug: app.slug, description: app.description } : undefined,
+      });
+    });
 }
 
 async function listPublishedAssets(agentId: string): Promise<LibraryItem[]> {
@@ -362,10 +514,13 @@ export async function listLibrary(params: {
   search?: string | null;
   limit?: number;
 }): Promise<LibraryPayload> {
-  const [installedApps, installedSkills, workflows, subagents, memory, files, publishedAssets, explicit, recentActivity] = await Promise.all([
+  const [installedApps, installedSkills, projects, workflows, savedOutputs, downloadedPackages, subagents, memory, files, publishedAssets, explicit, recentActivity] = await Promise.all([
     listInstalledAgentApps(params.ownerAgentId).catch(() => []),
     listInstalledSkills(params.ownerAgentId),
+    listProjectItems(params.ownerAgentId, params.workspaceId),
     listWorkflows(params.ownerAgentId),
+    listSavedOutputs(params.ownerAgentId, params.workspaceId),
+    listDownloadedAppPackages(params.ownerAgentId),
     listAccessibleSubagents({ viewerAgentId: params.ownerAgentId, workspaceId: params.workspaceId, projectId: params.projectId }).catch(() => []),
     listAccessibleMemoryEntries({ viewerAgentId: params.ownerAgentId, ownerAgentId: params.ownerAgentId, workspaceId: params.workspaceId ?? null, limit: 100 }).catch(() => []),
     listAccessibleFiles({ viewerAgentId: params.ownerAgentId, workspaceId: params.workspaceId ?? undefined, limit: 100 }).catch(() => []),
@@ -443,7 +598,7 @@ export async function listLibrary(params: {
 
   const search = params.search?.trim().toLowerCase() ?? '';
   const limit = Math.max(1, Math.min(params.limit ?? 100, 250));
-  const items = dedupeLibraryItems([...appItems, ...installedSkills, ...workflows, ...subagentItems, ...memoryItems, ...fileItems, ...publishedAssets, ...explicit, ...recentActivity])
+  const items = dedupeLibraryItems([...appItems, ...installedSkills, ...projects, ...workflows, ...savedOutputs, ...downloadedPackages, ...subagentItems, ...memoryItems, ...fileItems, ...publishedAssets, ...explicit, ...recentActivity])
     .filter(item => !params.workspaceId || !item.workspaceId || item.workspaceId === params.workspaceId)
     .filter(item => !params.projectId || !item.projectId || item.projectId === params.projectId)
     .filter(item => matchesSearch(item, search))
