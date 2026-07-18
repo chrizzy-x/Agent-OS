@@ -5,7 +5,7 @@ import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
 import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
-import { Badge, Button, Card, ConfirmationDialog, DataTable, EmptyState, FilterChips, LoadingState, PageHeader, SearchBar } from '@/components/os/ui';
+import { Badge, Button, Card, ConfirmationDialog, DataTable, EmptyState, FilterChips, LoadingState, PageHeader, SearchBar, Select } from '@/components/os/ui';
 
 type LibraryKind =
   | 'installed_app'
@@ -43,6 +43,8 @@ type LibraryPayload = {
   summary: Record<LibraryKind, number>;
 };
 
+type LibrarySort = 'recent' | 'name' | 'type' | 'status';
+
 const FILTERS = [
   { key: 'all', label: 'All', kinds: [] as LibraryKind[] },
   { key: 'apps', label: 'Apps', kinds: ['installed_app'] as LibraryKind[] },
@@ -69,6 +71,29 @@ function formatDate(value: string | null): string {
   }
 }
 
+function sortTimestamp(value: string | null): number {
+  if (!value) return 0;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function metadataText(item: LibraryItem, keys: string[]): string {
+  for (const key of keys) {
+    const value = item.metadata?.[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number') return String(value);
+  }
+  return '';
+}
+
+function metadataList(item: LibraryItem, keys: string[]): string[] {
+  for (const key of keys) {
+    const value = item.metadata?.[key];
+    if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+  }
+  return [];
+}
+
 export default function LibraryPage() {
   const shell = useApplicationShell();
   const [payload, setPayload] = useState<LibraryPayload | null>(null);
@@ -76,6 +101,7 @@ export default function LibraryPage() {
   const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState<LibrarySort>('recent');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [message, setMessage] = useState('');
   const [workingAssetId, setWorkingAssetId] = useState('');
@@ -122,8 +148,14 @@ export default function LibraryPage() {
   const items = useMemo(() => {
     const base = payload?.items ?? [];
     const current = FILTERS.find(item => item.key === filter) ?? FILTERS[0];
-    return current.key === 'all' ? base : base.filter(item => current.kinds.includes(item.kind));
-  }, [filter, payload?.items]);
+    const filtered = current.key === 'all' ? base : base.filter(item => current.kinds.includes(item.kind));
+    return [...filtered].sort((left, right) => {
+      if (sort === 'name') return left.name.localeCompare(right.name);
+      if (sort === 'type') return formatKind(left.kind).localeCompare(formatKind(right.kind)) || left.name.localeCompare(right.name);
+      if (sort === 'status') return metadataText(left, ['status']).localeCompare(metadataText(right, ['status'])) || left.name.localeCompare(right.name);
+      return sortTimestamp(right.updatedAt) - sortTimestamp(left.updatedAt) || left.name.localeCompare(right.name);
+    });
+  }, [filter, payload?.items, sort]);
 
   async function installToDevice(item: LibraryItem) {
     const targets = Array.isArray(item.metadata?.supportedDeviceTargets)
@@ -228,6 +260,44 @@ export default function LibraryPage() {
     return parts.length ? parts.join(' - ') : 'Workspace asset';
   }
 
+function ownerLabel(item: LibraryItem): string {
+    return metadataText(item, ['publisherName', 'developerName', 'authorName', 'developerHandle', 'ownerName', 'sourceType']) || 'Workspace';
+  }
+
+  function installedStatus(item: LibraryItem): string {
+    if (item.kind === 'installed_app' || item.kind === 'installed_skill') return metadataText(item, ['status']) || 'installed';
+    if (item.kind === 'download') return metadataText(item, ['status']) || 'cached';
+    return metadataText(item, ['status']) || 'saved';
+  }
+
+  function permissionLabel(item: LibraryItem): string {
+    const permissions = metadataList(item, ['permissionsRequired', 'permissionsApproved']);
+    if (permissions.length === 0) return 'No special permissions';
+    return `${permissions.length} permission${permissions.length === 1 ? '' : 's'}`;
+  }
+
+  function compatibilityLabel(item: LibraryItem): string {
+    const compatibility = metadataList(item, ['compatibility', 'supportedDeviceTargets']);
+    if (compatibility.length === 0) return item.kind === 'installed_app' ? 'AgentOS app' : 'Workspace';
+    return compatibility.slice(0, 3).join(', ');
+  }
+
+  function lastUsedDate(item: LibraryItem): string {
+    return formatDate(metadataText(item, ['lastOpenedAt', 'lastUsedAt', 'completedAt', 'installedAt']) || item.updatedAt);
+  }
+
+  function renderMetadata(item: LibraryItem) {
+    return (
+      <div className="library-card-meta" aria-label={`${item.name} metadata`}>
+        <span><b>Last used</b>{lastUsedDate(item)}</span>
+        <span><b>Owner</b>{ownerLabel(item)}</span>
+        <span><b>Status</b>{installedStatus(item)}</span>
+        <span><b>Permissions</b>{permissionLabel(item)}</span>
+        <span><b>Compatibility</b>{compatibilityLabel(item)}</span>
+      </div>
+    );
+  }
+
   function renderActions(item: LibraryItem) {
     const removable = item.kind === 'installed_skill' || item.kind === 'installed_app';
     const configureHref = item.kind === 'installed_app' || item.kind === 'installed_skill' ? item.href : undefined;
@@ -303,11 +373,29 @@ export default function LibraryPage() {
         <SearchBar value={search} onChange={event => setSearch(event.target.value)} placeholder="Search library assets" />
         <div className="library-toolbar">
           <FilterChips items={FILTERS.map(item => item.label)} active={FILTERS.find(item => item.key === filter)?.label ?? 'All'} onChange={label => setFilter(FILTERS.find(item => item.label === label)?.key ?? 'all')} />
-          <div className="os-segmented-control" role="group" aria-label="Library view">
-            <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')}>Grid</button>
-            <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>List</button>
+          <div className="library-toolbar-controls">
+            <label className="library-sort-control">
+              <span>Sort</span>
+              <Select value={sort} onChange={event => setSort(event.target.value as LibrarySort)} aria-label="Sort Library">
+                <option value="recent">Recent</option>
+                <option value="name">Name</option>
+                <option value="type">Type</option>
+                <option value="status">Status</option>
+              </Select>
+            </label>
+            <div className="os-segmented-control" role="group" aria-label="Library view">
+              <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')}>Grid</button>
+              <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>List</button>
+            </div>
           </div>
         </div>
+        {payload ? (
+          <div className="library-result-meta" aria-live="polite">
+            <Badge tone="default">{items.length} shown</Badge>
+            <span>{FILTERS.find(item => item.key === filter)?.label ?? 'All'} assets</span>
+            <span>Sorted by {sort === 'recent' ? 'recent activity' : sort}</span>
+          </div>
+        ) : null}
         {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
 
         {loading ? <LoadingState label="Loading library" /> : !payload ? (
@@ -333,6 +421,7 @@ export default function LibraryPage() {
                     <span>{formatDate(item.updatedAt)}</span>
                     <span>{metadataLine(item)}</span>
                   </div>
+                  {renderMetadata(item)}
                   {renderActions(item)}
                 </div>
               </Card>
@@ -340,15 +429,18 @@ export default function LibraryPage() {
           </div>
         ) : (
           <DataTable
-            columns={['Asset', 'Type', 'Visibility', 'Updated', '']}
+            columns={['Asset', 'Type', 'Owner', 'Status', 'Permissions', 'Compatibility', 'Updated', '']}
             rows={items.map(item => [
               <div key={`${item.id}-asset`}>
                 <div className="os-entity-title">{item.name}</div>
                 <div className="os-entity-copy">{item.description}</div>
               </div>,
               formatKind(item.kind),
-              <Badge key={`${item.id}-visibility`} tone={item.visibility === 'public' ? 'success' : item.visibility === 'workspace' ? 'accent' : 'default'}>{item.visibility}</Badge>,
-              formatDate(item.updatedAt),
+              ownerLabel(item),
+              <Badge key={`${item.id}-status`} tone={installedStatus(item).toLowerCase().includes('active') || installedStatus(item).toLowerCase().includes('installed') ? 'success' : 'default'}>{installedStatus(item)}</Badge>,
+              permissionLabel(item),
+              compatibilityLabel(item),
+              lastUsedDate(item),
               <div key={`${item.id}-actions`}>{renderActions(item)}</div>,
             ])}
           />

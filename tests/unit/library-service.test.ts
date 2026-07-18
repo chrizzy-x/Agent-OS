@@ -119,15 +119,25 @@ describe('library service', () => {
         id: 'app-1',
         name: 'Research Kit',
         slug: 'research-kit',
+        category: 'Research',
         description: 'Research app',
+        publisherName: 'AgentOS Labs',
+        developerHandle: 'agentos-labs',
         workspaceId: 'workspace-1',
         visibility: 'public',
+        platforms: ['AgentOS Cloud'],
+        deviceTargets: ['pwa'],
+        permissionsRequired: ['files.read'],
+        manifest: { version: '1.0.0', permissions: ['files.read'] },
       },
       installation: {
         id: 'install-1',
         workspaceId: 'workspace-1',
         updatedAt: '2026-06-01T10:00:00Z',
+        installedAt: '2026-06-01T09:55:00Z',
+        lastOpenedAt: '2026-06-01T10:05:00Z',
         status: 'active',
+        permissionsApproved: ['files.read'],
       },
     }]);
     libraryMocks.listAccessibleSubagents.mockResolvedValue([{
@@ -160,10 +170,15 @@ describe('library service', () => {
             id: 'skill-1',
             name: 'Research Notes',
             slug: 'research-notes',
+            author_name: 'AgentOS Labs',
+            developer_handle: 'agentos-labs',
+            version: '1.2.0',
             category: 'Research',
             description: 'Capture notes',
             visibility: 'public',
             published: true,
+            permissions_required: ['files.read'],
+            compatibility: ['Super AgentOS', 'Workflows'],
           },
         }]);
       }
@@ -227,6 +242,10 @@ describe('library service', () => {
     });
     expect(library.items.map(item => item.kind)).toContain('installed_app');
     expect(library.groups.template[0].href).toBe('/library/templates/brief');
+    expect(library.groups.installed_app[0].metadata.publisherName).toBe('AgentOS Labs');
+    expect(library.groups.installed_app[0].metadata.permissionsRequired).toEqual(['files.read']);
+    expect(library.groups.installed_skill[0].metadata.authorName).toBe('AgentOS Labs');
+    expect(library.groups.installed_skill[0].metadata.compatibility).toEqual(['Super AgentOS', 'Workflows']);
     expect(library.groups.project[0].href).toBe('/projects/project-1');
     expect(library.groups.saved_output[0].description).toBe('Saved output containing summary.');
     expect(library.groups.download[0].metadata.packageRef).toBe('agentos://workspace/workspace-1/apps/research-kit/1.0.0');

@@ -37,6 +37,22 @@ Library exposes direct actions where the backing API is connected:
 
 Actions that still need dedicated backend support are visible but disabled with an explanation. This includes pinning, duplicate or fork operations, share permissions, project assignment, export, and deletion for asset types without a safe removal API.
 
+## Search, Filters, and Sorting
+
+Library supports direct search across item name, description, asset type, and structured metadata. Users can filter by asset family:
+
+- Apps
+- Skills
+- Projects
+- Incognito subagents
+- Workflows
+- Saved outputs
+- Connectors
+- Memory
+- Files and downloads
+
+Users can sort the current result set by recent activity, name, type, or status. Grid and list views both show last used date, owner or developer, permissions, installed or saved status, and compatibility where the backing asset provides that metadata.
+
 ## Data Rules
 
 Library does not show fake installs, fake ratings, fake workflows, fake logs, fake outputs, or fake downloaded packages. Secrets never become Library memory assets. Vault-controlled credentials remain behind Vault permission flows.

@@ -188,6 +188,8 @@ async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
       metadata: {
         skillId: skill.id,
         slug,
+        authorName: skill.author_name ?? null,
+        developerHandle: skill.developer_handle ?? null,
         category: skill.category ?? null,
         version: skill.version ?? null,
         status: row.status ?? null,
@@ -212,7 +214,7 @@ async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
         dependency_install,
         installed_at,
         updated_at,
-        skill:skills(id,name,slug,version,category,description,icon,pricing_model,price_per_call,capabilities,primitives_required,permissions_required,required_secrets,required_skills,optional_skills,compatibility,total_calls,rating,verified)
+        skill:skills(id,name,slug,version,author_name,developer_handle,category,description,icon,pricing_model,price_per_call,capabilities,primitives_required,permissions_required,required_secrets,required_skills,optional_skills,compatibility,total_calls,rating,verified)
       `)
       .eq('agent_id', agentId)
       .order('installed_at', { ascending: false });
@@ -250,6 +252,8 @@ async function listInstalledSkills(agentId: string): Promise<LibraryItem[]> {
       metadata: {
         skillId: skill.id,
         slug: skill.slug,
+        authorName: (skill as { author_name?: unknown }).author_name ?? null,
+        developerHandle: (skill as { developer_handle?: unknown }).developer_handle ?? null,
         category: skill.category,
         status: installation.status,
         capabilities: Array.isArray(skill.capabilities) ? skill.capabilities : [],
@@ -533,6 +537,11 @@ export async function listLibrary(params: {
     const workspaceId = entry.installation.workspaceId ?? entry.app.workspaceId ?? null;
     const installedVersion = entry.app.manifest?.version ?? entry.installation.installedVersion ?? '1.0.0';
     const supportedDeviceTargets = resolveSupportedDeviceTargets(entry.app);
+    const appPlatforms = Array.isArray(entry.app.platforms) ? entry.app.platforms : [];
+    const appDeviceTargets = Array.isArray(entry.app.deviceTargets) ? entry.app.deviceTargets : [];
+    const appPermissions = Array.isArray(entry.app.permissionsRequired) ? entry.app.permissionsRequired : [];
+    const manifestPermissions = Array.isArray(entry.app.manifest?.permissions) ? entry.app.manifest.permissions : [];
+    const approvedPermissions = Array.isArray(entry.installation.permissionsApproved) ? entry.installation.permissionsApproved : [];
     const cache = await getAgentAppPackageCacheStatus({
       ownerAgentId: params.ownerAgentId,
       workspaceId,
@@ -552,8 +561,18 @@ export async function listLibrary(params: {
       metadata: {
         appId: entry.app.id,
         slug: entry.app.slug,
+        publisherName: entry.app.publisherName,
+        developerHandle: entry.app.developerHandle,
+        category: entry.app.category,
+        version: installedVersion,
         status: entry.installation.status,
+        installedStatus: entry.installation.status,
+        installedAt: entry.installation.installedAt,
+        lastOpenedAt: entry.installation.lastOpenedAt,
         supportedDeviceTargets,
+        compatibility: appPlatforms.length ? appPlatforms : appDeviceTargets,
+        permissionsRequired: appPermissions.length ? appPermissions : manifestPermissions,
+        permissionsApproved: approvedPermissions,
         packageCachedForOfflineInstall: cache.cached,
         packageRef: cache.packageRef,
       },
