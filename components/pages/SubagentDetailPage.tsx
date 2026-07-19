@@ -6,11 +6,13 @@ import { useRouter } from 'next/navigation';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { summarizeAgentResult } from '@/src/ui/presenters';
+import { fetchBrowserSessionState, fetchWithBrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
 import {
   ActivityFeed,
   Badge,
   Button,
   Card,
+  ConfirmationDialog,
   EmptyState,
   Input,
   LoadingState,
@@ -28,6 +30,8 @@ type SubagentPayload = {
     description: string | null;
     instructions: string;
     status: string;
+    workspaceId: string;
+    projectId: string | null;
     visibility: 'private' | 'workspace' | 'public';
     exposedCapabilities: string[];
   };
@@ -35,6 +39,7 @@ type SubagentPayload = {
     model: string;
     temperature: number;
     behavior: string;
+    allowedApps?: string[];
     allowedTools: string[];
     permissions: Record<string, boolean>;
   };
@@ -47,7 +52,39 @@ type SubagentPayload = {
   workflows: Array<{ id: string; name: string; summary: string | null; status: string }>;
 };
 
-const TABS = ['Configure', 'Instructions', 'Assignments', 'Memory', 'Skills', 'Tools', 'Permissions', 'Activity'];
+type InstalledApp = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+};
+
+type ProjectOption = {
+  id: string;
+  name: string;
+  status: string;
+};
+
+const TABS = ['Configure', 'Instructions', 'Assignments', 'Memory', 'Skills', 'Apps', 'Tools', 'Permissions', 'Activity'];
+
+function visibilityLabel(value: 'private' | 'workspace' | 'public'): string {
+  if (value === 'private') return 'Incognito';
+  if (value === 'workspace') return 'Workflow';
+  return 'Public';
+}
+
+function statusLabel(value: string): string {
+  if (value === 'archived') return 'Paused';
+  return value.replace(/^\w/, char => char.toUpperCase());
+}
+
+function capabilityToken(kind: 'app' | 'skill', slug: string): string {
+  return `${kind}:${slug}`;
+}
+
+function manualCapabilities(values: string[] = []): string[] {
+  return values.filter(item => !item.startsWith('skill:') && !item.startsWith('app:'));
+}
 
 type SubagentDetailPageProps = {
   activePath?: string;
@@ -63,20 +100,50 @@ export default function SubagentDetailPage({
   const id = params?.id ?? '';
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<SubagentPayload | null>(null);
+  const [authState, setAuthState] = useState<BrowserSessionAuthState>('signed_out');
   const [tab, setTab] = useState('Configure');
   const [command, setCommand] = useState('');
   const [result, setResult] = useState('');
   const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
   const [shareTarget, setShareTarget] = useState('');
   const [workflowAssignment, setWorkflowAssignment] = useState('');
   const [memoryAssignment, setMemoryAssignment] = useState('');
+  const [projectAssignment, setProjectAssignment] = useState('');
+  const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/subagents/${id}`, { cache: 'no-store' });
-      const data = await res.json();
-      setPayload(data);
+      const sessionState = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+      setAuthState(sessionState.state);
+      if (!sessionState.session) {
+        setPayload(null);
+        return;
+      }
+      const { response, authState: nextAuthState } = await fetchWithBrowserSession(`/api/subagents/${id}`, { cache: 'no-store' });
+      setAuthState(nextAuthState);
+      const data = await response.json();
+      const nextPayload = response.ok ? data as SubagentPayload : null;
+      setPayload(nextPayload);
+      setProjectAssignment(nextPayload?.subagent.projectId ?? '');
+      if (nextPayload) {
+        const [appsRes, projectsRes] = await Promise.all([
+          fetchWithBrowserSession(`/api/apps/installed?workspaceId=${encodeURIComponent(nextPayload.subagent.workspaceId)}`, { cache: 'no-store' }),
+          fetchWithBrowserSession(`/api/projects?workspace=${encodeURIComponent(nextPayload.subagent.workspaceId)}`, { cache: 'no-store' }),
+        ]);
+        const appsData = await appsRes.response.json().catch(() => ({})) as { installedApps?: Array<Record<string, unknown>> };
+        const projectsData = await projectsRes.response.json().catch(() => ({})) as { projects?: ProjectOption[] };
+        setInstalledApps((appsData.installedApps ?? []).map(item => ({
+          id: String(item.id ?? item.slug ?? ''),
+          name: String(item.name ?? 'App'),
+          slug: String(item.slug ?? item.id ?? ''),
+          description: String(item.description ?? 'Installed app'),
+        })).filter(item => item.id && item.slug));
+        setProjects(projectsData.projects ?? []);
+      }
     } catch {
       setPayload(null);
     } finally {
@@ -93,33 +160,44 @@ export default function SubagentDetailPage({
     () => payload?.installedSkills.map(item => item.skill?.name || item.skill?.slug || 'Skill') ?? [],
     [payload],
   );
+  const attachedAppNames = useMemo(() => {
+    const tokens = subagent?.exposedCapabilities ?? [];
+    const names = tokens
+      .filter(item => item.startsWith('app:'))
+      .map(item => item.slice('app:'.length))
+      .map(slug => installedApps.find(app => app.slug === slug)?.name ?? slug);
+    return names.length ? names.join(', ') : 'No apps attached';
+  }, [installedApps, subagent?.exposedCapabilities]);
 
   async function save() {
     if (!subagent) return;
     setSaving(true);
-    await fetch(`/api/subagents/${subagent.id}`, {
+    setMessage('');
+    const result = await fetchWithBrowserSession(`/api/subagents/${subagent.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(subagent),
     });
+    const body = await result.response.json().catch(() => ({})) as { error?: string; message?: string };
+    setMessage(result.response.ok ? 'Subagent saved.' : body.error ?? body.message ?? 'Save failed.');
     setSaving(false);
-    await load();
+    if (result.response.ok) await load();
   }
 
   async function testRun() {
     if (!subagent || !command.trim()) return;
-    const res = await fetch(`/api/subagents/${subagent.id}/command`, {
+    const res = await fetchWithBrowserSession(`/api/subagents/${subagent.id}/command`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command }),
     });
-    const data = await res.json();
+    const data = await res.response.json();
     setResult(summarizeAgentResult(data.result ?? data));
   }
 
   async function shareSubagent() {
     if (!subagent || !shareTarget.trim()) return;
-    await fetch('/api/permissions/grants', {
+    await fetchWithBrowserSession('/api/permissions/grants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -135,7 +213,7 @@ export default function SubagentDetailPage({
   }
 
   async function revokeShare(grantId: string) {
-    await fetch(`/api/permissions/grants?grantId=${encodeURIComponent(grantId)}`, {
+    await fetchWithBrowserSession(`/api/permissions/grants?grantId=${encodeURIComponent(grantId)}`, {
       method: 'DELETE',
     });
     await load();
@@ -143,7 +221,7 @@ export default function SubagentDetailPage({
 
   async function assignResource(targetType: 'workflow' | 'memory', targetId: string) {
     if (!subagent || !targetId) return;
-    await fetch('/api/permissions/grants', {
+    await fetchWithBrowserSession('/api/permissions/grants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -160,17 +238,82 @@ export default function SubagentDetailPage({
     await load();
   }
 
+  async function assignProject() {
+    if (!subagent || !projectAssignment) return;
+    setSaving(true);
+    setMessage('');
+    const result = await fetchWithBrowserSession(`/api/subagents/${subagent.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: projectAssignment }),
+    });
+    const body = await result.response.json().catch(() => ({})) as { error?: string; message?: string };
+    setMessage(result.response.ok ? 'Project assignment updated.' : body.error ?? body.message ?? 'Project assignment failed.');
+    setSaving(false);
+    if (result.response.ok) await load();
+  }
+
+  async function duplicateSubagent() {
+    if (!subagent) return;
+    setSaving(true);
+    setMessage('');
+    const result = await fetchWithBrowserSession('/api/subagents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspaceId: subagent.workspaceId,
+        projectId: subagent.projectId,
+        name: `${subagent.name} copy`,
+        description: subagent.description,
+        instructions: subagent.instructions,
+        visibility: subagent.visibility,
+        exposedCapabilities: subagent.exposedCapabilities,
+      }),
+    });
+    const body = await result.response.json().catch(() => ({})) as { subagent?: { id?: string }; error?: string; message?: string };
+    setSaving(false);
+    if (!result.response.ok || !body.subagent?.id) {
+      setMessage(body.error ?? body.message ?? 'Duplicate failed.');
+      return;
+    }
+    router.push(`/subagents/${encodeURIComponent(body.subagent.id)}`);
+  }
+
+  async function updateStatus(status: 'active' | 'archived') {
+    if (!subagent) return;
+    setSaving(true);
+    setMessage('');
+    const result = await fetchWithBrowserSession(`/api/subagents/${subagent.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    const body = await result.response.json().catch(() => ({})) as { error?: string; message?: string };
+    setMessage(result.response.ok ? (status === 'active' ? 'Subagent resumed.' : 'Subagent paused.') : body.error ?? body.message ?? 'Status update failed.');
+    setSaving(false);
+    if (result.response.ok) await load();
+  }
+
+  async function toggleApp(slug: string) {
+    if (!subagent) return;
+    const token = capabilityToken('app', slug);
+    const next = subagent.exposedCapabilities.includes(token)
+      ? subagent.exposedCapabilities.filter(item => item !== token)
+      : [...subagent.exposedCapabilities, token];
+    setPayload(current => current ? { ...current, subagent: { ...current.subagent, exposedCapabilities: next } } : current);
+  }
+
   async function deleteSubagent() {
-    if (!subagent || !window.confirm(`Delete ${subagent.name}?`)) return;
-    const response = await fetch(`/api/subagents/${subagent.id}`, { method: 'DELETE' });
-    if (response.ok) router.push('/subagents');
+    if (!subagent) return;
+    const result = await fetchWithBrowserSession(`/api/subagents/${subagent.id}`, { method: 'DELETE' });
+    if (result.response.ok) router.push('/subagents');
   }
 
   return (
     <div style={{ minHeight: '100vh' }}>
       <Nav activePath={activePath} />
       <WorkspaceShell
-        activePath="/agents"
+        activePath={activePath}
         aside={(
           <Card>
             <div className="os-entity-title" style={{ marginBottom: 12 }}>Run test</div>
@@ -182,24 +325,31 @@ export default function SubagentDetailPage({
           </Card>
         )}
       >
-        {loading ? <LoadingState label="Loading agent" /> : !payload || !subagent ? (
-          <EmptyState title="Subagent not found" body="This incognito subagent is unavailable or you do not have access." />
+        {loading ? <LoadingState label="Loading subagent" /> : !payload || !subagent ? (
+          authState === 'expired'
+            ? <EmptyState title="Session expired" body="Sign in again to manage this subagent." action={<Button href="/signin">Sign in again</Button>} />
+            : authState === 'signed_out'
+              ? <EmptyState title="Sign in required" body="Sign in to manage this subagent." action={<Button href="/signin">Sign in</Button>} />
+              : <EmptyState title="Subagent not found" body="This incognito subagent is unavailable or you do not have access." />
         ) : (
           <>
             <PageHeader
-              eyebrow="Agent details"
+              eyebrow="Subagent"
               title={subagent.name}
               subtitle={subagent.description ?? 'Incognito Mode subagent'}
               actions={(
                 <>
-                  <Badge tone="success">{subagent.status}</Badge>
-                  <Badge tone={subagent.visibility === 'public' ? 'success' : subagent.visibility === 'workspace' ? 'accent' : 'default'}>{subagent.visibility}</Badge>
+                  <Badge tone={subagent.status === 'active' ? 'success' : 'warning'}>{statusLabel(subagent.status)}</Badge>
+                  <Badge tone={subagent.visibility === 'public' ? 'success' : subagent.visibility === 'workspace' ? 'accent' : 'default'}>{visibilityLabel(subagent.visibility)}</Badge>
                   <Button variant="secondary" onClick={() => void save()}>{saving ? 'Saving...' : 'Save'}</Button>
-                  <Button variant="danger" onClick={() => void deleteSubagent()}>Delete</Button>
+                  <Button variant="secondary" onClick={() => void duplicateSubagent()} disabled={saving}>Duplicate</Button>
+                  <Button variant="secondary" onClick={() => void updateStatus(subagent.status === 'archived' ? 'active' : 'archived')} disabled={saving}>{subagent.status === 'archived' ? 'Resume' : 'Pause'}</Button>
+                  <Button variant="destructive" onClick={() => setDeleteOpen(true)}>Delete</Button>
                   <Button onClick={() => void testRun()}>Run test</Button>
                 </>
               )}
             />
+            {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
             <Card>
               <Tabs tabs={TABS.map(item => ({ key: item, label: item }))} active={tab} onChange={setTab} />
             </Card>
@@ -207,32 +357,39 @@ export default function SubagentDetailPage({
             {tab === 'Configure' ? (
               <Card>
                 <div style={{ display: 'grid', gap: 12 }}>
-                  <Input value={subagent.name} onChange={event => setPayload(current => current ? { ...current, subagent: { ...current.subagent, name: event.target.value } } : current)} />
-                  <Input value={subagent.description ?? ''} onChange={event => setPayload(current => current ? { ...current, subagent: { ...current.subagent, description: event.target.value } } : current)} placeholder="Description" />
+                  <label className="os-field-label" htmlFor="subagent-name">Subagent name</label>
+                  <Input id="subagent-name" value={subagent.name} onChange={event => setPayload(current => current ? { ...current, subagent: { ...current.subagent, name: event.target.value } } : current)} />
+                  <label className="os-field-label" htmlFor="subagent-description">Description</label>
+                  <Input id="subagent-description" value={subagent.description ?? ''} onChange={event => setPayload(current => current ? { ...current, subagent: { ...current.subagent, description: event.target.value } } : current)} placeholder="Description" />
                   <div style={{ display: 'grid', gridTemplateColumns: '200px minmax(0, 1fr)', gap: 12 }}>
                     <select
+                      aria-label="Subagent type"
                       value={subagent.visibility}
                       onChange={event => setPayload(current => current ? { ...current, subagent: { ...current.subagent, visibility: event.target.value as 'private' | 'workspace' | 'public' } } : current)}
                       style={{ minHeight: 44, borderRadius: 12, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', color: 'inherit', padding: '0 12px' }}
                     >
-                      <option value="private">private</option>
-                      <option value="workspace">workspace</option>
-                      <option value="public">public</option>
+                      <option value="private">Incognito</option>
+                      <option value="workspace">Workflow</option>
+                      <option value="public">Public</option>
                     </select>
                     <Input
-                      value={subagent.exposedCapabilities.join(', ')}
+                      value={manualCapabilities(subagent.exposedCapabilities).join(', ')}
                       onChange={event => setPayload(current => current ? {
                         ...current,
                         subagent: {
                           ...current.subagent,
-                          exposedCapabilities: event.target.value.split(',').map(item => item.trim()).filter(Boolean),
+                          exposedCapabilities: [
+                            ...event.target.value.split(',').map(item => item.trim()).filter(Boolean),
+                            ...current.subagent.exposedCapabilities.filter(item => item.startsWith('skill:') || item.startsWith('app:')),
+                          ],
                         },
                       } : current)}
-                      placeholder="Exposed capabilities"
+                      placeholder="Manual capabilities"
                     />
                   </div>
                   <div className="os-entity-copy">Model: {payload.profile.model} | Temperature: {payload.profile.temperature} | Behavior: {payload.profile.behavior}</div>
-                  <div className="os-entity-copy">Memory: {payload.memory.length} | Files: {payload.fileCount} | Vault: {payload.vaultAssignments.length}</div>
+                  <div className="os-entity-copy">Memory scope: subagent namespace only. Memory: {payload.memory.length} | Files: {payload.fileCount} | Vault: {payload.vaultAssignments.length}</div>
+                  <div className="os-entity-copy">Attached apps: {attachedAppNames}</div>
                   <label className="os-inline-actions">
                     <input
                       type="checkbox"
@@ -250,7 +407,8 @@ export default function SubagentDetailPage({
 
             {tab === 'Instructions' ? (
               <Card>
-                <Textarea value={subagent.instructions} onChange={event => setPayload(current => current ? { ...current, subagent: { ...current.subagent, instructions: event.target.value } } : current)} />
+                <label className="os-field-label" htmlFor="subagent-instructions">Instructions</label>
+                <Textarea id="subagent-instructions" value={subagent.instructions} onChange={event => setPayload(current => current ? { ...current, subagent: { ...current.subagent, instructions: event.target.value } } : current)} />
               </Card>
             ) : null}
 
@@ -272,6 +430,16 @@ export default function SubagentDetailPage({
 
             {tab === 'Assignments' ? (
               <div style={{ display: 'grid', gap: 12 }}>
+                <Card>
+                  <div style={{ width: '100%', display: 'grid', gap: 10 }}>
+                    <div className="os-entity-title">Project Assignment</div>
+                    <select className="os-select" aria-label="Project assignment" value={projectAssignment} onChange={event => setProjectAssignment(event.target.value)}>
+                      <option value="">Select project</option>
+                      {projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                    <Button onClick={() => void assignProject()} disabled={!projectAssignment || projectAssignment === subagent.projectId} disabledReason={!projectAssignment ? 'Select a project first.' : projectAssignment === subagent.projectId ? 'This subagent is already assigned to that project.' : undefined}>Assign project</Button>
+                  </div>
+                </Card>
                 <Card>
                   <div style={{ width: '100%', display: 'grid', gap: 10 }}>
                     <div className="os-entity-title">Workflow Assignment</div>
@@ -308,6 +476,27 @@ export default function SubagentDetailPage({
               <Card>
                 <div className="os-entity-title" style={{ marginBottom: 12 }}>Installed skills</div>
                 <div className="os-entity-copy">{skillNames.join(', ') || 'No installed skills'}</div>
+              </Card>
+            ) : null}
+
+            {tab === 'Apps' ? (
+              <Card>
+                <div className="os-entity-title" style={{ marginBottom: 12 }}>Attached apps</div>
+                <div className="os-entity-copy" style={{ marginBottom: 12 }}>Apps are attached as capability tokens for routing. Dedicated app-assignment records will replace this when the backend supports them.</div>
+                {installedApps.length ? (
+                  <div className="os-drawer-stack">
+                    {installedApps.map(app => (
+                      <label key={app.id} className="os-inline-actions">
+                        <input
+                          type="checkbox"
+                          checked={subagent.exposedCapabilities.includes(capabilityToken('app', app.slug))}
+                          onChange={() => void toggleApp(app.slug)}
+                        />
+                        {app.name}
+                      </label>
+                    ))}
+                  </div>
+                ) : <div className="os-entity-copy">Install an app before attaching one to this subagent.</div>}
               </Card>
             ) : null}
 
@@ -359,6 +548,15 @@ export default function SubagentDetailPage({
           </>
         )}
       </WorkspaceShell>
+      <ConfirmationDialog
+        open={deleteOpen}
+        title="Delete subagent"
+        body={`Delete ${subagent?.name ?? 'this subagent'}? The backend removes it from active use and keeps history available for audit where supported.`}
+        confirmLabel="Delete"
+        busy={saving}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => void deleteSubagent()}
+      />
     </div>
   );
 }
