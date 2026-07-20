@@ -29,6 +29,7 @@ type Secret = {
   version: number;
   updatedAt: string;
   lastAccessedAt: string | null;
+  maskedValue?: string;
   assignedAppsCount?: number;
   assignedSubagentsCount?: number;
   assignedWorkflowsCount?: number;
@@ -59,7 +60,7 @@ type VersionEntry = {
   createdAt: string;
 };
 
-type DrawerId = 'secret-details' | 'secret-history' | 'secret-assign';
+type DrawerId = 'secret-details' | 'secret-history' | 'secret-assign' | 'secret-edit';
 
 type SubjectType = 'app' | 'subagent' | 'workflow' | 'skill' | 'session' | 'sdk_credential' | 'super_agentos';
 type VaultView = 'secrets' | 'apiKeys' | 'credentials' | 'wallets' | 'audit';
@@ -104,6 +105,7 @@ export default function VaultPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
   const [disableConfirm, setDisableConfirm] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [draftValue, setDraftValue] = useState('');
   const [subjectType, setSubjectType] = useState<SubjectType>('app');
@@ -225,6 +227,28 @@ export default function VaultPage() {
     }
   }
 
+  async function renameSecret() {
+    if (!selected) return;
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/vault', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secretId: selected.id, action: 'rename', name: draftName }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Secret label updated.' : payload.error ?? 'Update failed');
+      if (response.ok) {
+        setDraftName('');
+        drawer.openDrawer('secret-details', selected.id);
+        await refresh(selected.id);
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function toggleSecretStatus() {
     if (!selected) return;
     setWorking(true);
@@ -241,6 +265,27 @@ export default function VaultPage() {
       if (response.ok) {
         setDisableConfirm(false);
         await refresh(selected.id);
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function deleteSecret() {
+    if (!selected) return;
+    const secretId = selected.id;
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch(`/api/vault?secretId=${encodeURIComponent(secretId)}`, {
+        method: 'DELETE',
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Secret deleted.' : payload.error ?? 'Delete failed');
+      if (response.ok) {
+        setDeleteConfirm(false);
+        drawer.closeDrawer();
+        await refresh();
       }
     } finally {
       setWorking(false);
@@ -354,9 +399,10 @@ export default function VaultPage() {
         ) : (
           <Card>
             <DataTable
-              columns={['Name', 'Status', 'Last used', 'Assigned apps', 'Assigned subagents', 'Assigned workflows', 'Actions']}
+              columns={['Name', 'Masked value', 'Status', 'Last used', 'Assigned apps', 'Assigned subagents', 'Assigned workflows', 'Actions']}
               rows={secrets.map(secret => [
                 <button key={`${secret.id}-pick`} type="button" onClick={() => drawer.openDrawer('secret-details', secret.id)} style={{ background: 'transparent', border: 0, padding: 0, color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }}>{secret.name}</button>,
+                secret.maskedValue ?? '****************',
                 <Badge key={`${secret.id}-status`} tone={secret.status === 'active' ? 'success' : 'warning'}>{secret.status}</Badge>,
                 formatDate(secret.lastAccessedAt),
                 String(secret.assignedAppsCount ?? 0),
@@ -396,11 +442,14 @@ export default function VaultPage() {
         footer={selected ? (
           <div className="os-inline-actions">
             <Button variant="secondary" onClick={() => setRotateOpen(true)}>Rotate</Button>
+            <Button variant="secondary" onClick={() => { setDraftName(selected.name); drawer.openDrawer('secret-edit', selected.id); }}>Edit label</Button>
             <Button onClick={() => drawer.openDrawer('secret-assign', selected.id)}>Assign</Button>
             <Button variant="secondary" onClick={() => drawer.openDrawer('secret-history', selected.id)}>History</Button>
+            <Button variant="secondary" disabled disabledReason="Provider-specific secret tests are not connected yet.">Test</Button>
             <Button variant={selected.status === 'active' ? 'danger' : 'secondary'} onClick={() => setDisableConfirm(true)}>
               {selected.status === 'active' ? 'Revoke access' : 'Restore'}
             </Button>
+            <Button variant="danger" onClick={() => setDeleteConfirm(true)}>Delete</Button>
           </div>
         ) : undefined}
       >
@@ -415,6 +464,7 @@ export default function VaultPage() {
               </div>
               <div className="os-drawer-stack" style={{ marginTop: 12 }}>
                 <div className="os-entity-copy">Last used: {formatDate(selected.lastAccessedAt)}</div>
+                <div className="os-entity-copy">Masked value: {selected.maskedValue ?? '****************'}</div>
                 <div className="os-entity-copy">Updated: {formatDate(selected.updatedAt)}</div>
                 <div className="os-entity-copy">Assigned apps: {selected.assignedAppsCount ?? 0}</div>
                 <div className="os-entity-copy">Assigned subagents: {selected.assignedSubagentsCount ?? 0}</div>
@@ -456,6 +506,22 @@ export default function VaultPage() {
                 ))}
               </div>
             </Card>
+          </div>
+        )}
+      </Drawer>
+
+      <Drawer
+        open={drawer.current?.id === 'secret-edit'}
+        onClose={drawer.closeDrawer}
+        title={selected ? `Edit ${selected.name}` : 'Edit secret'}
+        description="Update the visible label only. Plaintext values remain hidden; use Rotate to replace the value."
+        routeSafe
+        footer={<Button onClick={() => void renameSecret()} disabled={working || !selected || !draftName.trim()}>{working ? 'Working...' : 'Save label'}</Button>}
+      >
+        {!selected ? <EmptyState title="Secret unavailable" body="Select a secret to edit." /> : (
+          <div className="os-drawer-stack">
+            <Input value={draftName} onChange={event => setDraftName(event.target.value.toUpperCase())} placeholder="SECRET_NAME" />
+            <div className="os-entity-copy">Secret values are never revealed or copied into normal memory while editing labels.</div>
           </div>
         )}
       </Drawer>
@@ -549,6 +615,18 @@ export default function VaultPage() {
           tone={selected.status === 'active' ? 'danger' : 'default'}
           busy={working}
           onConfirm={() => void toggleSecretStatus()}
+        />
+      ) : null}
+      {selected ? (
+        <ConfirmModal
+          open={deleteConfirm}
+          onClose={() => setDeleteConfirm(false)}
+          title={`Delete ${selected.name}?`}
+          body="This permanently removes the encrypted value and blocks future runtime use. Existing audit records remain redacted."
+          confirmLabel="Delete secret"
+          tone="danger"
+          busy={working}
+          onConfirm={() => void deleteSecret()}
         />
       ) : null}
     </div>

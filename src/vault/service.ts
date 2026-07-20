@@ -417,6 +417,42 @@ export async function setVaultSecretStatus(params: {
   return mapSecret(row);
 }
 
+export async function renameVaultSecret(params: {
+  ownerAgentId: string;
+  secretId: string;
+  name: string;
+}): Promise<VaultSecretMetadata> {
+  const name = params.name.trim().toUpperCase();
+  if (!/^[A-Z0-9_]{2,120}$/.test(name)) {
+    throw new ValidationError('Secret name must be 2-120 uppercase letters, numbers, or underscores');
+  }
+
+  const supabase = getSupabaseAdmin();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('vault_secrets')
+    .update({ name, updated_at: now })
+    .eq('id', params.secretId)
+    .eq('owner_agent_id', params.ownerAgentId)
+    .select('id,vault_id,workspace_id,name,masked_value,status,version,created_at,updated_at,last_accessed_at')
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to rename Vault secret: ${error.message}`);
+  if (!data) throw new PermissionError('Vault secret not found or not accessible');
+  const row = data as Record<string, unknown>;
+
+  await auditVault({
+    ownerAgentId: params.ownerAgentId,
+    workspaceId: String(row.workspace_id),
+    vaultId: String(row.vault_id),
+    secretId: String(row.id),
+    action: 'secret_renamed',
+    metadata: { name },
+  });
+
+  return mapSecret(row);
+}
+
 export async function rotateVaultSecret(params: {
   ownerAgentId: string;
   secretId: string;

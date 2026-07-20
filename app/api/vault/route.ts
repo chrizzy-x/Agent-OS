@@ -4,6 +4,7 @@ import {
   deleteVaultSecret,
   listVaultSecrets,
   rotateVaultSecret,
+  renameVaultSecret,
   setVaultSecretStatus,
   upsertVaultSecret,
 } from '@/src/vault/service';
@@ -107,6 +108,15 @@ export async function PATCH(request: NextRequest) {
         ownerAgentId: ctx.agentId,
         secretId,
         value: typeof body.value === 'string' ? body.value : '',
+      });
+      return NextResponse.json({ secret });
+    }
+
+    if (action === 'rename') {
+      const secret = await renameVaultSecret({
+        ownerAgentId: ctx.agentId,
+        secretId,
+        name: typeof body.name === 'string' ? body.name : '',
       });
       return NextResponse.json({ secret });
     }
