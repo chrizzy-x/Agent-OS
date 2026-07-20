@@ -66,6 +66,26 @@ function visibleMessageContent(message: { role: string; content: string }): stri
   }
 }
 
+function mcpRoutingCard(content: string): { state: 'ready' | 'reconnect'; title: string; body: string; action: string } | null {
+  if (content.startsWith('MCP route preview:')) {
+    return {
+      state: 'ready',
+      title: 'MCP route ready',
+      body: content.replace('MCP route preview:', '').trim(),
+      action: 'Permission review required before external execution.',
+    };
+  }
+  if (content.startsWith('MCP routing unavailable:')) {
+    return {
+      state: 'reconnect',
+      title: 'MCP reconnect required',
+      body: content.replace('MCP routing unavailable:', '').trim(),
+      action: 'Open Universal MCP to connect or repair the external tool.',
+    };
+  }
+  return null;
+}
+
 async function fileData(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -359,6 +379,7 @@ export default function NLStudioPanel() {
             {messages.map(message => {
               const visibleContent = visibleMessageContent(message);
               const highlightedContent = renderHighlightedContent(message.id, visibleContent);
+              const routeCard = message.role === 'assistant' ? mcpRoutingCard(visibleContent) : null;
               return (
               <article
                 key={message.id}
@@ -376,7 +397,16 @@ export default function NLStudioPanel() {
                   {message.role === 'system' ? <div className="nl-system-label">System</div> : null}
                   {visibleContent ? (
                     <div className="nl-markdown">
-                      {highlightedContent ?? (
+                      {routeCard ? (
+                        <div className={`nl-mcp-route-card ${routeCard.state}`} role="status">
+                          <div>
+                            <span className="nl-mcp-route-dot" aria-hidden="true" />
+                            <strong>{routeCard.title}</strong>
+                          </div>
+                          <p>{routeCard.body}</p>
+                          <span>{routeCard.action}</span>
+                        </div>
+                      ) : highlightedContent ?? (
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -403,6 +433,12 @@ export default function NLStudioPanel() {
                           {composerInvocations.map(item => (
                             <span key={item.id}>{item.kind}: {item.label}</span>
                           ))}
+                        </div>
+                      ) : null}
+                      {composerInvocations.some(item => item.kind === 'mcp') ? (
+                        <div className="nl-mcp-route-inline">
+                          <strong>External MCP route</strong>
+                          <span>Super AgentOS will ask before running connected external tools and will show reconnect if the connector is unavailable.</span>
                         </div>
                       ) : null}
                       <button type="button" onClick={() => void stopGeneration()}>Stop</button>
@@ -907,6 +943,58 @@ export default function NLStudioPanel() {
           text-overflow: ellipsis;
           white-space: nowrap;
           color: var(--text-tertiary);
+        }
+
+        .nl-mcp-route-card,
+        .nl-mcp-route-inline {
+          display: grid;
+          gap: 7px;
+          padding: 10px 12px;
+          border: 1px solid rgba(96, 165, 250, 0.28);
+          border-radius: 10px;
+          background: rgba(59, 130, 246, 0.075);
+          color: var(--text-secondary);
+          font-size: 0.78rem;
+          line-height: 1.45;
+        }
+
+        .nl-mcp-route-card > div {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+        }
+
+        .nl-mcp-route-card strong,
+        .nl-mcp-route-inline strong {
+          color: var(--text-primary);
+          font-size: 0.8rem;
+        }
+
+        .nl-mcp-route-card p {
+          margin: 0;
+        }
+
+        .nl-mcp-route-card > span,
+        .nl-mcp-route-inline span {
+          color: var(--text-tertiary);
+        }
+
+        .nl-mcp-route-card.reconnect {
+          border-color: rgba(251, 191, 36, 0.32);
+          background: rgba(251, 191, 36, 0.09);
+        }
+
+        .nl-mcp-route-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: #60a5fa;
+          box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.12);
+        }
+
+        .nl-mcp-route-card.reconnect .nl-mcp-route-dot {
+          background: #fbbf24;
+          box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.12);
         }
 
         .nl-response-state.error {

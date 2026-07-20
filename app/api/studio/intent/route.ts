@@ -214,12 +214,49 @@ function isStoreNavigationRequest(message: string, target: 'appstore' | 'skillst
   return /\b(open|show|browse)\b.*\bmarketplace\b/i.test(message);
 }
 
-function parseRouteTarget(message: string): { kind: 'app' | 'skill' | 'workflow'; reference: string | null } | null {
-  const match = message.match(/\broute\b.+\bthrough\b\s+(app|skill|workflow)(?:\s+(.+))?$/i);
+function parseRouteTarget(message: string): { kind: 'app' | 'skill' | 'workflow' | 'mcp'; reference: string | null } | null {
+  const match = message.match(/\broute\b.+\bthrough\b\s+(app|skill|workflow|mcp)(?:\s+(.+))?$/i);
   if (!match) return null;
   return {
-    kind: match[1].toLowerCase() as 'app' | 'skill' | 'workflow',
+    kind: match[1].toLowerCase() as 'app' | 'skill' | 'workflow' | 'mcp',
     reference: match[2]?.trim() || null,
+  };
+}
+
+async function resolveMcpRoutePreview(reference: string | null): Promise<{
+  reply: string;
+  statusText: string;
+  target: { kind: 'mcp'; reference: string | null; server: string | null; state: 'ready' | 'reconnect_required' };
+}> {
+  const supabase = getSupabaseAdmin();
+  const query = supabase
+    .from('mcp_servers')
+    .select('name,description,category,active')
+    .eq('active', true)
+    .order('name', { ascending: true })
+    .limit(20);
+  const { data, error } = await query;
+  const servers = error ? [] : (data ?? []);
+  const needle = reference?.trim().toLowerCase() ?? '';
+  const matched = needle
+    ? servers.find(server => String(server.name ?? '').toLowerCase().includes(needle) || String(server.category ?? '').toLowerCase().includes(needle))
+    : servers[0];
+
+  if (!matched) {
+    return {
+      reply: reference
+        ? `MCP routing unavailable: no connected MCP tool matched "${reference}". Open Universal MCP to reconnect or register the external tool before running this action.`
+        : 'MCP routing unavailable: no connected MCP tools are available in this workspace. Open Universal MCP to connect an external tool before running this action.',
+      statusText: 'Reconnect required.',
+      target: { kind: 'mcp', reference, server: null, state: 'reconnect_required' },
+    };
+  }
+
+  const server = String(matched.name ?? 'MCP connector');
+  return {
+    reply: `MCP route preview: Super AgentOS can route this through ${server}. Review the connector permissions, then use an explicit mcp call command to run the external action.`,
+    statusText: 'MCP route ready.',
+    target: { kind: 'mcp', reference, server, state: 'ready' },
   };
 }
 
@@ -1082,6 +1119,19 @@ export async function POST(req: NextRequest) {
 
     const routeTarget = parseRouteTarget(trimmedMessage);
     if (routeTarget) {
+      if (routeTarget.kind === 'mcp') {
+        const preview = await resolveMcpRoutePreview(routeTarget.reference);
+        await recordStudioTurn(ctx.agentId, sessionId, 'assistant', preview.reply);
+        return NextResponse.json({
+          kind: preview.target.state === 'ready' ? 'action_preview' : 'unsupported',
+          intent,
+          statusText: preview.statusText,
+          reply: preview.reply,
+          target: preview.target,
+          permissionRequired: preview.target.state === 'ready',
+          reconnectRequired: preview.target.state === 'reconnect_required',
+        });
+      }
       const reply = routeTarget.reference
         ? `Routing through ${routeTarget.kind} ${routeTarget.reference} is ready for execution, but this request still needs an explicit run path.`
         : `Routing through a ${routeTarget.kind} is available, but this request still needs an explicit run path.`;
