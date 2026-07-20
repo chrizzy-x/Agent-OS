@@ -963,6 +963,48 @@ export async function createRuntimeSecretGrant(params: {
   }
 }
 
+export async function recordRuntimeSecretAccessDenied(params: {
+  ownerAgentId: string;
+  workspaceId?: string;
+  name: string;
+  subjectType?: string;
+  subjectId?: string;
+  reason?: string;
+  sessionId?: string | null;
+}): Promise<{ denied: true; name: string; subjectType: VaultSubjectType; subjectId: string }> {
+  const validated = await validateRuntimeSecretRequest(params);
+  await auditVault({
+    ownerAgentId: params.ownerAgentId,
+    workspaceId: String(validated.secret.workspace_id),
+    vaultId: String(validated.secret.vault_id),
+    secretId: String(validated.secret.id),
+    action: 'runtime_access_denied',
+    metadata: {
+      name: validated.name,
+      subjectType: validated.scopedType,
+      subjectId: validated.subjectId,
+      reason: params.reason?.trim() || 'user_denied',
+    },
+  });
+  await appendRuntimeSecretStudioEvent({
+    ownerAgentId: params.ownerAgentId,
+    sessionId: params.sessionId,
+    type: 'secret_access_denied',
+    payload: {
+      name: validated.name,
+      subjectType: validated.scopedType,
+      subjectId: validated.subjectId,
+      reason: params.reason?.trim() || 'user_denied',
+    },
+  });
+  return {
+    denied: true,
+    name: validated.name,
+    subjectType: validated.scopedType ?? 'super_agentos',
+    subjectId: validated.subjectId ?? params.ownerAgentId,
+  };
+}
+
 async function appendRuntimeSecretStudioEvent(params: {
   ownerAgentId: string;
   sessionId?: string | null;

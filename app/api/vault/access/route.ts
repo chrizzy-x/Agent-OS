@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertAgentAppPermissionAccess } from '@/src/appstore/service';
 import { requireRouteCapability } from '@/src/auth/request';
-import { createRuntimeSecretGrant, validateRequiredSecrets } from '@/src/vault/service';
+import { cleanupRuntimeSecretGrant, createRuntimeSecretGrant, recordRuntimeSecretAccessDenied, validateRequiredSecrets } from '@/src/vault/service';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -68,6 +68,42 @@ export async function POST(request: NextRequest) {
           expiresAt: grant.expiresAt,
         },
         appSlug: appAccess?.app.slug ?? null,
+      });
+    }
+
+    if (action === 'deny') {
+      const result = await recordRuntimeSecretAccessDenied({
+        ownerAgentId: ctx.agentId,
+        workspaceId,
+        name: typeof body.name === 'string' ? body.name : '',
+        subjectType: typeof body.subjectType === 'string' ? body.subjectType : undefined,
+        subjectId: typeof body.subjectId === 'string' ? body.subjectId : undefined,
+        reason: typeof body.reason === 'string' ? body.reason : undefined,
+        sessionId,
+      });
+      return NextResponse.json(result);
+    }
+
+    if (action === 'cleanup') {
+      const grantId = typeof body.grantId === 'string' ? body.grantId : '';
+      if (!grantId.trim()) {
+        return NextResponse.json({ code: 'VALIDATION_ERROR', error: 'grantId is required', message: 'grantId is required' }, { status: 400 });
+      }
+      const grant = await cleanupRuntimeSecretGrant({
+        ownerAgentId: ctx.agentId,
+        grantId,
+      });
+      return NextResponse.json({
+        cleaned: true,
+        grant: {
+          id: grant.id,
+          name: grant.name,
+          subjectType: grant.subjectType,
+          subjectId: grant.subjectId,
+          status: grant.status,
+          expiresAt: grant.expiresAt,
+          cleanedUpAt: grant.cleanedUpAt,
+        },
       });
     }
 

@@ -60,7 +60,16 @@ type VersionEntry = {
   createdAt: string;
 };
 
-type DrawerId = 'secret-details' | 'secret-history' | 'secret-assign' | 'secret-edit';
+type RuntimeGrant = {
+  id: string;
+  name: string;
+  subjectType: string;
+  subjectId: string;
+  status: string;
+  expiresAt: string;
+};
+
+type DrawerId = 'secret-details' | 'secret-history' | 'secret-assign' | 'secret-edit' | 'secret-permission';
 
 type SubjectType = 'app' | 'subagent' | 'workflow' | 'skill' | 'session' | 'sdk_credential' | 'super_agentos';
 type VaultView = 'secrets' | 'apiKeys' | 'credentials' | 'wallets' | 'audit';
@@ -110,6 +119,10 @@ export default function VaultPage() {
   const [draftValue, setDraftValue] = useState('');
   const [subjectType, setSubjectType] = useState<SubjectType>('app');
   const [subjectId, setSubjectId] = useState('');
+  const [permissionSubjectType, setPermissionSubjectType] = useState<SubjectType>('workflow');
+  const [permissionSubjectId, setPermissionSubjectId] = useState('');
+  const [permissionReason, setPermissionReason] = useState('');
+  const [runtimeGrant, setRuntimeGrant] = useState<RuntimeGrant | null>(null);
 
   const selected = useMemo(
     () => secrets.find(secret => secret.id === drawer.current?.entityId) ?? null,
@@ -313,6 +326,82 @@ export default function VaultPage() {
     }
   }
 
+  async function grantRuntimePermission() {
+    if (!selected) return;
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/vault/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'runtime',
+          workspaceId: shell.activeWorkspaceId,
+          name: selected.name,
+          subjectType: permissionSubjectType,
+          subjectId: permissionSubjectId,
+          reason: permissionReason,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Runtime permission granted.' : payload.error ?? 'Permission grant failed');
+      if (response.ok) {
+        setRuntimeGrant(payload.grant ?? null);
+        await refresh(selected.id);
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function denyRuntimePermission() {
+    if (!selected) return;
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/vault/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deny',
+          workspaceId: shell.activeWorkspaceId,
+          name: selected.name,
+          subjectType: permissionSubjectType,
+          subjectId: permissionSubjectId,
+          reason: permissionReason || 'User denied runtime secret access',
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Runtime permission denied and audited.' : payload.error ?? 'Permission denial failed');
+      if (response.ok) {
+        setRuntimeGrant(null);
+        await refresh(selected.id);
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function revokeRuntimeGrant() {
+    if (!runtimeGrant) return;
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/vault/access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cleanup', grantId: runtimeGrant.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Runtime grant revoked.' : payload.error ?? 'Runtime grant revoke failed');
+      if (response.ok) {
+        setRuntimeGrant(null);
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function revokeAssignment(assignment: Assignment) {
     if (!selected) return;
     setWorking(true);
@@ -443,6 +532,7 @@ export default function VaultPage() {
           <div className="os-inline-actions">
             <Button variant="secondary" onClick={() => setRotateOpen(true)}>Rotate</Button>
             <Button variant="secondary" onClick={() => { setDraftName(selected.name); drawer.openDrawer('secret-edit', selected.id); }}>Edit label</Button>
+            <Button onClick={() => { setPermissionSubjectId(''); setPermissionReason(''); setRuntimeGrant(null); drawer.openDrawer('secret-permission', selected.id); }}>Request permission</Button>
             <Button onClick={() => drawer.openDrawer('secret-assign', selected.id)}>Assign</Button>
             <Button variant="secondary" onClick={() => drawer.openDrawer('secret-history', selected.id)}>History</Button>
             <Button variant="secondary" disabled disabledReason="Provider-specific secret tests are not connected yet.">Test</Button>
@@ -522,6 +612,46 @@ export default function VaultPage() {
           <div className="os-drawer-stack">
             <Input value={draftName} onChange={event => setDraftName(event.target.value.toUpperCase())} placeholder="SECRET_NAME" />
             <div className="os-entity-copy">Secret values are never revealed or copied into normal memory while editing labels.</div>
+          </div>
+        )}
+      </Drawer>
+
+      <Drawer
+        open={drawer.current?.id === 'secret-permission'}
+        onClose={drawer.closeDrawer}
+        title={selected ? `Permission for ${selected.name}` : 'Vault permission'}
+        description="Grant or deny temporary runtime access without revealing the secret value."
+        routeSafe
+        footer={selected ? (
+          <div className="os-inline-actions">
+            <Button variant="secondary" onClick={() => void denyRuntimePermission()} disabled={working || !permissionSubjectId.trim()}>{working ? 'Working...' : 'Deny'}</Button>
+            <Button onClick={() => void grantRuntimePermission()} disabled={working || !permissionSubjectId.trim()}>{working ? 'Working...' : 'Grant permission'}</Button>
+          </div>
+        ) : undefined}
+      >
+        {!selected ? <EmptyState title="Secret unavailable" body="Select a secret to manage runtime permission." /> : (
+          <div className="os-drawer-stack">
+            <Card>
+              <div className="os-entity-title">Why access is needed</div>
+              <div className="os-entity-copy">Runtime subjects receive a temporary grant id only. Plaintext can be consumed by an authorized SDK runtime and is never shown in this UI.</div>
+            </Card>
+            <Select value={permissionSubjectType} onChange={event => setPermissionSubjectType(event.target.value as SubjectType)} aria-label="Permission subject type">
+              {SUBJECT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </Select>
+            <Input value={permissionSubjectId} onChange={event => setPermissionSubjectId(event.target.value)} placeholder="Runtime subject id" />
+            <Input value={permissionReason} onChange={event => setPermissionReason(event.target.value)} placeholder="Why this secret is needed" />
+            {runtimeGrant ? (
+              <Card>
+                <div className="os-inline-actions">
+                  <Badge tone="success">granted</Badge>
+                  <Button variant="danger" onClick={() => void revokeRuntimeGrant()} disabled={working}>Revoke grant</Button>
+                </div>
+                <div className="os-entity-copy" style={{ marginTop: 8 }}>Grant: {runtimeGrant.id}</div>
+                <div className="os-entity-copy">Expires: {formatDate(runtimeGrant.expiresAt)}</div>
+              </Card>
+            ) : (
+              <div className="os-empty-body">No temporary runtime grant active in this permission review.</div>
+            )}
           </div>
         )}
       </Drawer>
