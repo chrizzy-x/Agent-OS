@@ -25,6 +25,6 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({
     code: 'METHOD_NOT_ALLOWED',
     error: 'FFP is disabled',
-      message: 'FFP is Coming Soon and cannot be enabled in AgentOS v6.6.7.',
+      message: 'FFP is Coming Soon and cannot be enabled in AgentOS V6.6.8.',
   }, { status: 405, headers: { Allow: 'GET' } });
 }

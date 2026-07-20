@@ -31,14 +31,23 @@ function visibleSkills(rows: Array<Record<string, unknown>>, agentId: string): A
 
 function buildRouteDecision(row: Record<string, unknown>, tool: string, primitive: string): Record<string, unknown> {
   const persisted = asObject(row.route_decision);
-  if (Object.keys(persisted).length > 0) return persisted;
+  if (Object.keys(persisted).length > 0) {
+    return {
+      ...persisted,
+      protocolState: 'disabled',
+      consensusAvailable: false,
+      status: 'compatibility_record_only',
+    };
+  }
   return {
     source: tool.startsWith('mcp.') ? 'external_mcp' : tool.startsWith('skill.') || tool.startsWith('agentos.skill.') ? 'skill' : 'primitive',
     selectedTool: tool,
     selectedPrimitive: primitive,
-    consensusThreshold: typeof row.consensus_threshold === 'number' ? row.consensus_threshold : Number(row.consensus_threshold ?? 0),
-    validatorCount: typeof row.validator_count === 'number' ? row.validator_count : Number(row.validator_count ?? 0),
-    status: typeof row.status === 'string' ? row.status : 'recorded',
+    consensusThreshold: null,
+    validatorCount: null,
+    protocolState: 'disabled',
+    consensusAvailable: false,
+    status: 'compatibility_record_only',
   };
 }
 
@@ -91,9 +100,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
         input: row.input && typeof row.input === 'object' ? row.input : {},
         result: row.result && typeof row.result === 'object' ? row.result : {},
         status: typeof row.status === 'string' ? row.status : 'recorded',
+        protocolState: 'disabled',
+        consensusAvailable: false,
+        displayStatus: 'Compatibility record only',
         errorMessage: typeof row.error_message === 'string' ? row.error_message : null,
-        consensusThreshold: typeof row.consensus_threshold === 'number' ? row.consensus_threshold : Number(row.consensus_threshold ?? 0),
-        validatorCount: typeof row.validator_count === 'number' ? row.validator_count : Number(row.validator_count ?? 0),
+        consensusThreshold: null,
+        validatorCount: null,
         inputHash: typeof row.input_hash === 'string' ? row.input_hash : null,
         executedAt: typeof row.executed_at === 'string' ? row.executed_at : null,
         fallbackUsed: row.fallback_used === true,

@@ -104,8 +104,14 @@ describe('GET /api/ffp/routes', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(body.enabled).toBe(false);
+    expect(body.consensusAvailable).toBe(false);
     expect(body.routes[0].id).toBe('exec-1');
     expect(body.routes[0].primitive).toBe('mem');
+    expect(body.routes[0].protocolState).toBe('disabled');
+    expect(body.routes[0].displayStatus).toBe('Compatibility record only');
+    expect(body.routes[0].consensusThreshold).toBeNull();
+    expect(body.routes[0].validatorCount).toBeNull();
     expect(body.routes[0].invokedByType).toBe('ffp_chain');
     expect(body.routes[0].related.apps[0].name).toBe('Memory Console');
     expect(body.routes[0].related.workflows[0].name).toBe('Cache lookup');

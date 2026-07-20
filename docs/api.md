@@ -50,7 +50,7 @@ Returns server status. No authentication required.
 ```json
 {
   "status": "ok",
-  "version": "6.6.7",
+  "version": "6.6.8",
   "timestamp": "2026-06-21T00:00:00.000Z",
   "tools": 44
 }
@@ -58,7 +58,7 @@ Returns server status. No authentication required.
 
 > `tools` reflects the current number of registered MCP tools.
 
-Production verification must confirm `GET https://www.agentos.services/health` returns `200` with `version: 6.6.7`.
+Production verification must confirm `GET https://www.agentos.services/health` returns `200` with `version: 6.6.8`.
 
 ### `GET /tools`
 Lists all available tool names. No authentication required.
@@ -95,7 +95,7 @@ Executes a tool call.
 
 ---
 
-## v6.6.7 Platform Endpoints
+## V6.6.8 Platform Endpoints
 
 ### Marketplace & Capability Layer
 
@@ -144,7 +144,7 @@ Execution records include `{ id, userId, workspaceId, projectId, type, sourceTyp
 | `GET /api/ffp/temp` | Read the disabled FFP compatibility status |
 | `PATCH /api/ffp/temp` | Return `405 Method Not Allowed` |
 
-FFP is visible as Coming Soon, cannot be activated, and is bypassed by all runtime execution in v6.6.7.
+FFP is visible as Coming Soon, cannot be activated, and is bypassed by all runtime execution in V6.6.8.
 
 ### Files, Memory, Notifications
 

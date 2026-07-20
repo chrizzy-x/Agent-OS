@@ -6,8 +6,8 @@ export const runtime = 'nodejs';
 
 /**
  * GET /api/ffp/chains
- * Public endpoint — returns all known FFP sector chains with execution stats.
- * FFP chain coordinators use this to discover AgentOS bridge availability.
+ * Public endpoint — returns disabled FFP compatibility chain records.
+ * These rows are not active chain, validator, proof, transaction, or consensus events.
  */
 export async function GET(): Promise<NextResponse> {
   try {
@@ -55,9 +55,17 @@ export async function GET(): Promise<NextResponse> {
       successful: stats.success,
       failed: stats.failed,
       lastExecution: stats.lastExecution,
+      protocolState: 'disabled',
+      displayStatus: 'Compatibility record only',
     }));
 
-    return NextResponse.json({ chains, total: chains.length });
+    return NextResponse.json({
+      enabled: false,
+      consensusAvailable: false,
+      message: 'FFP is disabled. Chain rows are compatibility records only, not active protocol traffic.',
+      chains,
+      total: chains.length,
+    });
   } catch (error) {
     console.error('[ffp/chains]', error instanceof Error ? error.message : error);
     const err = toErrorResponse(error);

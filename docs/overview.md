@@ -1,6 +1,6 @@
-# AgentOS V6.6.7 Technical Overview
+# AgentOS V6.6.8 Technical Overview
 
-V6.6.7 adds the OS Surface Implementation on top of the persistent operating shell. Every top-level page now has one responsibility, full available width, and a distinct workflow: Home shows what is happening, Library shows owned assets, Appstore installs apps, Skillstore installs capabilities, Developer publishes listings, Settings configures AgentOS, and Resources teaches the platform.
+V6.6.8 formalizes the Super AgentOS runtime contract on top of the persistent operating shell. Capability Graph nodes, Workspace Context packages, Runtime Registry assets, and durable task records now expose deterministic metadata for execution, replay, audit, and configuration checks.
 
 > Super AgentOS-first AI operating system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
 
@@ -12,7 +12,7 @@ AgentOS is a consumer-facing AI operating system with Super AgentOS as the prima
 
 Builders still get the underlying operating system: apps, skills, workflows, SDK, MCP, files, memory, Vault, audit, and primitives.
 
-V6.6.7 unifies those layers through persisted executions, recovery, panic stop, notifications, governed files, governed memory, marketplace ownership, workspace asset synchronization, bearer-token connectivity, offline-capable app package cache, production diagnostic errors, and non-overlapping operating surfaces.
+V6.6.8 unifies those layers through canonical capability contracts, context version metadata, graph versions, persisted task lifecycle fields, recovery, panic stop, notifications, governed files, governed memory, marketplace ownership, workspace asset synchronization, bearer-token connectivity, production diagnostic errors, and non-overlapping operating surfaces.
 
 AgentOS also provides six fundamental primitives that autonomous agents need to operate:
 
@@ -29,7 +29,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 
 ---
 
-## V6.6.7 Product Layers
+## V6.6.8 Product Layers
 
 | Layer | What it provides |
 |-------|------------------|
@@ -41,7 +41,7 @@ Instead of every user or developer assembling apps, skills, workflows, MCPs, mem
 | **Marketplace** | Consumer App Store for products, Skill Store for capabilities, developer profiles, publishing flows, store listings, update center, ownership, device install separation, and recommendations |
 | **Builder** | AppStore, Skills, Workflows, SDK, MCP, Vault, FFP, Developer, and Audit surfaces |
 
-## V6.6.7 Surface Rules
+## V6.6.8 Surface Rules
 
 Top-level navigation order is Home, Studio, Library, Appstore, Skillstore, Developer, Projects, Subagents, Workflows, Memory, Vault, Universal MCP, Community, FFP, Resources, Settings.
 
@@ -51,7 +51,7 @@ Library owns installed inventory. Installed apps and installed skills do not hav
 
 Resources replaces Docs as the knowledge hub. `/docs` redirects to `/resources`.
 
-FFP remains disabled and Coming Soon in v6.6.7. Studio internals are untouched.
+FFP remains disabled and Coming Soon in V6.6.8. Studio internals are untouched.
 
 ---
 
@@ -336,11 +336,11 @@ For technical support, API reference, and community resources, visit the [Agent 
 
 ## FFP Temp
 
-FFP is disabled in V6.6.7. The route and compatibility records remain visible as a future wiring point for Fabric Furge Protocol.
+FFP is disabled in V6.6.8. The route and compatibility records remain visible as a future wiring point for Fabric Furge Protocol.
 
 | State | Route |
 |-------|-------|
 | **FFP Disabled** | Multi-agent activities -> Unified Execution Engine |
 | **FFP Enabled** | Multi-agent activities -> FFP temporary abstraction layer -> Unified Execution Engine |
 
-All execution bypasses FFP in V6.6.7. No consensus engine, proposal voting, activation control, or fake consensus result is exposed.
+All execution bypasses FFP in V6.6.8. No consensus engine, proposal voting, activation control, or fake consensus result is exposed.

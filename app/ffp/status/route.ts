@@ -10,6 +10,6 @@ export async function GET() {
     nodeUrl: null,
     requireConsensus: false,
     consensusAvailable: false,
-    message: 'FFP is disabled and Coming Soon in AgentOS v6.6.7.',
+    message: 'FFP is disabled and Coming Soon in AgentOS V6.6.8.',
   });
 }
