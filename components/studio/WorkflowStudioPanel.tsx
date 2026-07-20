@@ -80,8 +80,16 @@ function createNode(type: BuilderNodeType, order: number, seed?: Partial<Builder
       label: 'Subagent step',
       description: 'Delegate work to an incognito subagent.',
       tool: 'agentos.subagent.unconfigured.run',
-      input: { instructions: 'Describe the delegated task.' },
-      output: { expected: 'Subagent result.' },
+      input: {
+        instructions: 'Describe the delegated task.',
+        role: 'Operator',
+        handoffFrom: 'Previous step',
+        privacyScope: 'Project scoped',
+      },
+      output: {
+        expected: 'Subagent result.',
+        handoffTo: 'Next step',
+      },
     },
     vault: {
       type: 'vault',
@@ -226,6 +234,12 @@ function nodeStatus(node: BuilderNode, resources: {
   return { label: node.type === 'vault' ? 'permissioned' : 'ready', tone: 'success' as const, blocking: false };
 }
 
+function subagentTypeLabel(visibility?: string): string {
+  if (visibility === 'public') return 'Public';
+  if (visibility === 'workspace') return 'Workflow';
+  return 'Incognito';
+}
+
 export default function WorkflowStudioPanel() {
   const {
     workflows,
@@ -269,6 +283,22 @@ export default function WorkflowStudioPanel() {
     .filter(status => status.blocking);
   const hasExecutableNode = draft.nodes.some(node => EXECUTABLE_NODE_TYPES.has(node.type));
   const canSave = Boolean(draft.name.trim() && activeWorkspaceId && hasExecutableNode && blockers.length === 0);
+  const collaborationNodes = useMemo(
+    () => draft.nodes
+      .filter(node => node.type === 'subagent')
+      .map((node, index) => {
+        const subagent = subagents.find(item => item.id === text(node.input.subagentId));
+        return {
+          node,
+          subagent,
+          role: text(node.input.role, subagent?.name ?? `Operator ${index + 1}`),
+          handoffFrom: text(node.input.handoffFrom, index === 0 ? 'Workflow start' : 'Previous step'),
+          handoffTo: text(node.output.handoffTo, 'Next step'),
+          privacyScope: text(node.input.privacyScope, `${subagentTypeLabel(subagent?.visibility)} scope`),
+        };
+      }),
+    [draft.nodes, subagents],
+  );
 
   function updateDraft(updater: (current: DraftWorkflow) => DraftWorkflow) {
     setDirty(true);
@@ -337,7 +367,12 @@ export default function WorkflowStudioPanel() {
         ...node,
         label: subagent.name,
         tool: `agentos.subagent.${subagent.id}.run`,
-        input: { ...node.input, subagentId: subagent.id },
+        input: {
+          ...node.input,
+          subagentId: subagent.id,
+          role: text(node.input.role, subagent.name),
+          privacyScope: `${subagentTypeLabel(subagent.visibility)} scope`,
+        },
       };
     }
     if (node.type === 'vault') {
@@ -468,6 +503,37 @@ export default function WorkflowStudioPanel() {
               );
             })}
           </div>
+
+          <div className="workflow-collaboration-panel" aria-label="Multi-agent collaboration">
+            <div className="workflow-pane-head">
+              <div>
+                <div className="workflow-pane-title">Multi-agent collaboration</div>
+                <div className="os-entity-copy">Subagent roles, handoffs, output flow, and scoped logs.</div>
+              </div>
+              <Badge tone={collaborationNodes.length ? 'success' : 'warning'}>{collaborationNodes.length || 'none'}</Badge>
+            </div>
+            {collaborationNodes.length ? (
+              <div className="workflow-collaboration-list">
+                {collaborationNodes.map((item, index) => (
+                  <div key={item.node.id} className="workflow-collaboration-item">
+                    <span className="node-order">{index + 1}</span>
+                    <div>
+                      <strong>{item.role}</strong>
+                      <small>{item.subagent?.name ?? 'Select a subagent to activate this operator.'}</small>
+                    </div>
+                    <div className="workflow-collaboration-flow">
+                      <span>{item.handoffFrom}</span>
+                      <span>{item.handoffTo}</span>
+                      <span>{item.privacyScope}</span>
+                    </div>
+                    <Badge tone={item.subagent ? 'success' : 'warning'}>{item.subagent ? 'handoff ready' : 'needs subagent'}</Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No subagent collaboration yet" body="Add subagent nodes to show role handoffs and per-agent output flow." />
+            )}
+          </div>
         </section>
 
         <aside className="workflow-pane inspector">
@@ -514,13 +580,28 @@ export default function WorkflowStudioPanel() {
               ) : null}
 
               {selectedNode.type === 'subagent' ? (
-                <label className="workflow-field">
-                  <span>Incognito subagent</span>
-                  <Select data-testid="workflow-subagent-resource" aria-label="Incognito subagent selector" value={text(selectedNode.input.subagentId)} onChange={event => updateNode(node => bindResource(node, event.target.value))}>
-                    <option value="">Select subagent</option>
-                    {subagents.map(subagent => <option key={subagent.id} value={subagent.id}>{subagent.name}</option>)}
-                  </Select>
-                </label>
+                <>
+                  <label className="workflow-field">
+                    <span>Subagent operator</span>
+                    <Select data-testid="workflow-subagent-resource" aria-label="Subagent selector" value={text(selectedNode.input.subagentId)} onChange={event => updateNode(node => bindResource(node, event.target.value))}>
+                      <option value="">Select subagent</option>
+                      {subagents.map(subagent => <option key={subagent.id} value={subagent.id}>{subagent.name}</option>)}
+                    </Select>
+                  </label>
+                  <label className="workflow-field">
+                    <span>Role in workflow</span>
+                    <Input aria-label="Subagent workflow role" value={text(selectedNode.input.role)} onChange={event => updateNode(node => ({ ...node, input: { ...node.input, role: event.target.value } }))} />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Handoff from</span>
+                    <Input aria-label="Subagent handoff from" value={text(selectedNode.input.handoffFrom)} onChange={event => updateNode(node => ({ ...node, input: { ...node.input, handoffFrom: event.target.value } }))} />
+                  </label>
+                  <label className="workflow-field">
+                    <span>Handoff to</span>
+                    <Input aria-label="Subagent handoff to" value={text(selectedNode.output.handoffTo)} onChange={event => updateNode(node => ({ ...node, output: { ...node.output, handoffTo: event.target.value } }))} />
+                  </label>
+                  <div className="workflow-disabled-note">Per-agent logs are shown from workflow run logs when execution data exists. This builder stores the role and handoff metadata without copying private project data.</div>
+                </>
               ) : null}
 
               {selectedNode.type === 'vault' ? (
@@ -710,6 +791,48 @@ export default function WorkflowStudioPanel() {
           gap: 8px;
         }
 
+        .workflow-collaboration-panel {
+          display: grid;
+          gap: 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 12px;
+          background: rgba(255,255,255,0.02);
+        }
+
+        .workflow-collaboration-list {
+          display: grid;
+          gap: 8px;
+        }
+
+        .workflow-collaboration-item {
+          min-width: 0;
+          display: grid;
+          grid-template-columns: auto minmax(120px, 0.8fr) minmax(160px, 1fr) auto;
+          align-items: center;
+          gap: 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 10px;
+        }
+
+        .workflow-collaboration-item strong,
+        .workflow-collaboration-item small,
+        .workflow-collaboration-flow span {
+          display: block;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .workflow-collaboration-item small,
+        .workflow-collaboration-flow {
+          color: var(--text-tertiary);
+          font-size: 0.78rem;
+          line-height: 1.35;
+        }
+
         .workflow-node {
           justify-content: start;
           grid-template-columns: auto minmax(0, 1fr) auto;
@@ -785,6 +908,15 @@ export default function WorkflowStudioPanel() {
 
           .workflow-meta-grid {
             grid-template-columns: 1fr;
+          }
+
+          .workflow-collaboration-item {
+            grid-template-columns: auto minmax(0, 1fr);
+          }
+
+          .workflow-collaboration-flow,
+          .workflow-collaboration-item .os-badge {
+            grid-column: 2;
           }
         }
       `}</style>
