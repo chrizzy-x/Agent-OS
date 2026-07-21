@@ -163,7 +163,7 @@ Public beta plans:
 
 Self-serve plan transitions are live in free beta mode:
 - `POST /api/plans/transition`
-- `/settings?section=billing`
+- `/settings?section=plan`
 
 ## FFP
 
@@ -171,10 +171,12 @@ FFP is visible at `/ffp`.
 
 Behavior:
 - `/api/ffp/temp` exposes the workspace FFP temp status
-- `PATCH /api/ffp/temp` enables or disables the temporary routing abstraction
-- disabled routes multi-agent activities directly to the Unified Execution Engine
-- enabled routes multi-agent workflows, subagent collaboration, and multi-agent delegation through the FFP temporary abstraction before the Unified Execution Engine
-- single-agent execution bypasses FFP temp
+- `PATCH /api/ffp/temp` returns `405 Method Not Allowed`
+- all runtime execution routes directly to the Unified Execution Engine
+- no live validator dashboard, proof events, transactions, voting, or consensus engine ships in this build
+- FFP remains a visible coming-soon compatibility surface until real backend functionality exists
+
+Product vocabulary and user-facing docs live in `docs/product-vocabulary.md`.
 
 Environment:
 ```env
