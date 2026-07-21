@@ -11,6 +11,7 @@ type PanicStatus = {
   mcpDisabled: boolean;
   vaultDisabled: boolean;
   requireReauth: boolean;
+  available?: boolean;
 };
 
 type PanicContext = {
@@ -38,6 +39,24 @@ function tone(state: PanicStatus['state']): 'success' | 'warning' | 'danger' | '
 
 function label(state: PanicStatus['state']): string {
   return state === 'heavy_activity' ? 'Heavy Activity' : state.replace(/^\w/, char => char.toUpperCase());
+}
+
+function fallbackStatus(): PanicStatus {
+  return {
+    state: 'healthy',
+    activeCount: 0,
+    mcpDisabled: false,
+    vaultDisabled: false,
+    requireReauth: false,
+    available: false,
+  };
+}
+
+function panicActionDisabledReason(status: PanicStatus, working: boolean): string | undefined {
+  if (working) return 'A panic action is already running.';
+  if (status.available === false) return 'Panic backend is unavailable. Refresh sign-in and workspace access, then retry.';
+  if (status.activeCount === 0) return 'No active executions in this workspace/session.';
+  return undefined;
 }
 
 export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: string | null; sessionId?: string | null }) {
@@ -93,10 +112,12 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
     const queryString = query.toString();
     const response = await fetchWithBrowserSession(`/api/panic${queryString ? `?${queryString}` : ''}`, { cache: 'no-store' }).catch(() => null);
     if (!response?.response.ok) {
-      setStatus(null);
+      setStatus(fallbackStatus());
+      setMessage('Panic backend is unavailable. Refresh sign-in and workspace access, then retry.');
       return;
     }
-    setStatus(await response.response.json() as PanicStatus);
+    const payload = await response.response.json() as PanicStatus;
+    setStatus({ ...payload, available: true });
   }, [context.sessionId, context.workspaceId]);
 
   useEffect(() => {
@@ -116,6 +137,12 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
   }, [refresh]);
 
   async function run(action: 'pause' | 'stop_all' | 'lockdown') {
+    if (!status) return;
+    const disabledReason = panicActionDisabledReason(status, working);
+    if (disabledReason) {
+      setMessage(disabledReason);
+      return;
+    }
     setWorking(true);
     setMessage('');
     const result = await fetchWithBrowserSession('/api/panic', {
@@ -136,6 +163,7 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
   if (!status) return null;
 
   const visibleStatus = status;
+  const disabledReason = panicActionDisabledReason(visibleStatus, working);
 
   return (
     <>
@@ -153,7 +181,7 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
         open={open}
         onClose={() => setOpen(false)}
         title="Panic Control"
-        description="Stop, pause, or lock down active workspace execution"
+        description="Pause, stop, or lock down active execution in the current workspace/session."
         size="sm"
       >
         <Card className="panic-control-card">
@@ -165,12 +193,17 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
             <Badge tone={tone(visibleStatus.state)}>{label(visibleStatus.state)}</Badge>
           </div>
         </Card>
+        <Card>
+          <div className="os-entity-copy">
+            Current function: Panic pauses or stops active executions scoped to the active workspace/session. Lockdown also disables MCP and Vault runtime grants until re-authentication.
+          </div>
+        </Card>
         {message ? <Card><div className="os-entity-copy">{message}</div></Card> : null}
         <Card className="panic-action-card">
           <div className="panic-action-grid">
-            <Button variant="secondary" onClick={() => void run('pause')} disabled={working} disabledReason="A panic action is already running.">Pause runs</Button>
-            <Button variant="destructive" onClick={() => void run('stop_all')} disabled={working} disabledReason="A panic action is already running.">Stop all</Button>
-            <Button variant="destructive" onClick={() => void run('lockdown')} disabled={working} disabledReason="A panic action is already running.">Lockdown</Button>
+            <Button variant="secondary" onClick={() => void run('pause')} disabled={Boolean(disabledReason)} disabledReason={disabledReason}>Pause runs</Button>
+            <Button variant="destructive" onClick={() => void run('stop_all')} disabled={Boolean(disabledReason)} disabledReason={disabledReason}>Stop all</Button>
+            <Button variant="destructive" onClick={() => void run('lockdown')} disabled={Boolean(disabledReason)} disabledReason={disabledReason}>Lockdown</Button>
             <Button href="/mcp" variant="secondary">Diagnostics</Button>
           </div>
         </Card>
