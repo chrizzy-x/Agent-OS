@@ -24,7 +24,12 @@ export async function GET(request: NextRequest) {
         this_month: '0.00',
         last_month: '0.00',
         all_time: '0.00',
+        gross_all_time: '0.00',
+        platform_cut_all_time: '0.00',
+        monetization_source: 'skills',
         per_skill: [],
+        revenue_share_pct: 70,
+        platform_share_pct: 30,
       });
     }
 
@@ -77,7 +82,11 @@ export async function GET(request: NextRequest) {
       this_month: (thisMonth * 0.7).toFixed(2),
       last_month: (lastMonth * 0.7).toFixed(2),
       all_time: (allTime * 0.7).toFixed(2),
+      gross_all_time: allTime.toFixed(2),
+      platform_cut_all_time: (allTime * 0.3).toFixed(2),
+      monetization_source: 'skills',
       revenue_share_pct: 70,
+      platform_share_pct: 30,
       per_skill: perSkill,
     });
   } catch (error: unknown) {

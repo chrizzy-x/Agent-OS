@@ -14,6 +14,8 @@ Marketplace metrics should use these display rules:
 - missing analytics: `No data`
 - missing revenue backend data: `No revenue data`
 - zero real revenue records: `No revenue recorded`
+- missing paid app transactions: `No paid app transactions recorded`
+- missing paid skill usage: `No skill revenue recorded`
 
 App and skill listing pages must not synthesize version history or execution examples. If release notes, changelog, examples, inputs, outputs, screenshots, reviews, or analytics are missing, the page must say they are not published or not recorded.
 

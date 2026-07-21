@@ -69,13 +69,18 @@ type DeveloperApp = {
   lastHeartbeatAt?: string | null;
   publishState?: string | null;
   rejectionReason?: string | null;
+  pricing?: Record<string, unknown> | null;
 };
 
 type DeveloperEarnings = {
   this_month?: string;
   last_month?: string;
   all_time?: string;
+  gross_all_time?: string;
+  platform_cut_all_time?: string;
+  monetization_source?: string;
   revenue_share_pct?: number;
+  platform_share_pct?: number;
   per_skill?: Array<{ skill_id: string; skill_name: string; skill_slug: string; total_calls: number; total_revenue: string }>;
 };
 
@@ -118,6 +123,8 @@ type DeveloperSkill = {
   banner_url?: string | null;
   video_url?: string | null;
   examples?: Array<Record<string, unknown>>;
+  pricing_model?: string | null;
+  price_per_call?: number | string | null;
 };
 
 type AppDetail = DeveloperApp & {
@@ -156,6 +163,23 @@ function formatDate(value: string | null | undefined): string {
 function metricOrNoData(value: number | string | null | undefined): string | number {
   if (value === null || value === undefined || value === '') return 'No data';
   return value;
+}
+
+function appPricingLabel(pricing: Record<string, unknown> | null | undefined): string {
+  const model = String(pricing?.model ?? pricing?.type ?? pricing?.plan ?? 'free').toLowerCase();
+  const amount = Number(pricing?.amount ?? pricing?.price ?? pricing?.monthly ?? 0);
+  if (model === 'free' || amount <= 0) return 'Free';
+  if (model.includes('month')) return `$${amount.toFixed(2)}/mo`;
+  if (model.includes('call') || model.includes('usage')) return `$${amount.toFixed(2)}/use`;
+  return `$${amount.toFixed(2)}`;
+}
+
+function skillPricingLabel(skill: Pick<DeveloperSkill, 'pricing_model' | 'price_per_call'>): string {
+  const model = String(skill.pricing_model ?? 'free').toLowerCase();
+  const amount = Number(skill.price_per_call ?? 0);
+  if (model === 'free' || amount <= 0) return 'Free';
+  if (model === 'per_call' || model === 'usage') return `$${amount.toFixed(2)}/call`;
+  return 'Usage priced';
 }
 
 export default function DeveloperConsolePage() {
@@ -444,9 +468,10 @@ export default function DeveloperConsolePage() {
             <EmptyState title="No apps yet" body="Publish an app or register an SDK app to populate this surface." action={<Button href="/publish/app">Publish app</Button>} />
           ) : (
             <DataTable
-              columns={['App', 'Runtime', 'Review', 'Installs', 'Health', 'Actions']}
+              columns={['App', 'Price', 'Runtime', 'Review', 'Installs', 'Health', 'Actions']}
               rows={filteredApps.map(app => [
                 app.name,
+                appPricingLabel(app.pricing),
                 app.runtimeType,
                 <StatusPill key={`${app.id}-publish`} status={publishStatus(app)} />,
                 String(app.installCount),
@@ -474,9 +499,10 @@ export default function DeveloperConsolePage() {
             <EmptyState title="No skills yet" body="Publish a capability to populate this surface." action={<Button href="/publish/skill">Publish skill</Button>} />
           ) : (
             <DataTable
-              columns={['Skill', 'Category', 'Review', 'Installs', 'Calls', 'Actions']}
+              columns={['Skill', 'Price', 'Category', 'Review', 'Installs', 'Calls', 'Actions']}
               rows={filteredSkills.map(skill => [
                 skill.name,
+                skillPricingLabel(skill),
                 skill.category,
                 <StatusPill key={`${skill.id}-publish`} status={publishStatus(skill)} />,
                 String(skill.total_installs ?? 0),
@@ -536,11 +562,23 @@ export default function DeveloperConsolePage() {
       return (
         <div className="os-drawer-stack">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-            <MetricCard label="Revenue Summary" value={formatMoneyMetric(earnings.all_time)} />
-            <MetricCard label="Monthly Revenue" value={formatMoneyMetric(earnings.this_month)} />
+            <MetricCard label="Developer Earnings" value={formatMoneyMetric(earnings.all_time)} />
+            <MetricCard label="This Month" value={formatMoneyMetric(earnings.this_month)} />
             <MetricCard label="Last Month" value={formatMoneyMetric(earnings.last_month)} />
+            <MetricCard label="Gross Sales" value={formatMoneyMetric(earnings.gross_all_time)} />
+            <MetricCard label="Platform Cut" value={formatMoneyMetric(earnings.platform_cut_all_time)} />
+            <MetricCard label="Revenue Split" value={`${earnings.revenue_share_pct ?? 70}% developer / ${earnings.platform_share_pct ?? 30}% platform`} />
             <MetricCard label="Payout Status" value={Number(earnings?.all_time ?? 0) > 0 ? 'Pending' : 'No payout'} />
           </div>
+          <Card>
+            <div className="os-entity-title" style={{ marginBottom: 12 }}>Monetization Rules</div>
+            <div className="os-drawer-stack">
+              <div className="os-entity-copy">Apps and skills can be free or priced after listing metadata, permissions, verification, and review.</div>
+              <div className="os-entity-copy">Developer earnings are calculated only from real paid app or skill usage records.</div>
+              <div className="os-entity-copy">Workflows and subagents are reusable execution assets, not monetized marketplace products.</div>
+              <div className="os-entity-copy">Agent Credits remain platform compute accounting and are separate from developer earnings.</div>
+            </div>
+          </Card>
           <Card>
             <div className="os-entity-title" style={{ marginBottom: 12 }}>App Revenue</div>
             <div className="os-entity-copy">No paid app transactions recorded.</div>
