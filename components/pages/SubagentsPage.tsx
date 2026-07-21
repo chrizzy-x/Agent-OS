@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
+import { fetchBrowserSession, fetchWithBrowserSession } from '@/src/auth/browser-session';
 import {
   Button,
   EmptyState,
@@ -90,14 +91,20 @@ export default function SubagentsPage({
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const session = await fetchBrowserSession().catch(() => null);
+      if (!session) {
+        setSubagents([]);
+        setInstalledSkills([]);
+        return;
+      }
       const [subagentsRes, workspacesRes, skillsRes] = await Promise.all([
-        fetch(`/api/subagents${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
-        fetch('/api/workspaces', { cache: 'no-store' }),
-        fetch('/api/skills/installed', { cache: 'no-store' }),
+        fetchWithBrowserSession(`/api/subagents${shell.activeWorkspaceId ? `?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/workspaces', { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/skills/installed', { cache: 'no-store' }),
       ]);
-      const subagentsData = await subagentsRes.json();
-      const workspacesData = await workspacesRes.json();
-      const skillsData = await skillsRes.json();
+      const subagentsData = await subagentsRes.response.json();
+      const workspacesData = await workspacesRes.response.json();
+      const skillsData = await skillsRes.response.json();
       setSubagents(subagentsData.subagents ?? []);
       setInstalledSkills((skillsData.installed_skills ?? []).map((entry: { skill?: Record<string, unknown> }) => ({
         id: String(entry.skill?.id ?? ''),

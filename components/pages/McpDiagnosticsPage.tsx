@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Nav from '@/components/Nav';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { Drawer } from '@/components/os/overlays';
-import { fetchBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
+import { fetchBrowserSession, fetchWithBrowserSession, type BrowserSession } from '@/src/auth/browser-session';
 import {
   Badge,
   Button,
@@ -89,19 +89,24 @@ export default function McpDiagnosticsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [sessionData, registryRes, agentsRes, connectorsRes] = await Promise.all([
-        fetchBrowserSession().catch(() => null),
-        fetch('/api/mcp', { cache: 'no-store' }),
-        fetch('/api/agents', { cache: 'no-store' }),
-        fetch('/api/connectors', { cache: 'no-store' }),
-      ]);
+      const sessionData = await fetchBrowserSession().catch(() => null);
+      const registryRes = await fetch('/api/mcp', { cache: 'no-store' });
       const registry = await registryRes.json();
-      const agents = await agentsRes.json();
-      const connectorPayload = await connectorsRes.json();
       setSession(sessionData);
       setPayload(registryRes.ok ? normalizeMcpPayload(registry) : null);
-      setExternalAgents(agentsRes.ok ? agents.agents ?? [] : []);
-      setConnectors(connectorsRes.ok ? connectorPayload.connectors ?? [] : []);
+      if (!sessionData) {
+        setExternalAgents([]);
+        setConnectors([]);
+        return;
+      }
+      const [agentsRes, connectorsRes] = await Promise.all([
+        fetchWithBrowserSession('/api/agents', { cache: 'no-store' }),
+        fetchWithBrowserSession('/api/connectors', { cache: 'no-store' }),
+      ]);
+      const agents = await agentsRes.response.json();
+      const connectorPayload = await connectorsRes.response.json();
+      setExternalAgents(agentsRes.response.ok ? agents.agents ?? [] : []);
+      setConnectors(connectorsRes.response.ok ? connectorPayload.connectors ?? [] : []);
     } catch {
       setPayload(null);
     } finally {

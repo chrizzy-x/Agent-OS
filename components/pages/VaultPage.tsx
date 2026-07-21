@@ -6,6 +6,7 @@ import { ConfirmModal, Drawer } from '@/components/os/overlays';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import WorkspaceShell from '@/components/os/workspace-shell';
 import { useApplicationShell } from '@/components/os/application-shell';
+import { fetchBrowserSession, fetchWithBrowserSession } from '@/src/auth/browser-session';
 import {
   Badge,
   Button,
@@ -132,7 +133,12 @@ export default function VaultPage() {
   const loadSecrets = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/vault?search=${encodeURIComponent(search)}${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
+      const session = await fetchBrowserSession().catch(() => null);
+      if (!session) {
+        setSecrets([]);
+        return;
+      }
+      const { response } = await fetchWithBrowserSession(`/api/vault?search=${encodeURIComponent(search)}${shell.activeWorkspaceId ? `&workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}` : ''}`, { cache: 'no-store' });
       const payload = await response.json();
       setSecrets(payload.secrets ?? []);
     } catch {
