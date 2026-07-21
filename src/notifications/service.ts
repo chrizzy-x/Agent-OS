@@ -40,6 +40,47 @@ function mapNotification(row: Record<string, unknown>): NotificationRecord {
   };
 }
 
+function consolidationKey(item: NotificationRecord): string {
+  const type = item.type.toLowerCase();
+  if (type.includes('security') || type.includes('auth') || type.includes('token') || type.includes('session')) {
+    return item.id;
+  }
+  return [
+    item.type,
+    item.title,
+    item.body,
+    item.workspaceId ?? '',
+    item.sessionId ?? '',
+    item.executionId ?? '',
+    String(item.metadata.deepLink ?? item.metadata.href ?? item.metadata.navigateTo ?? item.metadata.actionHref ?? ''),
+  ].join('\u001f');
+}
+
+export function consolidateNotifications(notifications: NotificationRecord[]): NotificationRecord[] {
+  const byKey = new Map<string, NotificationRecord & { metadata: Record<string, unknown> }>();
+  for (const item of notifications) {
+    const key = consolidationKey(item);
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, item);
+      continue;
+    }
+    const currentTime = Date.parse(current.createdAt);
+    const nextTime = Date.parse(item.createdAt);
+    const latest = Number.isFinite(nextTime) && (!Number.isFinite(currentTime) || nextTime > currentTime) ? item : current;
+    const count = Number(current.metadata.consolidatedCount ?? 1) + 1;
+    byKey.set(key, {
+      ...latest,
+      status: current.status === 'unread' || item.status === 'unread' ? 'unread' : latest.status,
+      metadata: {
+        ...latest.metadata,
+        consolidatedCount: count,
+      },
+    });
+  }
+  return [...byKey.values()].sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+}
+
 export async function createNotification(params: {
   agentId: string;
   workspaceId?: string | null;
@@ -102,18 +143,18 @@ export async function listNotifications(params: {
     }
 
     const { data, error } = await query;
-    if (!error) return ((data ?? []) as Record<string, unknown>[]).map(mapNotification);
+    if (!error) return consolidateNotifications(((data ?? []) as Record<string, unknown>[]).map(mapNotification));
   } catch {
     // Fall through to local state.
   }
 
   const state = await readLocalRuntimeState();
-  return state.notifications
+  return consolidateNotifications(state.notifications
     .filter(item => String(item.agent_id) === params.agentId)
     .filter(item => !params.status || params.status === 'all' || item.status === params.status)
     .sort((left, right) => String(right.created_at ?? '').localeCompare(String(left.created_at ?? '')))
     .slice(0, Math.max(1, Math.min(params.limit ?? 50, 200)))
-    .map(mapNotification);
+    .map(mapNotification));
 }
 
 export async function updateNotification(params: {

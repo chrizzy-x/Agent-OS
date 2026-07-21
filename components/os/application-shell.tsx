@@ -186,6 +186,11 @@ function formatNotificationTime(value: string): string {
   }
 }
 
+function notificationRepeatCount(item: NotificationRef): number {
+  const count = Number(item.metadata.consolidatedCount ?? 1);
+  return Number.isFinite(count) && count > 1 ? count : 1;
+}
+
 function formatSessionTime(value: string): string {
   try {
     return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value));
@@ -240,8 +245,7 @@ function NotificationDrawer(props: {
   for (const item of props.notifications) {
     if (item.status === 'archived') continue;
     if (item.status === 'unread') grouped.get('Unread')?.push(item);
-    grouped.get('Recent')?.push(item);
-    grouped.get(notificationGroup(item.type))?.push(item);
+    else grouped.get(notificationGroup(item.type))?.push(item);
   }
 
   return (
@@ -270,7 +274,7 @@ function NotificationDrawer(props: {
                 <article key={`${group}-${item.id}`} className="agentos-notification-item" data-status={item.status}>
                   <i aria-hidden="true">{notificationGroup(item.type).slice(0, 1)}</i>
                   <div>
-                    <strong>{item.title}</strong>
+                    <strong>{item.title}{notificationRepeatCount(item) > 1 ? ` (${notificationRepeatCount(item)} alerts)` : ''}</strong>
                     <p>{item.body}</p>
                     <time>{formatNotificationTime(item.createdAt)}</time>
                     <div className="agentos-notification-actions">
