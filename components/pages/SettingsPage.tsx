@@ -375,8 +375,12 @@ export default function SettingsPage() {
         <CardSection title="Usage">
           <div className="settings-two-column">
             <div className="os-entity-copy">Agent Credits: visible in compute telemetry when backend usage records are available.</div>
+            <div className="os-entity-copy">Credit balance: no real credit ledger connected.</div>
+            <div className="os-entity-copy">Reset window: no real reset schedule connected.</div>
+            <div className="os-entity-copy">Usage history: no real compute usage records connected.</div>
             <div className="os-entity-copy">Bearer tokens: {session?.capabilities?.includes('use_bearer_token') ? 'Enabled.' : lockedControlReason(currentPlanKey, 'use_bearer_token')}</div>
             <div className="os-entity-copy">Builder Revenue: {session?.capabilities?.includes('create_app') ? 'Enabled for publisher workspaces.' : lockedControlReason(currentPlanKey, 'create_app')}</div>
+            <div className="os-entity-copy">Developer earnings stay separate from Agent Credits compute accounting.</div>
             <div className="os-entity-copy">Upgrade, Downgrade, and plan switching change capability gates immediately while beta billing is disabled.</div>
           </div>
         </CardSection>

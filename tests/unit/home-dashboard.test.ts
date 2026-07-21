@@ -28,6 +28,8 @@ describe('Home dashboard baseline', () => {
     expect(page).toContain('MCP Status');
     expect(page).toContain('Recommended Next Actions');
     expect(page).toContain('payload.credits.message');
+    expect(page).toContain('Developer monetization: separate from compute credits');
+    expect(page).toContain('payload.credits.usageHistory.length');
   });
 
   it('does not drift back to a public marketing landing page', () => {

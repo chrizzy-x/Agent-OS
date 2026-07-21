@@ -79,6 +79,11 @@ type DashboardPayload = {
     balance: number | string | null;
     resetWindow: string | null;
     weeklyAllowance: number | string | null;
+    usageHistory: Array<{ id: string; label: string; credits: number | string; createdAt: string }>;
+    consumedBy: Array<{ source: string; credits: number | string }>;
+    lowCreditWarning: boolean;
+    upgradePath: string;
+    computeSeparatedFromMonetization: boolean;
     message: string;
   };
   recommendedActions: Array<{ id: string; label: string; href: string; reason: string }>;
@@ -538,9 +543,17 @@ export default function HomePage() {
                 <div className="os-entity-title">{payload.credits.label}</div>
                 <div className="os-entity-copy">{payload.credits.message}</div>
               </div>
-              <Badge tone="warning">Disabled</Badge>
+              <Badge tone={payload.credits.lowCreditWarning ? 'warning' : 'default'}>{payload.credits.available ? 'Connected' : 'Not connected'}</Badge>
             </div>
-            <Button disabled variant="secondary" disabledReason={payload.credits.message}>View usage</Button>
+            <div className="settings-two-column" style={{ marginBottom: 12 }}>
+              <div className="os-entity-copy">Balance: {payload.credits.balance ?? 'No telemetry'}</div>
+              <div className="os-entity-copy">Weekly allowance: {payload.credits.weeklyAllowance ?? 'No telemetry'}</div>
+              <div className="os-entity-copy">Reset window: {payload.credits.resetWindow ?? 'No telemetry'}</div>
+              <div className="os-entity-copy">Usage history: {payload.credits.usageHistory.length ? `${payload.credits.usageHistory.length} records` : 'No real records'}</div>
+              <div className="os-entity-copy">Consumed by: {payload.credits.consumedBy.length ? `${payload.credits.consumedBy.length} sources` : 'No real records'}</div>
+              <div className="os-entity-copy">Developer monetization: separate from compute credits</div>
+            </div>
+            <Button href={payload.credits.upgradePath} variant="secondary">View plan options</Button>
           </Card>
         </div>
 

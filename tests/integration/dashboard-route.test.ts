@@ -225,7 +225,11 @@ describe('GET /api/dashboard', () => {
     expect(body.privateSubagents).toHaveLength(1);
     expect(body.privateSubagents[0].name).toBe('Research helper');
     expect(body.credits.available).toBe(false);
-    expect(body.credits.message).toBe('Credit telemetry is not connected yet.');
+    expect(body.credits.message).toContain('will not show fake balances');
+    expect(body.credits.usageHistory).toEqual([]);
+    expect(body.credits.consumedBy).toEqual([]);
+    expect(body.credits.computeSeparatedFromMonetization).toBe(true);
+    expect(body.credits.upgradePath).toBe('/settings?section=billing');
     expect(body.recommendedActions.some((action: { id: string }) => action.id === 'open-super-agentos')).toBe(true);
     expect(body.sdkApps).toEqual([]);
     expect(body.ffp).toBeNull();

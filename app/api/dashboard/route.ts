@@ -203,7 +203,12 @@ export async function GET(request: NextRequest) {
       balance: null,
       resetWindow: null,
       weeklyAllowance: null,
-      message: 'Credit telemetry is not connected yet.',
+      usageHistory: [],
+      consumedBy: [],
+      lowCreditWarning: false,
+      upgradePath: '/settings?section=billing',
+      computeSeparatedFromMonetization: true,
+      message: 'Credit telemetry is not connected yet. AgentOS will not show fake balances, reset windows, or usage history.',
     };
     const recommendedActions = [
       { id: 'open-super-agentos', label: 'Open Super AgentOS', href: '/studio?mode=nl', reason: 'Start or continue execution from NL Studio.' },
