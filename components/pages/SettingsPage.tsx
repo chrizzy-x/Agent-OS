@@ -18,10 +18,16 @@ import { Badge, Button, Card, EmptyState, Input, LoadingState, PageHeader, Texta
 type SettingsSectionId =
   | 'general'
   | 'account'
+  | 'plan'
+  | 'credits'
   | 'billing'
+  | 'memory'
   | 'appearance'
   | 'notifications'
   | 'privacy-security'
+  | 'vault'
+  | 'connected-tools'
+  | 'data-privacy'
   | 'developer-access'
   | 'sessions'
   | 'devices'
@@ -48,14 +54,20 @@ type ThemePreference = 'system' | 'light' | 'dark';
 const SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string }> = [
   { id: 'general', label: 'General' },
   { id: 'account', label: 'Account' },
-  { id: 'billing', label: 'Subscription & Billing' },
+  { id: 'plan', label: 'Plan' },
+  { id: 'credits', label: 'Credits' },
+  { id: 'billing', label: 'Billing' },
+  { id: 'memory', label: 'Memory' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'privacy-security', label: 'Privacy & Security' },
-  { id: 'experimental', label: 'Experimental' },
+  { id: 'vault', label: 'Vault' },
+  { id: 'connected-tools', label: 'Connected Tools' },
+  { id: 'data-privacy', label: 'Data & Privacy' },
   { id: 'developer-access', label: 'Developer Access' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'devices', label: 'Devices' },
+  { id: 'experimental', label: 'Experimental' },
 ];
 
 const PLAN_CARDS: Array<{ plan: AgentPlan; summary: string }> = [
@@ -85,6 +97,11 @@ function CardSection(props: { id?: string; title: string; action?: ReactNode; ch
       </Card>
     </section>
   );
+}
+
+function confirmDestructiveAction(message: string): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.confirm(message);
 }
 
 export default function SettingsPage() {
@@ -257,6 +274,7 @@ export default function SettingsPage() {
   }
 
   async function revokeToken(id: string) {
+    if (!confirmDestructiveAction('Revoke this bearer token? Connected tools using it will lose access.')) return;
     const response = await fetch('/api/bearer-tokens', {
       method: 'DELETE',
       credentials: 'include',
@@ -268,6 +286,7 @@ export default function SettingsPage() {
   }
 
   async function revokeSession(sessionId: string) {
+    if (!confirmDestructiveAction('Revoke this session? That device will need to sign in again.')) return;
     const response = await fetch(`/api/settings/sessions?sessionId=${encodeURIComponent(sessionId)}`, { method: 'DELETE', credentials: 'include' });
     setMessage(response.ok ? 'Session revoked.' : 'Session revoke failed.');
     await load();
@@ -279,6 +298,7 @@ export default function SettingsPage() {
   }
 
   async function signOutAllDevices() {
+    if (!confirmDestructiveAction('Sign out all devices? Every active browser session will need to sign in again.')) return;
     await fetch('/api/settings/sessions', { method: 'DELETE', credentials: 'include' }).catch(() => null);
     await destroyBrowserSession();
     router.replace('/signin');
@@ -359,7 +379,7 @@ export default function SettingsPage() {
     );
   }
 
-  function renderBilling() {
+  function renderPlan() {
     return (
       <div className="os-drawer-stack">
         <CardSection title="Current Plan">
@@ -371,18 +391,7 @@ export default function SettingsPage() {
             {currentDescriptor.limits.map(limit => <div key={limit} className="os-entity-copy">{limit}</div>)}
           </div>
           <div className="os-entity-copy" style={{ marginTop: 12 }}>{currentDescriptor.upgradePath}</div>
-        </CardSection>
-        <CardSection title="Usage">
-          <div className="settings-two-column">
-            <div className="os-entity-copy">Agent Credits: visible in compute telemetry when backend usage records are available.</div>
-            <div className="os-entity-copy">Credit balance: no real credit ledger connected.</div>
-            <div className="os-entity-copy">Reset window: no real reset schedule connected.</div>
-            <div className="os-entity-copy">Usage history: no real compute usage records connected.</div>
-            <div className="os-entity-copy">Bearer tokens: {session?.capabilities?.includes('use_bearer_token') ? 'Enabled.' : lockedControlReason(currentPlanKey, 'use_bearer_token')}</div>
-            <div className="os-entity-copy">Builder Revenue: {session?.capabilities?.includes('create_app') ? 'Enabled for publisher workspaces.' : lockedControlReason(currentPlanKey, 'create_app')}</div>
-            <div className="os-entity-copy">Developer earnings stay separate from Agent Credits compute accounting.</div>
-            <div className="os-entity-copy">Upgrade, Downgrade, and plan switching change capability gates immediately while beta billing is disabled.</div>
-          </div>
+          <div className="os-entity-copy" style={{ marginTop: 12 }}>Upgrade, Downgrade, and plan switching change capability gates immediately while beta billing is disabled.</div>
         </CardSection>
         <CardSection title="Plans">
           <div className="settings-plan-grid">
@@ -411,11 +420,109 @@ export default function SettingsPage() {
             })}
           </div>
         </CardSection>
+      </div>
+    );
+  }
+
+  function renderCredits() {
+    return (
+      <div className="os-drawer-stack">
+        <CardSection title="Agent Credits">
+          <div className="settings-two-column">
+            <div className="os-entity-copy">Compute accounting: Agent Credits belong to the AgentOS platform.</div>
+            <div className="os-entity-copy">Agent Credits: visible in compute telemetry when backend usage records are available.</div>
+            <div className="os-entity-copy">Credit balance: no real credit ledger connected.</div>
+            <div className="os-entity-copy">Reset window: no real reset schedule connected.</div>
+            <div className="os-entity-copy">Weekly allowance: shown when backend compute telemetry is available.</div>
+            <div className="os-entity-copy">Usage history: no real compute usage records connected.</div>
+            <div className="os-entity-copy">Developer earnings stay separate from Agent Credits compute accounting.</div>
+          </div>
+        </CardSection>
+        <CardSection title="Credit Access">
+          <div className="settings-two-column">
+            <div className="os-entity-copy">Bearer tokens: {session?.capabilities?.includes('use_bearer_token') ? 'Enabled.' : lockedControlReason(currentPlanKey, 'use_bearer_token')}</div>
+            <div className="os-entity-copy">Upgrade path: {currentDescriptor.upgradePath}</div>
+          </div>
+        </CardSection>
+      </div>
+    );
+  }
+
+  function renderBilling() {
+    return (
+      <div className="os-drawer-stack">
         <CardSection title="Payment Method, Invoices, Enterprise License">
           <div className="settings-two-column">
             <div className="os-entity-copy">Payment Method: beta billing is disabled.</div>
             <div className="os-entity-copy">Invoices: no invoices available in beta mode.</div>
             <div className="os-entity-copy">Enterprise License: contact sales when enabled.</div>
+            <div className="os-entity-copy">Plan changes are handled in the Plan section while beta billing is disabled.</div>
+          </div>
+        </CardSection>
+      </div>
+    );
+  }
+
+  function renderMemory() {
+    return (
+      <div className="os-drawer-stack">
+        <CardSection title="Memory">
+          <div className="settings-two-column">
+            <div className="os-entity-copy">Saved memory: available in the Memory route when backend records exist.</div>
+            <div className="os-entity-copy">Project boundaries: project context remains separate from global memory.</div>
+            <div className="os-entity-copy">Secrets: never saved as normal memory.</div>
+            <div className="os-entity-copy">Controls: view, edit, delete, and disable are managed from Memory.</div>
+          </div>
+          <div style={{ marginTop: 12 }}><Button href="/memory" variant="secondary">Open Memory</Button></div>
+        </CardSection>
+      </div>
+    );
+  }
+
+  function renderVault() {
+    return (
+      <div className="os-drawer-stack">
+        <CardSection title="Vault">
+          <div className="settings-two-column">
+            <div className="os-entity-copy">Secrets are stored in Vault, not chat memory.</div>
+            <div className="os-entity-copy">Runtime grants are permissioned and revocable.</div>
+            <div className="os-entity-copy">Lockdown disables Vault runtime grants until re-authentication.</div>
+            <div className="os-entity-copy">Secret values stay hidden by default.</div>
+          </div>
+          <div style={{ marginTop: 12 }}><Button href="/vault" variant="secondary">Open Vault</Button></div>
+        </CardSection>
+      </div>
+    );
+  }
+
+  function renderConnectedTools() {
+    return (
+      <div className="os-drawer-stack">
+        <CardSection title="Connected Tools">
+          <div className="settings-two-column">
+            <div className="os-entity-copy">Universal MCP connects external tools and agents.</div>
+            <div className="os-entity-copy">SDK apps remain separate from MCP connections.</div>
+            <div className="os-entity-copy">Permission review and health checks are managed from Universal MCP.</div>
+            <div className="os-entity-copy">MCP runtime can be disabled by Panic Lockdown.</div>
+          </div>
+          <div style={{ marginTop: 12 }}><Button href="/mcp" variant="secondary">Open Universal MCP</Button></div>
+        </CardSection>
+      </div>
+    );
+  }
+
+  function renderDataPrivacy() {
+    return (
+      <div className="os-drawer-stack">
+        <CardSection title="Data & Privacy">
+          <div className="settings-two-column">
+            <div className="os-entity-copy">Workspace assets live in Library and Projects.</div>
+            <div className="os-entity-copy">Session context, project context, memory, app outputs, workflow logs, and Vault secrets stay distinct.</div>
+            <div className="os-entity-copy">Data export: available from Library where backend file/export support exists.</div>
+            <div className="os-entity-copy">Account deletion: disabled until the destructive account-deletion backend is connected.</div>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Button variant="danger" disabled disabledReason="Account deletion backend is not connected yet.">Delete account</Button>
           </div>
         </CardSection>
       </div>
@@ -423,6 +530,7 @@ export default function SettingsPage() {
   }
 
   function renderDeveloperAccess() {
+    const isEnterprise = currentDescriptor.enterprise || session?.accountType === 'enterprise';
     const developerCapabilities = [
       ['Developer Console', session?.capabilities?.includes('access_developer_console') === true],
       ['App Publishing', session?.capabilities?.includes('create_app') === true],
@@ -436,6 +544,7 @@ export default function SettingsPage() {
           <div className="settings-two-column">
             <div className="os-entity-copy">Workspace plan: {currentPlanLabel}</div>
             <div className="os-entity-copy">Developer routes stay gated by backend capabilities.</div>
+            {!isEnterprise ? <div className="os-entity-copy">Retail users see upgrade guidance only. Full SDK publishing controls require Enterprise Plus or Enterprise Max.</div> : null}
           </div>
         </CardSection>
         <CardSection title="Capabilities">
@@ -447,6 +556,13 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        </CardSection>
+        <CardSection title="Developer Console">
+          {isEnterprise ? (
+            <Button href="/developer" variant="secondary">Open Developer Console</Button>
+          ) : (
+            <Button disabled disabledReason="Enterprise Plus or Enterprise Max is required for SDK publishing controls.">Open Developer Console</Button>
+          )}
         </CardSection>
       </div>
     );
@@ -566,7 +682,10 @@ export default function SettingsPage() {
   function renderCurrentSection() {
     if (section === 'general') return renderGeneral();
     if (section === 'account') return renderAccount();
+    if (section === 'plan') return renderPlan();
+    if (section === 'credits') return renderCredits();
     if (section === 'billing') return renderBilling();
+    if (section === 'memory') return renderMemory();
     if (section === 'appearance') return (
       <CardSection title="Appearance">
         <div className="os-segmented-control" role="group" aria-label="Theme">
@@ -588,6 +707,9 @@ export default function SettingsPage() {
       </CardSection>
     );
     if (section === 'privacy-security') return renderSecurity();
+    if (section === 'vault') return renderVault();
+    if (section === 'connected-tools') return renderConnectedTools();
+    if (section === 'data-privacy') return renderDataPrivacy();
     if (section === 'developer-access') return renderDeveloperAccess();
     if (section === 'sessions') return renderSessions();
     if (section === 'devices') return renderDevices();
@@ -609,7 +731,7 @@ export default function SettingsPage() {
         <PageHeader
           eyebrow="Settings"
           title="Settings"
-          subtitle="Configure AgentOS account, billing, appearance, notifications, privacy, sessions, and experiments."
+          subtitle="Configure AgentOS account, plan, credits, memory, appearance, notifications, security, Vault, connected tools, developer access, data, and billing."
           actions={<Button onClick={() => void saveAccount()}>{saving ? 'Saving...' : 'Save changes'}</Button>}
         />
 
