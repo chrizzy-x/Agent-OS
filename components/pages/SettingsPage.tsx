@@ -12,6 +12,7 @@ import {
   type BrowserSessionAuthState,
 } from '@/src/auth/browser-session';
 import { getSwitchablePlans, PLAN_ACCOUNT_TYPE, PLAN_LABELS, type AgentPlan } from '@/src/auth/tiers';
+import { getPlanDescriptor, lockedControlReason } from '@/src/auth/capabilities';
 import { Badge, Button, Card, EmptyState, Input, LoadingState, PageHeader, Textarea } from '@/components/os/ui';
 
 type SettingsSectionId =
@@ -110,6 +111,7 @@ export default function SettingsPage() {
   const currentPlan = workspaces[0]?.plan ? String(workspaces[0].plan) : session?.plan ?? 'retail_free';
   const currentPlanLabel = planLabel(currentPlan);
   const currentPlanKey = currentPlan in PLAN_LABELS ? currentPlan as AgentPlan : null;
+  const currentDescriptor = getPlanDescriptor(currentPlanKey ?? 'retail_free');
   const switchablePlans = useMemo(() => currentPlanKey ? new Set(getSwitchablePlans(currentPlanKey)) : new Set<AgentPlan>(), [currentPlanKey]);
 
   const themePreference = (profile?.preferences?.theme === 'light' || profile?.preferences?.theme === 'dark' || profile?.preferences?.theme === 'system'
@@ -363,14 +365,19 @@ export default function SettingsPage() {
         <CardSection title="Current Plan">
           <div className="os-inline-actions">
             <Badge tone="accent">{currentPlanLabel}</Badge>
-            <span className="os-entity-copy">Usage and limits are enforced by backend capabilities.</span>
+            <span className="os-entity-copy">{currentDescriptor.enterprise ? 'Enterprise workspace' : 'Retail workspace'} | beta billing is disabled.</span>
           </div>
+          <div className="settings-two-column" style={{ marginTop: 12 }}>
+            {currentDescriptor.limits.map(limit => <div key={limit} className="os-entity-copy">{limit}</div>)}
+          </div>
+          <div className="os-entity-copy" style={{ marginTop: 12 }}>{currentDescriptor.upgradePath}</div>
         </CardSection>
         <CardSection title="Usage">
           <div className="settings-two-column">
-            <div className="os-entity-copy">Token Usage: available in plan telemetry when enabled.</div>
-            <div className="os-entity-copy">Builder Revenue: {session?.capabilities?.includes('create_app') ? 'Enabled for publisher workspaces.' : 'Not enabled.'}</div>
-            <div className="os-entity-copy">Upgrade, Downgrade, and plan switching are available while beta billing is disabled.</div>
+            <div className="os-entity-copy">Agent Credits: visible in compute telemetry when backend usage records are available.</div>
+            <div className="os-entity-copy">Bearer tokens: {session?.capabilities?.includes('use_bearer_token') ? 'Enabled.' : lockedControlReason(currentPlanKey, 'use_bearer_token')}</div>
+            <div className="os-entity-copy">Builder Revenue: {session?.capabilities?.includes('create_app') ? 'Enabled for publisher workspaces.' : lockedControlReason(currentPlanKey, 'create_app')}</div>
+            <div className="os-entity-copy">Upgrade, Downgrade, and plan switching change capability gates immediately while beta billing is disabled.</div>
           </div>
         </CardSection>
         <CardSection title="Plans">
@@ -388,8 +395,11 @@ export default function SettingsPage() {
                     </div>
                     <div className="os-entity-copy">Account intent: {targetIntent}</div>
                     <div className="os-entity-copy">{card.summary}</div>
+                    <div className="os-drawer-stack">
+                      {getPlanDescriptor(card.plan).limits.map(limit => <small key={limit} className="os-entity-copy">{limit}</small>)}
+                    </div>
                     <Button disabled={!canSwitch || active || pendingPlan !== null} onClick={() => void changePlan(card.plan)}>
-                      {active ? 'Active' : pendingPlan === card.plan ? 'Changing...' : `Switch to ${PLAN_LABELS[card.plan]}`}
+                      {active ? 'Active' : pendingPlan === card.plan ? 'Changing...' : `Upgrade / switch to ${PLAN_LABELS[card.plan]}`}
                     </Button>
                   </div>
                 </Card>
@@ -429,7 +439,7 @@ export default function SettingsPage() {
             {developerCapabilities.map(([label, enabled]) => (
               <div key={label} className="os-entity-head">
                 <span className="os-entity-copy">{label}</span>
-                <Badge tone={enabled ? 'success' : 'default'}>{enabled ? 'Enabled' : 'Unavailable'}</Badge>
+                <Badge tone={enabled ? 'success' : 'warning'}>{enabled ? 'Enabled' : 'Enterprise required'}</Badge>
               </div>
             ))}
           </div>

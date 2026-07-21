@@ -48,6 +48,8 @@ async function buildSessionPayload(agentId: string, token: string) {
       planLabel: plan.label,
       accountType: plan.enterprise ? 'enterprise' : 'retail',
       capabilities: plan.capabilities,
+      limits: plan.limits,
+      upgradePath: plan.upgradePath,
       expiresAt: claims.exp ? new Date(claims.exp * 1000).toISOString() : null,
     },
   };

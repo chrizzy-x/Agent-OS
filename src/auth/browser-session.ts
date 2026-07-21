@@ -5,6 +5,8 @@ export interface BrowserSession {
   planLabel?: string;
   accountType?: 'retail' | 'enterprise';
   capabilities?: string[];
+  limits?: string[];
+  upgradePath?: string;
   expiresAt: string | null;
 }
 

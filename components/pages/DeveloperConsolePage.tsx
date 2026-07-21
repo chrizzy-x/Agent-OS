@@ -7,6 +7,7 @@ import { Drawer } from '@/components/os/overlays';
 import { useRouteDrawer } from '@/components/os/drawer-state';
 import { resolveBrowserAccessState } from '@/src/auth/browser-access';
 import { fetchBrowserSessionState, type BrowserSession, type BrowserSessionAuthState } from '@/src/auth/browser-session';
+import { lockedControlReason } from '@/src/auth/capabilities';
 import { formatMetricCount, formatMoneyMetric } from '@/src/data/discipline';
 import {
   ActivityFeed,
@@ -178,6 +179,8 @@ export default function DeveloperConsolePage() {
   const [tab, setTab] = useState<DeveloperTab>('overview');
 
   const canUseDeveloperConsole = session?.capabilities?.includes('access_developer_console') === true;
+  const currentPlan = session?.plan ?? 'retail_free';
+  const developerLockReason = lockedControlReason(currentPlan, 'access_developer_console') ?? undefined;
   const accessState = resolveBrowserAccessState(session, loading, 'access_developer_console', authState);
 
   const load = useCallback(async () => {
@@ -661,8 +664,8 @@ export default function DeveloperConsolePage() {
               <div className="os-entity-copy">Published skills: {skills.length}</div>
               <div className="os-entity-copy">SDK registrations: {registry.length}</div>
               <div className="os-entity-copy">Recovery needed: {recoveryEntries.length}</div>
-              <Button href="/publish/app" variant="secondary">Publish app</Button>
-              <Button href="/publish/skill" variant="secondary">Publish skill</Button>
+              <Button href="/publish/app" variant="secondary" disabled={!canUseDeveloperConsole} disabledReason={developerLockReason}>Publish app</Button>
+              <Button href="/publish/skill" variant="secondary" disabled={!canUseDeveloperConsole} disabledReason={developerLockReason}>Publish skill</Button>
             </div>
           </Card>
         )}
@@ -687,7 +690,7 @@ export default function DeveloperConsolePage() {
             ? <EmptyState title="Session expired" body="Sign in again to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in again</Button>} />
             : <EmptyState title="Sign in required" body="Sign in to manage apps, SDK registrations, and analytics." action={<Button href="/signin">Sign in</Button>} />
         ) : !canUseDeveloperConsole ? (
-          <EmptyState title="Enterprise access required" body="Developer Console stays gated to enterprise-capable workspaces." action={<Button href="/studio">Open Studio</Button>} />
+          <EmptyState title="Enterprise access required" body="Developer Console, SDK, app publishing, skill publishing, webhooks, and developer analytics require Enterprise Plus or Enterprise Max." action={<Button href="/settings?section=billing">View plans</Button>} />
         ) : (
           <div className="os-drawer-stack">
             <Tabs tabs={DEVELOPER_TABS} active={tab} onChange={key => setTab(key as DeveloperTab)} />

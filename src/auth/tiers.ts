@@ -36,6 +36,40 @@ export const PLAN_PRICES_USD: Record<AgentPlan, number> = {
   enterprise_max: 0,
 };
 
+export const PLAN_LIMIT_LABELS: Record<AgentPlan, string[]> = {
+  retail_free: [
+    '1 GB workspace storage',
+    '100 MB memory context',
+    '60 requests per minute',
+    'Browser session access',
+  ],
+  retail_pro: [
+    '10 GB workspace storage',
+    '1 GB memory context',
+    '300 requests per minute',
+    'Bearer token and API access',
+  ],
+  enterprise_plus: [
+    '100 GB workspace storage',
+    '10 GB memory context',
+    '1,000 requests per minute',
+    'SDK, publishing, team, and developer controls',
+  ],
+  enterprise_max: [
+    '250 GB workspace storage',
+    '25 GB memory context',
+    '2,500 requests per minute',
+    'Highest enterprise limits, governance, and diagnostics',
+  ],
+};
+
+export const PLAN_UPGRADE_COPY: Record<AgentPlan, string> = {
+  retail_free: 'Upgrade to Pro for bearer tokens and API access, or Enterprise Plus for SDK and publishing.',
+  retail_pro: 'Upgrade to Enterprise Plus for SDK, Appstore publishing, Skill Store publishing, and team controls.',
+  enterprise_plus: 'Upgrade to Enterprise Max for the highest limits, governance, and advanced diagnostics.',
+  enterprise_max: 'Enterprise Max is the highest AgentOS plan in this build.',
+};
+
 export const PLAN_ACCOUNT_TYPE: Record<AgentPlan, AccountType> = {
   retail_free: 'retail',
   retail_pro: 'retail',

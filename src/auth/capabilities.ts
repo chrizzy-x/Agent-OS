@@ -5,6 +5,8 @@ import {
   isEnterprisePlan,
   PLAN_LABELS,
   PLAN_PRICES_USD,
+  PLAN_LIMIT_LABELS,
+  PLAN_UPGRADE_COPY,
   TIER_QUOTAS,
   type AgentPlan,
 } from './tiers.js';
@@ -103,6 +105,8 @@ export type PlanDescriptor = {
   enterprise: boolean;
   capabilities: Capability[];
   quotas: AgentQuotas;
+  limits: string[];
+  upgradePath: string;
 };
 
 export function getPlanDescriptor(planOrTier: unknown): PlanDescriptor {
@@ -114,6 +118,8 @@ export function getPlanDescriptor(planOrTier: unknown): PlanDescriptor {
     enterprise: isEnterprisePlan(plan),
     capabilities: [...CAPABILITY_MATRIX[plan]],
     quotas: TIER_QUOTAS[plan],
+    limits: PLAN_LIMIT_LABELS[plan],
+    upgradePath: PLAN_UPGRADE_COPY[plan],
   };
 }
 
@@ -144,4 +150,27 @@ export function capabilityMessage(capability: Capability): string {
   }
 
   return `Plan capability required: ${capability}`;
+}
+
+export function lockedControlReason(planOrTier: unknown, capability: Capability): string | null {
+  if (hasCapability(planOrTier, capability)) return null;
+  if (capability === 'use_bearer_token') return 'Bearer token access requires Pro, Enterprise Plus, or Enterprise Max.';
+  if (
+    capability === 'access_sdk'
+    || capability === 'access_developer_console'
+    || capability === 'create_skill'
+    || capability === 'publish_skill'
+    || capability === 'create_app'
+    || capability === 'publish_app'
+    || capability === 'manage_manifest'
+    || capability === 'manage_webhook'
+    || capability === 'manage_versions'
+    || capability === 'manage_team'
+    || capability === 'manage_org_vault'
+    || capability === 'view_audit_logs'
+    || capability === 'use_advanced_analytics'
+  ) {
+    return 'Requires Enterprise Plus or Enterprise Max.';
+  }
+  return capabilityMessage(capability);
 }
