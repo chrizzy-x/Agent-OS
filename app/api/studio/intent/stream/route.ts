@@ -4,7 +4,7 @@ import { appendExecutionLog, createExecution, updateExecution } from '@/src/exec
 import { createNotification } from '@/src/notifications/service';
 import { listProjects } from '@/src/projects/service';
 import { streamStudioChatReply } from '@/src/studio/conversation';
-import { getStudioModelLabel } from '@/src/studio/providers';
+import { getStudioModelLabel, getStudioProviderStatus } from '@/src/studio/providers';
 import { detectAgentOSIntent, humanStatusForIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle } from '@/src/studio/persistence';
 import { createAgentTask, updateAgentTask, type AgentTaskRecord } from '@/src/tasks/service';
@@ -147,6 +147,7 @@ export async function POST(request: NextRequest) {
           workspaceId,
           projectId,
         });
+        const providerStatus = getStudioProviderStatus();
         task = await createAgentTask({
           userId: ctx.agentId,
           workspaceId,
@@ -169,11 +170,23 @@ export async function POST(request: NextRequest) {
             invocationCount: invocations.length,
             contextVersion: workspaceContext.metadata.contextVersion,
             graphVersion: workspaceContext.capabilityGraph.graphVersion,
+            providerStatus: {
+              mode: providerStatus.mode,
+              provider: providerStatus.provider,
+              model: providerStatus.model,
+              label: providerStatus.label,
+            },
           },
           executionMetadata: {
             runtime: 'super-agentos',
             runtimeContract: workspaceContext.runtimeRegistry.contract,
             contextBuild: workspaceContext.metadata,
+            provider: {
+              mode: providerStatus.mode,
+              provider: providerStatus.provider,
+              model: providerStatus.model,
+              label: providerStatus.label,
+            },
           },
         });
 
@@ -188,7 +201,17 @@ export async function POST(request: NextRequest) {
           sourceId: sessionId,
           title: message.slice(0, 180),
           input: { message, approval: body.approval === true, attachments, invocations },
-          metadata: { projectId, taskId: task.id },
+          metadata: {
+            projectId,
+            taskId: task.id,
+            runtime: 'super-agentos',
+            provider: {
+              mode: providerStatus.mode,
+              provider: providerStatus.provider,
+              model: providerStatus.model,
+              label: providerStatus.label,
+            },
+          },
           model: getStudioModelLabel(),
         });
         executionId = execution.id;
@@ -201,8 +224,18 @@ export async function POST(request: NextRequest) {
           agentId: ctx.agentId,
           executionId,
           message: 'Super AgentOS request started',
+          data: {
+            providerMode: providerStatus.mode,
+            provider: providerStatus.provider,
+            model: providerStatus.model,
+          },
         });
-        push('execution', { executionId, status: 'RUNNING' });
+        push('execution', {
+          executionId,
+          status: 'RUNNING',
+          providerMode: providerStatus.mode,
+          providerLabel: providerStatus.label,
+        });
 
         const intent = await detectAgentOSIntent(message);
         const statusText = humanStatusForIntent(intent);
@@ -290,7 +323,7 @@ export async function POST(request: NextRequest) {
             agentId: ctx.agentId,
             executionId,
             message: 'Super AgentOS request completed',
-            data: { kind: 'chat_reply' },
+            data: { kind: 'chat_reply', providerMode: providerStatus.mode },
           });
           await createNotification({
             agentId: ctx.agentId,
@@ -362,7 +395,7 @@ export async function POST(request: NextRequest) {
           agentId: ctx.agentId,
           executionId,
           message: paused ? 'Super AgentOS request paused for approval' : 'Super AgentOS request completed',
-          data: { kind: payload.kind, status: response.status },
+          data: { kind: payload.kind, status: response.status, providerMode: providerStatus.mode },
         });
         await createNotification({
           agentId: ctx.agentId,

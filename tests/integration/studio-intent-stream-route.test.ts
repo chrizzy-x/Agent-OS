@@ -97,6 +97,8 @@ describe('POST /api/studio/intent/stream', () => {
 
     expect(body).toContain('event: execution');
     expect(body).toContain('event: status');
+    expect(body).toContain('"providerMode":"local_fallback"');
+    expect(body).toContain('"providerLabel":"Local fallback"');
     expect(body).toContain('data: {"text":"Hel"}');
     expect(body).toContain('data: {"text":"lo"}');
     expect(body).toContain('"status":"COMPLETED"');
@@ -108,6 +110,21 @@ describe('POST /api/studio/intent/stream', () => {
     expect(mocks.appendStudioMessage).toHaveBeenNthCalledWith(2, expect.objectContaining({
       role: 'assistant',
       content: 'Hello',
+    }));
+    expect(mocks.createExecution).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'local-fallback',
+      metadata: expect.objectContaining({
+        provider: expect.objectContaining({
+          mode: 'local_fallback',
+          label: 'Local fallback',
+        }),
+      }),
+    }));
+    expect(mocks.appendExecutionLog).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Super AgentOS request started',
+      data: expect.objectContaining({
+        providerMode: 'local_fallback',
+      }),
     }));
   });
 
