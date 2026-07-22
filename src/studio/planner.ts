@@ -1,4 +1,5 @@
 import { getRedisClient } from '../storage/redis.js';
+import { generateWithStudioProvider, getStudioModelLabel } from './providers.js';
 
 // In-memory fallback for when Redis is unavailable
 const LOCAL_TOKENS = new Map<string, { value: string; expiresAt: number }>();
@@ -277,28 +278,16 @@ export function sanitizeStudioPlan(instruction: string, plan: Plan): Plan {
 }
 
 export async function callClaude(instruction: string): Promise<Plan> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('Studio AI is not configured. Contact the platform owner to set ANTHROPIC_API_KEY.');
-
-  const res = await fetch(ANTHROPIC_API, {
-    method: 'POST',
-    headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: instruction }],
-    }),
+  const result = await generateWithStudioProvider({
+    system: SYSTEM_PROMPT,
+    user: instruction,
+    maxTokens: 2048,
   });
+  if (!result?.text) {
+    throw new Error(`Studio AI planning is not configured. Configure STUDIO_AI_PROVIDER with Anthropic or OpenAI credentials. Current route: ${getStudioModelLabel()}.`);
+  }
 
-  const data = await res.json() as { content?: Array<{ type: string; text: string }>; error?: { message: string } };
-  if (!res.ok) throw new Error(data.error?.message ?? 'Anthropic API error');
-
-  const text = data.content?.find(c => c.type === 'text')?.text ?? '';
+  const text = result.text;
   const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
   return sanitizeStudioPlan(instruction, JSON.parse(cleaned) as Plan);
 }

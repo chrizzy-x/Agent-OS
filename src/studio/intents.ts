@@ -1,3 +1,5 @@
+import { generateWithStudioProvider } from './providers.js';
+
 export const AGENT_OS_INTENTS = [
   'NORMAL_CHAT',
   'REASONING',
@@ -19,8 +21,6 @@ export const AGENT_OS_INTENTS = [
 ] as const;
 
 export type AgentOSIntent = (typeof AGENT_OS_INTENTS)[number];
-
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 
 function hasKeyword(message: string, keywords: string[]): boolean {
   return keywords.some(keyword => message.includes(keyword));
@@ -51,9 +51,6 @@ export function detectIntentHeuristically(input: string): AgentOSIntent {
 }
 
 async function classifyIntentWithModel(input: string): Promise<AgentOSIntent | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
   const prompt = [
     'Classify the user request into exactly one label.',
     `Allowed labels: ${AGENT_OS_INTENTS.join(', ')}`,
@@ -62,27 +59,12 @@ async function classifyIntentWithModel(input: string): Promise<AgentOSIntent | n
   ].join('\n');
 
   try {
-    const response = await fetch(ANTHROPIC_API, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-haiku-latest',
-        max_tokens: 12,
-        temperature: 0,
-        system: 'Classify the request. Output only one allowed label.',
-        messages: [{ role: 'user', content: prompt }],
-      }),
+    const result = await generateWithStudioProvider({
+      system: 'Classify the request. Output only one allowed label.',
+      user: prompt,
+      maxTokens: 12,
     });
-
-    if (!response.ok) return null;
-    const payload = await response.json() as {
-      content?: Array<{ type?: string; text?: string }>;
-    };
-    const text = payload.content?.find(item => item.type === 'text')?.text?.trim().toUpperCase();
+    const text = result?.text.trim().toUpperCase();
     if (text && AGENT_OS_INTENTS.includes(text as AgentOSIntent)) {
       return text as AgentOSIntent;
     }
