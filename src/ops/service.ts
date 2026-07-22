@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import Anthropic from '@anthropic-ai/sdk';
 import { isFfpEnabled } from '../config/env.js';
 import {
   FULL_CATALOG,
@@ -8,6 +7,7 @@ import {
   type FeatureCatalogItem,
 } from '../catalog/feature-catalog.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { generateWithStudioProvider, getStudioProviderStatus } from '../studio/providers.js';
 import { TOOLS } from '../tools.js';
 import { ValidationError } from '../utils/errors.js';
 
@@ -79,12 +79,10 @@ type TaskRow = {
 type HealthSignals = {
   hasSupabase: boolean;
   hasRedis: boolean;
-  hasAnthropic: boolean;
+  hasStudioProvider: boolean;
   ffpEnabled: boolean;
   activeMcpServers: number;
 };
-
-let anthropicClient: Anthropic | null = null;
 
 function sanitizeSlug(value: string): string {
   return value.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toLowerCase();
@@ -143,35 +141,19 @@ function buildInfraAgent(feature: FeatureCatalogItem, role: PairRole) {
   };
 }
 
-async function getAnthropicClient(): Promise<Anthropic | null> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return null;
-  }
-
-  if (!anthropicClient) {
-    anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  }
-
-  return anthropicClient;
-}
-
 async function maybeGenerateTriageSuggestion(feature: FeatureCatalogItem, summary: string): Promise<string | null> {
-  const client = await getAnthropicClient();
-  if (!client) {
+  const providerStatus = getStudioProviderStatus();
+  if (!providerStatus.configured) {
     return null;
   }
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 160,
-    messages: [{
-      role: 'user',
-      content: `You are triaging an Agent OS operations incident.\nFeature: ${feature.name}\nSummary: ${summary}\nReturn two short remediation actions in plain English.`,
-    }],
+  const result = await generateWithStudioProvider({
+    system: 'You are triaging an AgentOS operations incident. Return two short remediation actions in plain English.',
+    user: `Feature: ${feature.name}\nSummary: ${summary}`,
+    maxTokens: 160,
   });
 
-  const first = response.content[0];
-  return first && first.type === 'text' ? first.text : null;
+  return result?.text?.trim() || null;
 }
 
 export async function syncFeatureCatalog() {
@@ -275,7 +257,7 @@ async function getHealthSignals(): Promise<HealthSignals> {
   return {
     hasSupabase: true,
     hasRedis: Boolean(process.env.REDIS_URL),
-    hasAnthropic: Boolean(process.env.ANTHROPIC_API_KEY),
+    hasStudioProvider: getStudioProviderStatus().configured,
     ffpEnabled: isFfpEnabled(),
     activeMcpServers: count ?? 0,
   };
@@ -320,9 +302,9 @@ function evaluatePairHealth(feature: FeatureCatalogItem, pair: PairRow | undefin
     reasons.push('No active MCP servers are registered.');
   }
 
-  if (feature.slug === 'error-triage' && !signals.hasAnthropic) {
+  if (feature.slug === 'error-triage' && !signals.hasStudioProvider) {
     score -= 0.15;
-    reasons.push('Anthropic API key is not configured for triage assistance.');
+    reasons.push('Live Studio provider is not configured for triage assistance.');
   }
 
   if (feature.kind === 'runtime_function' && !(feature.slug in TOOLS)) {
@@ -369,7 +351,7 @@ async function createHealthSnapshot(feature: FeatureCatalogItem, pair: PairRow, 
       activeMcpServers: signals.activeMcpServers,
       ffpEnabled: signals.ffpEnabled,
       hasRedis: signals.hasRedis,
-      hasAnthropic: signals.hasAnthropic,
+      hasStudioProvider: signals.hasStudioProvider,
     },
   });
 
