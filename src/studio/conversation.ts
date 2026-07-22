@@ -1,7 +1,6 @@
 import type { AgentOSIntent } from './intents.js';
+import { generateWithStudioProvider, streamWithStudioProvider } from './providers.js';
 import { summarizeValue } from '../ui/presenters.js';
-
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 
 function buildConversationContext(params: {
   message: string;
@@ -20,29 +19,22 @@ function buildConversationContext(params: {
   return `${contextLines}\n\nUser request:\n${params.message}`;
 }
 
-function buildConversationRequest(params: {
+function buildConversationPayload(params: {
   message: string;
   intent: AgentOSIntent;
   workspaceName?: string | null;
   projectName?: string | null;
   sessionTitle?: string | null;
-  stream?: boolean;
-}): Record<string, unknown> {
+}): { system: string; user: string; maxTokens: number } {
   return {
-    model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
-    max_tokens: 1200,
-    temperature: 0.2,
-    stream: params.stream === true,
+    maxTokens: 1200,
     system: [
       'You are AgentOS Studio, an AI operating system assistant.',
       'Respond clearly in useful Markdown.',
       'Never emit raw JSON, transport payloads, hidden reasoning, or internal chain-of-thought.',
       'If the request sounds actionable but needs an approval step, describe the action briefly instead of inventing success.',
     ].join(' '),
-    messages: [{
-      role: 'user',
-      content: buildConversationContext(params),
-    }],
+    user: buildConversationContext(params),
   };
 }
 
@@ -127,28 +119,10 @@ export async function generateStudioChatReply(params: {
   projectName?: string | null;
   sessionTitle?: string | null;
 }): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return buildFallbackReply(params);
-  }
-
+  const payload = buildConversationPayload(params);
   try {
-    const response = await fetch(ANTHROPIC_API, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(buildConversationRequest(params)),
-    });
-
-    if (!response.ok) return buildFallbackReply(params);
-    const payload = await response.json() as {
-      content?: Array<{ type?: string; text?: string }>;
-    };
-    const reply = payload.content?.find(item => item.type === 'text')?.text?.trim();
-    return reply || buildFallbackReply(params);
+    const result = await generateWithStudioProvider(payload);
+    return result?.text || buildFallbackReply(params);
   } catch {
     return buildFallbackReply(params);
   }
@@ -163,72 +137,23 @@ export async function streamStudioChatReply(params: {
   signal?: AbortSignal;
   onDelta: (text: string) => void | Promise<void>;
 }): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  const payload = buildConversationPayload(params);
+  try {
+    const result = await streamWithStudioProvider({
+      ...payload,
+      signal: params.signal,
+      onDelta: params.onDelta,
+    });
+    if (result?.text) return result.text;
+  } catch {
+    // Fall through to local fallback.
+  }
+
+  {
     const fallback = buildFallbackReply(params);
     await params.onDelta(fallback);
     return fallback;
   }
-
-  const response = await fetch(ANTHROPIC_API, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(buildConversationRequest({ ...params, stream: true })),
-    signal: params.signal,
-  });
-
-  if (!response.ok || !response.body) {
-    const fallback = buildFallbackReply(params);
-    await params.onDelta(fallback);
-    return fallback;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let reply = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, '\n');
-    const frames = buffer.split('\n\n');
-    buffer = frames.pop() ?? '';
-
-    for (const frame of frames) {
-      const data = frame
-        .split('\n')
-        .filter(line => line.startsWith('data:'))
-        .map(line => line.slice(5).trim())
-        .join('\n');
-      if (!data || data === '[DONE]') continue;
-
-      try {
-        const payload = JSON.parse(data) as {
-          type?: string;
-          delta?: { type?: string; text?: string };
-        };
-        const text = payload.type === 'content_block_delta' && payload.delta?.type === 'text_delta'
-          ? payload.delta.text ?? ''
-          : '';
-        if (!text) continue;
-        reply += text;
-        await params.onDelta(text);
-      } catch {
-        // Ignore malformed provider events.
-      }
-    }
-
-    if (done) break;
-  }
-
-  if (reply.trim()) return reply;
-  const fallback = buildFallbackReply(params);
-  await params.onDelta(fallback);
-  return fallback;
 }
 
 export function formatExecutionReply(summary: string, result: unknown): string {

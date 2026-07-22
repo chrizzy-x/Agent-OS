@@ -4,6 +4,7 @@ import { appendExecutionLog, createExecution, updateExecution } from '@/src/exec
 import { createNotification } from '@/src/notifications/service';
 import { listProjects } from '@/src/projects/service';
 import { streamStudioChatReply } from '@/src/studio/conversation';
+import { getStudioModelLabel } from '@/src/studio/providers';
 import { detectAgentOSIntent, humanStatusForIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle } from '@/src/studio/persistence';
 import { createAgentTask, updateAgentTask, type AgentTaskRecord } from '@/src/tasks/service';
@@ -188,7 +189,7 @@ export async function POST(request: NextRequest) {
           title: message.slice(0, 180),
           input: { message, approval: body.approval === true, attachments, invocations },
           metadata: { projectId, taskId: task.id },
-          model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
+          model: getStudioModelLabel(),
         });
         executionId = execution.id;
         await updateExecution({

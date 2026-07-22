@@ -222,12 +222,17 @@ JWT_SECRET=
 ADMIN_TOKEN=
 ENCRYPTION_KEY=
 VAULT_ENCRYPTION_KEY=
+STUDIO_AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-6
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5
 ```
 
 Notes:
 - `VAULT_ENCRYPTION_KEY` falls back to `ENCRYPTION_KEY`
 - `FFP_TEMP_ENABLED` is optional; the workspace toggle is the source of truth
+- Studio chooses the configured provider through `STUDIO_AI_PROVIDER`; without a live provider key, Super AgentOS returns an honest local structured fallback instead of pretending model execution ran.
 
 ## Development
 
