@@ -1,6 +1,6 @@
-﻿import Anthropic from '@anthropic-ai/sdk';
 import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { generateWithStudioProvider, getStudioProviderStatus } from '../studio/providers.js';
 
 export type EvalCase = {
   id: string;
@@ -45,7 +45,6 @@ const localSuites = new Map<string, EvalSuite>();
 const localCases = new Map<string, EvalCase[]>();
 const localRuns = new Map<string, EvalRun[]>();
 const localResults = new Map<string, EvalResult[]>();
-let anthropicClient: Anthropic | null = null;
 
 function deepEqual(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -67,48 +66,38 @@ function containsExpected(actual: unknown, expected: unknown): boolean {
   return Object.entries(expected as Record<string, unknown>).every(([key, value]) => containsExpected((actual as Record<string, unknown>)[key], value));
 }
 
-async function getAnthropicClient(): Promise<Anthropic | null> {
-  if (anthropicClient) {
-    return anthropicClient;
-  }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return null;
-  }
-
-  anthropicClient = new Anthropic({ apiKey });
-  return anthropicClient;
-}
-
-async function judgeWithLlm(actualOutput: unknown, expectedOutput: unknown): Promise<{ score: number; reasoning: string }> {
-  const client = await getAnthropicClient();
-  if (!client) {
+export async function judgeWithLlm(actualOutput: unknown, expectedOutput: unknown): Promise<{ score: number; reasoning: string }> {
+  const providerStatus = getStudioProviderStatus();
+  if (!providerStatus.configured) {
     return {
       score: containsExpected(actualOutput, expectedOutput) ? 0.8 : 0.2,
-      reasoning: 'Fallback judge used because ANTHROPIC_API_KEY is not configured.',
+      reasoning: 'Deterministic fallback judge used because live Studio provider execution is not configured.',
     };
   }
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 300,
+  const result = await generateWithStudioProvider({
     system: 'Score the actual output against the expected output from 0 to 1. Return strict JSON with keys score and reasoning.',
-    messages: [
-      {
-        role: 'user',
-        content: JSON.stringify({ actualOutput, expectedOutput }),
-      },
-    ],
+    user: JSON.stringify({ actualOutput, expectedOutput }),
+    maxTokens: 300,
   });
+  if (!result) {
+    return {
+      score: containsExpected(actualOutput, expectedOutput) ? 0.8 : 0.2,
+      reasoning: `Deterministic fallback judge used because ${providerStatus.label} is unavailable.`,
+    };
+  }
 
-  const text = response.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
-    .join('')
+  const text = (result.text ?? '')
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
+
+  if (!text) {
+    return {
+      score: containsExpected(actualOutput, expectedOutput) ? 0.8 : 0.2,
+      reasoning: `Deterministic fallback judge used because ${providerStatus.label} returned no judge text.`,
+    };
+  }
 
   try {
     const parsed = JSON.parse(text) as { score?: number; reasoning?: string };
@@ -518,6 +507,4 @@ export async function executeEvalRun(params: {
     throw error;
   }
 }
-
-
 
