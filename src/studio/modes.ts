@@ -15,7 +15,7 @@ export const STUDIO_MODES = [
   {
     key: 'nl',
     label: 'NL Studio',
-    shortLabel: 'NL',
+    shortLabel: 'Chat',
     icon: 'N',
     description: 'Conversation-first Super AgentOS command surface.',
     initialState: 'NL_STUDIO',

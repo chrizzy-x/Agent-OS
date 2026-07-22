@@ -94,6 +94,24 @@ export default function ModeSwitch(props: {
             display: inline;
           }
         }
+
+        @media (max-width: 520px) {
+          .studio-mode-switch {
+            gap: 4px;
+            padding: 5px;
+            border-radius: 14px;
+          }
+
+          .studio-mode-switch button {
+            min-height: 38px;
+            gap: 0;
+            font-size: 0.8rem;
+          }
+
+          .studio-mode-icon {
+            display: none;
+          }
+        }
       `}</style>
     </div>
   );
