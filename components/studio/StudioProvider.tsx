@@ -176,6 +176,15 @@ type SuperAgentRecord = {
   status: string;
 };
 
+type ProviderStatusRecord = {
+  configured: boolean;
+  provider: 'anthropic' | 'openai' | null;
+  model: string | null;
+  label: string;
+  mode: 'live' | 'local_fallback';
+  message: string;
+};
+
 type PendingApproval = {
   confirmToken: string;
   reply: string;
@@ -190,6 +199,7 @@ type StudioContextValue = {
   streamingStatus: string | null;
   activeExecutionId: string | null;
   browserSession: BrowserSession | null;
+  providerStatus: ProviderStatusRecord;
   mode: StudioMode;
   setMode: (mode: StudioMode) => void;
   sidebarOpen: boolean;
@@ -270,6 +280,15 @@ type StudioContextValue = {
 
 const StudioContext = createContext<StudioContextValue | null>(null);
 
+const DEFAULT_PROVIDER_STATUS: ProviderStatusRecord = {
+  configured: false,
+  provider: null,
+  model: null,
+  label: 'Local fallback',
+  mode: 'local_fallback',
+  message: 'Live model execution is not configured. Studio will return honest structured fallback responses.',
+};
+
 function flattenFiles(nodes: StudioFileNode[]): StudioFileNode[] {
   return nodes.flatMap(node => [node, ...(node.children ? flattenFiles(node.children) : [])]);
 }
@@ -318,6 +337,7 @@ export function StudioProvider(props: {
   const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
   const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
   const [browserSession, setBrowserSession] = useState<BrowserSession | null>(null);
+  const [providerStatus, setProviderStatus] = useState<ProviderStatusRecord>(DEFAULT_PROVIDER_STATUS);
   const [mode, setModeState] = useState<StudioMode>(requestedMode);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
@@ -411,6 +431,7 @@ export function StudioProvider(props: {
     setProjects(nextProjects);
     setCurrentProject(nextCurrentProject);
     setWorkflows((payload.workflows ?? []) as WorkflowRecord[]);
+    setProviderStatus((payload.providerStatus ?? DEFAULT_PROVIDER_STATUS) as ProviderStatusRecord);
     setVaultSecrets((payload.vaultSecrets ?? []) as VaultSecretRecord[]);
     setInstalledSkills(mapInstalledSkills(payload.installedSkills));
     setInstalledApps(mapInstalledApps(payload.installedApps));
@@ -1138,6 +1159,7 @@ export function StudioProvider(props: {
     streamingStatus,
     activeExecutionId,
     browserSession,
+    providerStatus,
     mode,
     setMode,
     sidebarOpen,
@@ -1215,6 +1237,7 @@ export function StudioProvider(props: {
     activeExecutionId,
     advancedMode,
     browserSession,
+    providerStatus,
     closeContext,
     composerAttachments,
     composerInvocations,

@@ -6,6 +6,7 @@ import { listAccessibleMemoryEntries } from '../memory/service.js';
 import { resolveProjectForWorkspace, listProjects } from '../projects/service.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { listStudioSessions, createStudioSession, getStudioSessionBundle } from './persistence.js';
+import { getStudioProviderStatus } from './providers.js';
 import { listAccessibleSubagents } from '../subagents/service.js';
 import { allowLocalDataFallback } from '../data/discipline.js';
 import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
@@ -94,6 +95,7 @@ export async function buildStudioBootstrap(params: {
   mode?: StudioMode;
 }): Promise<Record<string, unknown>> {
   await reconcileAgentOSProvisioning(params.ownerAgentId).catch(() => undefined);
+  const providerStatus = getStudioProviderStatus();
 
   const [workspaces, sessions] = await Promise.all([
     listWorkspaces(params.ownerAgentId).catch(() => [] as Awaited<ReturnType<typeof listWorkspaces>>),
@@ -123,6 +125,7 @@ export async function buildStudioBootstrap(params: {
     if (!project) {
       return {
         mode: params.mode ?? 'nl',
+        providerStatus,
         session: null,
         sessions,
         messages: [],
@@ -229,6 +232,7 @@ export async function buildStudioBootstrap(params: {
 
   return {
     mode: params.mode ?? 'nl',
+    providerStatus,
     session: bundle?.session ?? session,
     sessions,
     messages: bundle?.messages ?? [],

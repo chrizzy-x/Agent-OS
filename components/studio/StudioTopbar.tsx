@@ -13,12 +13,13 @@ export default function StudioTopbar() {
     workspaces,
     notifications,
     browserSession,
+    providerStatus,
     openContext,
     startNewChat,
   } = useStudio();
   const nlMode = mode === 'nl';
   const modeDefinition = getStudioModeDefinition(mode);
-  const modelLabel = process.env.NEXT_PUBLIC_AGENTOS_MODEL ?? 'Default model';
+  const providerLabel = providerStatus.configured ? providerStatus.label : 'Local fallback';
   const workspace = workspaces.find(item => item.id === session?.workspaceId)
     ?? workspaces.find(item => item.id === currentProject?.workspaceId)
     ?? workspaces[0]
@@ -31,13 +32,16 @@ export default function StudioTopbar() {
         <span>{workspace?.name ?? 'Workspace'}</span>
         <span>{currentProject?.name ?? 'No project'}</span>
         <span>{modeDefinition.label}</span>
+        <span className={`studio-provider-pill ${providerStatus.mode}`} title={providerStatus.message}>
+          {providerStatus.configured ? 'AI live' : 'AI local'} · {providerLabel}
+        </span>
       </div>
       <ModeSwitch mode={mode} onChange={setMode} />
       <div className="studio-switchbar-actions">
         {nlMode ? <button type="button" onClick={() => void startNewChat()}>New chat</button> : null}
         <button type="button" onClick={() => openContext('notifications')}>Alerts {notifications.filter(item => item.status === 'unread').length}</button>
         <button type="button" onClick={() => openContext(nlMode ? 'overview' : 'logs')}>Context</button>
-        <span className="studio-switchbar-user">{browserSession?.agentName ?? 'User'} · {modelLabel}</span>
+        <span className="studio-switchbar-user">{browserSession?.agentName ?? 'User'}</span>
       </div>
       <style>{`
         .studio-switchbar {
@@ -70,6 +74,28 @@ export default function StudioTopbar() {
           flex: 0 0 auto;
           color: var(--text-tertiary);
           font-size: 0.7rem;
+        }
+
+        .studio-provider-pill {
+          max-width: 220px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          border: 1px solid var(--border);
+          border-radius: 999px;
+          padding: 4px 8px;
+          color: var(--text-secondary) !important;
+          background: rgba(255,255,255,0.04);
+        }
+
+        .studio-provider-pill.live {
+          border-color: color-mix(in srgb, #31c698 34%, var(--border));
+          color: #31c698 !important;
+        }
+
+        .studio-provider-pill.local_fallback {
+          border-color: color-mix(in srgb, #ffb53d 36%, var(--border));
+          color: #ffb53d !important;
         }
 
         .studio-switchbar-actions {
@@ -135,6 +161,10 @@ export default function StudioTopbar() {
             display: none;
           }
 
+          .studio-switchbar-title .studio-provider-pill {
+            display: inline-flex;
+          }
+
           .studio-switchbar-actions button:first-child:not(:last-child) {
             display: none;
           }
@@ -144,6 +174,11 @@ export default function StudioTopbar() {
           .studio-switchbar-title span,
           .studio-switchbar-actions button {
             display: none;
+          }
+
+          .studio-switchbar-title .studio-provider-pill {
+            display: inline-flex;
+            max-width: 92px;
           }
         }
       `}</style>

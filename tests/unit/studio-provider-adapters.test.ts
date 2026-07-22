@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateWithStudioProvider, getConfiguredStudioProvider, streamWithStudioProvider } from '../../src/studio/providers.js';
+import { generateWithStudioProvider, getConfiguredStudioProvider, getStudioProviderStatus, streamWithStudioProvider } from '../../src/studio/providers.js';
 
 const originalEnv = {
   STUDIO_AI_PROVIDER: process.env.STUDIO_AI_PROVIDER,
@@ -49,6 +49,17 @@ describe('Studio provider adapters', () => {
     expect(getConfiguredStudioProvider()).toEqual({
       provider: 'anthropic',
       model: 'claude-sonnet-4-6',
+    });
+  });
+
+  it('reports local fallback without exposing provider secrets', () => {
+    expect(getStudioProviderStatus()).toEqual({
+      configured: false,
+      provider: null,
+      model: null,
+      label: 'Local fallback',
+      mode: 'local_fallback',
+      message: 'Live model execution is not configured. Studio will return honest structured fallback responses.',
     });
   });
 

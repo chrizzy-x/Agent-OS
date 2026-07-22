@@ -16,6 +16,15 @@ export type StudioProviderResult = {
   text: string;
 };
 
+export type StudioProviderStatus = {
+  configured: boolean;
+  provider: StudioProviderName | null;
+  model: string | null;
+  label: string;
+  mode: 'live' | 'local_fallback';
+  message: string;
+};
+
 function preferredProvider(): StudioProviderName | null {
   const configured = process.env.STUDIO_AI_PROVIDER?.trim().toLowerCase();
   if (configured === 'openai' || configured === 'anthropic') return configured;
@@ -42,6 +51,28 @@ export function getConfiguredStudioProvider(): { provider: StudioProviderName; m
 export function getStudioModelLabel(): string {
   const provider = getConfiguredStudioProvider();
   return provider ? `${provider.provider}:${provider.model}` : 'local-fallback';
+}
+
+export function getStudioProviderStatus(): StudioProviderStatus {
+  const provider = getConfiguredStudioProvider();
+  if (!provider) {
+    return {
+      configured: false,
+      provider: null,
+      model: null,
+      label: 'Local fallback',
+      mode: 'local_fallback',
+      message: 'Live model execution is not configured. Studio will return honest structured fallback responses.',
+    };
+  }
+  return {
+    configured: true,
+    provider: provider.provider,
+    model: provider.model,
+    label: `${provider.provider}:${provider.model}`,
+    mode: 'live',
+    message: 'Live model execution is configured for Studio responses.',
+  };
 }
 
 function parseOpenAIText(payload: unknown): string {
