@@ -34,6 +34,25 @@ function isWorkspaceCapabilityQuestion(message: string): boolean {
   return /\b(what can you do|available capabilities|what is installed|workspace capabilities)\b/i.test(message);
 }
 
+function isProviderStatusQuestion(message: string): boolean {
+  return /\b(ai provider|model status|provider status|are you live|live model|local fallback|can i talk to super agent|is super agent live)\b/i.test(message);
+}
+
+function providerStatusReply(providerStatus: ReturnType<typeof getStudioProviderStatus>): string {
+  if (providerStatus.configured) {
+    return [
+      `Super AgentOS is connected to a live AI provider: ${providerStatus.label}.`,
+      'Studio will stream model-backed responses and record the provider route in execution history.',
+      'Secrets are not exposed in chat, logs, or provider status messages.',
+    ].join('\n\n');
+  }
+  return [
+    'Super AgentOS is available, but this environment is using local fallback responses because no live AI provider key is configured.',
+    'You can still create sessions, use workspace context, inspect capabilities, and get structured execution plans.',
+    'For full model-backed intelligence, configure Anthropic or OpenAI provider credentials in production.',
+  ].join('\n\n');
+}
+
 function workspaceCapabilityReply(context: Awaited<ReturnType<typeof buildWorkspaceContextPackage>>): string {
   const summary = context.capabilityGraph.summary;
   const sourceSummary = Object.entries(summary.bySourceType)
@@ -266,7 +285,13 @@ export async function POST(request: NextRequest) {
           });
           workspaceId = names.workspaceId;
           projectId = names.projectId;
-          if (isWorkspaceCapabilityQuestion(message)) {
+          if (isProviderStatusQuestion(message)) {
+            partialReply = providerStatusReply(providerStatus);
+            for (const text of replyChunks(partialReply)) {
+              push('delta', { text });
+              await new Promise(resolve => setTimeout(resolve, 8));
+            }
+          } else if (isWorkspaceCapabilityQuestion(message)) {
             partialReply = workspaceCapabilityReply(workspaceContext);
             for (const text of replyChunks(partialReply)) {
               push('delta', { text });

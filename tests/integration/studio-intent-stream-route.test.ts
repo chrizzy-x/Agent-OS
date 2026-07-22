@@ -154,6 +154,25 @@ describe('POST /api/studio/intent/stream', () => {
     }));
   });
 
+  it('answers provider status questions from runtime configuration', async () => {
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Can I talk to Super Agent now? Is Super Agent live?',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+      }),
+    }));
+    const body = await response.text();
+
+    expect(body).toContain('Super AgentOS is available');
+    expect(body).toContain('local fallback responses');
+    expect(body).toContain('configure');
+    expect(body).toContain('Anthropic or OpenAI provider credentials');
+    expect(mocks.streamStudioChatReply).not.toHaveBeenCalled();
+  });
+
   it('returns a generic error without exposing the thrown message', async () => {
     mocks.streamStudioChatReply.mockRejectedValue(new Error('secret provider stack'));
 
