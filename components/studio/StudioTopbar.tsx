@@ -19,7 +19,8 @@ export default function StudioTopbar() {
   } = useStudio();
   const nlMode = mode === 'nl';
   const modeDefinition = getStudioModeDefinition(mode);
-  const providerLabel = providerStatus.configured ? providerStatus.label : 'Local fallback';
+  const providerLabel = providerStatus.configured ? providerStatus.label : 'Super AgentOS';
+  const providerState = providerStatus.mode === 'external' ? 'External intelligence' : 'Native runtime';
   const workspace = workspaces.find(item => item.id === session?.workspaceId)
     ?? workspaces.find(item => item.id === currentProject?.workspaceId)
     ?? workspaces[0]
@@ -33,7 +34,7 @@ export default function StudioTopbar() {
         <span>{currentProject?.name ?? 'No project'}</span>
         <span>{modeDefinition.label}</span>
         <span className={`studio-provider-pill ${providerStatus.mode}`} title={providerStatus.message}>
-          {providerStatus.configured ? 'AI live' : 'AI local'} · {providerLabel}
+          {providerState} · {providerLabel}
         </span>
       </div>
       <ModeSwitch mode={mode} onChange={setMode} />
@@ -88,14 +89,14 @@ export default function StudioTopbar() {
           background: rgba(255,255,255,0.04);
         }
 
-        .studio-provider-pill.live {
+        .studio-provider-pill.external {
           border-color: color-mix(in srgb, #31c698 34%, var(--border));
           color: #31c698 !important;
         }
 
-        .studio-provider-pill.local_fallback {
-          border-color: color-mix(in srgb, #ffb53d 36%, var(--border));
-          color: #ffb53d !important;
+        .studio-provider-pill.native {
+          border-color: color-mix(in srgb, #765fff 36%, var(--border));
+          color: #8f7cff !important;
         }
 
         .studio-switchbar-actions {

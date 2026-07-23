@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
   appendStudioEvent: vi.fn(),
   appendStudioMessage: vi.fn(),
   getStudioSessionBundle: vi.fn(),
+  createAgentTask: vi.fn(),
+  updateAgentTask: vi.fn(),
+  listVaultSecrets: vi.fn(),
+  buildWorkspaceContextPackage: vi.fn(),
   listWorkspaces: vi.fn(),
 }));
 
@@ -45,6 +49,16 @@ vi.mock('../../src/studio/persistence.js', () => ({
   appendStudioMessage: mocks.appendStudioMessage,
   getStudioSessionBundle: mocks.getStudioSessionBundle,
 }));
+vi.mock('../../src/tasks/service.js', () => ({
+  createAgentTask: mocks.createAgentTask,
+  updateAgentTask: mocks.updateAgentTask,
+}));
+vi.mock('../../src/vault/service.js', () => ({
+  listVaultSecrets: mocks.listVaultSecrets,
+}));
+vi.mock('../../src/workspace-context/service.js', () => ({
+  buildWorkspaceContextPackage: mocks.buildWorkspaceContextPackage,
+}));
 vi.mock('../../src/workspaces/service.js', () => ({
   listWorkspaces: mocks.listWorkspaces,
 }));
@@ -64,6 +78,25 @@ describe('POST /api/studio/intent/stream', () => {
     mocks.translateMessageToStudioCommand.mockReturnValue(null);
     mocks.appendStudioEvent.mockResolvedValue({});
     mocks.appendStudioMessage.mockResolvedValue({});
+    mocks.createAgentTask.mockResolvedValue({ id: 'task-1', metadata: {} });
+    mocks.updateAgentTask.mockResolvedValue({});
+    mocks.listVaultSecrets.mockResolvedValue({ secrets: [] });
+    mocks.buildWorkspaceContextPackage.mockResolvedValue({
+      metadata: { contextVersion: 'context-v1' },
+      capabilityGraph: {
+        graphVersion: 'graph-v1',
+        summary: { available: 0, needsConfiguration: 0, error: 0, bySourceType: {} },
+        availableCapabilities: [],
+        needsConfiguration: [],
+      },
+      runtimeRegistry: {
+        contract: {
+          runtime: 'super-agentos',
+          plannerVersion: 'planner-v1',
+          selectionPolicy: 'native_first',
+        },
+      },
+    });
     mocks.getStudioSessionBundle.mockResolvedValue({
       session: {
         id: 'session-1',
@@ -97,8 +130,9 @@ describe('POST /api/studio/intent/stream', () => {
 
     expect(body).toContain('event: execution');
     expect(body).toContain('event: status');
-    expect(body).toContain('"providerMode":"local_fallback"');
-    expect(body).toContain('"providerLabel":"Local fallback"');
+    expect(body).toContain('"providerMode":"native"');
+    expect(body).toContain('"providerLabel":"Super AgentOS"');
+    expect(body).toContain('"executionTarget":"Super AgentOS"');
     expect(body).toContain('data: {"text":"Hel"}');
     expect(body).toContain('data: {"text":"lo"}');
     expect(body).toContain('"status":"COMPLETED"');
@@ -112,18 +146,23 @@ describe('POST /api/studio/intent/stream', () => {
       content: 'Hello',
     }));
     expect(mocks.createExecution).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'local-fallback',
+      model: 'super-agentos:native',
       metadata: expect.objectContaining({
         provider: expect.objectContaining({
-          mode: 'local_fallback',
-          label: 'Local fallback',
+          mode: 'native',
+          label: 'Super AgentOS',
+        }),
+        executionTarget: expect.objectContaining({
+          selected: 'super_agentos',
+          displayName: 'Super AgentOS',
         }),
       }),
     }));
     expect(mocks.appendExecutionLog).toHaveBeenCalledWith(expect.objectContaining({
       message: 'Super AgentOS request started',
       data: expect.objectContaining({
-        providerMode: 'local_fallback',
+        providerMode: 'native',
+        executionTarget: 'Super AgentOS',
       }),
     }));
   });
@@ -166,10 +205,11 @@ describe('POST /api/studio/intent/stream', () => {
     }));
     const body = await response.text();
 
-    expect(body).toContain('Super AgentOS is available');
-    expect(body).toContain('local fallback responses');
-    expect(body).toContain('configure');
-    expect(body).toContain('Anthropic or OpenAI provider credentials');
+    expect(body).toContain('Super AgentOS is running on the native AgentOS ');
+    expect(body).toContain('runtime.');
+    expect(body).toContain('External intelligence is optional');
+    expect(body).toContain('Connect a ');
+    expect(body).toContain('provider through Vault when you want BYOK ');
     expect(mocks.streamStudioChatReply).not.toHaveBeenCalled();
   });
 

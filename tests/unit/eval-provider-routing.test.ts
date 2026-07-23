@@ -23,9 +23,9 @@ describe('eval LLM judging provider routing', () => {
       configured: false,
       provider: null,
       model: null,
-      label: 'Local fallback',
-      mode: 'local_fallback',
-      message: 'Live model execution is not configured.',
+      label: 'Super AgentOS',
+      mode: 'native',
+      message: 'Super AgentOS is the native AgentOS runtime.',
     });
   });
 
@@ -34,7 +34,7 @@ describe('eval LLM judging provider routing', () => {
 
     await expect(judgeWithLlm({ answer: 'yes' }, { answer: 'yes' })).resolves.toEqual({
       score: 0.8,
-      reasoning: 'Deterministic fallback judge used because live Studio provider execution is not configured.',
+      reasoning: 'Deterministic native Super AgentOS judge used because external intelligence is not connected.',
     });
 
     expect(providerMocks.generateWithStudioProvider).not.toHaveBeenCalled();
@@ -46,8 +46,8 @@ describe('eval LLM judging provider routing', () => {
       provider: 'openai',
       model: 'gpt-test',
       label: 'OpenAI gpt-test',
-      mode: 'live',
-      message: 'Live model execution is configured.',
+      mode: 'external',
+      message: 'Development external intelligence override is configured.',
     });
     providerMocks.generateWithStudioProvider.mockResolvedValue({
       provider: 'openai',

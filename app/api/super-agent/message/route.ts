@@ -28,22 +28,22 @@ function isCapabilityQuestion(message: string): boolean {
 }
 
 function isProviderStatusQuestion(message: string): boolean {
-  return /\b(ai provider|model status|provider status|are you live|live model|local fallback|can i talk to super agent|is super agent live)\b/i.test(message);
+  return /\b(ai provider|model status|provider status|external intelligence|native runtime|can i talk to super agent|is super agent live)\b/i.test(message);
 }
 
 function providerStatusReply(providerStatus: ReturnType<typeof getStudioProviderStatus>): string {
   if (providerStatus.configured) {
     return [
-      `Super AgentOS is connected to a live AI provider: ${providerStatus.label}.`,
-      'It can answer normal questions through the configured model and route real work only through connected AgentOS capabilities.',
+      `Super AgentOS is using a development external intelligence override: ${providerStatus.label}.`,
+      'AgentOS still owns the session, context, memory, permissions, tools, execution logs, recovery, and final response.',
       'Secrets are not exposed in replies, context summaries, or provider status messages.',
     ].join('\n\n');
   }
 
   return [
-    'Super AgentOS is available, but this environment is using local fallback responses because no live AI provider key is configured.',
-    'You can still create sessions, inspect workspace capabilities, and get structured execution plans.',
-    'For full model-backed intelligence, configure Anthropic or OpenAI provider credentials in production.',
+    'Super AgentOS is running on the native AgentOS runtime.',
+    'External intelligence is optional. Users connect OpenAI, Anthropic, Gemini, or future providers through Vault when they want provider-assisted execution.',
+    'Super AgentOS can continue planning, answering, inspecting workspace capabilities, and producing structured results without external provider credentials.',
   ].join('\n\n');
 }
 
@@ -112,8 +112,8 @@ export async function POST(request: NextRequest) {
     const reply = answersProviderQuestion
       ? providerStatusReply(providerStatus)
       : answersWorkspaceQuestion
-        ? `In this workspace I can use ${capabilitySummary(context)} Available sources include apps, skills, workflows, subagents, MCP tools, projects, Library items, memory, and Vault metadata. I will show missing configuration instead of pretending unavailable tools worked.`
-        : await generateStudioChatReply({ message, intent });
+        ? `In this workspace I can use ${capabilitySummary(context)} Available sources include apps, skills, Primeflows, Prime Agents, MCP tools, projects, Library items, memory, and Vault metadata. I will show missing configuration instead of pretending unavailable tools worked.`
+        : await generateStudioChatReply({ message, intent, executionTargetId: 'super_agentos' });
     const completedAsConversation = Boolean(message) && !answersWorkspaceQuestion && !answersProviderQuestion;
 
     const updated = await updateAgentTask({

@@ -10,15 +10,15 @@ import { fetchWithBrowserSession } from '@/src/auth/browser-session';
 const SUGGESTIONS = [
   'Research a topic',
   'Build an app',
-  'Create a workflow',
+  'Create a Primeflow',
   'Analyze a file',
 ];
 
 const SLASH_COMMANDS = [
   { command: '/skill ', label: 'Run a skill' },
   { command: '/app ', label: 'Run an app' },
-  { command: '/workflow ', label: 'Run a workflow' },
-  { command: '/subagent ', label: 'Delegate to an incognito subagent' },
+  { command: '/workflow ', label: 'Run a Primeflow' },
+  { command: '/subagent ', label: 'Delegate to a Prime Agent' },
   { command: '/mcp ', label: 'Call an MCP tool' },
   { command: '/file ', label: 'Analyze an uploaded file' },
   { command: '/project ', label: 'Switch project context' },
@@ -86,6 +86,12 @@ function mcpRoutingCard(content: string): { state: 'ready' | 'reconnect'; title:
   return null;
 }
 
+function visibleResourceKind(kind: string): string {
+  if (kind === 'workflow') return 'Primeflow';
+  if (kind === 'subagent') return 'Prime Agent';
+  return kind;
+}
+
 async function fileData(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -107,6 +113,11 @@ export default function NLStudioPanel() {
     sending,
     streamingStatus,
     activeExecutionId,
+    executionTargets,
+    sessionExecutionTargetId,
+    messageExecutionOverrideId,
+    setSessionExecutionTarget,
+    setMessageExecutionOverride,
     session,
     currentProject,
     projects,
@@ -130,10 +141,13 @@ export default function NLStudioPanel() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [resourceMenu, setResourceMenu] = useState<ResourceMenu | null>(null);
+  const [executionMenuOpen, setExecutionMenuOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [activeChatMatchIndex, setActiveChatMatchIndex] = useState(0);
   const activeConversation = messages.length > 0;
+  const selectedExecutionTarget = executionTargets.find(target => target.id === (messageExecutionOverrideId ?? sessionExecutionTargetId))
+    ?? executionTargets.find(target => target.id === 'super_agentos');
   const normalizedChatSearch = chatSearchQuery.trim().toLowerCase();
   const lastUserMessage = useMemo(
     () => [...messages].reverse().find(message => message.role === 'user')?.content ?? '',
@@ -321,7 +335,7 @@ export default function NLStudioPanel() {
             <img src="/logo.png" alt="AgentOS" className="nl-empty-logo" />
             <div>
               <h1>What should Super AgentOS do?</h1>
-              <p>Start with a request, a file, an app, a skill, or a workflow.</p>
+              <p>Start with a request, a file, an app, a skill, or a Primeflow.</p>
             </div>
             <div className="nl-empty-suggestions" aria-label="Prompt suggestions">
               {SUGGESTIONS.map(suggestion => (
@@ -431,7 +445,7 @@ export default function NLStudioPanel() {
                       {composerInvocations.length > 0 ? (
                         <div className="nl-execution-chips" aria-label="Selected execution resources">
                           {composerInvocations.map(item => (
-                            <span key={item.id}>{item.kind}: {item.label}</span>
+                            <span key={item.id}>{visibleResourceKind(item.kind)}: {item.label}</span>
                           ))}
                         </div>
                       ) : null}
@@ -497,6 +511,64 @@ export default function NLStudioPanel() {
           submitComposer();
         }}>
           <div className="nl-composer-meta">
+            <div className="nl-execution-selector">
+              <button
+                type="button"
+                className="nl-execution-trigger"
+                onClick={() => setExecutionMenuOpen(open => !open)}
+                aria-haspopup="menu"
+                aria-expanded={executionMenuOpen}
+                aria-label="Choose execution mode"
+                title={selectedExecutionTarget?.description ?? 'Native AgentOS intelligence'}
+              >
+                <span>{selectedExecutionTarget?.displayName ?? 'Super AgentOS'}</span>
+                {messageExecutionOverrideId ? <em>Once</em> : null}
+              </button>
+              {executionMenuOpen ? (
+                <div className="nl-execution-menu" role="menu" aria-label="Execution options">
+                  {executionTargets.filter(target => target.userSelectable && target.availability === 'available').map(target => (
+                    <div key={target.id} className="nl-execution-option">
+                      <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={(messageExecutionOverrideId ?? sessionExecutionTargetId) === target.id}
+                        onClick={() => {
+                          void setSessionExecutionTarget(target.id);
+                          setExecutionMenuOpen(false);
+                        }}
+                      >
+                        <strong>{target.displayName}</strong>
+                        <span>{target.description}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="nl-execution-once"
+                        onClick={() => {
+                          setMessageExecutionOverride(target.id);
+                          setExecutionMenuOpen(false);
+                        }}
+                        title={`Use ${target.displayName} for one message`}
+                      >
+                        Once
+                      </button>
+                    </div>
+                  ))}
+                  {messageExecutionOverrideId ? (
+                    <button
+                      type="button"
+                      className="nl-execution-clear"
+                      onClick={() => {
+                        setMessageExecutionOverride(null);
+                        setExecutionMenuOpen(false);
+                      }}
+                    >
+                      Clear one-message override
+                    </button>
+                  ) : null}
+                  <a href="/vault" className="nl-execution-connect">Connect external intelligence</a>
+                </div>
+              ) : null}
+            </div>
             {currentProject ? (
               <button type="button" onClick={() => setResourceMenu(resourceMenu === 'project' ? null : 'project')} title="Change project context">
                 Project: {currentProject.name}
@@ -509,7 +581,7 @@ export default function NLStudioPanel() {
             ))}
             {composerInvocations.map(item => (
               <button key={item.id} type="button" onClick={() => removeComposerInvocation(item.id)} title="Remove invocation">
-                {item.kind}: {item.label} x
+                {visibleResourceKind(item.kind)}: {item.label} x
               </button>
             ))}
           </div>
@@ -534,8 +606,8 @@ export default function NLStudioPanel() {
             <button type="button" onClick={() => imageInputRef.current?.click()} aria-label="Upload image">Image</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'skill' ? null : 'skill')}>Skills</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'app' ? null : 'app')}>Apps</button>
-            <button type="button" onClick={() => setResourceMenu(resourceMenu === 'workflow' ? null : 'workflow')}>Workflow</button>
-            <button type="button" onClick={() => setResourceMenu(resourceMenu === 'subagent' ? null : 'subagent')}>Subagents</button>
+            <button type="button" onClick={() => setResourceMenu(resourceMenu === 'workflow' ? null : 'workflow')}>Primeflow</button>
+            <button type="button" onClick={() => setResourceMenu(resourceMenu === 'subagent' ? null : 'subagent')}>Prime Agents</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'project' ? null : 'project')}>Project</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'context' ? null : 'context')}>Context</button>
             <button type="button" onClick={() => setResourceMenu(resourceMenu === 'mcp' ? null : 'mcp')}>MCP</button>
@@ -574,7 +646,7 @@ export default function NLStudioPanel() {
                 >
                   {item.label}
                 </button>
-              )) : <span>{resourceMenu === 'project' ? 'No projects available.' : `No connected ${resourceMenu} resources.`}</span>}
+              )) : <span>{resourceMenu === 'project' ? 'No projects available.' : `No connected ${resourceMenu === 'workflow' ? 'Primeflow' : resourceMenu === 'subagent' ? 'Prime Agent' : resourceMenu} resources.`}</span>}
             </div>
           ) : null}
           {composerValue.startsWith('/') ? (
@@ -1147,6 +1219,82 @@ export default function NLStudioPanel() {
           display: none;
         }
 
+        .nl-execution-selector {
+          position: relative;
+        }
+
+        .nl-composer-meta .nl-execution-trigger {
+          border-color: rgba(76, 113, 255, 0.28);
+          background: color-mix(in srgb, var(--accent) 8%, transparent);
+          color: var(--text-primary);
+          font-weight: 700;
+        }
+
+        .nl-execution-trigger em {
+          margin-left: 5px;
+          color: var(--text-tertiary);
+          font-style: normal;
+          font-weight: 600;
+        }
+
+        .nl-execution-menu {
+          position: absolute;
+          left: 0;
+          bottom: calc(100% + 8px);
+          z-index: 20;
+          width: min(310px, calc(100vw - 28px));
+          display: grid;
+          gap: 5px;
+          padding: 8px;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: var(--bg-secondary);
+          box-shadow: 0 18px 50px rgba(0,0,0,0.28);
+        }
+
+        .nl-execution-option {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 5px;
+        }
+
+        .nl-execution-option button:first-child {
+          min-height: 42px;
+          display: grid;
+          justify-items: start;
+          gap: 2px;
+          text-align: left;
+        }
+
+        .nl-execution-option button[aria-checked="true"] {
+          border-color: rgba(76, 113, 255, 0.42);
+          background: color-mix(in srgb, var(--accent) 12%, transparent);
+          color: var(--text-primary);
+        }
+
+        .nl-execution-option span,
+        .nl-execution-connect {
+          overflow: hidden;
+          color: var(--text-tertiary);
+          font-size: 0.68rem;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .nl-execution-once {
+          width: 52px;
+        }
+
+        .nl-execution-clear,
+        .nl-execution-connect {
+          min-height: 32px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+          text-decoration: none;
+        }
+
         .nl-composer-meta button,
         .nl-composer-tools button {
           min-height: 25px;
@@ -1305,6 +1453,14 @@ export default function NLStudioPanel() {
 
           .nl-message-actions {
             opacity: 1;
+          }
+
+          .nl-execution-menu {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: 104px;
+            width: auto;
           }
         }
       `}</style>

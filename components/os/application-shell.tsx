@@ -151,9 +151,31 @@ function initials(session: BrowserSession | null) {
 }
 
 function formatMode(value: string | null) {
-  if (value === 'workflow') return 'Workflow Builder';
+  if (value === 'workflow') return 'Primeflow Builder';
   if (value === 'code') return 'Code Studio';
   return 'NL Studio';
+}
+
+function SurfaceIcon({ id }: { id: string }) {
+  const common = { 'aria-hidden': true, viewBox: '0 0 24 24' };
+  if (id === 'home') return <svg {...common}><path d="M4 11.5 12 5l8 6.5" /><path d="M6.5 10.5V20h11v-9.5" /><path d="M10 20v-5h4v5" /></svg>;
+  if (id === 'studio') return <svg {...common}><path d="M12 3v4" /><path d="M12 17v4" /><path d="M3 12h4" /><path d="M17 12h4" /><path d="m6.8 6.8 2.8 2.8" /><path d="m14.4 14.4 2.8 2.8" /><path d="m17.2 6.8-2.8 2.8" /><path d="m9.6 14.4-2.8 2.8" /></svg>;
+  if (id === 'search') return <svg {...common}><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>;
+  if (id === 'tasks') return <svg {...common}><path d="M8 6h12" /><path d="M8 12h12" /><path d="M8 18h12" /><path d="m3.8 6 .7.7L6 5" /><path d="m3.8 12 .7.7L6 11" /><path d="m3.8 18 .7.7L6 17" /></svg>;
+  if (id === 'projects') return <svg {...common}><path d="M4 7h6l2 2h8v10H4z" /><path d="M4 7V5h6l2 2" /></svg>;
+  if (id === 'library') return <svg {...common}><path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z" /><path d="M7 18h12" /><path d="M8 8h7" /></svg>;
+  if (id === 'appstore') return <svg {...common}><rect x="4" y="4" width="6" height="6" rx="1.5" /><rect x="14" y="4" width="6" height="6" rx="1.5" /><rect x="4" y="14" width="6" height="6" rx="1.5" /><rect x="14" y="14" width="6" height="6" rx="1.5" /></svg>;
+  if (id === 'skillstore') return <svg {...common}><path d="M12 3 4 7v6c0 4 3.2 6.6 8 8 4.8-1.4 8-4 8-8V7z" /><path d="m9 12 2 2 4-5" /></svg>;
+  if (id === 'subagents') return <svg {...common}><circle cx="12" cy="7" r="3" /><path d="M5 21a7 7 0 0 1 14 0" /><path d="M5 10a3 3 0 0 0 3 3" /><path d="M19 10a3 3 0 0 1-3 3" /></svg>;
+  if (id === 'workflows') return <svg {...common}><circle cx="5" cy="6" r="2" /><circle cx="19" cy="6" r="2" /><circle cx="12" cy="18" r="2" /><path d="M7 6h10" /><path d="M6.5 8 11 16" /><path d="m17.5 8-4.5 8" /></svg>;
+  if (id === 'memory') return <svg {...common}><path d="M8 4h8a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z" /><path d="M9 8h6" /><path d="M9 12h6" /><path d="M9 16h3" /></svg>;
+  if (id === 'vault') return <svg {...common}><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V8a4 4 0 0 1 8 0v2" /><circle cx="12" cy="15" r="1.5" /></svg>;
+  if (id === 'universal-mcp') return <svg {...common}><path d="M12 4v16" /><path d="M4 12h16" /><circle cx="12" cy="12" r="3" /><path d="M5 5l3 3" /><path d="m19 5-3 3" /><path d="m5 19 3-3" /><path d="m19 19-3-3" /></svg>;
+  if (id === 'developer') return <svg {...common}><path d="m9 8-4 4 4 4" /><path d="m15 8 4 4-4 4" /><path d="m13 5-2 14" /></svg>;
+  if (id === 'community') return <svg {...common}><circle cx="8" cy="8" r="3" /><circle cx="17" cy="10" r="2.5" /><path d="M3 20a5 5 0 0 1 10 0" /><path d="M14 20a4 4 0 0 1 7 0" /></svg>;
+  if (id === 'ffp') return <svg {...common}><path d="M12 3 4 7v10l8 4 8-4V7z" /><path d="M12 12 4 7" /><path d="m12 12 8-5" /><path d="M12 12v9" /></svg>;
+  if (id === 'docs') return <svg {...common}><path d="M6 3h9l3 3v15H6z" /><path d="M15 3v4h4" /><path d="M9 12h6" /><path d="M9 16h6" /></svg>;
+  return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M12 2v3" /><path d="M12 19v3" /><path d="M2 12h3" /><path d="M19 12h3" /></svg>;
 }
 
 function badgeCount(value: number): string {
@@ -405,7 +427,7 @@ function LeftSidebar(props: {
               props.onCloseMobile();
             }}
           >
-            <i aria-hidden="true">{item.icon}</i><b>{item.label}</b>{item.status === 'coming_soon' ? <small>Soon</small> : null}
+            <i aria-hidden="true"><SurfaceIcon id={item.id} /></i><b>{item.label}</b>{item.status === 'coming_soon' ? <small>Soon</small> : null}
           </Link>
         ))}
       </nav>
@@ -413,9 +435,9 @@ function LeftSidebar(props: {
       <section className="agentos-global-quick">
         <h2>Quick Actions</h2>
         <button type="button" onClick={() => navigate('/studio?mode=nl')}>New Chat</button>
-        <button type="button" onClick={() => navigate('/studio?mode=workflow&new=1')}>New Workflow</button>
+        <button type="button" onClick={() => navigate('/studio?mode=workflow&new=1')}>New Primeflow</button>
         <button type="button" onClick={() => navigate('/projects?create=1')}>New Project</button>
-        <button type="button" onClick={() => navigate('/subagents?create=1')}>New Subagent</button>
+        <button type="button" onClick={() => navigate('/subagents?create=1')}>New Prime Agent</button>
       </section>
 
       <section className="agentos-global-history">

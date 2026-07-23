@@ -71,7 +71,7 @@ export async function judgeWithLlm(actualOutput: unknown, expectedOutput: unknow
   if (!providerStatus.configured) {
     return {
       score: containsExpected(actualOutput, expectedOutput) ? 0.8 : 0.2,
-      reasoning: 'Deterministic fallback judge used because live Studio provider execution is not configured.',
+      reasoning: 'Deterministic native Super AgentOS judge used because external intelligence is not connected.',
     };
   }
 
@@ -83,7 +83,7 @@ export async function judgeWithLlm(actualOutput: unknown, expectedOutput: unknow
   if (!result) {
     return {
       score: containsExpected(actualOutput, expectedOutput) ? 0.8 : 0.2,
-      reasoning: `Deterministic fallback judge used because ${providerStatus.label} is unavailable.`,
+      reasoning: `Deterministic native Super AgentOS judge used because ${providerStatus.label} is unavailable.`,
     };
   }
 
@@ -95,7 +95,7 @@ export async function judgeWithLlm(actualOutput: unknown, expectedOutput: unknow
   if (!text) {
     return {
       score: containsExpected(actualOutput, expectedOutput) ? 0.8 : 0.2,
-      reasoning: `Deterministic fallback judge used because ${providerStatus.label} returned no judge text.`,
+      reasoning: `Deterministic native Super AgentOS judge used because ${providerStatus.label} returned no judge text.`,
     };
   }
 
@@ -507,4 +507,3 @@ export async function executeEvalRun(params: {
     throw error;
   }
 }
-

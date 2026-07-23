@@ -284,7 +284,7 @@ export async function callClaude(instruction: string): Promise<Plan> {
     maxTokens: 2048,
   });
   if (!result?.text) {
-    throw new Error(`Studio AI planning is not configured. Configure STUDIO_AI_PROVIDER with Anthropic or OpenAI credentials. Current route: ${getStudioModelLabel()}.`);
+    throw new Error(`External intelligence did not return a Primeflow plan. Super AgentOS remains the native runtime; optional development provider route: ${getStudioModelLabel()}.`);
   }
 
   const text = result.text;

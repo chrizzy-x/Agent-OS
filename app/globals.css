@@ -3586,9 +3586,17 @@ nextjs-portal {
   place-items: center;
   border: 1px solid var(--border);
   border-radius: 6px;
-  font-family: var(--font-mono), monospace;
-  font-size: 0.65rem;
-  font-style: normal;
+  color: var(--text-tertiary);
+}
+
+.agentos-global-nav i svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .agentos-global-nav b {

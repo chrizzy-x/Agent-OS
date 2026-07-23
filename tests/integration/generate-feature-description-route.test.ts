@@ -20,9 +20,9 @@ describe('POST /api/generate-feature-description', () => {
       configured: false,
       provider: null,
       model: null,
-      label: 'Local fallback',
-      mode: 'local_fallback',
-      message: 'Live model execution is not configured.',
+      label: 'Super AgentOS',
+      mode: 'native',
+      message: 'Super AgentOS is the native AgentOS runtime.',
     });
   });
 
@@ -61,8 +61,8 @@ describe('POST /api/generate-feature-description', () => {
       generated: false,
       description: 'Protect workspace secrets.',
       provider: {
-        mode: 'local_fallback',
-        label: 'Local fallback',
+        mode: 'native',
+        label: 'Super AgentOS',
       },
     });
   });

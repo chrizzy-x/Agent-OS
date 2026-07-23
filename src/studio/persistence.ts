@@ -282,6 +282,7 @@ export async function createStudioSession(params: {
     status: 'active',
     state: redactSecretsDeep(params.initialState ?? {
       mode: 'NORMAL_CHAT',
+      executionTargetId: 'super_agentos',
       workflowGraph: { nodes: [], edges: [] },
       workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
       artifacts: [],

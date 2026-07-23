@@ -8,7 +8,7 @@ import {
 
 describe('studio mode contract', () => {
   it('defines the three required Studio modes in product order', () => {
-    expect(STUDIO_MODES.map(mode => mode.label)).toEqual(['NL Studio', 'Workflow Builder', 'Code Studio']);
+    expect(STUDIO_MODES.map(mode => mode.label)).toEqual(['NL Studio', 'Primeflow Builder', 'Code Studio']);
     expect(STUDIO_MODES.map(mode => mode.key)).toEqual(['nl', 'workflow', 'code']);
   });
 

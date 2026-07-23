@@ -29,6 +29,7 @@ import type {
   StudioTerminalEvent,
   StudioTerminalSession,
 } from '@/src/studio/types';
+import type { ExecutionTarget } from '@/src/studio/execution-targets';
 
 type StudioSessionRecord = {
   id: string;
@@ -45,6 +46,7 @@ type StudioSessionRecord = {
   pinnedAt?: string | null;
   archivedAt?: string | null;
   deletedAt?: string | null;
+  state?: Record<string, unknown>;
 };
 
 type StudioMessageRecord = {
@@ -178,10 +180,10 @@ type SuperAgentRecord = {
 
 type ProviderStatusRecord = {
   configured: boolean;
-  provider: 'anthropic' | 'openai' | null;
+  provider: 'anthropic' | 'openai' | 'gemini' | null;
   model: string | null;
   label: string;
-  mode: 'live' | 'local_fallback';
+  mode: 'native' | 'external';
   message: string;
 };
 
@@ -200,6 +202,11 @@ type StudioContextValue = {
   activeExecutionId: string | null;
   browserSession: BrowserSession | null;
   providerStatus: ProviderStatusRecord;
+  executionTargets: ExecutionTarget[];
+  sessionExecutionTargetId: string;
+  messageExecutionOverrideId: string | null;
+  setSessionExecutionTarget: (targetId: string) => Promise<void>;
+  setMessageExecutionOverride: (targetId: string | null) => void;
   mode: StudioMode;
   setMode: (mode: StudioMode) => void;
   sidebarOpen: boolean;
@@ -284,9 +291,9 @@ const DEFAULT_PROVIDER_STATUS: ProviderStatusRecord = {
   configured: false,
   provider: null,
   model: null,
-  label: 'Local fallback',
-  mode: 'local_fallback',
-  message: 'Live model execution is not configured. Studio will return honest structured fallback responses.',
+  label: 'Super AgentOS',
+  mode: 'native',
+  message: 'Super AgentOS is the native AgentOS runtime. External intelligence is optional and user-connected through Vault.',
 };
 
 function flattenFiles(nodes: StudioFileNode[]): StudioFileNode[] {
@@ -338,6 +345,9 @@ export function StudioProvider(props: {
   const [activeExecutionId, setActiveExecutionId] = useState<string | null>(null);
   const [browserSession, setBrowserSession] = useState<BrowserSession | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatusRecord>(DEFAULT_PROVIDER_STATUS);
+  const [executionTargets, setExecutionTargets] = useState<ExecutionTarget[]>([]);
+  const [sessionExecutionTargetId, setSessionExecutionTargetId] = useState('super_agentos');
+  const [messageExecutionOverrideId, setMessageExecutionOverrideId] = useState<string | null>(null);
   const [mode, setModeState] = useState<StudioMode>(requestedMode);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
@@ -432,6 +442,9 @@ export function StudioProvider(props: {
     setCurrentProject(nextCurrentProject);
     setWorkflows((payload.workflows ?? []) as WorkflowRecord[]);
     setProviderStatus((payload.providerStatus ?? DEFAULT_PROVIDER_STATUS) as ProviderStatusRecord);
+    setExecutionTargets((payload.executionTargets ?? []) as ExecutionTarget[]);
+    setSessionExecutionTargetId(typeof payload.sessionExecutionTargetId === 'string' ? payload.sessionExecutionTargetId : 'super_agentos');
+    setMessageExecutionOverrideId(null);
     setVaultSecrets((payload.vaultSecrets ?? []) as VaultSecretRecord[]);
     setInstalledSkills(mapInstalledSkills(payload.installedSkills));
     setInstalledApps(mapInstalledApps(payload.installedApps));
@@ -623,6 +636,22 @@ export function StudioProvider(props: {
     setComposerInvocations(current => current.filter(item => item.id !== id));
   }, []);
 
+  const setSessionExecutionTarget = useCallback(async (targetId: string) => {
+    const target = executionTargets.find(item => item.id === targetId && item.userSelectable && item.availability === 'available');
+    const nextTargetId = target?.id ?? 'super_agentos';
+    setSessionExecutionTargetId(nextTargetId);
+    setMessageExecutionOverrideId(null);
+    if (!session?.id) return;
+    const response = await fetchWithBrowserSession(`/api/studio/sessions/${session.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statePatch: { executionTargetId: nextTargetId } }),
+    });
+    if (!response.response.ok) return;
+    setSession(current => current ? { ...current, state: { ...(current.state ?? {}), executionTargetId: nextTargetId } } : current);
+    setSessions(current => current.map(item => item.id === session.id ? { ...item, state: { ...(item.state ?? {}), executionTargetId: nextTargetId } } : item));
+  }, [executionTargets, session?.id]);
+
   const createSession = useCallback(async (options?: { linkedSubagentId?: string | null; title?: string }) => {
     if (!currentWorkspaceId) return null;
     const response = await fetchWithBrowserSession('/api/studio/sessions', {
@@ -633,6 +662,7 @@ export function StudioProvider(props: {
         projectId: currentProject?.id ?? requestedProjectId,
         linkedSubagentId: options?.linkedSubagentId ?? null,
         title: options?.title ?? 'New chat',
+        initialState: { executionTargetId: sessionExecutionTargetId },
       }),
     });
     if (!response.response.ok) return null;
@@ -775,6 +805,7 @@ export function StudioProvider(props: {
             workspaceId: currentWorkspaceId,
             projectId: currentProject?.id ?? requestedProjectId,
             title: nextMessage.slice(0, 80) || 'New chat',
+            initialState: { executionTargetId: sessionExecutionTargetId },
           }),
         });
         if (!response.response.ok) {
@@ -847,6 +878,9 @@ export function StudioProvider(props: {
           sessionId: executionSession.id,
           workspaceId: executionSession.workspaceId,
           projectId: currentProject?.id,
+          executionTargetId: messageExecutionOverrideId ?? sessionExecutionTargetId,
+          sessionExecutionTargetId,
+          messageExecutionOverrideId,
           attachments: composerAttachments,
           invocations: composerInvocations,
         }),
@@ -941,6 +975,7 @@ export function StudioProvider(props: {
       } finally {
         setStreamingStatus(null);
         setSending(false);
+        setMessageExecutionOverrideId(null);
         setComposerAttachments([]);
         setComposerInvocations([]);
         settleStream();
@@ -949,7 +984,7 @@ export function StudioProvider(props: {
         }
       }
     }
-  }, [composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, mode, pushRoute, refreshRuntimeState, requestedProjectId, router, sending, session]);
+  }, [composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, messageExecutionOverrideId, mode, pushRoute, refreshRuntimeState, requestedProjectId, router, sending, session, sessionExecutionTargetId]);
 
   const stopGeneration = useCallback(async () => {
     const abortController = streamAbortRef.current;
@@ -1160,6 +1195,11 @@ export function StudioProvider(props: {
     activeExecutionId,
     browserSession,
     providerStatus,
+    executionTargets,
+    sessionExecutionTargetId,
+    messageExecutionOverrideId,
+    setSessionExecutionTarget,
+    setMessageExecutionOverride: setMessageExecutionOverrideId,
     mode,
     setMode,
     sidebarOpen,
@@ -1238,6 +1278,10 @@ export function StudioProvider(props: {
     advancedMode,
     browserSession,
     providerStatus,
+    executionTargets,
+    sessionExecutionTargetId,
+    messageExecutionOverrideId,
+    setSessionExecutionTarget,
     closeContext,
     composerAttachments,
     composerInvocations,

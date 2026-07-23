@@ -57,7 +57,7 @@ function StudioRightPanel() {
         </>
       ) : mode === 'workflow' ? (
         <section>
-          <h2>Workflow Builder</h2>
+          <h2>Primeflow Builder</h2>
           <ContextRow label="Nodes" value={workflows.length ? 'Available' : 0} />
           <ContextRow label="Triggers" value={workflows.filter(item => item.status === 'active').length} />
           <ContextRow label="Schedules" value={workflows.length} />
@@ -83,7 +83,7 @@ function StudioRightPanel() {
         <ContextRow label="Super AgentOS" value={superAgent?.status ?? 'Active'} />
         <ContextRow label="Agentic Apps" value={installedApps.length} />
         <ContextRow label="External Agents" value="Universal MCP" />
-        <ContextRow label="Workflow Agents" value={subagents.filter(item => session?.linkedWorkflowId && item.projectId === session.projectId).length} />
+        <ContextRow label="Primeflow Agents" value={subagents.filter(item => session?.linkedWorkflowId && item.projectId === session.projectId).length} />
         <ContextRow label="Running Agents" value={runningAgents.length} />
         <ContextRow label="Idle Agents" value={idleAgents.length} />
       </section>

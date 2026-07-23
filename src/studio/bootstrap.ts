@@ -7,6 +7,7 @@ import { resolveProjectForWorkspace, listProjects } from '../projects/service.js
 import { getSupabaseAdmin } from '../storage/supabase.js';
 import { listStudioSessions, createStudioSession, getStudioSessionBundle } from './persistence.js';
 import { getStudioProviderStatus } from './providers.js';
+import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from './execution-targets.js';
 import { listAccessibleSubagents } from '../subagents/service.js';
 import { allowLocalDataFallback } from '../data/discipline.js';
 import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
@@ -126,6 +127,8 @@ export async function buildStudioBootstrap(params: {
       return {
         mode: params.mode ?? 'nl',
         providerStatus,
+        executionTargets: buildExecutionTargets(),
+        sessionExecutionTargetId: 'super_agentos',
         session: null,
         sessions,
         messages: [],
@@ -230,9 +233,18 @@ export async function buildStudioBootstrap(params: {
       canonical_doc: row.canonical_doc && typeof row.canonical_doc === 'object' ? row.canonical_doc : undefined,
     }));
 
+  const activeSessionState = bundle?.session?.state ?? session?.state ?? {};
+  const executionTargets = buildExecutionTargets({ vaultSecrets: vault.secrets ?? [] });
+  const sessionExecutionTarget = resolveExecutionTarget(
+    executionTargets,
+    normalizeExecutionTargetId(activeSessionState.executionTargetId ?? activeSessionState.provider ?? activeSessionState.executionMode),
+  );
+
   return {
     mode: params.mode ?? 'nl',
     providerStatus,
+    executionTargets,
+    sessionExecutionTargetId: sessionExecutionTarget.id,
     session: bundle?.session ?? session,
     sessions,
     messages: bundle?.messages ?? [],

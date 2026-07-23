@@ -57,6 +57,9 @@ export async function POST(request: NextRequest) {
         ? body.linkedMemoryRefs.filter((item): item is string => typeof item === 'string')
         : undefined,
       title: typeof body.title === 'string' ? body.title : undefined,
+      initialState: body.initialState && typeof body.initialState === 'object' && !Array.isArray(body.initialState)
+        ? body.initialState as Record<string, unknown>
+        : undefined,
     });
     return NextResponse.json({ session }, { status: 201 });
   } catch (error: unknown) {

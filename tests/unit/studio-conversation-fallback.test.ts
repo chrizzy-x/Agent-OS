@@ -1,19 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateStudioChatReply, streamStudioChatReply } from '../../src/studio/conversation.js';
 
-const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+const originalEnv = {
+  AGENTOS_ENABLE_DEV_PROVIDER_KEYS: process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+};
 
-describe('Studio conversation local fallback', () => {
+describe('Studio conversation native runtime', () => {
   beforeEach(() => {
+    delete process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS;
     delete process.env.ANTHROPIC_API_KEY;
   });
 
   afterEach(() => {
-    if (originalAnthropicKey) process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+    if (originalEnv.AGENTOS_ENABLE_DEV_PROVIDER_KEYS) process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS = originalEnv.AGENTOS_ENABLE_DEV_PROVIDER_KEYS;
+    else delete process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS;
+    if (originalEnv.ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = originalEnv.ANTHROPIC_API_KEY;
     else delete process.env.ANTHROPIC_API_KEY;
   });
 
-  it('returns a structured honest answer when live model execution is not configured', async () => {
+  it('returns a structured honest answer through Super AgentOS without provider credentials', async () => {
     const reply = await generateStudioChatReply({
       message: 'How should AgentOS launch the next marketplace update?',
       intent: 'REASONING',
@@ -21,13 +27,13 @@ describe('Studio conversation local fallback', () => {
       projectName: 'Marketplace',
     });
 
-    expect(reply).toContain('Best next steps:');
+    expect(reply).toContain('Here is the useful starting answer');
     expect(reply).toContain('Scope: AgentOS / Marketplace');
-    expect(reply).toContain('live model execution is not configured');
+    expect(reply).toContain('Native AgentOS path:');
     expect(reply).not.toContain('{');
   });
 
-  it('streams the same honest fallback without requiring a provider key', async () => {
+  it('streams through Super AgentOS without requiring a provider key', async () => {
     const chunks: string[] = [];
     const reply = await streamStudioChatReply({
       message: 'Research wallet UX for AgentOS users',
@@ -35,8 +41,8 @@ describe('Studio conversation local fallback', () => {
       onDelta: text => chunks.push(text),
     });
 
-    expect(reply).toContain('Suggested execution:');
-    expect(reply).toContain('Provider status:');
+    expect(reply).toContain('Execution plan:');
+    expect(reply).toContain('External intelligence is not required');
     expect(chunks.join('')).toBe(reply);
   });
 });

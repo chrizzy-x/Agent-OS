@@ -4,11 +4,13 @@ import { appendExecutionLog, createExecution, updateExecution } from '@/src/exec
 import { createNotification } from '@/src/notifications/service';
 import { listProjects } from '@/src/projects/service';
 import { streamStudioChatReply } from '@/src/studio/conversation';
+import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from '@/src/studio/execution-targets';
 import { getStudioModelLabel, getStudioProviderStatus } from '@/src/studio/providers';
 import { detectAgentOSIntent, humanStatusForIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle } from '@/src/studio/persistence';
 import { createAgentTask, updateAgentTask, type AgentTaskRecord } from '@/src/tasks/service';
 import { sanitizeErrorMessage } from '@/src/utils/output-sanitizer';
+import { listVaultSecrets } from '@/src/vault/service';
 import { buildWorkspaceContextPackage } from '@/src/workspace-context/service';
 import { listWorkspaces } from '@/src/workspaces/service';
 
@@ -35,7 +37,7 @@ function isWorkspaceCapabilityQuestion(message: string): boolean {
 }
 
 function isProviderStatusQuestion(message: string): boolean {
-  return /\b(ai provider|model status|provider status|are you live|live model|local fallback|can i talk to super agent|is super agent live)\b/i.test(message);
+  return /\b(ai provider|model status|provider status|are you live|live model|native runtime|external intelligence|can i talk to super agent|is super agent live)\b/i.test(message);
 }
 
 function providerStatusReply(providerStatus: ReturnType<typeof getStudioProviderStatus>): string {
@@ -47,9 +49,9 @@ function providerStatusReply(providerStatus: ReturnType<typeof getStudioProvider
     ].join('\n\n');
   }
   return [
-    'Super AgentOS is available, but this environment is using local fallback responses because no live AI provider key is configured.',
-    'You can still create sessions, use workspace context, inspect capabilities, and get structured execution plans.',
-    'For full model-backed intelligence, configure Anthropic or OpenAI provider credentials in production.',
+    'Super AgentOS is running on the native AgentOS runtime.',
+    'External intelligence is optional. Connect a provider through Vault when you want BYOK assistance.',
+    'Super AgentOS still owns session context, memory, tools, permissions, execution logs, recovery, and final result delivery.',
   ].join('\n\n');
 }
 
@@ -63,7 +65,7 @@ function workspaceCapabilityReply(context: Awaited<ReturnType<typeof buildWorksp
   return [
     `I can use ${summary.available} available workspace capabilities${sourceSummary ? ` across ${sourceSummary}` : ''}.`,
     needsConfig.length ? `Needs configuration: ${needsConfig.join('; ')}.` : 'No configured capability blockers were found.',
-    'I will use installed apps, skills, workflows, subagents, MCP tools, projects, Library assets, memory, and Vault metadata when they are available. I will not fake unavailable tools.',
+    'I will use installed apps, skills, Primeflows, Prime Agents, MCP tools, projects, Library assets, memory, and Vault metadata when they are available. I will not fake unavailable tools.',
   ].join('\n\n');
 }
 
@@ -166,6 +168,15 @@ export async function POST(request: NextRequest) {
           workspaceId,
           projectId,
         });
+        const vault = workspaceId
+          ? await listVaultSecrets({ ownerAgentId: ctx.agentId, workspaceId }).catch(() => ({ secrets: [] }))
+          : { secrets: [] };
+        const executionTargets = buildExecutionTargets({ vaultSecrets: vault.secrets });
+        const selectedExecutionTarget = resolveExecutionTarget(executionTargets, body.executionTargetId);
+        const sessionExecutionTargetId = normalizeExecutionTargetId(body.sessionExecutionTargetId);
+        const messageExecutionOverrideId = typeof body.messageExecutionOverrideId === 'string'
+          ? normalizeExecutionTargetId(body.messageExecutionOverrideId)
+          : null;
         const providerStatus = getStudioProviderStatus();
         task = await createAgentTask({
           userId: ctx.agentId,
@@ -195,6 +206,13 @@ export async function POST(request: NextRequest) {
               model: providerStatus.model,
               label: providerStatus.label,
             },
+            executionTarget: {
+              selected: selectedExecutionTarget.id,
+              type: selectedExecutionTarget.type,
+              displayName: selectedExecutionTarget.displayName,
+              sessionDefault: sessionExecutionTargetId,
+              messageOverride: messageExecutionOverrideId,
+            },
           },
           executionMetadata: {
             runtime: 'super-agentos',
@@ -205,6 +223,14 @@ export async function POST(request: NextRequest) {
               provider: providerStatus.provider,
               model: providerStatus.model,
               label: providerStatus.label,
+            },
+            executionTarget: {
+              selected: selectedExecutionTarget.id,
+              type: selectedExecutionTarget.type,
+              displayName: selectedExecutionTarget.displayName,
+              sessionDefault: sessionExecutionTargetId,
+              messageOverride: messageExecutionOverrideId,
+              failurePolicy: selectedExecutionTarget.failurePolicy,
             },
           },
         });
@@ -224,6 +250,13 @@ export async function POST(request: NextRequest) {
             projectId,
             taskId: task.id,
             runtime: 'super-agentos',
+            executionTarget: {
+              selected: selectedExecutionTarget.id,
+              type: selectedExecutionTarget.type,
+              displayName: selectedExecutionTarget.displayName,
+              sessionDefault: sessionExecutionTargetId,
+              messageOverride: messageExecutionOverrideId,
+            },
             provider: {
               mode: providerStatus.mode,
               provider: providerStatus.provider,
@@ -247,6 +280,8 @@ export async function POST(request: NextRequest) {
             providerMode: providerStatus.mode,
             provider: providerStatus.provider,
             model: providerStatus.model,
+            executionTarget: selectedExecutionTarget.displayName,
+            messageOverride: messageExecutionOverrideId,
           },
         });
         push('execution', {
@@ -254,6 +289,7 @@ export async function POST(request: NextRequest) {
           status: 'RUNNING',
           providerMode: providerStatus.mode,
           providerLabel: providerStatus.label,
+          executionTarget: selectedExecutionTarget.displayName,
         });
 
         const intent = await detectAgentOSIntent(message);
@@ -304,6 +340,7 @@ export async function POST(request: NextRequest) {
               workspaceName: names.workspaceName,
               projectName: names.projectName,
               sessionTitle: names.sessionTitle,
+              executionTargetId: selectedExecutionTarget.id,
               signal: request.signal,
               onDelta: text => {
                 partialReply += text;
@@ -348,7 +385,14 @@ export async function POST(request: NextRequest) {
             agentId: ctx.agentId,
             executionId,
             message: 'Super AgentOS request completed',
-            data: { kind: 'chat_reply', providerMode: providerStatus.mode },
+            data: {
+              kind: 'chat_reply',
+              providerMode: providerStatus.mode,
+              executionTrace: selectedExecutionTarget.type === 'orchestrator'
+                ? ['Orchestrator analyzed request', 'Super AgentOS validated and delivered the result']
+                : ['Super AgentOS analyzed request', 'Super AgentOS delivered the result'],
+              executionTarget: selectedExecutionTarget.displayName,
+            },
           });
           await createNotification({
             agentId: ctx.agentId,

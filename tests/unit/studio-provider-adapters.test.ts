@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateWithStudioProvider, getConfiguredStudioProvider, getStudioProviderStatus, streamWithStudioProvider } from '../../src/studio/providers.js';
 
 const originalEnv = {
+  AGENTOS_ENABLE_DEV_PROVIDER_KEYS: process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS,
+  NODE_ENV: process.env.NODE_ENV,
   STUDIO_AI_PROVIDER: process.env.STUDIO_AI_PROVIDER,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL,
@@ -31,6 +33,7 @@ describe('Studio provider adapters', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     delete process.env.STUDIO_AI_PROVIDER;
+    delete process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_MODEL;
     delete process.env.OPENAI_API_KEY;
@@ -42,28 +45,26 @@ describe('Studio provider adapters', () => {
     resetEnv();
   });
 
-  it('selects configured Anthropic before OpenAI by default', () => {
+  it('keeps Super AgentOS native as the default even when provider env keys exist', () => {
     process.env.ANTHROPIC_API_KEY = 'anthropic-key';
     process.env.OPENAI_API_KEY = 'openai-key';
 
-    expect(getConfiguredStudioProvider()).toEqual({
-      provider: 'anthropic',
-      model: 'claude-sonnet-4-6',
-    });
+    expect(getConfiguredStudioProvider()).toBeNull();
   });
 
-  it('reports local fallback without exposing provider secrets', () => {
+  it('reports native Super AgentOS without exposing provider secrets', () => {
     expect(getStudioProviderStatus()).toEqual({
       configured: false,
       provider: null,
       model: null,
-      label: 'Local fallback',
-      mode: 'local_fallback',
-      message: 'Live model execution is not configured. Studio will return honest structured fallback responses.',
+      label: 'Super AgentOS',
+      mode: 'native',
+      message: 'Super AgentOS is the native AgentOS runtime. External intelligence is optional and user-connected through Vault.',
     });
   });
 
-  it('can prefer OpenAI through STUDIO_AI_PROVIDER', async () => {
+  it('can use OpenAI only through an explicit development override', async () => {
+    process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS = '1';
     process.env.STUDIO_AI_PROVIDER = 'openai';
     process.env.OPENAI_API_KEY = 'openai-key';
     process.env.OPENAI_MODEL = 'gpt-test';
@@ -85,6 +86,7 @@ describe('Studio provider adapters', () => {
   });
 
   it('parses OpenAI response streaming deltas', async () => {
+    process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS = '1';
     process.env.STUDIO_AI_PROVIDER = 'openai';
     process.env.OPENAI_API_KEY = 'openai-key';
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(streamFromFrames([

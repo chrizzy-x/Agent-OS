@@ -1,7 +1,7 @@
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const OPENAI_RESPONSES_API = 'https://api.openai.com/v1/responses';
 
-export type StudioProviderName = 'anthropic' | 'openai';
+export type StudioProviderName = 'anthropic' | 'openai' | 'gemini';
 
 export type StudioProviderRequest = {
   system: string;
@@ -21,13 +21,14 @@ export type StudioProviderStatus = {
   provider: StudioProviderName | null;
   model: string | null;
   label: string;
-  mode: 'live' | 'local_fallback';
+  mode: 'native' | 'external';
   message: string;
 };
 
 function preferredProvider(): StudioProviderName | null {
+  if (process.env.NODE_ENV === 'production' || process.env.AGENTOS_ENABLE_DEV_PROVIDER_KEYS !== '1') return null;
   const configured = process.env.STUDIO_AI_PROVIDER?.trim().toLowerCase();
-  if (configured === 'openai' || configured === 'anthropic') return configured;
+  if (configured === 'openai' || configured === 'anthropic' || configured === 'gemini') return configured;
   return null;
 }
 
@@ -39,18 +40,12 @@ export function getConfiguredStudioProvider(): { provider: StudioProviderName; m
   if (preferred === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
     return { provider: 'anthropic', model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6' };
   }
-  if (process.env.ANTHROPIC_API_KEY) {
-    return { provider: 'anthropic', model: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6' };
-  }
-  if (process.env.OPENAI_API_KEY) {
-    return { provider: 'openai', model: process.env.OPENAI_MODEL ?? 'gpt-5' };
-  }
   return null;
 }
 
 export function getStudioModelLabel(): string {
   const provider = getConfiguredStudioProvider();
-  return provider ? `${provider.provider}:${provider.model}` : 'local-fallback';
+  return provider ? `${provider.provider}:${provider.model}` : 'super-agentos:native';
 }
 
 export function getStudioProviderStatus(): StudioProviderStatus {
@@ -60,9 +55,9 @@ export function getStudioProviderStatus(): StudioProviderStatus {
       configured: false,
       provider: null,
       model: null,
-      label: 'Local fallback',
-      mode: 'local_fallback',
-      message: 'Live model execution is not configured. Studio will return honest structured fallback responses.',
+      label: 'Super AgentOS',
+      mode: 'native',
+      message: 'Super AgentOS is the native AgentOS runtime. External intelligence is optional and user-connected through Vault.',
     };
   }
   return {
@@ -70,8 +65,8 @@ export function getStudioProviderStatus(): StudioProviderStatus {
     provider: provider.provider,
     model: provider.model,
     label: `${provider.provider}:${provider.model}`,
-    mode: 'live',
-    message: 'Live model execution is configured for Studio responses.',
+    mode: 'external',
+    message: 'Development external intelligence override is configured. Production users connect provider credentials through Vault.',
   };
 }
 

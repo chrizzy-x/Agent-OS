@@ -49,8 +49,8 @@ describe('POST /api/super-agent/message', () => {
       provider: 'openai',
       model: 'gpt-test',
       label: 'OpenAI gpt-test',
-      mode: 'live',
-      message: 'Live model execution is configured.',
+      mode: 'external',
+      message: 'Development external intelligence override is configured.',
     });
     mocks.buildWorkspaceContextPackage.mockResolvedValue({
       metadata: {
@@ -114,6 +114,7 @@ describe('POST /api/super-agent/message', () => {
     expect(mocks.generateStudioChatReply).toHaveBeenCalledWith({
       message: 'research AI agents and save it',
       intent: 'RESEARCH',
+      executionTargetId: 'super_agentos',
     });
     expect(mocks.updateAgentTask).toHaveBeenCalledWith(expect.objectContaining({
       patch: expect.objectContaining({
@@ -142,7 +143,7 @@ describe('POST /api/super-agent/message', () => {
     expect(response.status).toBe(200);
     expect(mocks.detectAgentOSIntent).not.toHaveBeenCalled();
     expect(mocks.generateStudioChatReply).not.toHaveBeenCalled();
-    expect(body.reply).toContain('connected to a live AI provider');
+    expect(body.reply).toContain('development external intelligence override');
     expect(body.providerStatus).toEqual(expect.objectContaining({
       configured: true,
       label: 'OpenAI gpt-test',

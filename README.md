@@ -6,7 +6,7 @@
 
 > V6.6.8
 
-AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, workflows, memory, Vault, workspace assets, and activity.
+AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, Primeflows, memory, Vault, workspace assets, and activity.
 
 Live:
 - [agentos.services](https://agentos.services)
@@ -222,17 +222,21 @@ JWT_SECRET=
 ADMIN_TOKEN=
 ENCRYPTION_KEY=
 VAULT_ENCRYPTION_KEY=
-STUDIO_AI_PROVIDER=anthropic
-ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-4-6
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5
+AGENTOS_ENABLE_DEV_PROVIDER_KEYS=0
+# Development-only external intelligence override.
+# STUDIO_AI_PROVIDER=openai
+# OPENAI_API_KEY=
+# OPENAI_MODEL=gpt-5
+# ANTHROPIC_API_KEY=
+# ANTHROPIC_MODEL=claude-sonnet-4-6
+# GEMINI_API_KEY=
+# GEMINI_MODEL=gemini-2.5-pro
 ```
 
 Notes:
 - `VAULT_ENCRYPTION_KEY` falls back to `ENCRYPTION_KEY`
 - `FFP_TEMP_ENABLED` is optional; the workspace toggle is the source of truth
-- Studio chooses the configured provider through `STUDIO_AI_PROVIDER`; without a live provider key, Super AgentOS returns an honest local structured fallback instead of pretending model execution ran.
+- Super AgentOS is the native default runtime. External intelligence providers are optional BYOK extensions connected through Vault; development env keys are ignored unless `AGENTOS_ENABLE_DEV_PROVIDER_KEYS=1`.
 
 ## Development
 
