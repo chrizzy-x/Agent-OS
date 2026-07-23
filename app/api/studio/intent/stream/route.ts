@@ -178,6 +178,7 @@ export async function POST(request: NextRequest) {
           ? normalizeExecutionTargetId(body.messageExecutionOverrideId)
           : null;
         const providerStatus = getStudioProviderStatus();
+        const startedAt = Date.now();
         task = await createAgentTask({
           userId: ctx.agentId,
           workspaceId,
@@ -233,9 +234,8 @@ export async function POST(request: NextRequest) {
               failurePolicy: selectedExecutionTarget.failurePolicy,
             },
           },
-        });
+        }).catch(() => null);
 
-        const startedAt = Date.now();
         const execution = await createExecution({
           agentId: ctx.agentId,
           workspaceId,
@@ -248,7 +248,7 @@ export async function POST(request: NextRequest) {
           input: { message, approval: body.approval === true, attachments, invocations },
           metadata: {
             projectId,
-            taskId: task.id,
+            taskId: task?.id ?? null,
             runtime: 'super-agentos',
             executionTarget: {
               selected: selectedExecutionTarget.id,
@@ -265,14 +265,14 @@ export async function POST(request: NextRequest) {
             },
           },
           model: getStudioModelLabel(),
-        });
-        executionId = execution.id;
-        await updateExecution({
+        }).catch(() => null);
+        executionId = execution?.id ?? null;
+        if (executionId) await updateExecution({
           agentId: ctx.agentId,
           executionId,
           patch: { status: 'RUNNING', startedAt: new Date(startedAt).toISOString() },
-        });
-        await appendExecutionLog({
+        }).catch(() => undefined);
+        if (executionId) await appendExecutionLog({
           agentId: ctx.agentId,
           executionId,
           message: 'Super AgentOS request started',
@@ -283,7 +283,7 @@ export async function POST(request: NextRequest) {
             executionTarget: selectedExecutionTarget.displayName,
             messageOverride: messageExecutionOverrideId,
           },
-        });
+        }).catch(() => undefined);
         push('execution', {
           executionId,
           status: 'RUNNING',
@@ -361,7 +361,7 @@ export async function POST(request: NextRequest) {
           }
 
           const payload = { kind: 'chat_reply', intent, statusText, reply: partialReply };
-          await updateExecution({
+          if (executionId) await updateExecution({
             agentId: ctx.agentId,
             executionId,
             patch: {
@@ -370,8 +370,8 @@ export async function POST(request: NextRequest) {
               durationMs: Date.now() - startedAt,
               completedAt: new Date().toISOString(),
             },
-          });
-          await updateAgentTask({
+          }).catch(() => undefined);
+          if (task) await updateAgentTask({
             userId: ctx.agentId,
             taskId: task.id,
             patch: {
@@ -381,7 +381,7 @@ export async function POST(request: NextRequest) {
               metadata: { ...task.metadata, executionId },
             },
           }).catch(() => undefined);
-          await appendExecutionLog({
+          if (executionId) await appendExecutionLog({
             agentId: ctx.agentId,
             executionId,
             message: 'Super AgentOS request completed',
@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
                 : ['Super AgentOS analyzed request', 'Super AgentOS delivered the result'],
               executionTarget: selectedExecutionTarget.displayName,
             },
-          });
+          }).catch(() => undefined);
           await createNotification({
             agentId: ctx.agentId,
             workspaceId,
@@ -437,7 +437,7 @@ export async function POST(request: NextRequest) {
         }
 
         const paused = payload.kind === 'approval_required';
-        await updateExecution({
+        if (executionId) await updateExecution({
           agentId: ctx.agentId,
           executionId,
           patch: {
@@ -446,7 +446,7 @@ export async function POST(request: NextRequest) {
             durationMs: Date.now() - startedAt,
             completedAt: new Date().toISOString(),
           },
-        });
+        }).catch(() => undefined);
         if (task) {
           await updateAgentTask({
             userId: ctx.agentId,
@@ -460,12 +460,12 @@ export async function POST(request: NextRequest) {
             },
           }).catch(() => undefined);
         }
-        await appendExecutionLog({
+        if (executionId) await appendExecutionLog({
           agentId: ctx.agentId,
           executionId,
           message: paused ? 'Super AgentOS request paused for approval' : 'Super AgentOS request completed',
           data: { kind: payload.kind, status: response.status, providerMode: providerStatus.mode },
-        });
+        }).catch(() => undefined);
         await createNotification({
           agentId: ctx.agentId,
           workspaceId,
