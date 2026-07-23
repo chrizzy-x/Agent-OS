@@ -4,6 +4,9 @@ import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
   requireAgentContextWithTier: vi.fn(),
   buildWorkspaceContextPackage: vi.fn(),
+  detectAgentOSIntent: vi.fn(),
+  generateStudioChatReply: vi.fn(),
+  getStudioProviderStatus: vi.fn(),
   createAgentTask: vi.fn(),
   updateAgentTask: vi.fn(),
 }));
@@ -14,6 +17,18 @@ vi.mock('../../src/auth/request.js', () => ({
 
 vi.mock('../../src/workspace-context/service.js', () => ({
   buildWorkspaceContextPackage: mocks.buildWorkspaceContextPackage,
+}));
+
+vi.mock('../../src/studio/conversation.js', () => ({
+  generateStudioChatReply: mocks.generateStudioChatReply,
+}));
+
+vi.mock('../../src/studio/intents.js', () => ({
+  detectAgentOSIntent: mocks.detectAgentOSIntent,
+}));
+
+vi.mock('../../src/studio/providers.js', () => ({
+  getStudioProviderStatus: mocks.getStudioProviderStatus,
 }));
 
 vi.mock('../../src/tasks/service.js', () => ({
@@ -27,6 +42,16 @@ describe('POST /api/super-agent/message', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireAgentContextWithTier.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_pro' });
+    mocks.detectAgentOSIntent.mockResolvedValue('RESEARCH');
+    mocks.generateStudioChatReply.mockResolvedValue('Provider-backed Super AgentOS answer.');
+    mocks.getStudioProviderStatus.mockReturnValue({
+      configured: true,
+      provider: 'openai',
+      model: 'gpt-test',
+      label: 'OpenAI gpt-test',
+      mode: 'live',
+      message: 'Live model execution is configured.',
+    });
     mocks.buildWorkspaceContextPackage.mockResolvedValue({
       metadata: {
         contextVersion: 'ctx-test',
@@ -76,7 +101,7 @@ describe('POST /api/super-agent/message', () => {
     mocks.updateAgentTask.mockImplementation(async ({ patch }) => ({ id: 'task-1', ...patch }));
   });
 
-  it('does not mark a routed-only message as completed execution', async () => {
+  it('answers normal messages through the Studio provider path without exposing raw context', async () => {
     const response = await POST(new NextRequest('http://localhost/api/super-agent/message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -85,12 +110,42 @@ describe('POST /api/super-agent/message', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(mocks.detectAgentOSIntent).toHaveBeenCalledWith('research AI agents and save it');
+    expect(mocks.generateStudioChatReply).toHaveBeenCalledWith({
+      message: 'research AI agents and save it',
+      intent: 'RESEARCH',
+    });
     expect(mocks.updateAgentTask).toHaveBeenCalledWith(expect.objectContaining({
       patch: expect.objectContaining({
-        status: 'needs_configuration',
-        errorMessage: 'No executable capability action was selected.',
+        status: 'completed',
+        resultSummary: 'Provider-backed Super AgentOS answer.',
+        errorMessage: null,
       }),
     }));
-    expect(body.task.status).toBe('needs_configuration');
+    expect(body.reply).toBe('Provider-backed Super AgentOS answer.');
+    expect(body.task.status).toBe('completed');
+    expect(body.contextSummary).toEqual(expect.objectContaining({
+      contextVersion: 'ctx-test',
+      graphVersion: 'capgraph-test',
+    }));
+    expect(body.workspaceContext).toBeUndefined();
+  });
+
+  it('answers provider status questions deterministically', async () => {
+    const response = await POST(new NextRequest('http://localhost/api/super-agent/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'can i talk to super agent now?' }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mocks.detectAgentOSIntent).not.toHaveBeenCalled();
+    expect(mocks.generateStudioChatReply).not.toHaveBeenCalled();
+    expect(body.reply).toContain('connected to a live AI provider');
+    expect(body.providerStatus).toEqual(expect.objectContaining({
+      configured: true,
+      label: 'OpenAI gpt-test',
+    }));
   });
 });

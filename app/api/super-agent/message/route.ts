@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContextWithTier } from '@/src/auth/request';
+import { generateStudioChatReply } from '@/src/studio/conversation';
+import { getStudioProviderStatus } from '@/src/studio/providers';
+import { detectAgentOSIntent } from '@/src/studio/intents';
 import { createAgentTask, updateAgentTask } from '@/src/tasks/service';
 import { buildWorkspaceContextPackage } from '@/src/workspace-context/service';
 import { toErrorResponse } from '@/src/utils/errors';
@@ -22,6 +25,46 @@ function capabilitySummary(context: Awaited<ReturnType<typeof buildWorkspaceCont
 
 function isCapabilityQuestion(message: string): boolean {
   return /\b(what can you do|available capabilities|what is installed|workspace capabilities)\b/i.test(message);
+}
+
+function isProviderStatusQuestion(message: string): boolean {
+  return /\b(ai provider|model status|provider status|are you live|live model|local fallback|can i talk to super agent|is super agent live)\b/i.test(message);
+}
+
+function providerStatusReply(providerStatus: ReturnType<typeof getStudioProviderStatus>): string {
+  if (providerStatus.configured) {
+    return [
+      `Super AgentOS is connected to a live AI provider: ${providerStatus.label}.`,
+      'It can answer normal questions through the configured model and route real work only through connected AgentOS capabilities.',
+      'Secrets are not exposed in replies, context summaries, or provider status messages.',
+    ].join('\n\n');
+  }
+
+  return [
+    'Super AgentOS is available, but this environment is using local fallback responses because no live AI provider key is configured.',
+    'You can still create sessions, inspect workspace capabilities, and get structured execution plans.',
+    'For full model-backed intelligence, configure Anthropic or OpenAI provider credentials in production.',
+  ].join('\n\n');
+}
+
+function publicContextSummary(context: Awaited<ReturnType<typeof buildWorkspaceContextPackage>>) {
+  return {
+    contextVersion: context.metadata.contextVersion,
+    graphVersion: context.capabilityGraph.graphVersion,
+    capabilities: context.capabilityGraph.summary,
+    availableCapabilityIds: context.capabilityGraph.availableCapabilities.slice(0, 12).map(item => item.id),
+    needsConfiguration: context.capabilityGraph.needsConfiguration.slice(0, 8).map(item => ({
+      id: item.id,
+      name: item.name,
+      sourceType: item.sourceType,
+      reason: item.statusReason ?? 'Needs configuration',
+    })),
+    runtime: {
+      name: context.runtimeRegistry.contract.runtime,
+      plannerVersion: context.runtimeRegistry.contract.plannerVersion,
+      selectionPolicy: context.runtimeRegistry.contract.selectionPolicy,
+    },
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -60,26 +103,35 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const providerStatus = getStudioProviderStatus();
     const answersWorkspaceQuestion = isCapabilityQuestion(message);
-    const reply = answersWorkspaceQuestion
-      ? `In this workspace I can use ${capabilitySummary(context)} Available sources include apps, skills, workflows, subagents, MCP tools, projects, Library items, memory, and Vault metadata. I will show missing configuration instead of pretending unavailable tools worked.`
-      : `I loaded your workspace context and found ${capabilitySummary(context)} No execution was started because this endpoint only prepares and routes Super AgentOS messages; use Studio streaming or a capability action endpoint to run a specific capability.`;
+    const answersProviderQuestion = isProviderStatusQuestion(message);
+    const intent = answersWorkspaceQuestion || answersProviderQuestion
+      ? 'NORMAL_CHAT'
+      : await detectAgentOSIntent(message);
+    const reply = answersProviderQuestion
+      ? providerStatusReply(providerStatus)
+      : answersWorkspaceQuestion
+        ? `In this workspace I can use ${capabilitySummary(context)} Available sources include apps, skills, workflows, subagents, MCP tools, projects, Library items, memory, and Vault metadata. I will show missing configuration instead of pretending unavailable tools worked.`
+        : await generateStudioChatReply({ message, intent });
+    const completedAsConversation = Boolean(message) && !answersWorkspaceQuestion && !answersProviderQuestion;
 
     const updated = await updateAgentTask({
       userId: ctx.agentId,
       taskId: task.id,
       patch: {
-        status: answersWorkspaceQuestion ? 'completed' : 'needs_configuration',
-        progress: answersWorkspaceQuestion ? 100 : 40,
-        resultSummary: answersWorkspaceQuestion ? reply : null,
-        errorMessage: answersWorkspaceQuestion ? null : 'No executable capability action was selected.',
+        status: answersWorkspaceQuestion || answersProviderQuestion || completedAsConversation ? 'completed' : 'needs_configuration',
+        progress: answersWorkspaceQuestion || answersProviderQuestion || completedAsConversation ? 100 : 40,
+        resultSummary: answersWorkspaceQuestion || answersProviderQuestion || completedAsConversation ? reply : null,
+        errorMessage: answersWorkspaceQuestion || answersProviderQuestion || completedAsConversation ? null : 'No executable capability action was selected.',
       },
     });
 
     return NextResponse.json({
       reply,
       task: updated,
-      workspaceContext: context,
+      providerStatus,
+      contextSummary: publicContextSummary(context),
     });
   } catch (error) {
     const err = toErrorResponse(error);
