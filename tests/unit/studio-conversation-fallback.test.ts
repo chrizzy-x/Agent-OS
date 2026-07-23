@@ -19,7 +19,7 @@ describe('Studio conversation native runtime', () => {
     else delete process.env.ANTHROPIC_API_KEY;
   });
 
-  it('returns a structured honest answer through Super AgentOS without provider credentials', async () => {
+  it('returns a direct useful answer through Super AgentOS without provider credentials', async () => {
     const reply = await generateStudioChatReply({
       message: 'How should AgentOS launch the next marketplace update?',
       intent: 'REASONING',
@@ -27,9 +27,10 @@ describe('Studio conversation native runtime', () => {
       projectName: 'Marketplace',
     });
 
-    expect(reply).toContain('Here is the useful starting answer');
-    expect(reply).toContain('Scope: AgentOS / Marketplace');
-    expect(reply).toContain('Native AgentOS path:');
+    expect(reply).toContain('Right now, Super AgentOS can chat');
+    expect(reply).toContain('approval first');
+    expect(reply).not.toContain('Here is the useful starting answer');
+    expect(reply).not.toContain('Native AgentOS path:');
     expect(reply).not.toContain('{');
   });
 
@@ -41,8 +42,23 @@ describe('Studio conversation native runtime', () => {
       onDelta: text => chunks.push(text),
     });
 
-    expect(reply).toContain('Execution plan:');
-    expect(reply).toContain('External intelligence is not required');
+    expect(reply).toContain('source-backed research needs');
+    expect(reply).toContain('I will not invent citations');
     expect(chunks.join('')).toBe(reply);
+  });
+
+  it('handles vague follow-ups without dumping execution-path boilerplate', async () => {
+    const reply = await generateStudioChatReply({
+      message: 'do it then',
+      intent: 'NORMAL_CHAT',
+      recentMessages: [
+        { role: 'user', content: 'Create project Launch Plan' },
+        { role: 'assistant', content: 'Create project Launch Plan?' },
+      ],
+    });
+
+    expect(reply).toContain('Use the visible Approve button');
+    expect(reply).not.toContain('Super AgentOS execution path');
+    expect(reply).not.toContain('I can work on');
   });
 });

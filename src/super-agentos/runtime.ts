@@ -7,6 +7,7 @@ export type SuperAgentOSRuntimeRequest = {
   projectName?: string | null;
   sessionTitle?: string | null;
   executionTargetId?: string;
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
 };
 
 export type SuperAgentOSRuntimeResult = {
@@ -19,13 +20,19 @@ function cleanSentence(value: string): string {
   return value.trim().replace(/\s+/g, ' ').replace(/\?+$/g, '');
 }
 
-function scopeLine(params: SuperAgentOSRuntimeRequest): string {
-  const scope = [params.workspaceName, params.projectName].filter(Boolean).join(' / ');
-  return scope ? `Scope: ${scope}` : 'Scope: current AgentOS workspace';
-}
-
 function isQuestion(message: string): boolean {
   return /\?$|\b(what|why|how|when|where|who|which|can you|should i|is it|are you)\b/i.test(message);
+}
+
+function isVagueFollowUp(message: string): boolean {
+  return /^(do it|do it then|yes|yeah|ok|okay|continue|go ahead|run it|approve it|make it happen)[.! ]*$/i.test(message.trim());
+}
+
+function previousAssistantPrompt(params: SuperAgentOSRuntimeRequest): string | null {
+  return [...(params.recentMessages ?? [])]
+    .reverse()
+    .find(message => message.role === 'assistant' && /\?$/.test(message.content.trim()))
+    ?.content.trim() ?? null;
 }
 
 export async function runSuperAgentOSRuntime(params: SuperAgentOSRuntimeRequest): Promise<SuperAgentOSRuntimeResult> {
@@ -36,22 +43,24 @@ export async function runSuperAgentOSRuntime(params: SuperAgentOSRuntimeRequest)
     'Super AgentOS prepared a native execution path',
   ];
 
+  if (isVagueFollowUp(params.message)) {
+    const pending = previousAssistantPrompt(params);
+    return {
+      completedBy: 'super_agentos',
+      trace,
+      text: pending
+        ? `I’m ready to proceed with: “${pending}” Use the visible Approve button so I can execute it with your permission.`
+        : 'I need the exact task before I can execute it. Tell me the action directly, for example: “Create project Launch Plan” or “Install skill Research Assistant.”',
+    };
+  }
+
   if (params.intent === 'RESEARCH') {
     return {
       completedBy: 'super_agentos',
       trace,
       text: [
-        `I can prepare the research path for: ${outcome}.`,
-        '',
-        scopeLine(params),
-        '',
-        'Execution plan:',
-        '1. Define the exact question and success criteria.',
-        '2. Gather sources from approved web, file, project, app, MCP, or Vault-authorized context.',
-        '3. Compare findings, conflicts, and confidence.',
-        '4. Return a concise report with citations when source access is available.',
-        '',
-        'External intelligence is not required for this plan. If a connected provider is selected, Super AgentOS will use it only as an optional assistant and will validate the final result itself.',
+        `I can research “${outcome},” but source-backed research needs an available web/file/MCP source connected to this workspace.`,
+        'Right now I can structure the report, list the questions to answer, and use any connected workspace sources you authorize. I will not invent citations or pretend unavailable tools ran.',
       ].join('\n'),
     };
   }
@@ -61,15 +70,8 @@ export async function runSuperAgentOSRuntime(params: SuperAgentOSRuntimeRequest)
       completedBy: 'super_agentos',
       trace,
       text: [
-        `Here is the useful starting answer for: ${outcome}.`,
-        '',
-        scopeLine(params),
-        '',
-        'Native AgentOS path:',
-        '1. Separate facts, assumptions, and required actions.',
-        '2. Use available project, memory, Library, Vault, app, skill, Prime Agent, Primeflow, and MCP context.',
-        '3. Execute only connected capabilities with permission.',
-        '4. Return the best complete result available without fabricating missing work.',
+        'Right now, Super AgentOS can chat, create and manage Studio sessions, create projects with approval, use project context, show Library/Vault/MCP/App Store/Skill Store surfaces, and route supported actions through the connected AgentOS backend.',
+        'For actions that change data, I will ask for approval first; for tools or providers that are not connected, I will say what is missing instead of pretending it ran.',
       ].join('\n'),
     };
   }
@@ -78,17 +80,8 @@ export async function runSuperAgentOSRuntime(params: SuperAgentOSRuntimeRequest)
     completedBy: 'super_agentos',
     trace,
     text: [
-      `I can work on: ${outcome}.`,
-      '',
-      scopeLine(params),
-      '',
-      'Super AgentOS execution path:',
-      '1. Understand the requested outcome.',
-      '2. Build a plan from available AgentOS context.',
-      '3. Use connected skills, apps, Prime Agents, Primeflows, MCP tools, memory, and Vault permissions when available.',
-      '4. Deliver the completed result or show the exact missing connection needed.',
-      '',
-      'External intelligence is optional. Super AgentOS remains the active runtime for this session.',
+      `I need a concrete action to execute “${outcome}.”`,
+      'Use a direct command like “Create project Launch Plan,” “Open Vault,” “Install skill Research Assistant,” or “Route this through MCP filesystem.”',
     ].join('\n'),
   };
 }

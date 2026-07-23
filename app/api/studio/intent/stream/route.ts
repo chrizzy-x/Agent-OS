@@ -40,6 +40,15 @@ function isProviderStatusQuestion(message: string): boolean {
   return /\b(ai provider|model status|provider status|are you live|live model|native runtime|external intelligence|can i talk to super agent|is super agent live)\b/i.test(message);
 }
 
+async function loadRecentConversation(agentId: string, sessionId: string | null) {
+  if (!sessionId) return [];
+  const bundle = await getStudioSessionBundle(agentId, sessionId).catch(() => null);
+  return (bundle?.messages ?? [])
+    .filter(message => message.role === 'user' || message.role === 'assistant')
+    .slice(-10)
+    .map(message => ({ role: message.role as 'user' | 'assistant', content: message.content }));
+}
+
 function providerStatusReply(providerStatus: ReturnType<typeof getStudioProviderStatus>): string {
   if (providerStatus.configured) {
     return [
@@ -319,6 +328,7 @@ export async function POST(request: NextRequest) {
             workspaceId,
             projectId,
           });
+          const recentMessages = await loadRecentConversation(ctx.agentId, sessionId);
           workspaceId = names.workspaceId;
           projectId = names.projectId;
           if (isProviderStatusQuestion(message)) {
@@ -341,6 +351,7 @@ export async function POST(request: NextRequest) {
               projectName: names.projectName,
               sessionTitle: names.sessionTitle,
               executionTargetId: selectedExecutionTarget.id,
+              recentMessages,
               signal: request.signal,
               onDelta: text => {
                 partialReply += text;

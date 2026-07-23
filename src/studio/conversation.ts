@@ -45,6 +45,7 @@ async function runNativeReply(params: {
   workspaceName?: string | null;
   projectName?: string | null;
   executionTargetId?: string;
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }): Promise<string> {
   const result = params.executionTargetId === 'orchestrator'
     ? await runOrchestratorRuntime(params)
@@ -59,6 +60,7 @@ export async function generateStudioChatReply(params: {
   projectName?: string | null;
   sessionTitle?: string | null;
   executionTargetId?: string;
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }): Promise<string> {
   if (!params.executionTargetId?.startsWith('external_provider:')) {
     return buildNativeRecoveryReply(params);
@@ -81,6 +83,7 @@ export async function streamStudioChatReply(params: {
   sessionTitle?: string | null;
   executionTargetId?: string;
   signal?: AbortSignal;
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
   onDelta: (text: string) => void | Promise<void>;
 }): Promise<string> {
   if (!params.executionTargetId?.startsWith('external_provider:')) {
@@ -120,6 +123,7 @@ async function buildNativeRecoveryReply(params: {
   workspaceName?: string | null;
   projectName?: string | null;
   executionTargetId?: string;
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }): Promise<string> {
   return runNativeReply(params);
 }

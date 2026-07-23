@@ -422,6 +422,15 @@ async function loadContextNames(agentId: string, workspaceId: string | null, pro
   }
 }
 
+async function loadRecentConversation(agentId: string, sessionId: string | null) {
+  if (!sessionId) return [];
+  const bundle = await getStudioSessionBundle(agentId, sessionId).catch(() => null);
+  return (bundle?.messages ?? [])
+    .filter(message => message.role === 'user' || message.role === 'assistant')
+    .slice(-10)
+    .map(message => ({ role: message.role as 'user' | 'assistant', content: message.content }));
+}
+
 async function executeWorkflowPlan(params: {
   ctx: Awaited<ReturnType<typeof requireRouteCapability>>;
   sessionId: string | null;
@@ -1304,12 +1313,14 @@ export async function POST(req: NextRequest) {
     }
 
     const names = await loadContextNames(ctx.agentId, workspaceId, projectId);
+    const recentMessages = await loadRecentConversation(ctx.agentId, sessionId);
     const reply = await generateStudioChatReply({
       message: trimmedMessage,
       intent,
       workspaceName: names.workspaceName,
       projectName: names.projectName,
       sessionTitle: sessionContext.title,
+      recentMessages,
     });
     await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
     return NextResponse.json({
