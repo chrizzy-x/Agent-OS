@@ -1,6 +1,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { AGENTOS_APPSTORE_ROUTE, AGENTOS_DEVELOPER_ROUTE, AGENTOS_NAV_MARK_ASSET } from './constants';
+import {
+  AGENTOS_APPSTORE_ROUTE,
+  AGENTOS_DEVELOPER_ROUTE,
+  AGENTOS_NAV_MARK_ASSET,
+  AGENTOS_WHITEPAPER_ROUTE,
+} from './constants';
 
 function ArrowIcon() {
   return (
@@ -10,7 +15,19 @@ function ArrowIcon() {
   );
 }
 
-export default function LandingNavigation({ entryHref, homeHref }: { entryHref: string; homeHref: string }) {
+type LandingNavigationProps = {
+  entryHref: string;
+  homeHref: string;
+  productHref?: string;
+  activeItem?: 'whitepaper';
+};
+
+export default function LandingNavigation({
+  entryHref,
+  homeHref,
+  productHref = '#product-demo',
+  activeItem,
+}: LandingNavigationProps) {
   return (
     <header className="agentos-landing-nav agentos-liquid-glass" aria-label="AgentOS landing navigation">
       <Link href="/" className="agentos-landing-brand" aria-label="AgentOS home">
@@ -18,7 +35,10 @@ export default function LandingNavigation({ entryHref, homeHref }: { entryHref: 
         <span>AgentOS</span>
       </Link>
       <nav className="agentos-landing-links" aria-label="Landing links">
-        <a href="#product-demo">Product</a>
+        <Link href={productHref}>Product</Link>
+        <Link href={AGENTOS_WHITEPAPER_ROUTE} aria-current={activeItem === 'whitepaper' ? 'page' : undefined}>
+          Whitepaper
+        </Link>
         <Link href={AGENTOS_APPSTORE_ROUTE}>Appstore</Link>
         <Link href={AGENTOS_DEVELOPER_ROUTE}>Developers</Link>
       </nav>
