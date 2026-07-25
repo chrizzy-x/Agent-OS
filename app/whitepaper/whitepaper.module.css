@@ -1,24 +1,13 @@
-:global(.agentos-global-shell:has(.agentos-whitepaper-root)) {
-  display: block;
-  min-height: 100dvh;
-}
-
-:global(.agentos-global-shell:has(.agentos-whitepaper-root) > .agentos-global-header),
-:global(.agentos-global-shell:has(.agentos-whitepaper-root) > .agentos-global-left),
-:global(.agentos-global-shell:has(.agentos-whitepaper-root) > .agentos-global-right) {
-  display: none;
-}
-
-:global(.agentos-global-shell:has(.agentos-whitepaper-root) > .agentos-global-main) {
-  width: 100%;
-  min-height: 100dvh;
-  margin: 0;
-  padding: 0;
-}
-
 .page {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
   min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-bottom: 1px;
+  background: #f4f6fb;
+  isolation: isolate;
 }
 
 .page :global(.agentos-landing-links a[aria-current='page']) {
