@@ -49,3 +49,5 @@ jobs:
           git commit -m 'docs: generate AgentOS whitepaper PDF'
           git pull --rebase origin main
           git push origin HEAD:main
+
+# Publication trigger: 2026-07-26
