@@ -12,6 +12,12 @@ Live:
 - [agentos.services](https://agentos.services)
 - [Signup](https://www.agentos.services/signup)
 
+## Official whitepaper
+
+Read the [AgentOS Whitepaper v1.0 — July 2026](https://www.agentos.services/whitepaper).
+
+The downloadable PDF will be available at [`docs/AgentOS_Whitepaper_v1.0_July_2026.pdf`](docs/AgentOS_Whitepaper_v1.0_July_2026.pdf) once the repository publication workflow completes.
+
 Official identifiers:
 - Production domain: [www.agentos.services](https://www.agentos.services)
 - GitHub repository: [chrizzy-x/Agent-OS](https://github.com/chrizzy-x/Agent-OS)
