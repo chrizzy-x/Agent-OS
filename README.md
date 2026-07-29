@@ -22,6 +22,8 @@ Official identifiers:
 - Production domain: [www.agentos.services](https://www.agentos.services)
 - GitHub repository: [chrizzy-x/Agent-OS](https://github.com/chrizzy-x/Agent-OS)
 - `$sAGENT` contract address: `2Fob54QUhUbP9jv6h5XAh3PgB1kcULR6LXbxSzuwpump`
+- X handle: https://x.com/AgentOS_Tech
+- TG handle: https://t.me/agentosbyprime
 
 Supporting message:
 - talk to it, build with it, and install what it needs
