@@ -1,0 +1,96 @@
+name: AgentOS 100s UI Tour
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  record-ui-tour:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    env:
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3000
+      SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: recording-placeholder
+      JWT_SECRET: agentos-ui-tour-recording-secret-with-sufficient-length
+      ADMIN_TOKEN: recording-placeholder
+      CRON_SECRET: recording-placeholder
+      REDIS_URL: redis://127.0.0.1:6379
+      FFP_MODE: disabled
+      AGENTOS_ENABLE_DEV_PROVIDER_KEYS: '0'
+      NODE_ENV: production
+
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium and FFmpeg
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Build AgentOS
+        run: npm run build
+
+      - name: Start AgentOS
+        run: |
+          nohup npm run start -- -H 127.0.0.1 -p 3000 > /tmp/agentos-ui-tour-server.log 2>&1 &
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:3000/studio > /dev/null; then
+              echo "AgentOS is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/agentos-ui-tour-server.log
+          exit 1
+
+      - name: Record real AgentOS interface
+        run: node scripts/record-agentos-ui-tour.mjs
+
+      - name: Conform video to exactly 100 seconds
+        shell: bash
+        run: |
+          RAW="agentos-artifacts/ui-tour/agentos-ui-tour-raw.webm"
+          OUT="agentos-artifacts/ui-tour/AgentOS_Real_UI_Tour_100s.mp4"
+          DURATION=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$RAW")
+          FACTOR=$(python - "$DURATION" <<'PY'
+          import sys
+          duration = float(sys.argv[1])
+          print(100.0 / duration)
+          PY
+          )
+          ffmpeg -y -i "$RAW" \
+            -vf "setpts=${FACTOR}*PTS,fps=30,format=yuv420p" \
+            -t 100 \
+            -c:v libx264 -preset medium -crf 18 \
+            -movflags +faststart \
+            "$OUT"
+          ffprobe -v error -show_entries format=duration,width,height -of default=noprint_wrappers=1 "$OUT"
+
+      - name: Upload UI tour
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentOS-Real-UI-Tour-100s
+          path: |
+            agentos-artifacts/ui-tour/AgentOS_Real_UI_Tour_100s.mp4
+            /tmp/agentos-ui-tour-server.log
+          if-no-files-found: error
+          retention-days: 7
