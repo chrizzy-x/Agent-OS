@@ -25,11 +25,11 @@ describe('X guardrails', () => {
     });
 
     const result = evaluateXDraftGuardrails({
-      text: 'Launching our AI analytics dashboard today for growth teams.',
+      text: 'Launching our analytics dashboard today for growth teams.',
       kind: 'post',
       policy,
       ownRecentDraftTexts: [],
-      crossAccountRecentTexts: ['Launching our AI analytics dashboard today for growth teams'],
+      crossAccountRecentTexts: ['Launching our analytics dashboard today for growth teams'],
       postsPublishedToday: 0,
       repliesPublishedToday: 0,
     });

@@ -13,7 +13,7 @@ export const SKILL_STORE_CATEGORIES = [
   'Browser',
   'Automation',
   'Developer',
-  'AI',
+  'Intelligence',
   'System',
   'Communication',
   'Data',

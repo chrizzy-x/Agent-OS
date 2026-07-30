@@ -8,6 +8,7 @@ const coverage = getFeatureCoverageSummary();
 const officialSkillCount = getOfficialSkillCount();
 
 const releaseHighlights = [
+  'v6.6.8 - Super AgentOS Runtime Contract formalizes canonical capability contracts, workspace context metadata, deterministic graph versions, and replayable task execution fields.',
   'v6.6.7 - Marketplace Intelligence, Discovery & Publishing Layer ships consumer App Store and Skill Store discovery, publishing flows, developer profiles, ownership history, permissions, recommendations, and workspace asset synchronization.',
   'v6.6.4 - Marketplace & Capability Layer ships App Store discovery, Skill Store capability registry, permanent ownership, update center, developer profiles, skill dependencies, permission management, and workspace asset registry sync.',
   'v6.6.3 - Restored the persistent AgentOS shell, complete module navigation, workspace/session/project context, desktop sidebars, mobile drawers, and mode-aware Studio context without removing v6.6.2 execution features.',
@@ -97,17 +98,20 @@ export default function LaunchNotesPage() {
       <div className="max-w-5xl mx-auto px-4 py-12 space-y-8">
         <section>
           <div className="badge badge-accent mb-4">Launch Notes</div>
-          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.7 <span style={{ color: 'var(--accent)' }}>&ldquo;Marketplace Intelligence, Discovery &amp; Publishing Layer&rdquo;</span></h1>
+          <h1 className="text-4xl font-black mb-3">AgentOS v6.6.8 <span style={{ color: 'var(--accent)' }}>&ldquo;Runtime Contract&rdquo;</span></h1>
           <p className="text-lg" style={{ color: 'var(--text-muted)' }}>
-            v6.6.7 makes App Store and Skill Store consumer marketplace experiences while adding official publishing, developer profiles, recommendations, ownership history, and workspace asset intelligence. Live at <code>{APP_URL}</code>.
+            v6.6.8 formalizes Super AgentOS runtime contracts across capability graph metadata, workspace context packages, and durable task execution. Live at <code>{APP_URL}</code>.
           </p>
         </section>
 
         <section className="card p-6">
-          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.7</h2>
+          <h2 className="text-2xl font-bold mb-4">What shipped in v6.6.8</h2>
           <div className="space-y-4 text-sm" style={{ color: 'var(--text-muted)' }}>
             <p>
-              App Store now handles consumer discovery, store listings, install, launch, update, rollback, device install, ownership, and recommendations. Skill Store now uses the same marketplace language for installable capabilities, execution preview, dependency review, compatibility, and permission management.
+              Capability Graph now publishes canonical runtime contracts with provider, version, health, input/output schema, permission, dependency, compute, cost, priority, confidence, and fallback metadata.
+            </p>
+            <p>
+              Workspace Context now includes deterministic context metadata, dependency hash, graph version, source diagnostics, and registry contract details so tasks can be replayed and audited without exposing secrets.
             </p>
             <p>
               Platform coverage: {coverage.platformFeatures} platform features, {coverage.runtimeFunctions} runtime functions, {coverage.totalCatalogItems} catalog items under ops coverage, {officialSkillCount} official verified free skills across {OFFICIAL_SKILL_PACKS.length} maintained packs. Production is live at <code>{APP_URL}</code>.

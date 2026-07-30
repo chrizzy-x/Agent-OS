@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/os/ui';
 import { useStudio } from '@/components/studio/StudioProvider';
 import { fetchWithBrowserSession } from '@/src/auth/browser-session';
+import type { IntelligenceSelection, IntelligenceSelectionSource } from '@/src/intelligence/selection';
 
 const SUGGESTIONS = [
   'Research a topic',
@@ -92,6 +93,22 @@ function visibleResourceKind(kind: string): string {
   return kind;
 }
 
+const VENDOR_LABELS: Record<string, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Gemini',
+};
+
+function selectionKey(selection: IntelligenceSelection): string {
+  return selection.mode === 'single'
+    ? `single:${selection.connectionId}:${selection.modelId}`
+    : selection.mode;
+}
+
+function withSelectionSource(selection: IntelligenceSelection, selectionSource: IntelligenceSelectionSource): IntelligenceSelection {
+  return { ...selection, selectionSource };
+}
+
 async function fileData(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -113,11 +130,11 @@ export default function NLStudioPanel() {
     sending,
     streamingStatus,
     activeExecutionId,
-    executionTargets,
-    sessionExecutionTargetId,
-    messageExecutionOverrideId,
-    setSessionExecutionTarget,
-    setMessageExecutionOverride,
+    intelligenceConnections,
+    sessionIntelligenceSelection,
+    messageIntelligenceOverride,
+    setSessionIntelligenceSelection,
+    setMessageIntelligenceOverride,
     session,
     currentProject,
     projects,
@@ -141,13 +158,21 @@ export default function NLStudioPanel() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [resourceMenu, setResourceMenu] = useState<ResourceMenu | null>(null);
-  const [executionMenuOpen, setExecutionMenuOpen] = useState(false);
+  const [intelligenceMenuOpen, setIntelligenceMenuOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [activeChatMatchIndex, setActiveChatMatchIndex] = useState(0);
   const activeConversation = messages.length > 0;
-  const selectedExecutionTarget = executionTargets.find(target => target.id === (messageExecutionOverrideId ?? sessionExecutionTargetId))
-    ?? executionTargets.find(target => target.id === 'super_agentos');
+  const selectedIntelligenceSelection = messageIntelligenceOverride ?? sessionIntelligenceSelection;
+  const selectedConnection = selectedIntelligenceSelection.mode === 'single'
+    ? intelligenceConnections.find(connection => connection.id === selectedIntelligenceSelection.connectionId)
+    : null;
+  const selectedIntelligenceLabel = selectedIntelligenceSelection.mode === 'single'
+    ? `${selectedConnection ? VENDOR_LABELS[selectedConnection.vendor] ?? selectedConnection.vendor : 'Connected'} / ${selectedIntelligenceSelection.modelId ?? 'model'}`
+    : 'Native Super AgentOS';
+  const selectedIntelligenceDescription = selectedIntelligenceSelection.mode === 'single'
+    ? `${selectedConnection?.displayName ?? 'Connected intelligence'} using ${selectedIntelligenceSelection.modelId ?? selectedConnection?.selectedModelId ?? 'selected model'}`
+    : 'Native AgentOS runtime';
   const normalizedChatSearch = chatSearchQuery.trim().toLowerCase();
   const lastUserMessage = useMemo(
     () => [...messages].reverse().find(message => message.role === 'user')?.content ?? '',
@@ -326,6 +351,40 @@ export default function NLStudioPanel() {
             : resourceMenu === 'mcp'
               ? [{ ref: 'universal-mcp', label: 'Universal MCP' }]
               : [];
+  const nativeIntelligenceOption: { key: string; label: string; detail: string; selection: IntelligenceSelection } = {
+    key: 'native',
+    label: 'Native Super AgentOS',
+    detail: 'Native AgentOS runtime',
+    selection: {
+      mode: 'native',
+      connectionId: null,
+      modelId: null,
+      consensusConfigurationId: null,
+      selectionSource: 'session',
+    },
+  };
+  const connectedIntelligenceGroups = intelligenceConnections
+    .filter(connection => connection.status === 'active')
+    .reduce<Record<string, Array<{ key: string; label: string; detail: string; selection: IntelligenceSelection }>>>((groups, connection) => {
+      const models = connection.availableModels.length > 0 ? connection.availableModels : [connection.selectedModelId];
+      for (const modelId of models) {
+        const option = {
+          key: `${connection.id}:${modelId}`,
+          label: modelId,
+          detail: connection.displayName,
+          selection: {
+            mode: 'single',
+            connectionId: connection.id,
+            modelId,
+            consensusConfigurationId: null,
+            selectionSource: 'session',
+          } satisfies IntelligenceSelection,
+        };
+        groups[connection.vendor] ??= [];
+        groups[connection.vendor].push(option);
+      }
+      return groups;
+    }, {});
 
   return (
     <div className={`nl-studio-panel${activeConversation ? ' active' : ' empty'}`} data-active-conversation={activeConversation ? 'true' : 'false'}>
@@ -511,62 +570,101 @@ export default function NLStudioPanel() {
           submitComposer();
         }}>
           <div className="nl-composer-meta">
-            <div className="nl-execution-selector">
+            <div className="nl-intelligence-selector">
               <button
                 type="button"
-                className="nl-execution-trigger"
-                onClick={() => setExecutionMenuOpen(open => !open)}
+                className="nl-intelligence-trigger"
+                onClick={() => setIntelligenceMenuOpen(open => !open)}
                 aria-haspopup="menu"
-                aria-expanded={executionMenuOpen}
-                aria-label="Choose execution mode"
-                title={selectedExecutionTarget?.description ?? 'Native AgentOS intelligence'}
+                aria-expanded={intelligenceMenuOpen}
+                aria-label="Choose intelligence"
+                title={selectedIntelligenceDescription}
               >
-                <span>{selectedExecutionTarget?.displayName ?? 'Super AgentOS'}</span>
-                {messageExecutionOverrideId ? <em>Once</em> : null}
+                <span>{selectedIntelligenceLabel}</span>
+                {messageIntelligenceOverride ? <em>Once</em> : null}
               </button>
-              {executionMenuOpen ? (
-                <div className="nl-execution-menu" role="menu" aria-label="Execution options">
-                  {executionTargets.filter(target => target.userSelectable && target.availability === 'available').map(target => (
-                    <div key={target.id} className="nl-execution-option">
+              {intelligenceMenuOpen ? (
+                <>
+                <button type="button" className="nl-intelligence-backdrop" aria-label="Close intelligence selector" onClick={() => setIntelligenceMenuOpen(false)} />
+                <div className="nl-intelligence-menu" role="menu" aria-label="Intelligence options">
+                  <div className="nl-intelligence-section native">
+                    <div className="nl-intelligence-section-label">Native</div>
+                    <div className="nl-intelligence-option">
                       <button
                         type="button"
                         role="menuitemradio"
-                        aria-checked={(messageExecutionOverrideId ?? sessionExecutionTargetId) === target.id}
+                        aria-checked={selectionKey(selectedIntelligenceSelection) === selectionKey(nativeIntelligenceOption.selection)}
                         onClick={() => {
-                          void setSessionExecutionTarget(target.id);
-                          setExecutionMenuOpen(false);
+                          void setSessionIntelligenceSelection(withSelectionSource(nativeIntelligenceOption.selection, 'session'));
+                          setIntelligenceMenuOpen(false);
                         }}
                       >
-                        <strong>{target.displayName}</strong>
-                        <span>{target.description}</span>
+                        <strong>{nativeIntelligenceOption.label}</strong>
+                        <span>{nativeIntelligenceOption.detail}</span>
                       </button>
                       <button
                         type="button"
-                        className="nl-execution-once"
+                        className="nl-intelligence-once"
                         onClick={() => {
-                          setMessageExecutionOverride(target.id);
-                          setExecutionMenuOpen(false);
+                          setMessageIntelligenceOverride(withSelectionSource(nativeIntelligenceOption.selection, 'message'));
+                          setIntelligenceMenuOpen(false);
                         }}
-                        title={`Use ${target.displayName} for one message`}
+                        title="Use Native Super AgentOS for one message"
                       >
                         Once
                       </button>
                     </div>
+                  </div>
+                  {Object.entries(connectedIntelligenceGroups).map(([vendor, options]) => (
+                    <div key={vendor} className="nl-intelligence-section">
+                      <div className="nl-intelligence-section-label">{VENDOR_LABELS[vendor] ?? vendor}</div>
+                      {options.map(option => (
+                        <div key={option.key} className="nl-intelligence-option">
+                          <button
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={selectionKey(selectedIntelligenceSelection) === selectionKey(option.selection)}
+                            onClick={() => {
+                              void setSessionIntelligenceSelection(withSelectionSource(option.selection, 'session'));
+                              setIntelligenceMenuOpen(false);
+                            }}
+                          >
+                            <strong>{option.label}</strong>
+                            <span>{option.detail}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="nl-intelligence-once"
+                            onClick={() => {
+                              setMessageIntelligenceOverride(withSelectionSource(option.selection, 'message'));
+                              setIntelligenceMenuOpen(false);
+                            }}
+                            title={`Use ${option.label} for one message`}
+                          >
+                            Once
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   ))}
-                  {messageExecutionOverrideId ? (
+                  {Object.keys(connectedIntelligenceGroups).length === 0 ? (
+                    <div className="nl-intelligence-empty">No connected intelligence in Vault.</div>
+                  ) : null}
+                  {messageIntelligenceOverride ? (
                     <button
                       type="button"
-                      className="nl-execution-clear"
+                      className="nl-intelligence-clear"
                       onClick={() => {
-                        setMessageExecutionOverride(null);
-                        setExecutionMenuOpen(false);
+                        setMessageIntelligenceOverride(null);
+                        setIntelligenceMenuOpen(false);
                       }}
                     >
                       Clear one-message override
                     </button>
                   ) : null}
-                  <a href="/vault" className="nl-execution-connect">Connect external intelligence</a>
+                  <a href="/vault" className="nl-intelligence-connect">Connect in Vault</a>
                 </div>
+                </>
               ) : null}
             </div>
             {currentProject ? (
@@ -1219,46 +1317,65 @@ export default function NLStudioPanel() {
           display: none;
         }
 
-        .nl-execution-selector {
+        .nl-intelligence-selector {
           position: relative;
         }
 
-        .nl-composer-meta .nl-execution-trigger {
+        .nl-composer-meta .nl-intelligence-trigger {
           border-color: rgba(76, 113, 255, 0.28);
           background: color-mix(in srgb, var(--accent) 8%, transparent);
           color: var(--text-primary);
           font-weight: 700;
         }
 
-        .nl-execution-trigger em {
+        .nl-intelligence-trigger em {
           margin-left: 5px;
           color: var(--text-tertiary);
           font-style: normal;
           font-weight: 600;
         }
 
-        .nl-execution-menu {
+        .nl-intelligence-backdrop {
+          display: none;
+        }
+
+        .nl-intelligence-menu {
           position: absolute;
           left: 0;
           bottom: calc(100% + 8px);
           z-index: 20;
-          width: min(310px, calc(100vw - 28px));
+          width: min(340px, calc(100vw - 28px));
+          max-height: min(520px, 70vh);
           display: grid;
-          gap: 5px;
+          gap: 8px;
           padding: 8px;
+          overflow: auto;
           border: 1px solid var(--border);
           border-radius: 10px;
           background: var(--bg-secondary);
           box-shadow: 0 18px 50px rgba(0,0,0,0.28);
         }
 
-        .nl-execution-option {
+        .nl-intelligence-section {
+          display: grid;
+          gap: 5px;
+        }
+
+        .nl-intelligence-section-label {
+          padding: 2px 2px 0;
+          color: var(--text-tertiary);
+          font-size: 0.65rem;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .nl-intelligence-option {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto;
           gap: 5px;
         }
 
-        .nl-execution-option button:first-child {
+        .nl-intelligence-option button:first-child {
           min-height: 42px;
           display: grid;
           justify-items: start;
@@ -1266,14 +1383,15 @@ export default function NLStudioPanel() {
           text-align: left;
         }
 
-        .nl-execution-option button[aria-checked="true"] {
+        .nl-intelligence-option button[aria-checked="true"] {
           border-color: rgba(76, 113, 255, 0.42);
           background: color-mix(in srgb, var(--accent) 12%, transparent);
           color: var(--text-primary);
         }
 
-        .nl-execution-option span,
-        .nl-execution-connect {
+        .nl-intelligence-option span,
+        .nl-intelligence-empty,
+        .nl-intelligence-connect {
           overflow: hidden;
           color: var(--text-tertiary);
           font-size: 0.68rem;
@@ -1281,12 +1399,16 @@ export default function NLStudioPanel() {
           white-space: nowrap;
         }
 
-        .nl-execution-once {
+        .nl-intelligence-empty {
+          padding: 7px 2px;
+        }
+
+        .nl-intelligence-once {
           width: 52px;
         }
 
-        .nl-execution-clear,
-        .nl-execution-connect {
+        .nl-intelligence-clear,
+        .nl-intelligence-connect {
           min-height: 32px;
           display: inline-flex;
           align-items: center;
@@ -1455,12 +1577,33 @@ export default function NLStudioPanel() {
             opacity: 1;
           }
 
-          .nl-execution-menu {
+          .nl-intelligence-backdrop {
             position: fixed;
-            left: 12px;
-            right: 12px;
-            bottom: 104px;
+            inset: 0;
+            z-index: 18;
+            display: block;
+            border: 0;
+            background: rgba(0,0,0,0.36);
+          }
+
+          .nl-intelligence-menu {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
             width: auto;
+            max-height: min(72vh, 520px);
+            padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+            border-radius: 18px 18px 0 0;
+            z-index: 19;
+          }
+
+          .nl-intelligence-option {
+            grid-template-columns: minmax(0, 1fr) 58px;
+          }
+
+          .nl-intelligence-option button:first-child {
+            min-height: 48px;
           }
         }
       `}</style>

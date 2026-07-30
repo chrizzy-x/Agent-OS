@@ -34,7 +34,7 @@ describe('Home dashboard baseline', () => {
 
   it('does not drift back to a public marketing landing page', () => {
     const page = source('components', 'pages', 'HomePage.tsx');
-    expect(page).not.toContain('Your AI operating system.');
+    expect(page).not.toContain('Your legacy operating system.');
     expect(page).not.toContain('Talk to it. Build with it. Install what it needs.');
     expect(page).toContain('Open Super AgentOS');
     expect(page).toContain('Home is public. Everyone can see the AgentOS command map here; personal workspace data appears only after sign-in.');

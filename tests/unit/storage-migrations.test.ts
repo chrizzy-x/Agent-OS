@@ -146,6 +146,99 @@ describe('storage migrations', () => {
     expect(sql).toContain('deny_all_vault_runtime_grants');
   });
 
+  it('adds connected intelligence persistence with rollback guardrails', () => {
+    const sql = migrationSql('035_intelligence_runtime.sql');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS intelligence_connections');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS intelligence_defaults');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS studio_session_intelligence');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS intelligence_invocations');
+    expect(sql).toContain('workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE');
+    expect(sql).toContain('workspace_id UUID REFERENCES workspaces(id) ON DELETE SET NULL');
+    expect(sql).toContain('execution_id UUID REFERENCES agent_executions(id) ON DELETE SET NULL');
+    expect(sql).toContain('consensus_configuration_id UUID');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS consensus_configuration_id UUID');
+    expect(sql).toContain("vendor TEXT NOT NULL CHECK (vendor IN ('openai', 'anthropic', 'gemini'))");
+    expect(sql).toContain('vault_secret_id UUID NOT NULL REFERENCES vault_secrets(id) ON DELETE RESTRICT');
+    expect(sql).toContain("CHECK (status IN ('pending_validation', 'active', 'invalid', 'disabled', 'revoked'))");
+    expect(sql).toContain('ALTER TABLE nl_studio_sessions');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS intelligence_selection JSONB NOT NULL DEFAULT');
+    expect(sql).toContain('ALTER TABLE intelligence_connections ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain("policyname = 'deny_all_' || t");
+    expect(sql).toContain('-- ROLLBACK:');
+    expect(sql).toContain('DROP TABLE IF EXISTS intelligence_invocations');
+    expect(sql).toContain('DROP TABLE IF EXISTS intelligence_connections');
+  });
+
+  it('adds durable multi-intelligence worker run persistence', () => {
+    const sql = migrationSql('036_intelligence_worker_runs.sql');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS intelligence_worker_runs');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS intelligence_worker_outputs');
+    expect(sql).toContain('workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE');
+    expect(sql).toContain('execution_id UUID REFERENCES agent_executions(id) ON DELETE SET NULL');
+    expect(sql).toContain("CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled'))");
+    expect(sql).toContain('UNIQUE (run_id, worker_key)');
+    expect(sql).toContain('invocation_id UUID REFERENCES intelligence_invocations');
+    expect(sql).toContain('ALTER TABLE intelligence_worker_runs ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain('ALTER TABLE intelligence_worker_outputs ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain("policyname = 'deny_all_' || t");
+    expect(sql).toContain('-- ROLLBACK:');
+    expect(sql).toContain('DROP TABLE IF EXISTS intelligence_worker_outputs');
+    expect(sql).toContain('DROP TABLE IF EXISTS intelligence_worker_runs');
+  });
+
+  it('adds Standard Consensus records without activating FFP', () => {
+    const sql = migrationSql('037_standard_consensus.sql');
+    const runtimeSql = migrationSql('035_intelligence_runtime.sql');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS intelligence_consensus_configurations');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS intelligence_consensus_records');
+    expect(sql).toContain('workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE');
+    expect(sql).toContain('execution_id UUID REFERENCES agent_executions(id) ON DELETE SET NULL');
+    expect(sql).toContain('ALTER COLUMN consensus_configuration_id TYPE TEXT');
+    expect(runtimeSql).toContain('consensus_configuration_id UUID');
+    expect(sql).toContain("CHECK (strategy IN ('standard'))");
+    expect(sql).toContain('preserve_dissent BOOLEAN NOT NULL DEFAULT TRUE');
+    expect(sql).toContain('worker_run_id UUID REFERENCES intelligence_worker_runs');
+    expect(sql).toContain('consensus_hash TEXT');
+    expect(sql).toContain('dissent JSONB NOT NULL DEFAULT');
+    expect(sql).toContain('ALTER TABLE intelligence_consensus_configurations ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain('ALTER TABLE intelligence_consensus_records ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain("policyname = 'deny_all_' || t");
+    expect(sql).not.toContain('FFP Enabled');
+    expect(sql).toContain('-- ROLLBACK:');
+    expect(sql).toContain('DROP TABLE IF EXISTS intelligence_consensus_records');
+    expect(sql).toContain('DROP TABLE IF EXISTS intelligence_consensus_configurations');
+  });
+
+  it('catches memory runtime schema up for native Super AgentOS operations', () => {
+    const sql = migrationSql('038_memory_runtime_catchup.sql');
+
+    expect(sql).toContain('ALTER TABLE agent_memory_store');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE');
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS namespace_type TEXT NOT NULL DEFAULT 'agent'");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private'");
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS agent_memory_store_namespace_key_idx');
+    expect(sql).toContain('ALTER TABLE agent_workflows');
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private'");
+    expect(sql).toContain("CHECK (visibility IN ('private', 'workspace', 'public'))");
+    expect(sql).toContain("NOTIFY pgrst, 'reload schema'");
+  });
+
+  it('adds durable Studio approval token storage for serverless confirmations', () => {
+    const sql = migrationSql('039_studio_confirm_tokens.sql');
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS studio_confirm_tokens');
+    expect(sql).toContain('key_hash TEXT PRIMARY KEY');
+    expect(sql).toContain('expires_at TIMESTAMPTZ NOT NULL');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS studio_confirm_tokens_expires_at_idx');
+    expect(sql).toContain('ALTER TABLE studio_confirm_tokens ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain('CREATE POLICY "deny_all_studio_confirm_tokens"');
+    expect(sql).toContain("NOTIFY pgrst, 'reload schema'");
+    expect(sql).toContain('-- ROLLBACK:');
+  });
+
   it('formalizes FFP execution logs and removes legacy persisted plan identifiers', () => {
     const sql = migrationSql('023_ffp_audit_and_plan_cleanup.sql');
 

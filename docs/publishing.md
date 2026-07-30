@@ -1,6 +1,6 @@
 # Publishing
 
-AgentOS V6.6.7 exposes official Appstore and Skillstore publishing flows through the Developer Console.
+AgentOS V6.6.8 exposes official Appstore and Skillstore publishing flows through the Developer Console.
 
 ## Publish App
 

@@ -60,7 +60,7 @@ export const NATIVE_EXECUTION_TARGETS: ExecutionTarget[] = [
     supportsVision: false,
     supportsFiles: true,
     supportsStructuredOutput: true,
-    userSelectable: true,
+    userSelectable: false,
     failurePolicy: 'resume_with_super_agentos',
   },
 ];

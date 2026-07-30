@@ -92,7 +92,7 @@ const GROUPS: Record<GroupKey, GroupDefinition> = {
     name: 'Skill Store',
     badge: 'SKILL',
     description: 'Reusable third-party capabilities that can be installed, tested, executed, and attached to workspace assets.',
-    competitor: 'Zapier AI actions or ad hoc private tool registries',
+    competitor: 'Zapier actions or ad hoc private tool registries',
     standout: 'Agent OS treats extensions as installable runtime capabilities with execution, activity, reviews, and workspace ownership built in.',
     useCaseTemplates: [
       'A legal intake agent uses {name} to add document parsing or clause extraction without rebuilding those capabilities from scratch.',
@@ -370,8 +370,8 @@ function toCatalogItem(item: CatalogSeed): FeatureCatalogItem {
 
 export const PROJECT_DETAILS = {
   name: 'Agent OS',
-  summary: 'Agent OS is a production platform for building, deploying, and operating autonomous AI agents with hosted primitives, MCP routing, skills, downloadable agentic apps, and multi-agent control features.',
-  audience: 'Platform engineers, AI product teams, startups shipping agent workflows, and operators who need governed automation.',
+  summary: 'Agent OS is a production platform for building, deploying, and operating autonomous agents with hosted primitives, MCP routing, skills, downloadable agentic apps, and multi-agent control features.',
+  audience: 'Platform engineers, intelligence product teams, startups shipping agent workflows, and operators who need governed automation.',
   productionPath: 'Primary path: GitHub main -> GitHub Actions -> Vercel production. Direct Vercel deploys can be used temporarily for recovery or launch unblockers.',
   stack: [
     'Next.js App Router for product UI and APIs',

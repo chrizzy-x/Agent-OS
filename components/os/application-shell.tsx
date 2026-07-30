@@ -183,6 +183,22 @@ function badgeCount(value: number): string {
   return value > 99 ? '99+' : String(value);
 }
 
+function surfaceBadgeCount(id: string, payload: ShellPayload): string {
+  if (id === 'home') return badgeCount(payload.notifications.unread);
+  if (id === 'studio') return badgeCount(payload.sessions.filter(item => !item.archivedAt).length);
+  if (id === 'projects') return badgeCount(payload.projects.filter(item => item.status !== 'archived').length);
+  if (id === 'developer') return badgeCount(payload.agents.connected);
+  return '';
+}
+
+function surfaceBadgeLabel(id: string) {
+  if (id === 'home') return 'unread notifications';
+  if (id === 'studio') return 'active sessions';
+  if (id === 'projects') return 'projects';
+  if (id === 'developer') return 'connected agents';
+  return 'items';
+}
+
 function notificationHref(item: NotificationRef): string {
   const deepLink = item.metadata.deepLink ?? item.metadata.href ?? item.metadata.navigateTo ?? item.metadata.actionHref;
   if (typeof deepLink === 'string' && deepLink.startsWith('/')) return deepLink;
@@ -247,6 +263,47 @@ function DefaultRightPanel(props: {
         <div><span>FFP</span><strong>Coming Soon</strong></div>
       </section>
       <div id="agentos-right-panel-slot" />
+    </div>
+  );
+}
+
+function CollapsedRightRail(props: {
+  payload: ShellPayload;
+  onExpand: () => void;
+  onNotifications: () => void;
+}) {
+  const unreadBadge = badgeCount(props.payload.notifications.unread);
+  const agentsBadge = badgeCount(props.payload.agents.connected);
+
+  return (
+    <div className="agentos-global-context-rail" aria-label="Context shortcuts">
+      <button type="button" className="agentos-context-rail-button" onClick={props.onExpand} aria-label="Expand context sidebar" title="Context">
+        <span className="agentos-context-rail-icon"><SurfaceIcon id="settings" /></span>
+      </button>
+      <button
+        type="button"
+        className="agentos-context-rail-button"
+        onClick={props.onNotifications}
+        aria-label={`Open notifications (${props.payload.notifications.unread} unread)`}
+        title={`Open notifications (${props.payload.notifications.unread} unread)`}
+      >
+        <span className="agentos-context-rail-icon bell"><span className="agentos-bell-icon" aria-hidden="true" /></span>
+        {unreadBadge ? <b>{unreadBadge}</b> : null}
+      </button>
+      <button
+        type="button"
+        className="agentos-context-rail-button"
+        onClick={props.onExpand}
+        aria-label={`${props.payload.agents.connected} connected agents`}
+        title={`${props.payload.agents.connected} connected agents`}
+      >
+        <span className="agentos-context-rail-icon"><SurfaceIcon id="developer" /></span>
+        {agentsBadge ? <b>{agentsBadge}</b> : null}
+      </button>
+      <button type="button" className="agentos-context-rail-button" onClick={props.onExpand} aria-label="FFP status: Coming Soon" title="FFP: Coming Soon">
+        <span className="agentos-context-rail-icon"><SurfaceIcon id="ffp" /></span>
+        <small>Soon</small>
+      </button>
     </div>
   );
 }
@@ -413,23 +470,30 @@ function LeftSidebar(props: {
       </section>
 
       <nav className="agentos-global-nav" aria-label="AgentOS modules">
-        {NAVIGATION_SURFACES.map(item => (
-          <Link
-            key={item.href}
-            href={appendShellContextToHref(item.href, props.navigationContext)}
-            className={[
-              isProductSurfaceActivePath(props.pathname, item) ? 'active' : '',
-              item.status === 'coming_soon' ? 'coming-soon' : '',
-            ].filter(Boolean).join(' ')}
-            title={item.disabledReason}
-            onClick={() => {
-              beginNavigationMetric();
-              props.onCloseMobile();
-            }}
-          >
-            <i aria-hidden="true"><SurfaceIcon id={item.id} /></i><b>{item.label}</b>{item.status === 'coming_soon' ? <small>Soon</small> : null}
-          </Link>
-        ))}
+        {NAVIGATION_SURFACES.map(item => {
+          const badge = surfaceBadgeCount(item.id, props.payload);
+          return (
+            <Link
+              key={item.href}
+              href={appendShellContextToHref(item.href, props.navigationContext)}
+              className={[
+                isProductSurfaceActivePath(props.pathname, item) ? 'active' : '',
+                item.status === 'coming_soon' ? 'coming-soon' : '',
+              ].filter(Boolean).join(' ')}
+              title={item.disabledReason ?? item.label}
+              aria-label={badge ? `${item.label}, ${surfaceBadgeLabel(item.id)} count ${badge}` : item.label}
+              onClick={() => {
+                beginNavigationMetric();
+                props.onCloseMobile();
+              }}
+            >
+              <i aria-hidden="true"><SurfaceIcon id={item.id} /></i>
+              <b>{item.label}</b>
+              {badge ? <span className="agentos-nav-badge" aria-hidden="true">{badge}</span> : null}
+              {item.status === 'coming_soon' ? <small>Soon</small> : null}
+            </Link>
+          );
+        })}
       </nav>
 
       <section className="agentos-global-quick">
@@ -928,6 +992,11 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
           <button type="button" className="agentos-shell-collapse" onClick={() => setRightCollapsed(!rightCollapsed)} aria-label={rightCollapsed ? 'Expand context sidebar' : 'Collapse context sidebar'}>
             {rightCollapsed ? '<' : '>'}
           </button>
+          <CollapsedRightRail
+            payload={payload}
+            onExpand={() => setRightCollapsed(false)}
+            onNotifications={() => setNotificationDrawerOpen(value => !value)}
+          />
           <DefaultRightPanel workspace={workspace} project={project} session={activeSession} payload={payload} />
         </aside>
 

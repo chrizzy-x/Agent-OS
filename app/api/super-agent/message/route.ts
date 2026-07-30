@@ -28,7 +28,7 @@ function isCapabilityQuestion(message: string): boolean {
 }
 
 function isProviderStatusQuestion(message: string): boolean {
-  return /\b(ai provider|model status|provider status|external intelligence|native runtime|can i talk to super agent|is super agent live)\b/i.test(message);
+  return /\b(intelligence provider|model status|provider status|external intelligence|native runtime|can i talk to super agent|is super agent live)\b/i.test(message);
 }
 
 function providerStatusReply(providerStatus: ReturnType<typeof getStudioProviderStatus>): string {

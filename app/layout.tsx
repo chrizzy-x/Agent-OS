@@ -10,8 +10,8 @@ import ApplicationShell from '@/components/os/application-shell';
 export const metadata: Metadata = {
   title: 'AgentOS',
   description:
-    'AgentOS is your AI operating system for Studio, marketplace apps, skills, publishing, memory, and Vault.',
-  keywords: 'AI operating system, AgentOS, Studio, App Store, Skill Store, marketplace, publishing, apps, skills, memory, Vault',
+    'AgentOS is your operating intelligence system for Studio, marketplace apps, skills, publishing, memory, and Vault.',
+  keywords: 'operating intelligence system, AgentOS, Studio, App Store, Skill Store, marketplace, publishing, apps, skills, memory, Vault',
   metadataBase: new URL(APP_URL),
   manifest: '/manifest.json',
   appleWebApp: {
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'AgentOS',
-    description: 'The AI operating system for Studio, marketplace apps, skills, publishing, memory, and Vault.',
+    description: 'The operating intelligence system for Studio, marketplace apps, skills, publishing, memory, and Vault.',
     url: APP_URL,
     type: 'website',
     images: [{ url: '/logo.png', width: 512, height: 512, alt: 'AgentOS' }],
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'AgentOS',
-    description: 'The AI operating system for Studio, marketplace apps, skills, publishing, memory, and Vault.',
+    description: 'The operating intelligence system for Studio, marketplace apps, skills, publishing, memory, and Vault.',
     images: ['/logo.png'],
   },
 };
@@ -60,7 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <BrowserSessionFetchGuard />
         <Suspense
           fallback={(
-            <div className="agentos-global-shell agentos-global-shell-loading">
+            <div className="agentos-global-shell-loading">
               <header className="agentos-global-header">AgentOS</header>
               <aside className="agentos-global-left" />
               <main className="agentos-global-main">{children}</main>

@@ -8,7 +8,7 @@ import {
   formatMoneyMetric,
   formatRatingLabel,
 } from '../../src/data/discipline.js';
-import { hasSecretLikeValue } from '../../src/security/secret-redaction.js';
+import { hasSecretLikeValue, redactSecretsInString } from '../../src/security/secret-redaction.js';
 
 function source(...parts: string[]) {
   return readFileSync(join(process.cwd(), ...parts), 'utf8');
@@ -87,6 +87,8 @@ describe('real data and empty-state discipline', () => {
 
   it('keeps secrets out of durable memory controls', () => {
     expect(hasSecretLikeValue('api_key=sk-test1234567890abcdef')).toBe(true);
+    expect(hasSecretLikeValue('Authorization: Bearer secret-token-value')).toBe(true);
+    expect(redactSecretsInString('Authorization: Bearer secret-token-value')).not.toContain('secret-token-value');
     expect(hasSecretLikeValue('Remember that the user prefers concise reports.')).toBe(false);
 
     const memoryService = source('src', 'memory', 'service.ts');

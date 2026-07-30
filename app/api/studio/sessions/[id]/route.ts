@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { resolveProjectForWorkspace } from '@/src/projects/service';
+import { getStudioSessionIntelligence, setStudioSessionIntelligence } from '@/src/intelligence/service';
+import { normalizeIntelligenceSelection } from '@/src/intelligence/selection';
 import { getStudioSessionBundle, updateStudioSession } from '@/src/studio/persistence';
+import { buildStudioSyncContract } from '@/src/studio/sync-contract';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -10,8 +13,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.read');
     const { id } = await params;
-    const bundle = await getStudioSessionBundle(ctx.agentId, id);
-    return NextResponse.json(bundle);
+    const [bundle, intelligence] = await Promise.all([
+      getStudioSessionBundle(ctx.agentId, id),
+      getStudioSessionIntelligence({ ownerAgentId: ctx.agentId, sessionId: id }),
+    ]);
+    return NextResponse.json({ syncContract: buildStudioSyncContract(), ...bundle, intelligenceSelection: intelligence.selection });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
@@ -24,6 +30,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { id } = await params;
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const projectId = typeof body.projectId === 'string' ? body.projectId : body.projectId === null ? null : undefined;
+    const intelligenceSelection = body.intelligenceSelection && typeof body.intelligenceSelection === 'object' && !Array.isArray(body.intelligenceSelection)
+      ? normalizeIntelligenceSelection(body.intelligenceSelection, 'session')
+      : null;
     if (typeof projectId === 'string') {
       const bundle = await getStudioSessionBundle(ctx.agentId, id);
       await resolveProjectForWorkspace({
@@ -54,7 +63,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         ? body.statePatch as Record<string, unknown>
         : undefined,
     });
-    return NextResponse.json({ session });
+    const persistedIntelligence = intelligenceSelection
+      ? await setStudioSessionIntelligence({
+        ownerAgentId: ctx.agentId,
+        sessionId: id,
+        selection: intelligenceSelection,
+      })
+      : null;
+    return NextResponse.json({
+      syncContract: buildStudioSyncContract(),
+      session,
+      ...(persistedIntelligence ? { intelligenceSelection: persistedIntelligence.selection } : {}),
+    });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
@@ -73,7 +93,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       status: deleteMode ? undefined : 'archived',
       deleted: deleteMode ? true : undefined,
     });
-    return NextResponse.json({ session, archived: !deleteMode, deleted: deleteMode });
+    return NextResponse.json({ syncContract: buildStudioSyncContract(), session, archived: !deleteMode, deleted: deleteMode });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

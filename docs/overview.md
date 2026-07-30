@@ -2,13 +2,13 @@
 
 V6.6.8 formalizes the Super AgentOS runtime contract on top of the persistent operating shell. Capability Graph nodes, Workspace Context packages, Runtime Registry assets, and durable task records now expose deterministic metadata for execution, replay, audit, and configuration checks.
 
-> Super AgentOS-first AI operating system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
+> Super AgentOS-first operating intelligence system for users, builders, apps, skills, workflows, MCP tools, files, memory, and persisted execution.
 
 ---
 
 ## What is AgentOS?
 
-AgentOS is a consumer-facing AI operating system with Super AgentOS as the primary experience. A normal user can ask Super AgentOS to research, analyze, build, summarize files, create workflows, run apps, execute skills, call MCP tools, and recover failed work without manually navigating platform internals.
+AgentOS is a consumer-facing operating intelligence system with Super AgentOS as the primary experience. A normal user can ask Super AgentOS to research, analyze, build, summarize files, create workflows, run apps, execute skills, call MCP tools, and recover failed work without manually navigating platform internals.
 
 Builders still get the underlying operating system: apps, skills, workflows, SDK, MCP, files, memory, Vault, audit, and primitives.
 
@@ -57,7 +57,7 @@ FFP remains disabled and Coming Soon in V6.6.8. Studio internals are untouched.
 
 ## The Problem
 
-Building an autonomous AI agent requires significant infrastructure:
+Building an autonomous agent requires significant infrastructure:
 
 - Setting up cloud servers and databases
 - Configuring storage systems

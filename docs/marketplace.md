@@ -1,6 +1,6 @@
 # Marketplace
 
-AgentOS V6.6.7 treats apps as installable products and skills as installable capabilities.
+AgentOS V6.6.8 treats apps as installable products and skills as installable capabilities.
 
 ## Surfaces
 

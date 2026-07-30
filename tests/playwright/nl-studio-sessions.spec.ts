@@ -216,8 +216,9 @@ test.describe('NL Studio session management', () => {
     page.once('dialog', dialog => dialog.accept());
     await row.getByRole('button', { name: 'Archive' }).click();
     await expect(page).not.toHaveURL(/session=session-one/);
+    await expect(page.getByText('What should Super AgentOS do?')).toBeVisible();
+    await revealSessionControls(page);
     await expect(page.getByRole('heading', { name: 'Archived Sessions' })).toBeVisible();
     await expect(page.locator('.agentos-session-row').filter({ hasText: 'Planning chat' }).getByRole('button', { name: 'Continue' })).toBeVisible();
-    await expect(page.getByText('What should Super AgentOS do?')).toBeVisible();
   });
 });

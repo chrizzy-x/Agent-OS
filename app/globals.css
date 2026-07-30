@@ -3167,7 +3167,8 @@ nextjs-portal {
 }
 
 /* AgentOS V6.6.7 persistent operating-system shell */
-.agentos-global-shell {
+.agentos-global-shell,
+.agentos-global-shell-loading {
   --agentos-left-width: 280px;
   --agentos-right-width: 360px;
   min-height: 100vh;
@@ -3558,9 +3559,10 @@ nextjs-portal {
 
 .agentos-global-nav a,
 .agentos-global-nav > span {
+  position: relative;
   min-height: 32px;
   display: grid;
-  grid-template-columns: 25px minmax(0, 1fr) auto;
+  grid-template-columns: 25px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 7px;
   padding: 0 8px;
@@ -3618,6 +3620,20 @@ nextjs-portal {
 
 .agentos-global-nav small {
   font-size: 0.58rem;
+}
+
+.agentos-nav-badge {
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #EF4444;
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .agentos-global-quick,
@@ -3748,6 +3764,17 @@ nextjs-portal {
   padding: 0;
 }
 
+.agentos-global-sidebar[data-collapsed="true"] .agentos-nav-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 2px solid var(--bg-primary);
+  font-size: 0.58rem;
+}
+
 .agentos-global-context {
   height: 100%;
   display: flex;
@@ -3786,6 +3813,91 @@ nextjs-portal {
 
 .agentos-global-shell[data-right-collapsed="true"] .agentos-global-context {
   display: none;
+}
+
+.agentos-global-context-rail {
+  height: 100%;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 10px 72px;
+}
+
+.agentos-global-shell[data-right-collapsed="true"] .agentos-global-context-rail {
+  display: flex;
+}
+
+.agentos-context-rail-button {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.025);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.agentos-context-rail-button:hover {
+  background: rgba(255,255,255,0.055);
+  color: var(--text-primary);
+}
+
+.agentos-context-rail-icon,
+.agentos-context-rail-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.agentos-context-rail-icon {
+  display: grid;
+  place-items: center;
+}
+
+.agentos-context-rail-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.agentos-context-rail-icon.bell .agentos-bell-icon {
+  width: 15px;
+  height: 17px;
+}
+
+.agentos-context-rail-button b {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+  border: 2px solid var(--bg-primary);
+  border-radius: 999px;
+  background: #EF4444;
+  color: #ffffff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.agentos-context-rail-button small {
+  position: absolute;
+  right: -5px;
+  bottom: -6px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 0.5rem;
+  line-height: 1;
 }
 
 .agentos-shell-mobile-button,
@@ -4094,6 +4206,11 @@ nextjs-portal {
     display: flex;
   }
 
+  .agentos-global-context-rail,
+  .agentos-global-shell[data-right-collapsed="true"] .agentos-global-context-rail {
+    display: none;
+  }
+
   .agentos-shell-collapse {
     display: none;
   }
@@ -4142,9 +4259,12 @@ nextjs-portal {
   }
 
   .panic-button {
-    top: auto;
+    top: 8px;
+    left: auto;
     right: 12px;
-    bottom: 12px;
+    bottom: auto;
+    min-height: 34px;
+    padding-block: 5px;
   }
 
   .agentos-notification-drawer {

@@ -6,7 +6,7 @@
 
 > V6.6.8
 
-AgentOS is an AI operating system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, Primeflows, memory, Vault, workspace assets, and activity.
+AgentOS is an operating intelligence system. Every user gets one Super AgentOS with shared Studio, projects, apps, skills, Primeflows, memory, Vault, workspace assets, and activity.
 
 Live:
 - [agentos.services](https://agentos.services)

@@ -565,7 +565,7 @@ export default function WorkflowsPage({ selectedId }: { selectedId?: string }) {
               <Button variant="secondary" onClick={() => void runWorkflow()} loading={working} loadingLabel="Working...">Manual Run</Button>
               <Button variant="secondary" onClick={() => void toggleStatus()}>{working ? 'Working...' : active.status === 'paused' ? 'Resume' : 'Pause'}</Button>
               <Button variant="ghost" onClick={validateWorkflow}>Validate</Button>
-              <Button variant="ghost" onClick={sendToStudio}>AI Assist</Button>
+              <Button variant="ghost" onClick={sendToStudio}>Studio Assist</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-spec')}>Spec</Button>
               <Button variant="secondary" onClick={() => drawer.openDrawer('workflow-runtime')}>Runtime</Button>
             </>

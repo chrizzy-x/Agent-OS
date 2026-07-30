@@ -70,10 +70,33 @@ type RuntimeGrant = {
   expiresAt: string;
 };
 
+type IntelligenceVendor = 'openai' | 'anthropic' | 'gemini';
+
+type IntelligenceModel = {
+  id: string;
+  label: string;
+  vendor: IntelligenceVendor;
+  default: boolean;
+  capabilities: string[];
+};
+
+type IntelligenceConnection = {
+  id: string;
+  workspaceId: string;
+  vendor: IntelligenceVendor;
+  displayName: string;
+  status: string;
+  selectedModelId: string;
+  availableModels: string[];
+  lastValidatedAt: string | null;
+  lastError: string | null;
+  updatedAt: string;
+};
+
 type DrawerId = 'secret-details' | 'secret-history' | 'secret-assign' | 'secret-edit' | 'secret-permission';
 
 type SubjectType = 'app' | 'subagent' | 'workflow' | 'skill' | 'session' | 'sdk_credential' | 'super_agentos';
-type VaultView = 'secrets' | 'apiKeys' | 'credentials' | 'wallets' | 'audit';
+type VaultView = 'secrets' | 'intelligence' | 'apiKeys' | 'credentials' | 'wallets' | 'audit';
 
 const SUBJECT_OPTIONS: Array<{ value: SubjectType; label: string }> = [
   { value: 'app', label: 'App' },
@@ -84,6 +107,27 @@ const SUBJECT_OPTIONS: Array<{ value: SubjectType; label: string }> = [
   { value: 'sdk_credential', label: 'SDK Credential' },
   { value: 'super_agentos', label: 'Super AgentOS' },
 ];
+
+const INTELLIGENCE_VENDOR_OPTIONS: Array<{ value: IntelligenceVendor; label: string }> = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'gemini', label: 'Gemini' },
+];
+
+const FALLBACK_INTELLIGENCE_MODELS: Record<IntelligenceVendor, IntelligenceModel[]> = {
+  openai: [
+    { id: 'gpt-5', label: 'gpt-5', vendor: 'openai', default: true, capabilities: ['text', 'streaming'] },
+    { id: 'gpt-5-mini', label: 'gpt-5-mini', vendor: 'openai', default: false, capabilities: ['text', 'streaming'] },
+  ],
+  anthropic: [
+    { id: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6', vendor: 'anthropic', default: true, capabilities: ['text', 'streaming'] },
+    { id: 'claude-opus-4-1', label: 'claude-opus-4-1', vendor: 'anthropic', default: false, capabilities: ['text', 'streaming'] },
+  ],
+  gemini: [
+    { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro', vendor: 'gemini', default: true, capabilities: ['text', 'streaming'] },
+    { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash', vendor: 'gemini', default: false, capabilities: ['text', 'streaming'] },
+  ],
+};
 
 function formatDate(value: string | null | undefined): string {
   return value ? new Date(value).toLocaleString() : 'Never';
@@ -124,6 +168,14 @@ export default function VaultPage() {
   const [permissionSubjectId, setPermissionSubjectId] = useState('');
   const [permissionReason, setPermissionReason] = useState('');
   const [runtimeGrant, setRuntimeGrant] = useState<RuntimeGrant | null>(null);
+  const [connections, setConnections] = useState<IntelligenceConnection[]>([]);
+  const [connectionModels, setConnectionModels] = useState<Record<string, IntelligenceModel[]>>({});
+  const [connectionLoading, setConnectionLoading] = useState(false);
+  const [connectionVendor, setConnectionVendor] = useState<IntelligenceVendor>('openai');
+  const [connectionModelId, setConnectionModelId] = useState('gpt-5');
+  const [connectionName, setConnectionName] = useState('');
+  const [connectionCredential, setConnectionCredential] = useState('');
+  const [connectionDefault, setConnectionDefault] = useState(true);
 
   const selected = useMemo(
     () => secrets.find(secret => secret.id === drawer.current?.entityId) ?? null,
@@ -147,6 +199,26 @@ export default function VaultPage() {
       setLoading(false);
     }
   }, [search, shell.activeWorkspaceId]);
+
+  const loadConnections = useCallback(async () => {
+    if (!shell.activeWorkspaceId) {
+      setConnections([]);
+      setConnectionModels({});
+      return;
+    }
+    setConnectionLoading(true);
+    try {
+      const { response } = await fetchWithBrowserSession(`/api/intelligence/connections?workspaceId=${encodeURIComponent(shell.activeWorkspaceId)}`, { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      setConnections(payload.connections ?? []);
+      setConnectionModels(payload.models ?? {});
+    } catch {
+      setConnections([]);
+      setConnectionModels({});
+    } finally {
+      setConnectionLoading(false);
+    }
+  }, [shell.activeWorkspaceId]);
 
   const loadSecretDetail = useCallback(async (secretId: string) => {
     setDetailLoading(true);
@@ -178,6 +250,10 @@ export default function VaultPage() {
   }, [loadSecrets]);
 
   useEffect(() => {
+    void loadConnections();
+  }, [loadConnections]);
+
+  useEffect(() => {
     if (!drawer.current?.entityId) {
       setHistory([]);
       setAssignments([]);
@@ -192,7 +268,20 @@ export default function VaultPage() {
     active: secrets.filter(item => item.status === 'active').length,
     assigned: secrets.reduce((sum, item) => sum + (item.assignmentCount ?? 0), 0),
     recentlyUsed: secrets.filter(item => item.lastAccessedAt).length,
-  }), [secrets]);
+    connections: connections.filter(item => item.status === 'active').length,
+  }), [connections, secrets]);
+
+  const currentConnectionModels = useMemo(
+    () => connectionModels[connectionVendor] ?? FALLBACK_INTELLIGENCE_MODELS[connectionVendor],
+    [connectionModels, connectionVendor],
+  );
+
+  useEffect(() => {
+    const models = connectionModels[connectionVendor] ?? FALLBACK_INTELLIGENCE_MODELS[connectionVendor];
+    if (models.length > 0 && !models.some(model => model.id === connectionModelId)) {
+      setConnectionModelId(models.find(model => model.default)?.id ?? models[0].id);
+    }
+  }, [connectionModelId, connectionModels, connectionVendor]);
 
   async function refresh(secretId?: string) {
     await loadSecrets();
@@ -408,6 +497,78 @@ export default function VaultPage() {
     }
   }
 
+  async function createConnection() {
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/intelligence/connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: shell.activeWorkspaceId,
+          vendor: connectionVendor,
+          displayName: connectionName,
+          credential: connectionCredential,
+          modelId: connectionModelId,
+          makeDefault: connectionDefault,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok
+        ? payload.validated === false ? payload.validationError ?? 'Connection saved as invalid.' : 'Connection validated.'
+        : payload.error ?? 'Connection failed');
+      if (response.ok) {
+        setConnectionCredential('');
+        setConnectionName('');
+        await loadConnections();
+      }
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function setConnectionAsDefault(connection: IntelligenceConnection) {
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/intelligence/connections', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'set_default',
+          workspaceId: shell.activeWorkspaceId,
+          connectionId: connection.id,
+          modelId: connection.selectedModelId,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Workspace default updated.' : payload.error ?? 'Default update failed');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function revokeConnection(connection: IntelligenceConnection) {
+    setWorking(true);
+    setMessage('');
+    try {
+      const response = await fetch('/api/intelligence/connections', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'revoke',
+          workspaceId: shell.activeWorkspaceId,
+          connectionId: connection.id,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      setMessage(response.ok ? 'Connection revoked.' : payload.error ?? 'Revoke failed');
+      if (response.ok) await loadConnections();
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function revokeAssignment(assignment: Assignment) {
     if (!selected) return;
     setWorking(true);
@@ -439,6 +600,7 @@ export default function VaultPage() {
               <div className="os-entity-copy">Active: {summary.active}</div>
               <div className="os-entity-copy">Assignments: {summary.assigned}</div>
               <div className="os-entity-copy">Used: {summary.recentlyUsed}</div>
+              <div className="os-entity-copy">Connections: {summary.connections}</div>
             </div>
           </Card>
         )}
@@ -455,6 +617,7 @@ export default function VaultPage() {
           <Tabs
             tabs={[
               { key: 'secrets', label: 'Secrets' },
+              { key: 'intelligence', label: 'Connected Intelligence' },
               { key: 'apiKeys', label: 'API Keys' },
               { key: 'credentials', label: 'Credentials' },
               { key: 'wallets', label: 'Wallets' },
@@ -471,7 +634,7 @@ export default function VaultPage() {
           </div>
         </div>
 
-        {vaultView !== 'secrets' && vaultView !== 'audit' ? (
+        {vaultView !== 'secrets' && vaultView !== 'audit' && vaultView !== 'intelligence' ? (
           <ComingSoonState
             title={`${vaultView === 'apiKeys' ? 'API keys' : vaultView} coming soon`}
             body="This credential type is disabled in V6.6.8. Use Secrets for live encrypted values."
@@ -489,6 +652,52 @@ export default function VaultPage() {
             />
             {history.length === 0 ? <EmptyState title="No audit log selected" body="Open a secret first to inspect its masked audit history." /> : null}
           </Card>
+        ) : vaultView === 'intelligence' ? (
+          <div className="os-drawer-stack">
+            <Card>
+              <div className="os-entity-title" style={{ marginBottom: 12 }}>New connection</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+                <Select value={connectionVendor} onChange={event => setConnectionVendor(event.target.value as IntelligenceVendor)} aria-label="Connection vendor">
+                  {INTELLIGENCE_VENDOR_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </Select>
+                <Select value={connectionModelId} onChange={event => setConnectionModelId(event.target.value)} aria-label="Exact model">
+                  {currentConnectionModels.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
+                </Select>
+                <Input value={connectionName} onChange={event => setConnectionName(event.target.value)} placeholder="Connection name" />
+                <Input value={connectionCredential} onChange={event => setConnectionCredential(event.target.value)} placeholder="Credential value" type="password" />
+              </div>
+              <div className="os-inline-actions" style={{ marginTop: 12 }}>
+                <label className="os-entity-copy" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={connectionDefault} onChange={event => setConnectionDefault(event.target.checked)} />
+                  Use as workspace default
+                </label>
+                <Button onClick={() => void createConnection()} disabled={working || !shell.activeWorkspaceId || !connectionCredential.trim() || !connectionModelId.trim()}>
+                  {working ? 'Working...' : 'Validate and connect'}
+                </Button>
+              </div>
+            </Card>
+
+            {connectionLoading ? <LoadingState label="Loading connections" /> : connections.length === 0 ? (
+              <EmptyState title="No connected intelligence" body="Add a Vault-backed connection to make external reasoning selectable later." />
+            ) : (
+              <Card>
+                <DataTable
+                  columns={['Name', 'Vendor', 'Model', 'Status', 'Validated', 'Actions']}
+                  rows={connections.map(connection => [
+                    connection.displayName,
+                    INTELLIGENCE_VENDOR_OPTIONS.find(option => option.value === connection.vendor)?.label ?? connection.vendor,
+                    connection.selectedModelId,
+                    <Badge key={`${connection.id}-status`} tone={connection.status === 'active' ? 'success' : connection.status === 'invalid' ? 'warning' : 'default'}>{connection.status}</Badge>,
+                    connection.lastError ? connection.lastError : formatDate(connection.lastValidatedAt),
+                    <div key={`${connection.id}-actions`} className="os-inline-actions">
+                      <Button variant="secondary" onClick={() => void setConnectionAsDefault(connection)} disabled={working || connection.status !== 'active'}>Default</Button>
+                      <Button variant="danger" onClick={() => void revokeConnection(connection)} disabled={working || connection.status === 'revoked'}>Revoke</Button>
+                    </div>,
+                  ])}
+                />
+              </Card>
+            )}
+          </div>
         ) : loading ? <LoadingState label="Loading vault" /> : secrets.length === 0 ? (
           <EmptyState title="No secrets stored" body="Create a secret, then assign it to apps, subagents, workflows, skills, or sessions." action={<Button onClick={() => setCreateOpen(true)}>Create secret</Button>} />
         ) : (
