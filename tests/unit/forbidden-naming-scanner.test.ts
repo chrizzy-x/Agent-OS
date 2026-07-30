@@ -1,8 +1,25 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { scanForbiddenNaming } from '../../scripts/check-forbidden-naming.mjs';
+
+type NamingViolation = {
+  rule: string;
+};
+
+function scanForbiddenNaming(root: string, roots: string[]): NamingViolation[] {
+  const source = [
+    "import { scanForbiddenNaming } from './scripts/check-forbidden-naming.mjs';",
+    "const [root, ...roots] = process.argv.slice(1);",
+    "process.stdout.write(JSON.stringify(scanForbiddenNaming({ root, roots })));",
+  ].join('\n');
+  const output = execFileSync(process.execPath, ['--input-type=module', '-e', source, root, ...roots], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
+  return JSON.parse(output) as NamingViolation[];
+}
 
 describe('forbidden naming scanner', () => {
   it('allows vendor proper nouns and selected model labels', () => {
@@ -15,7 +32,7 @@ describe('forbidden naming scanner', () => {
       'export const metadata = "Intelligence: Gemini 2.5";',
     ].join('\n'));
 
-    expect(scanForbiddenNaming({ root, roots: ['components'] })).toEqual([]);
+    expect(scanForbiddenNaming(root, ['components'])).toEqual([]);
   });
 
   it('blocks generic product and implementation names', () => {
@@ -27,7 +44,7 @@ describe('forbidden naming scanner', () => {
       'export const badSlug = "ai-runtime";',
     ].join('\n'));
 
-    expect(scanForbiddenNaming({ root, roots: ['app'] }).map(violation => violation.rule)).toEqual([
+    expect(scanForbiddenNaming(root, ['app']).map(violation => violation.rule)).toEqual([
       'powered_by',
       'ai_provider',
       'standalone_ai',

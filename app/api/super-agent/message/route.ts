@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAgentContextWithTier } from '@/src/auth/request';
 import { generateStudioChatReply } from '@/src/studio/conversation';
 import { getStudioProviderStatus } from '@/src/studio/providers';
+import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { detectAgentOSIntent } from '@/src/studio/intents';
 import { createAgentTask, updateAgentTask } from '@/src/tasks/service';
 import { buildWorkspaceContextPackage } from '@/src/workspace-context/service';
@@ -113,7 +114,12 @@ export async function POST(request: NextRequest) {
       ? providerStatusReply(providerStatus)
       : answersWorkspaceQuestion
         ? `In this workspace I can use ${capabilitySummary(context)} Available sources include apps, skills, Primeflows, Prime Agents, MCP tools, projects, Library items, memory, and Vault metadata. I will show missing configuration instead of pretending unavailable tools worked.`
-        : await generateStudioChatReply({ message, intent, executionTargetId: 'super_agentos' });
+        : await generateStudioChatReply({
+          message,
+          intent,
+          executionTargetId: 'super_agentos',
+          agentContext: withStudioDefaultAllowedDomains({ ...ctx, studioSessionId: sessionId }),
+        });
     const completedAsConversation = Boolean(message) && !answersWorkspaceQuestion && !answersProviderQuestion;
 
     const updated = await updateAgentTask({

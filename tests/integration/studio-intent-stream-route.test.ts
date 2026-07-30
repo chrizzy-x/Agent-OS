@@ -78,7 +78,16 @@ import { POST } from '../../app/api/studio/intent/stream/route.js';
 describe('POST /api/studio/intent/stream', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireRouteCapability.mockResolvedValue({ agentId: 'agent-1' });
+    mocks.requireRouteCapability.mockResolvedValue({
+      agentId: 'agent-1',
+      allowedDomains: [],
+      quotas: {
+        storageQuotaBytes: 1024,
+        memoryQuotaBytes: 1024,
+        rateLimitPerMin: 100,
+      },
+      tier: 'retail_free',
+    });
     mocks.createExecution.mockResolvedValue({ id: 'execution-1' });
     mocks.updateExecution.mockResolvedValue({});
     mocks.runStandardConsensusRuntime.mockResolvedValue({

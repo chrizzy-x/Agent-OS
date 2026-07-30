@@ -3,6 +3,8 @@ import type { AgentContext } from '../auth/permissions.js';
 export const STUDIO_DEFAULT_ALLOWED_DOMAINS = [
   'api.coingecko.com',
   'api.open-meteo.com',
+  'api.wikimedia.org',
+  'en.wikipedia.org',
 ];
 
 export function withStudioDefaultAllowedDomains(agentContext: AgentContext): AgentContext {

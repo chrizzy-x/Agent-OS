@@ -18,6 +18,8 @@ describe('withStudioDefaultAllowedDomains', () => {
       'api.example.com',
       'api.coingecko.com',
       'api.open-meteo.com',
+      'api.wikimedia.org',
+      'en.wikipedia.org',
     ]);
   });
 });

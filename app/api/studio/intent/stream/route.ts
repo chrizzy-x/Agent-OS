@@ -13,6 +13,7 @@ import { normalizeIntelligenceSelection } from '@/src/intelligence/selection';
 import { createNotification } from '@/src/notifications/service';
 import { listProjects } from '@/src/projects/service';
 import { streamStudioChatReply } from '@/src/studio/conversation';
+import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from '@/src/studio/execution-targets';
 import { getStudioModelLabel, getStudioProviderStatus } from '@/src/studio/providers';
 import { detectAgentOSIntent, humanStatusForIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
@@ -458,6 +459,7 @@ export async function POST(request: NextRequest) {
               sessionTitle: names.sessionTitle,
               executionTargetId: selectedExecutionTarget.id,
               recentMessages,
+              agentContext: withStudioDefaultAllowedDomains({ ...ctx, studioSessionId: sessionId }),
               signal: request.signal,
               onDelta: text => {
                 partialReply += text;

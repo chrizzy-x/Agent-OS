@@ -41,7 +41,16 @@ import { POST } from '../../app/api/super-agent/message/route.js';
 describe('POST /api/super-agent/message', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.requireAgentContextWithTier.mockResolvedValue({ agentId: 'agent-1', tier: 'retail_pro' });
+    mocks.requireAgentContextWithTier.mockResolvedValue({
+      agentId: 'agent-1',
+      tier: 'retail_pro',
+      allowedDomains: [],
+      quotas: {
+        storageQuotaBytes: 1024,
+        memoryQuotaBytes: 1024,
+        rateLimitPerMin: 100,
+      },
+    });
     mocks.detectAgentOSIntent.mockResolvedValue('RESEARCH');
     mocks.generateStudioChatReply.mockResolvedValue('Provider-backed Super AgentOS answer.');
     mocks.getStudioProviderStatus.mockReturnValue({
@@ -115,6 +124,10 @@ describe('POST /api/super-agent/message', () => {
       message: 'research agents and save it',
       intent: 'RESEARCH',
       executionTargetId: 'super_agentos',
+      agentContext: expect.objectContaining({
+        agentId: 'agent-1',
+        allowedDomains: expect.arrayContaining(['api.wikimedia.org', 'en.wikipedia.org']),
+      }),
     });
     expect(mocks.updateAgentTask).toHaveBeenCalledWith(expect.objectContaining({
       patch: expect.objectContaining({

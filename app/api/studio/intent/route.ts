@@ -1575,6 +1575,7 @@ export async function POST(req: NextRequest) {
       projectName: names.projectName,
       sessionTitle: sessionContext.title,
       recentMessages,
+      agentContext: withStudioDefaultAllowedDomains({ ...ctx, studioSessionId: sessionId }),
     });
     await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
     return NextResponse.json({

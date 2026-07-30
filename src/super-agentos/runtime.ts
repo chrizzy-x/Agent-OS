@@ -1,4 +1,6 @@
 import type { AgentOSIntent } from '../studio/intents.js';
+import type { AgentContext } from '../auth/permissions.js';
+import { runNativeResearch, type NativeResearchFetcher } from './research.js';
 
 export type SuperAgentOSRuntimeRequest = {
   message: string;
@@ -8,6 +10,8 @@ export type SuperAgentOSRuntimeRequest = {
   sessionTitle?: string | null;
   executionTargetId?: string;
   recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  agentContext?: AgentContext | null;
+  researchFetcher?: NativeResearchFetcher;
 };
 
 export type SuperAgentOSRuntimeResult = {
@@ -55,6 +59,34 @@ export async function runSuperAgentOSRuntime(params: SuperAgentOSRuntimeRequest)
   }
 
   if (params.intent === 'RESEARCH') {
+    if (params.agentContext) {
+      try {
+        const research = await runNativeResearch({
+          message: params.message,
+          agentContext: params.agentContext,
+          fetcher: params.researchFetcher,
+        });
+        return {
+          completedBy: 'super_agentos',
+          trace: [
+            ...trace,
+            'Super AgentOS fetched public research sources through guarded native network operations',
+            'Super AgentOS assembled a source-backed native brief',
+          ],
+          text: research.text,
+        };
+      } catch {
+        return {
+          completedBy: 'super_agentos',
+          trace,
+          text: [
+            `I could not complete source-backed native research for "${outcome}" through the guarded network operation.`,
+            'Try again, or connect an approved source through MCP or Vault-backed connected intelligence.',
+          ].join('\n'),
+        };
+      }
+    }
+
     return {
       completedBy: 'super_agentos',
       trace,
