@@ -9,6 +9,7 @@ vi.mock('../../src/studio/providers.js', () => ({
 import { detectAgentOSIntent, humanStatusForIntent } from '../../src/studio/intents.js';
 import {
   buildNativeWorkflowPlan,
+  detectNativeMissingCapability,
   parseNativeExecutionRecoveryRequest,
   parseNativePanicRequest,
   parseNativeRunWorkflowReference,
@@ -57,5 +58,12 @@ describe('native Studio operations', () => {
       }),
     ]);
     expect(parseNativeRunWorkflowReference('run workflow Daily release report')).toBe('Daily release report');
+  });
+
+  it('returns explicit missing capability for unsupported non-Derek paper trades', () => {
+    const response = detectNativeMissingCapability('Paper trade without Derek: place a sandbox buy order and return the order id.');
+    expect(response?.capability).toBe('non_derek_paper_broker_execution');
+    expect(response?.reply).toContain('Missing capability');
+    expect(response?.reply).toContain('No order was placed');
   });
 });

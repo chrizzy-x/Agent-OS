@@ -25,6 +25,11 @@ export type NativeExecutionRecoveryRequest = {
   approvalPrompt: string;
 };
 
+export type NativeMissingCapabilityResponse = {
+  capability: string;
+  reply: string;
+};
+
 const SURFACE_NAVIGATION: Array<{
   label: string;
   href: string;
@@ -123,4 +128,23 @@ export function parseNativeExecutionRecoveryRequest(message: string): NativeExec
 export function parseNativeRunWorkflowReference(message: string): string | null {
   const match = message.match(/\b(?:run|execute|start|trigger)\s+(?:primeflow|workflow)\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+}
+
+export function detectNativeMissingCapability(message: string): NativeMissingCapabilityResponse | null {
+  const lower = message.toLowerCase();
+  const asksForTradeExecution = (
+    /\b(paper\s*trade|paper\s*trading|broker|brokerage|sandbox\s+(?:buy|sell|order)|buy\s+order|sell\s+order|place\s+(?:a\s+)?(?:sandbox\s+)?(?:buy|sell)?\s*order)\b/i.test(lower)
+    || /\b(trade|trading)\b/i.test(lower) && /\b(place|execute|submit|buy|sell|order|sandbox|paper)\b/i.test(lower)
+  );
+
+  if (!asksForTradeExecution) return null;
+
+  return {
+    capability: 'non_derek_paper_broker_execution',
+    reply: [
+      'Missing capability: no non-Derek paper-trading broker is connected to this workspace.',
+      'Native Super AgentOS cannot place or simulate broker orders without an installed broker App, Skill, or Universal MCP tool, approved execution permission, and Vault-backed sandbox credentials.',
+      'No order was placed. Connect a supported broker sandbox through Vault and approvals, then retry the trade execution task.',
+    ].join('\n\n'),
+  };
 }

@@ -17,6 +17,7 @@ import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from '@/src/studio/execution-targets';
 import { getStudioModelLabel, getStudioProviderStatus } from '@/src/studio/providers';
 import { detectAgentOSIntent, humanStatusForIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
+import { detectNativeMissingCapability } from '@/src/studio/native-operations';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle } from '@/src/studio/persistence';
 import { createAgentTask, updateAgentTask, type AgentTaskRecord } from '@/src/tasks/service';
 import { sanitizeErrorMessage } from '@/src/utils/output-sanitizer';
@@ -376,7 +377,14 @@ export async function POST(request: NextRequest) {
           const recentMessages = await loadRecentConversation(ctx.agentId, sessionId);
           workspaceId = names.workspaceId;
           projectId = names.projectId;
-          if (isProviderStatusQuestion(message)) {
+          const missingCapability = detectNativeMissingCapability(message);
+          if (missingCapability) {
+            partialReply = missingCapability.reply;
+            for (const text of replyChunks(partialReply)) {
+              push('delta', { text });
+              await new Promise(resolve => setTimeout(resolve, 8));
+            }
+          } else if (isProviderStatusQuestion(message)) {
             partialReply = providerStatusReply(providerStatus);
             for (const text of replyChunks(partialReply)) {
               push('delta', { text });
