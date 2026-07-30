@@ -431,6 +431,20 @@ export function StudioProvider(props: {
     }));
   }, [currentProject?.id, currentProject?.workspaceId, currentWorkspaceId, requestedProjectId, requestedSessionId, requestedWorkspaceId, router, session?.id, session?.workspaceId]);
 
+  const replaceCurrentHistoryRoute = useCallback((params: {
+    mode: StudioMode;
+    sessionId: string;
+    projectId: string | null;
+    workspaceId: string;
+  }) => {
+    const route = buildStudioRoute(params);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(window.history.state, '', route);
+      return;
+    }
+    router.replace(route);
+  }, [router]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     const auth = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
@@ -844,7 +858,6 @@ export function StudioProvider(props: {
     const nextMessage = (message ?? composerValue).trim();
     if (!nextMessage || sending) return;
     let activeSession = session;
-    let createdSession: StudioSessionRecord | null = null;
     if (!activeSession) {
       if (currentWorkspaceId) {
         const response = await fetchWithBrowserSession('/api/studio/sessions', {
@@ -872,10 +885,21 @@ export function StudioProvider(props: {
         }
         const payload = await response.response.json() as { session?: StudioSessionRecord };
         activeSession = payload.session ?? null;
-        createdSession = activeSession;
         if (activeSession) {
+          const activeProjectId = activeSession.projectId ?? currentProject?.id ?? requestedProjectId ?? null;
           setSession(activeSession);
           setSessions(current => [activeSession as StudioSessionRecord, ...current.filter(item => item.id !== activeSession?.id)]);
+          replaceCurrentHistoryRoute({
+            mode,
+            sessionId: activeSession.id,
+            projectId: activeProjectId,
+            workspaceId: activeSession.workspaceId,
+          });
+          applicationShell.syncContext({
+            workspaceId: activeSession.workspaceId,
+            projectId: activeProjectId,
+            sessionId: activeSession.id,
+          });
         }
       }
     }
@@ -1003,9 +1027,6 @@ export function StudioProvider(props: {
       activeStreamExecutionIdRef.current = null;
       setActiveExecutionId(null);
       try {
-        if (createdSession) {
-          pushRoute(mode, createdSession.id, createdSession.projectId ?? currentProject?.id ?? null);
-        }
         if (finalState === 'complete') {
           await loadSessionBundle(executionSession.id);
         } else if (finalState === 'stopped') {
@@ -1035,7 +1056,7 @@ export function StudioProvider(props: {
         }
       }
     }
-  }, [composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, messageIntelligenceOverride, mode, pushRoute, refreshRuntimeState, requestedProjectId, router, sending, session, sessionIntelligenceSelection]);
+  }, [applicationShell.syncContext, composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, messageIntelligenceOverride, mode, refreshRuntimeState, replaceCurrentHistoryRoute, requestedProjectId, router, sending, session, sessionIntelligenceSelection]);
 
   const stopGeneration = useCallback(async () => {
     const abortController = streamAbortRef.current;
