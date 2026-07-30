@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from '../../src/studio/execution-targets.js';
 
 describe('Studio execution target registry', () => {
-  it('keeps Super AgentOS and Orchestrator available without provider credentials', () => {
+  it('keeps Native selectable and legacy Orchestrator non-selectable without provider credentials', () => {
     const targets = buildExecutionTargets();
 
     expect(targets.map(target => target.id)).toEqual(['super_agentos', 'orchestrator']);
@@ -16,7 +16,7 @@ describe('Studio execution target registry', () => {
       id: 'orchestrator',
       displayName: 'Orchestrator',
       connectionStatus: 'native',
-      userSelectable: true,
+      userSelectable: false,
     });
   });
 
@@ -48,6 +48,10 @@ describe('Studio execution target registry', () => {
   it('resolves unavailable selections back to Super AgentOS', () => {
     const targets = buildExecutionTargets();
 
+    expect(resolveExecutionTarget(targets, 'orchestrator')).toMatchObject({
+      id: 'super_agentos',
+      displayName: 'Super AgentOS',
+    });
     expect(resolveExecutionTarget(targets, 'external_provider:anthropic')).toMatchObject({
       id: 'super_agentos',
       displayName: 'Super AgentOS',

@@ -1,36 +1,5 @@
-import { getRedisClient } from '../storage/redis.js';
 import { generateWithStudioProvider, getStudioModelLabel } from './providers.js';
-
-// In-memory fallback for when Redis is unavailable
-const LOCAL_TOKENS = new Map<string, { value: string; expiresAt: number }>();
-
-function pruneTokens() {
-  const now = Date.now();
-  for (const [k, e] of LOCAL_TOKENS) { if (e.expiresAt < now) LOCAL_TOKENS.delete(k); }
-}
-
-export async function tokenSet(key: string, ttlSeconds: number, value: string): Promise<void> {
-  try { await getRedisClient().setex(key, ttlSeconds, value); return; } catch { /* fall through */ }
-  pruneTokens();
-  LOCAL_TOKENS.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
-}
-
-export async function tokenGet(key: string): Promise<string | null> {
-  try {
-    const val = await getRedisClient().get(key);
-    if (val !== null) return val;
-  } catch { /* fall through */ }
-  const entry = LOCAL_TOKENS.get(key);
-  if (!entry || entry.expiresAt < Date.now()) { LOCAL_TOKENS.delete(key); return null; }
-  return entry.value;
-}
-
-export async function tokenDel(key: string): Promise<void> {
-  try { await getRedisClient().del(key); } catch { /* ignore */ }
-  LOCAL_TOKENS.delete(key);
-}
-
-export const TOKEN_TTL_SECONDS = 1800; // 30 minutes
+export { tokenDel, tokenGet, tokenSet, TOKEN_TTL_SECONDS } from './confirm-tokens.js';
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 

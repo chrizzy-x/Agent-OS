@@ -12,6 +12,9 @@ describe('Phase 22 Code Studio baseline', () => {
       'Deployment readiness',
       'No developer execution results yet',
       'Project:',
+      'terminalEventIcon',
+      'RUN',
+      'SYNC',
     );
   });
 });

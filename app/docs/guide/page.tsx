@@ -40,7 +40,7 @@ export default function GuidePage() {
         {/* SECTION 1 */}
         <Section id="what-is" title="What is AgentOS?">
           <p>
-            AgentOS is the <strong>operating system for the agent economy</strong>. It is the router between humans and AI systems, the workspace where you chat and operate, and the runtime layer that lets agents, apps, skills, workflows, and MCP tools work together:
+            AgentOS is the <strong>operating system for the agent economy</strong>. It is the router between humans and connected intelligence systems, the workspace where you chat and operate, and the runtime layer that lets agents, apps, skills, workflows, and MCP tools work together:
           </p>
           <ul className="list-disc ml-6 mt-3 space-y-2" style={{ color: 'var(--text-secondary)' }}>
             <li><strong>Memory</strong> — store and recall data between conversations</li>
@@ -54,7 +54,7 @@ export default function GuidePage() {
             Inside the product, your browser session opens Studio and your workspace immediately. Outside the product, your API key and SDK registration connect external agents and apps to the same runtime through <code className="tag text-sm">/mcp</code>.
           </p>
           <Callout emoji="💡">
-            The name &quot;MCP&quot; stands for <strong>Model Context Protocol</strong> — the open standard that lets AI models call external tools. AgentOS implements MCP so your agent can use all 30+ tools with zero integration overhead.
+            The name &quot;MCP&quot; stands for <strong>Model Context Protocol</strong> — the open standard that lets selected models call external tools. AgentOS implements MCP so your agent can use all 30+ tools with zero integration overhead.
           </Callout>
         </Section>
 
@@ -168,7 +168,7 @@ if (drop > 5) {
           </UseCase>
 
           <UseCase n="B" title="Personal research assistant with memory">
-            <p className="mb-3" style={{ color: 'var(--text-secondary)' }}>Every time you research a topic, store key facts so your agent remembers them in future conversations — no matter what AI model you&apos;re using.</p>
+            <p className="mb-3" style={{ color: 'var(--text-secondary)' }}>Every time you research a topic, store key facts so your agent remembers them in future conversations — no matter what selected model you&apos;re using.</p>
             <Code>{`// Save a research note
 await mcp('mem_set', {
   key: 'research:solana-tps',
@@ -221,7 +221,7 @@ console.log('Report saved:', reportText);`}</Code>
           </UseCase>
 
           <UseCase n="D" title="Multi-agent task coordination">
-            <p className="mb-3" style={{ color: 'var(--text-secondary)' }}>Agent A completes some work and publishes an event. Agent B is subscribed and immediately picks it up — like a task queue, but for AI agents.</p>
+            <p className="mb-3" style={{ color: 'var(--text-secondary)' }}>Agent A completes some work and publishes an event. Agent B is subscribed and immediately picks it up — like a task queue, but for agents.</p>
             <Code>{`// Agent A — publisher (when work is done)
 await mcp('events_publish', {
   topic:   'tasks.completed',
@@ -306,7 +306,7 @@ if ([9, 12, 18].includes(hour)) {
 }`}</Code>
           </UseCase>
 
-          <UseCase n="G" title="AI marketer swarm — 5 agents, one campaign">
+          <UseCase n="G" title="Marketing swarm — 5 agents, one campaign">
             <p className="mb-3" style={{ color: 'var(--text-secondary)' }}>Five specialized agents coordinate a full marketing campaign: one writes copy, one posts to X, one handles Reddit, one tracks metrics, one optimizes based on results. They communicate via events.</p>
             <Code>{`// ── AGENT 1: Copywriter ─────────────────────────────────────
 // Generates campaign copy and publishes to the swarm
@@ -448,7 +448,7 @@ console.log('History:', history);`}</Code>
             <Link href="/marketplace" style={{ color: 'var(--accent)' }}>Marketplace</Link> is the discovery layer. It explains how the two stores fit together and how apps built inside or outside AgentOS become discoverable through SDK registration.
           </p>
           <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>
-            The <Link href="/skillstore" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent or workflow. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps. Apps, skills, and workflows are workspace-owned assets inside the same routing layer; workflow monetization is not part of V6.6.7.
+            The <Link href="/skillstore" style={{ color: 'var(--accent)' }}>Skill Store</Link> is for installable capabilities you call from an agent or workflow. The <Link href="/appstore" style={{ color: 'var(--accent)' }}>App Store</Link> is for full downloadable agentic apps. Apps, skills, and workflows are workspace-owned assets inside the same routing layer; workflow monetization is not part of V6.6.8.
           </p>
 
           <h3 className="text-base font-semibold mb-2">Install a skill:</h3>
@@ -578,7 +578,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
 });`}</Code>
 
           <Callout emoji="💰">
-            V6.6.7 supports SDK validation, auto discovery, and marketplace listings for eligible apps and skills. Commercial workflow sales are not part of this release.
+            V6.6.8 supports SDK validation, auto discovery, and marketplace listings for eligible apps and skills. Commercial workflow sales are not part of this release.
           </Callout>
         </Section>
 
@@ -615,7 +615,7 @@ console.log(pkg.schema, pkg.manifest.entrypoint);`}</Code>
         {/* SECTION 9 */}
         <Section id="ffp" title="Step 8 — FFP temp">
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-            FFP is visible but disabled in AgentOS v6.6.7. Compatibility data remains available for future Fabric Furge Protocol support.
+            FFP is visible but disabled in AgentOS V6.6.8. Compatibility data remains available for future Fabric Furge Protocol support.
           </p>
           <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
             All activities route directly to the Unified Execution Engine. FFP cannot be activated and PATCH requests return Method Not Allowed.

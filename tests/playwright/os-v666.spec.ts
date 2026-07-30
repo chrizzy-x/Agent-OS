@@ -81,6 +81,40 @@ test.describe('AgentOS V6.6.7 OS surfaces', () => {
         }),
       });
     });
+    await page.route('**/api/agent/me', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'agent-qa',
+          name: 'QA Operator',
+          email: 'qa@example.com',
+          username: 'qa-operator',
+          avatarUrl: null,
+          bio: null,
+          website: null,
+          preferences: { theme: 'light' },
+        }),
+      });
+    });
+    await page.route('**/api/workspaces', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          workspaces: [{ id: 'workspace-qa', name: 'QA Workspace', slug: 'qa', plan: 'enterprise_max' }],
+        }),
+      });
+    });
+    await page.route('**/api/bearer-tokens', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ tokens: [] }) });
+    });
+    await page.route('**/api/settings/sessions', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessions: [], audit: [] }) });
+    });
+    await page.route('**/api/settings/devices', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ devices: [] }) });
+    });
     await page.route('**/api/notifications', async route => {
       const notifications = [
         { id: 'n1', type: 'workflow', title: 'Workflow finished', body: 'Daily research completed.', status: 'unread', metadata: {}, createdAt: new Date().toISOString(), readAt: null },
@@ -92,6 +126,7 @@ test.describe('AgentOS V6.6.7 OS surfaces', () => {
   });
 
   test('renders required surfaces and captures QA screenshots', async ({ page }, testInfo) => {
+    test.setTimeout(150_000);
     mkdirSync('agentos-artifacts/v666-qa', { recursive: true });
 
     for (const [name, route] of surfaces) {
@@ -111,8 +146,8 @@ test.describe('AgentOS V6.6.7 OS surfaces', () => {
     test.setTimeout(150_000);
     mkdirSync('agentos-artifacts/v666-qa', { recursive: true });
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await page.getByLabel(/unread notifications/).click();
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.locator('.agentos-notification-bell').click();
     await expect(page.locator('.agentos-notification-drawer')).toBeVisible();
     await page.screenshot({
       path: `agentos-artifacts/v666-qa/${testInfo.project.name}-notifications.png`,
@@ -145,14 +180,14 @@ test.describe('AgentOS V6.6.7 OS surfaces', () => {
 
     await page.goto('/settings?section=billing', { waitUntil: 'domcontentloaded' });
     await expect(
-      page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Subscription & Billing' }),
+      page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: 'Billing' }),
     ).toBeVisible();
     await page.screenshot({
       path: `agentos-artifacts/v666-qa/${testInfo.project.name}-settings-billing.png`,
       fullPage: true,
     });
 
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
     await page.getByLabel('Open account menu').click();
     await expect(page.getByText('Logout All Devices')).toBeVisible();
     await page.screenshot({
@@ -163,8 +198,10 @@ test.describe('AgentOS V6.6.7 OS surfaces', () => {
 
   test('uses the required sidebar order on desktop', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'Desktop sidebar order only.');
-    await page.goto('/');
-    const labels = await page.locator('.agentos-global-nav a b').allTextContents();
+    await page.goto('/dashboard');
+    const links = page.getByRole('navigation', { name: 'AgentOS modules' }).getByRole('link');
+    await expect(links.first()).toBeVisible();
+    const labels = await links.evaluateAll(items => items.map(item => (item.getAttribute('aria-label') ?? item.textContent ?? '').split(',')[0].trim()));
     expect(labels).toEqual(navLabels);
   });
 

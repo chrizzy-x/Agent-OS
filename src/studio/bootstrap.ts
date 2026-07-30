@@ -8,15 +8,68 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 import { listStudioSessions, createStudioSession, getStudioSessionBundle } from './persistence.js';
 import { getStudioProviderStatus } from './providers.js';
 import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from './execution-targets.js';
+import {
+  getIntelligenceDefault,
+  getStudioSessionIntelligence,
+  listIntelligenceConnections,
+  type IntelligenceConnectionRecord,
+} from '../intelligence/service.js';
+import {
+  createNativeIntelligenceSelection,
+  migrateLegacyExecutionTargetToIntelligenceSelection,
+  type IntelligenceSelection,
+  type LegacyIntelligenceConnectionMap,
+} from '../intelligence/selection.js';
 import { listAccessibleSubagents } from '../subagents/service.js';
 import { allowLocalDataFallback } from '../data/discipline.js';
 import { listWorkspaces, resolveDefaultWorkspaceForAgent } from '../workspaces/service.js';
 import { listVaultSecrets } from '../vault/service.js';
 import { listProjectFiles } from './files.js';
 import { studioModeInitialState } from './modes.js';
+import { buildStudioSyncContract } from './sync-contract.js';
 import type { StudioMode } from './types.js';
 import type { StudioSessionRecord } from './persistence.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
+
+function safeIntelligenceConnection(connection: IntelligenceConnectionRecord): Omit<IntelligenceConnectionRecord, 'vaultSecretId'> {
+  return {
+    id: connection.id,
+    ownerAgentId: connection.ownerAgentId,
+    workspaceId: connection.workspaceId,
+    vendor: connection.vendor,
+    displayName: connection.displayName,
+    status: connection.status,
+    selectedModelId: connection.selectedModelId,
+    availableModels: connection.availableModels,
+    capabilities: connection.capabilities,
+    health: connection.health,
+    lastValidatedAt: connection.lastValidatedAt,
+    lastError: connection.lastError,
+    createdAt: connection.createdAt,
+    updatedAt: connection.updatedAt,
+  };
+}
+
+function activeConnectionsByVendor(connections: IntelligenceConnectionRecord[]): LegacyIntelligenceConnectionMap {
+  return connections
+    .filter(connection => connection.status === 'active')
+    .reduce<LegacyIntelligenceConnectionMap>((acc, connection) => {
+      acc[connection.vendor] ??= {
+        connectionId: connection.id,
+        modelId: connection.selectedModelId,
+      };
+      return acc;
+    }, {});
+}
+
+function selectionUsable(selection: IntelligenceSelection, connections: IntelligenceConnectionRecord[]): boolean {
+  if (selection.mode !== 'single') return true;
+  return connections.some(connection =>
+    connection.id === selection.connectionId
+    && connection.status === 'active'
+    && connection.availableModels.includes(selection.modelId ?? connection.selectedModelId)
+  );
+}
 
 async function loadBootstrapWorkflows(ownerAgentId: string): Promise<Array<Record<string, unknown>>> {
   const supabase = getSupabaseAdmin();
@@ -125,10 +178,13 @@ export async function buildStudioBootstrap(params: {
     }).catch(() => null);
     if (!project) {
       return {
+        syncContract: buildStudioSyncContract(),
         mode: params.mode ?? 'nl',
         providerStatus,
         executionTargets: buildExecutionTargets(),
         sessionExecutionTargetId: 'super_agentos',
+        intelligenceConnections: [],
+        sessionIntelligenceSelection: createNativeIntelligenceSelection('native_default'),
         session: null,
         sessions,
         messages: [],
@@ -184,7 +240,7 @@ export async function buildStudioBootstrap(params: {
     ? projects.find(project => project.id === activeProjectId) ?? null
     : null;
 
-  const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries, workspaceAssets] = await Promise.all([
+  const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries, workspaceAssets, intelligenceConnections, workspaceDefault] = await Promise.all([
     session ? getStudioSessionBundle(params.ownerAgentId, session.id).catch(() => null) : Promise.resolve(null),
     loadBootstrapWorkflows(params.ownerAgentId).catch(() => []),
     loadBootstrapInstalledSkills(params.ownerAgentId).catch(() => []),
@@ -215,6 +271,19 @@ export async function buildStudioBootstrap(params: {
       projectId: activeProjectId,
       limit: 120,
     }).catch(() => ({ items: [], groups: {}, summary: {} })),
+    activeWorkspaceId
+      ? listIntelligenceConnections({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: activeWorkspaceId,
+      }).catch(() => [] as IntelligenceConnectionRecord[])
+      : Promise.resolve([] as IntelligenceConnectionRecord[]),
+    activeWorkspaceId
+      ? getIntelligenceDefault({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: activeWorkspaceId,
+        scope: 'workspace',
+      }).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
   const filteredWorkflows = workflows
@@ -235,16 +304,36 @@ export async function buildStudioBootstrap(params: {
 
   const activeSessionState = bundle?.session?.state ?? session?.state ?? {};
   const executionTargets = buildExecutionTargets({ vaultSecrets: vault.secrets ?? [] });
+  const connectionsByVendor = activeConnectionsByVendor(intelligenceConnections);
+  const nativeSelection = createNativeIntelligenceSelection('native_default');
+  const resolvedSessionSelection = session
+    ? (await getStudioSessionIntelligence({
+      ownerAgentId: params.ownerAgentId,
+      sessionId: session.id,
+      connectionsByVendor,
+    }).catch(() => ({
+      selection: migrateLegacyExecutionTargetToIntelligenceSelection(
+        activeSessionState.executionTargetId ?? activeSessionState.provider ?? activeSessionState.executionMode,
+        { selectionSource: 'session', connectionsByVendor },
+      ),
+    }))).selection
+    : workspaceDefault?.selection ?? nativeSelection;
+  const sessionIntelligenceSelection = selectionUsable(resolvedSessionSelection, intelligenceConnections)
+    ? resolvedSessionSelection
+    : nativeSelection;
   const sessionExecutionTarget = resolveExecutionTarget(
     executionTargets,
     normalizeExecutionTargetId(activeSessionState.executionTargetId ?? activeSessionState.provider ?? activeSessionState.executionMode),
   );
 
   return {
+    syncContract: buildStudioSyncContract(),
     mode: params.mode ?? 'nl',
     providerStatus,
     executionTargets,
     sessionExecutionTargetId: sessionExecutionTarget.id,
+    intelligenceConnections: intelligenceConnections.map(safeIntelligenceConnection),
+    sessionIntelligenceSelection,
     session: bundle?.session ?? session,
     sessions,
     messages: bundle?.messages ?? [],

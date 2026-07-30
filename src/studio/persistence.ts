@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { createNativeIntelligenceSelection } from '../intelligence/selection.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
@@ -210,7 +211,7 @@ async function assertSessionOwner(sessionId: string, ownerAgentId: string): Prom
 
 export async function listStudioSessions(
   ownerAgentId: string,
-  options: { status?: string | 'all' } = {},
+  options: { status?: string | 'all'; includeDeleted?: boolean } = {},
 ): Promise<StudioSessionRecord[]> {
   try {
     const supabase = getSupabaseAdmin();
@@ -218,9 +219,11 @@ export async function listStudioSessions(
       .from('nl_studio_sessions')
       .select('*')
       .eq('owner_agent_id', ownerAgentId)
-      .is('deleted_at', null)
       .order('pinned_at', { ascending: false, nullsFirst: false })
       .order('updated_at', { ascending: false });
+    if (!options.includeDeleted) {
+      query = query.is('deleted_at', null);
+    }
 
     if (options.status && options.status !== 'all') {
       query = query.eq('status', options.status);
@@ -236,7 +239,8 @@ export async function listStudioSessions(
 
   const state = await readLocalRuntimeState();
   const rows = state.studioSessions.filter(row => {
-    if (String(row.owner_agent_id) !== ownerAgentId || row.deleted_at) return false;
+    if (String(row.owner_agent_id) !== ownerAgentId) return false;
+    if (!options.includeDeleted && row.deleted_at) return false;
     if (options.status && options.status !== 'all') return String(row.status) === options.status;
     if (!options.status) return String(row.status) === 'active';
     return true;
@@ -282,7 +286,7 @@ export async function createStudioSession(params: {
     status: 'active',
     state: redactSecretsDeep(params.initialState ?? {
       mode: 'NORMAL_CHAT',
-      executionTargetId: 'super_agentos',
+      intelligenceSelection: createNativeIntelligenceSelection('session'),
       workflowGraph: { nodes: [], edges: [] },
       workflowCode: '{\n  "version": "1.0.0",\n  "nodes": [],\n  "edges": []\n}',
       artifacts: [],

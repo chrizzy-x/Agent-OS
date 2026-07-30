@@ -87,7 +87,7 @@ export function FeatureShowcase() {
                           disabled={loadingFeature === feature.slug || Boolean(featureDescriptions[feature.slug])}
                           className="btn-outline text-xs px-3 py-1.5"
                         >
-                          {loadingFeature === feature.slug ? 'Loading' : featureDescriptions[feature.slug] ? 'AI ready' : 'Learn more'}
+                          {loadingFeature === feature.slug ? 'Loading' : featureDescriptions[feature.slug] ? 'Ready' : 'Learn more'}
                         </button>
                       </div>
                       <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>

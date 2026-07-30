@@ -399,7 +399,7 @@ test.describe('AgentOS V6.6.7 human release flows', () => {
     await fileInputs.nth(0).setInputFiles({
       name: 'market-notes.txt',
       mimeType: 'text/plain',
-      buffer: Buffer.from('AI agent release notes, FURGEPAD LP settings, and report requirements.'),
+      buffer: Buffer.from('Agent release notes, FURGEPAD LP settings, and report requirements.'),
     });
     await expect(page.locator('.nl-composer-meta')).toContainText('market-notes.txt');
 
@@ -407,12 +407,12 @@ test.describe('AgentOS V6.6.7 human release flows', () => {
     await page.getByRole('menu', { name: 'skill resources' }).getByRole('button', { name: 'Research Skill' }).click();
     await page.locator('.nl-composer-tools').getByRole('button', { name: 'Apps' }).click();
     await page.getByRole('menu', { name: 'app resources' }).getByRole('button', { name: 'Report Builder' }).click();
-    await page.locator('.nl-composer-tools').getByRole('button', { name: 'Workflow' }).click();
+    await page.locator('.nl-composer-tools').getByRole('button', { name: 'Primeflow' }).click();
     await page.getByRole('menu', { name: 'workflow resources' }).getByRole('button', { name: 'Daily Market Report' }).click();
     await page.locator('.nl-composer-tools').getByRole('button', { name: 'MCP' }).click();
     await page.getByRole('menu', { name: 'mcp resources' }).getByRole('button', { name: 'Universal MCP' }).click();
 
-    await page.getByLabel('Message Super AgentOS').fill('Research AI agents, create a report, save it to my project, and notify me when done.');
+    await page.getByLabel('Message Super AgentOS').fill('Research agents, create a report, save it to my project, and notify me when done.');
     await page.getByLabel('Send message').click();
     await expect(page.getByText('Release report created from the uploaded market notes')).toBeVisible({ timeout: 15_000 });
 

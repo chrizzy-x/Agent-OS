@@ -4,32 +4,41 @@ import { requireRouteCapability } from '@/src/auth/request';
 import { capabilityMessage, hasCapability } from '@/src/auth/capabilities';
 import { getSupabaseAdmin } from '@/src/storage/supabase';
 import { registerExternalAgent } from '@/src/external-agents/service';
+import { requestExecutionAction, updateExecution } from '@/src/execution/service';
 import { executeUniversalToolCall } from '@/src/mcp/registry';
 import { executeStudioCommand } from '@/src/studio/service';
 import { generateStudioChatReply, formatExecutionReply } from '@/src/studio/conversation';
 import { tokenDel, tokenGet, tokenSet, TOKEN_TTL_SECONDS } from '@/src/studio/confirm-tokens';
 import { detectAgentOSIntent, humanStatusForIntent, isWorkflowIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
+import {
+  buildNativeWorkflowPlan,
+  parseNativeExecutionRecoveryRequest,
+  parseNativePanicRequest,
+  parseNativeRunWorkflowReference,
+  parseNativeSurfaceNavigation,
+  type WorkflowPlan,
+} from '@/src/studio/native-operations';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
-import { callClaude, tokenDel as legacyTokenDel, tokenGet as legacyTokenGet } from '@/src/studio/planner';
+import { tokenDel as legacyTokenDel, tokenGet as legacyTokenGet } from '@/src/studio/planner';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle, updateStudioSession } from '@/src/studio/persistence';
 import { syncWorkflowDocument } from '@/src/workflows/canonical';
-import { executeAgentOSAction } from '@/src/actions/service';
+import { executeAgentOSAction, type AgentOSActionType } from '@/src/actions/service';
 import { resolveProjectForWorkspace, updateProject } from '@/src/projects/service';
 import { listWorkspaces } from '@/src/workspaces/service';
 import { listVaultSecrets } from '@/src/vault/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
 import { listAgentApps } from '@/src/appstore/service';
+import { updateAgentTask } from '@/src/tasks/service';
 
 export const runtime = 'nodejs';
 
-type WorkflowPlan = {
-  summary: string;
-  steps: Array<{ order: number; tool: string; input: Record<string, unknown>; description: string }>;
-  schedule: string | null;
+type PendingRuntimeRecord = {
+  runtimeTaskId?: string | null;
+  runtimeExecutionId?: string | null;
 };
 
-type PendingStudioAction =
+type PendingStudioAction = PendingRuntimeRecord & (
   | {
     type: 'studio_command';
     agentId: string;
@@ -92,7 +101,27 @@ type PendingStudioAction =
     skillId: string;
     name: string;
     intent: AgentOSIntent;
-  };
+  }
+  | {
+    type: 'agentos_action';
+    agentId: string;
+    sessionId: string | null;
+    workspaceId: string | null;
+    projectId: string | null;
+    action: AgentOSActionType;
+    payload: Record<string, unknown>;
+    successReply: string;
+    intent: AgentOSIntent;
+  }
+  | {
+    type: 'execution_action';
+    agentId: string;
+    sessionId: string | null;
+    executionId: string;
+    action: 'pause' | 'resume' | 'retry' | 'cancel' | 'rollback' | 'inspect';
+    intent: AgentOSIntent;
+  }
+);
 
 const READ_ONLY_INTENT_TOOLS = new Set([
   'net_http_get',
@@ -490,7 +519,7 @@ async function executeWorkflowPlan(params: {
       steps: params.plan.steps,
       metadata: { source: 'studio_conversation_workflow' },
     });
-    const { data: workflow } = await supabase
+    const { data: workflow, error: workflowError } = await supabase
       .from('agent_workflows')
       .insert({
         agent_id: params.ctx.agentId,
@@ -510,14 +539,17 @@ async function executeWorkflowPlan(params: {
       })
       .select('id')
       .single();
+    if (workflowError) throw new Error(`Workflow persistence failed: ${workflowError.message}`);
     workflowId = workflow?.id ?? null;
+    if (!workflowId) throw new Error('Workflow persistence failed: missing workflow id');
 
     if (workflowId && taskId) {
-      await supabase
+      const { error: scheduleError } = await supabase
         .from('scheduled_tasks')
         .update({ workflow_id: workflowId })
         .eq('id', taskId)
         .eq('agent_id', params.ctx.agentId);
+      if (scheduleError) throw new Error(`Workflow schedule linkage failed: ${scheduleError.message}`);
     }
   }
 
@@ -682,6 +714,58 @@ async function executePendingAction(params: {
     });
   }
 
+  if (params.pending.type === 'agentos_action') {
+    const action = await executeAgentOSAction(params.ctx, {
+      action: params.pending.action,
+      source: 'natural_language',
+      sessionId: params.pending.sessionId,
+      workspaceId: params.pending.workspaceId,
+      projectId: params.pending.projectId,
+      payload: params.pending.payload,
+    });
+    const reply = params.pending.successReply;
+    await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
+    await recordStudioEvent(params.ctx.agentId, params.pending.sessionId, 'task_completed', {
+      action: params.pending.action,
+      executionId: action.executionId,
+      deepLink: action.deepLink,
+    });
+    return NextResponse.json({
+      kind: 'completed',
+      intent: params.pending.intent,
+      statusText: 'Done.',
+      reply,
+      executed: true,
+      result: sanitizeOutput(action.result),
+      execution: action.execution,
+      executionId: action.executionId,
+      navigateTo: action.deepLink ?? undefined,
+    });
+  }
+
+  if (params.pending.type === 'execution_action') {
+    const execution = await requestExecutionAction({
+      agentId: params.ctx.agentId,
+      executionId: params.pending.executionId,
+      action: params.pending.action,
+    });
+    const reply = `Execution ${execution.title} is now ${execution.status}.`;
+    await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
+    await recordStudioEvent(params.ctx.agentId, params.pending.sessionId, 'task_completed', {
+      action: params.pending.action,
+      executionId: execution.id,
+      status: execution.status,
+    });
+    return NextResponse.json({
+      kind: 'completed',
+      intent: params.pending.intent,
+      statusText: 'Done.',
+      reply,
+      executed: true,
+      execution,
+    });
+  }
+
   const project = await updateProject({
     ownerAgentId: params.ctx.agentId,
     projectId: params.pending.projectId,
@@ -700,6 +784,54 @@ async function executePendingAction(params: {
     executed: true,
     project,
   });
+}
+
+async function completePendingRuntimeRecord(params: {
+  ctx: Awaited<ReturnType<typeof requireRouteCapability>>;
+  pending: PendingStudioAction;
+  response: NextResponse;
+}) {
+  const runtimeTaskId = typeof params.pending.runtimeTaskId === 'string' ? params.pending.runtimeTaskId : null;
+  const runtimeExecutionId = typeof params.pending.runtimeExecutionId === 'string' ? params.pending.runtimeExecutionId : null;
+  if ((!runtimeTaskId && !runtimeExecutionId) || !params.response.ok) return;
+
+  const payload = await params.response.clone().json().catch(() => ({})) as Record<string, unknown>;
+  const now = new Date().toISOString();
+  const reply = typeof payload.reply === 'string'
+    ? payload.reply
+    : typeof payload.answer === 'string'
+      ? payload.answer
+      : 'Approved action completed.';
+
+  if (runtimeExecutionId) {
+    await updateExecution({
+      agentId: params.ctx.agentId,
+      executionId: runtimeExecutionId,
+      patch: {
+        status: 'COMPLETED',
+        output: sanitizeOutput(payload),
+        completedAt: now,
+      },
+    });
+  }
+
+  if (runtimeTaskId) {
+    await updateAgentTask({
+      userId: params.ctx.agentId,
+      taskId: runtimeTaskId,
+      patch: {
+        status: 'completed',
+        confirmationStatus: 'approved',
+        progress: 100,
+        resultSummary: reply.slice(0, 1000),
+        metadata: {
+          approvalCompletedAt: now,
+          approvedActionType: params.pending.type,
+          runtimeExecutionId,
+        },
+      },
+    });
+  }
 }
 
 function buildWorkflowPreview(plan: WorkflowPlan): string {
@@ -756,11 +888,17 @@ export async function POST(req: NextRequest) {
       sessionId?: string | null;
       workspaceId?: string | null;
       projectId?: string | null;
+      runtimeTaskId?: string | null;
+      runtimeExecutionId?: string | null;
     };
 
     const sessionId = typeof body.sessionId === 'string' ? body.sessionId : null;
     const message = typeof body.message === 'string' ? body.message : typeof body.instruction === 'string' ? body.instruction : '';
     const approval = body.approval === true || body.confirm === true;
+    const requestRuntimeRecord: PendingRuntimeRecord = {
+      runtimeTaskId: typeof body.runtimeTaskId === 'string' ? body.runtimeTaskId : null,
+      runtimeExecutionId: typeof body.runtimeExecutionId === 'string' ? body.runtimeExecutionId : null,
+    };
 
     if (approval) {
       const confirmToken = typeof body.confirmToken === 'string' ? body.confirmToken : '';
@@ -811,7 +949,9 @@ export async function POST(req: NextRequest) {
       if (pending.agentId !== ctx.agentId) {
         return NextResponse.json({ kind: 'error', error: 'Token mismatch' }, { status: 403 });
       }
-      return executePendingAction({ ctx, pending });
+      const response = await executePendingAction({ ctx, pending });
+      await completePendingRuntimeRecord({ ctx, pending, response });
+      return response;
     }
 
     if (!message.trim()) {
@@ -882,6 +1022,70 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const surfaceNavigation = parseNativeSurfaceNavigation(trimmedMessage);
+    if (surfaceNavigation) {
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', surfaceNavigation.reply);
+      return NextResponse.json({
+        kind: 'completed',
+        intent,
+        statusText: 'Done.',
+        reply: surfaceNavigation.reply,
+        navigateTo: surfaceNavigation.href,
+        target: {
+          type: 'studio_surface',
+          label: surfaceNavigation.label,
+          href: surfaceNavigation.href,
+        },
+      });
+    }
+
+    const executionRecovery = parseNativeExecutionRecoveryRequest(trimmedMessage);
+    if (executionRecovery) {
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'execution_action',
+        agentId: ctx.agentId,
+        ...requestRuntimeRecord,
+        sessionId,
+        executionId: executionRecovery.executionId,
+        action: executionRecovery.action,
+        intent,
+      } satisfies PendingStudioAction));
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', executionRecovery.approvalPrompt);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply: executionRecovery.approvalPrompt,
+        confirmToken,
+      });
+    }
+
+    const panicRequest = parseNativePanicRequest(trimmedMessage);
+    if (panicRequest) {
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'agentos_action',
+        agentId: ctx.agentId,
+        ...requestRuntimeRecord,
+        sessionId,
+        workspaceId,
+        projectId,
+        action: panicRequest.action,
+        payload: {},
+        successReply: `${panicRequest.completionLabel}.`,
+        intent,
+      } satisfies PendingStudioAction));
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', panicRequest.approvalPrompt);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply: panicRequest.approvalPrompt,
+        confirmToken,
+      });
+    }
+
     const installSkillReference = parseInstallReference(trimmedMessage, 'skill');
     if (installSkillReference) {
       const skill = await findSkillRecord(installSkillReference);
@@ -900,6 +1104,7 @@ export async function POST(req: NextRequest) {
       await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
         type: 'skill_install',
         agentId: ctx.agentId,
+        ...requestRuntimeRecord,
         sessionId,
         workspaceId,
         skillId: skill.id,
@@ -939,6 +1144,7 @@ export async function POST(req: NextRequest) {
       await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
         type: 'app_install',
         agentId: ctx.agentId,
+        ...requestRuntimeRecord,
         sessionId,
         workspaceId,
         slug: app.slug,
@@ -1046,6 +1252,7 @@ export async function POST(req: NextRequest) {
       await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
         type: 'subagent_create',
         agentId: ctx.agentId,
+        ...requestRuntimeRecord,
         sessionId,
         workspaceId,
         projectId,
@@ -1083,6 +1290,48 @@ export async function POST(req: NextRequest) {
         statusText: 'Done.',
         reply,
         navigateTo: '/developer/publish',
+      });
+    }
+
+    const runWorkflowReference = parseNativeRunWorkflowReference(trimmedMessage);
+    if (runWorkflowReference) {
+      const workflow = await findWorkflowRecord({
+        agentId: ctx.agentId,
+        projectId,
+        reference: runWorkflowReference,
+      });
+      if (!workflow) {
+        const reply = `No workflow matched "${runWorkflowReference}".`;
+        await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+        return NextResponse.json({
+          kind: 'unsupported',
+          intent,
+          statusText: 'Unavailable.',
+          reply,
+          code: 'NOT_FOUND',
+        }, { status: 404 });
+      }
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'agentos_action',
+        agentId: ctx.agentId,
+        ...requestRuntimeRecord,
+        sessionId,
+        workspaceId,
+        projectId,
+        action: 'run_workflow',
+        payload: { workflowId: workflow.id },
+        successReply: `Ran workflow ${workflow.name}.`,
+        intent,
+      } satisfies PendingStudioAction));
+      const reply = `Run workflow ${workflow.name}?`;
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply,
+        confirmToken,
       });
     }
 
@@ -1161,6 +1410,7 @@ export async function POST(req: NextRequest) {
         await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
           type: 'project_create',
           agentId: ctx.agentId,
+          ...requestRuntimeRecord,
           sessionId,
           workspaceId,
           name: projectAction.name,
@@ -1182,6 +1432,7 @@ export async function POST(req: NextRequest) {
         await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
           type: 'project_update',
           agentId: ctx.agentId,
+          ...requestRuntimeRecord,
           sessionId,
           projectId,
           name: projectAction.name,
@@ -1202,6 +1453,7 @@ export async function POST(req: NextRequest) {
         await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
           type: 'project_update',
           agentId: ctx.agentId,
+          ...requestRuntimeRecord,
           sessionId,
           projectId,
           status: 'archived',
@@ -1246,6 +1498,7 @@ export async function POST(req: NextRequest) {
         await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
           type: 'studio_command',
           agentId: ctx.agentId,
+          ...requestRuntimeRecord,
           sessionId,
           command,
           innerConfirmToken: result.confirmToken,
@@ -1276,7 +1529,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (isWorkflowIntent(intent)) {
-      const plan = await callClaude(trimmedMessage);
+      const plan = buildNativeWorkflowPlan(trimmedMessage);
       const confirmToken = crypto.randomUUID().replace(/-/g, '');
       let resolvedProjectId = projectId;
       if (workspaceId) {
@@ -1290,6 +1543,7 @@ export async function POST(req: NextRequest) {
       await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
         type: 'workflow_plan',
         agentId: ctx.agentId,
+        ...requestRuntimeRecord,
         sessionId,
         workspaceId,
         projectId: resolvedProjectId,

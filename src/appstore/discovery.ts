@@ -6,7 +6,7 @@ export const APP_STORE_CATEGORIES = [
   'Finance',
   'Trading',
   'Research',
-  'AI',
+  'Intelligence',
   'Productivity',
   'Development',
   'Social',

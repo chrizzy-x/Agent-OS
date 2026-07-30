@@ -4,6 +4,8 @@ import { NextRequest } from 'next/server';
 const routeMocks = vi.hoisted(() => ({
   requireRouteCapability: vi.fn(),
   getStudioSessionBundle: vi.fn(),
+  getStudioSessionIntelligence: vi.fn(),
+  setStudioSessionIntelligence: vi.fn(),
   resolveProjectForWorkspace: vi.fn(),
   updateStudioSession: vi.fn(),
 }));
@@ -17,11 +19,16 @@ vi.mock('../../src/studio/persistence.js', () => ({
   updateStudioSession: routeMocks.updateStudioSession,
 }));
 
+vi.mock('../../src/intelligence/service.js', () => ({
+  getStudioSessionIntelligence: routeMocks.getStudioSessionIntelligence,
+  setStudioSessionIntelligence: routeMocks.setStudioSessionIntelligence,
+}));
+
 vi.mock('../../src/projects/service.js', () => ({
   resolveProjectForWorkspace: routeMocks.resolveProjectForWorkspace,
 }));
 
-import { DELETE, PATCH } from '../../app/api/studio/sessions/[id]/route.js';
+import { DELETE, GET, PATCH } from '../../app/api/studio/sessions/[id]/route.js';
 
 describe('studio session route', () => {
   beforeEach(() => {
@@ -44,6 +51,38 @@ describe('studio session route', () => {
       title: 'Renamed session',
       status: 'active',
       state: { instructions: 'Use project context' },
+    });
+    routeMocks.getStudioSessionIntelligence.mockResolvedValue({
+      selection: {
+        mode: 'native',
+        connectionId: null,
+        modelId: null,
+        consensusConfigurationId: null,
+        selectionSource: 'session',
+      },
+    });
+    routeMocks.setStudioSessionIntelligence.mockResolvedValue({
+      selection: {
+        mode: 'single',
+        connectionId: 'connection-1',
+        modelId: 'gpt-5',
+        consensusConfigurationId: null,
+        selectionSource: 'session',
+      },
+    });
+  });
+
+  it('returns the persisted intelligence selection with the session bundle', async () => {
+    const response = await GET(new NextRequest('http://localhost/api/studio/sessions/session-1'), {
+      params: Promise.resolve({ id: 'session-1' }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.intelligenceSelection).toMatchObject({ mode: 'native' });
+    expect(routeMocks.getStudioSessionIntelligence).toHaveBeenCalledWith({
+      ownerAgentId: 'agent-1',
+      sessionId: 'session-1',
     });
   });
 
@@ -91,6 +130,43 @@ describe('studio session route', () => {
       statePatch: { instructions: 'Use project context', mode: 'NORMAL_CHAT' },
     });
     expect(body.session.title).toBe('Renamed session');
+  });
+
+  it('persists session intelligence selection without legacy execution target state', async () => {
+    const response = await PATCH(new NextRequest('http://localhost/api/studio/sessions/session-1', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        intelligenceSelection: {
+          mode: 'single',
+          connectionId: 'connection-1',
+          modelId: 'gpt-5',
+          consensusConfigurationId: null,
+          selectionSource: 'session',
+        },
+      }),
+    }), {
+      params: Promise.resolve({ id: 'session-1' }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.updateStudioSession).toHaveBeenCalledWith(expect.objectContaining({
+      statePatch: undefined,
+    }));
+    expect(routeMocks.setStudioSessionIntelligence).toHaveBeenCalledWith({
+      ownerAgentId: 'agent-1',
+      sessionId: 'session-1',
+      selection: {
+        mode: 'single',
+        connectionId: 'connection-1',
+        modelId: 'gpt-5',
+        consensusConfigurationId: null,
+        selectionSource: 'session',
+      },
+    });
+    expect(JSON.stringify(routeMocks.updateStudioSession.mock.calls.at(-1)?.[0] ?? {})).not.toContain('executionTargetId');
+    expect(body.intelligenceSelection).toMatchObject({ modelId: 'gpt-5' });
   });
 
   it('archives the session through DELETE', async () => {

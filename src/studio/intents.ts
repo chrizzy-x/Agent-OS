@@ -1,5 +1,3 @@
-import { generateWithStudioProvider } from './providers.js';
-
 export const AGENT_OS_INTENTS = [
   'NORMAL_CHAT',
   'REASONING',
@@ -36,6 +34,8 @@ export function detectIntentHeuristically(input: string): AgentOSIntent {
   if (hasKeyword(message, ['sdk', 'kernel', 'heartbeat', 'manifest', 'developer console'])) return 'SDK_TASK';
   if (/\b(project|rename project|new project|create project|archive project)\b/.test(message)) return 'PROJECT_TASK';
   if (/\b(agent|subagent|assistant agent)\b/.test(message)) return 'AGENT_TASK';
+  if (/\b(pause|resume|retry|cancel|rollback|inspect)\s+(execution|task|run)\b/.test(message)) return 'EXECUTION_TASK';
+  if (/\b(panic|stop all|cancel all active executions|stop active executions)\b/.test(message)) return 'EXECUTION_TASK';
   if (/\b(workflow|automation|schedule|cron)\b/.test(message)) {
     if (/\b(run|execute|start|trigger)\b/.test(message)) return 'WORKFLOW_EXECUTION';
     return 'WORKFLOW_DESIGN';
@@ -50,36 +50,8 @@ export function detectIntentHeuristically(input: string): AgentOSIntent {
   return 'NORMAL_CHAT';
 }
 
-async function classifyIntentWithModel(input: string): Promise<AgentOSIntent | null> {
-  const prompt = [
-    'Classify the user request into exactly one label.',
-    `Allowed labels: ${AGENT_OS_INTENTS.join(', ')}`,
-    'Return only the label.',
-    `Request: ${input}`,
-  ].join('\n');
-
-  try {
-    const result = await generateWithStudioProvider({
-      system: 'Classify the request. Output only one allowed label.',
-      user: prompt,
-      maxTokens: 12,
-    });
-    const text = result?.text.trim().toUpperCase();
-    if (text && AGENT_OS_INTENTS.includes(text as AgentOSIntent)) {
-      return text as AgentOSIntent;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 export async function detectAgentOSIntent(input: string): Promise<AgentOSIntent> {
   const heuristic = detectIntentHeuristically(input);
-  if (heuristic !== 'EXECUTION_TASK' && heuristic !== 'UNKNOWN') return heuristic;
-  const modelIntent = await classifyIntentWithModel(input);
-  if (modelIntent) return modelIntent;
   return heuristic === 'UNKNOWN' ? 'NORMAL_CHAT' : heuristic;
 }
 
@@ -104,7 +76,7 @@ export function humanStatusForIntent(intent: AgentOSIntent): string {
     case 'MCP_TASK':
       return 'Connecting tools...';
     case 'FFP_TASK':
-      return 'Routing through FFP...';
+      return 'Checking route history...';
     case 'VAULT_TASK':
       return 'Checking vault access...';
     case 'SDK_TASK':

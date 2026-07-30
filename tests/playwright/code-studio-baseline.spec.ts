@@ -79,7 +79,21 @@ async function mockCodeStudio(page: Page) {
       ],
     }],
   };
-  await page.addInitScript(({ sessionPayload, shellPayload, executionsPayload, studioPayload }) => {
+  const terminalSession = {
+    id: 'terminal-code',
+    projectId: 'project-code',
+    shell: 'powershell',
+    cwd: 'C:/repo',
+    status: 'running',
+    createdAt: now,
+    updatedAt: now,
+    events: [
+      { id: 'terminal-status', type: 'status', createdAt: now, status: 'running', message: 'Terminal running' },
+      { id: 'terminal-stdout', type: 'stdout', createdAt: now, chunk: 'npm run build' },
+      { id: 'terminal-exit', type: 'exit', createdAt: now, exitCode: 0, message: 'Command completed' },
+    ],
+  };
+  await page.addInitScript(({ sessionPayload, shellPayload, executionsPayload, studioPayload, terminalSession }) => {
     window.localStorage.setItem('agentos.shell.leftCollapsed', 'false');
     window.localStorage.setItem('agentos.shell.rightCollapsed', 'false');
     const originalFetch = window.fetch.bind(window);
@@ -93,13 +107,14 @@ async function mockCodeStudio(page: Page) {
       if (url.pathname === '/api/session' || url.pathname === '/api/session/refresh') return json(sessionPayload);
       if (url.pathname === '/api/shell/bootstrap') return json(shellPayload);
       if (url.pathname === '/api/studio/bootstrap') return json(studioPayload);
+      if (url.pathname === '/api/studio/terminals' && init?.method === 'POST') return json({ session: terminalSession }, 201);
       if (url.pathname === '/api/executions') return json(executionsPayload);
       if (url.pathname === '/api/recovery') return json({ executions: [] });
       if (url.pathname === '/api/notifications') return json({ notifications: [] });
       if (url.pathname === '/api/panic') return json({ state: 'healthy', activeCount: 0, mcpDisabled: false, vaultDisabled: false, requireReauth: false });
       return originalFetch(input, init);
     };
-  }, { sessionPayload, shellPayload, executionsPayload, studioPayload });
+  }, { sessionPayload, shellPayload, executionsPayload, studioPayload, terminalSession });
   await page.route(/\/api\/session(?:\/refresh)?(?:\?|$)/, route => fulfillJson(route, sessionPayload));
   await page.route('**/api/session**', route => fulfillJson(route, sessionPayload));
   await page.route('**/api/panic**', route => fulfillJson(route, {
@@ -110,6 +125,7 @@ async function mockCodeStudio(page: Page) {
     requireReauth: false,
   }));
   await page.route('**/api/shell/bootstrap**', route => fulfillJson(route, shellPayload));
+  await page.route('**/api/studio/terminals', route => fulfillJson(route, { session: terminalSession }, 201));
   await page.route('**/api/executions**', route => fulfillJson(route, executionsPayload));
   await page.route('**/api/recovery**', route => fulfillJson(route, { executions: [] }));
   await page.route('**/api/notifications**', route => fulfillJson(route, { notifications: [] }));
@@ -129,6 +145,10 @@ test('Code Studio exposes developer task, build/test, deployment, and results co
   await page.getByRole('button', { name: 'Build', exact: true }).click();
   await expect(page.getByLabel('Developer task')).toHaveValue(/build readiness/);
   await expect(page.getByPlaceholder(/Enable terminal|Run a command/)).toHaveValue('npm run build');
+  await page.getByRole('button', { name: 'Enable terminal' }).click();
+  await page.getByRole('button', { name: 'Start terminal' }).click();
+  await expect(page.getByText('RUN', { exact: true })).toBeVisible();
+  await expect(page.getByText('OK', { exact: true })).toBeVisible();
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(2);

@@ -44,7 +44,7 @@ describe('Studio provider-neutral routing', () => {
     });
   });
 
-  it('uses the Studio provider adapter for ambiguous intent classification', async () => {
+  it('does not use the Studio provider adapter for native intent classification', async () => {
     providerMocks.generateWithStudioProvider.mockResolvedValue({
       provider: 'openai',
       model: 'gpt-test',
@@ -52,11 +52,8 @@ describe('Studio provider-neutral routing', () => {
     });
     const { detectAgentOSIntent } = await import('../../src/studio/intents.js');
 
-    await expect(detectAgentOSIntent('run it there')).resolves.toBe('MCP_TASK');
+    await expect(detectAgentOSIntent('run it there')).resolves.toBe('EXECUTION_TASK');
 
-    expect(providerMocks.generateWithStudioProvider).toHaveBeenCalledWith(expect.objectContaining({
-      system: 'Classify the request. Output only one allowed label.',
-      maxTokens: 12,
-    }));
+    expect(providerMocks.generateWithStudioProvider).not.toHaveBeenCalled();
   });
 });

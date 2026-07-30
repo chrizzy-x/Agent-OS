@@ -1,6 +1,15 @@
 import { NextRequest } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { appendExecutionLog, createExecution, updateExecution } from '@/src/execution/service';
+import { requestStandardConsensusProposalOnly, runStandardConsensusRuntime } from '@/src/intelligence/consensus';
+import {
+  buildMixedExecutionVerification,
+  requestConnectedProposalOnly,
+  type IntelligenceProposalTrace,
+  type MixedExecutionVerification,
+} from '@/src/intelligence/mixed-execution';
+import { runSingleIntelligenceRuntime } from '@/src/intelligence/runtime';
+import { normalizeIntelligenceSelection } from '@/src/intelligence/selection';
 import { createNotification } from '@/src/notifications/service';
 import { listProjects } from '@/src/projects/service';
 import { streamStudioChatReply } from '@/src/studio/conversation';
@@ -20,6 +29,15 @@ function encodeEvent(event: string, payload: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
+function buildInternalIntentHeaders(requestHeaders: Headers): Headers {
+  const headers = new Headers({ 'content-type': 'application/json' });
+  const authorization = requestHeaders.get('authorization');
+  const cookie = requestHeaders.get('cookie');
+  if (authorization) headers.set('authorization', authorization);
+  if (cookie) headers.set('cookie', cookie);
+  return headers;
+}
+
 function isDirectConversation(intent: AgentOSIntent, message: string): boolean {
   return (
     intent === 'NORMAL_CHAT'
@@ -37,7 +55,7 @@ function isWorkspaceCapabilityQuestion(message: string): boolean {
 }
 
 function isProviderStatusQuestion(message: string): boolean {
-  return /\b(ai provider|model status|provider status|are you live|live model|native runtime|external intelligence|can i talk to super agent|is super agent live)\b/i.test(message);
+  return /\b(intelligence provider|model status|provider status|are you live|live model|native runtime|external intelligence|can i talk to super agent|is super agent live)\b/i.test(message);
 }
 
 async function loadRecentConversation(agentId: string, sessionId: string | null) {
@@ -52,7 +70,7 @@ async function loadRecentConversation(agentId: string, sessionId: string | null)
 function providerStatusReply(providerStatus: ReturnType<typeof getStudioProviderStatus>): string {
   if (providerStatus.configured) {
     return [
-      `Super AgentOS is connected to a live AI provider: ${providerStatus.label}.`,
+      `Super AgentOS is connected to live Connected Intelligence: ${providerStatus.label}.`,
       'Studio will stream model-backed responses and record the provider route in execution history.',
       'Secrets are not exposed in chat, logs, or provider status messages.',
     ].join('\n\n');
@@ -118,8 +136,7 @@ async function loadConversationNames(params: {
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-  const headers = new Headers(request.headers);
-  headers.set('content-type', 'application/json');
+  const internalIntentHeaders = buildInternalIntentHeaders(request.headers);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -130,6 +147,9 @@ export async function POST(request: NextRequest) {
       let projectId: string | null = null;
       let task: AgentTaskRecord | null = null;
       let partialReply = '';
+      let intelligenceInvocation: Record<string, unknown> | null = null;
+      let connectedProposal: IntelligenceProposalTrace | null = null;
+      let mixedExecution: MixedExecutionVerification | null = null;
       let userPersisted = false;
       let assistantPersisted = false;
       let closed = false;
@@ -159,6 +179,11 @@ export async function POST(request: NextRequest) {
         sessionId = typeof body.sessionId === 'string' ? body.sessionId : null;
         workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : null;
         projectId = typeof body.projectId === 'string' ? body.projectId : null;
+        if (sessionId && (!workspaceId || !projectId)) {
+          const bundle = await getStudioSessionBundle(ctx.agentId, sessionId).catch(() => null);
+          workspaceId = workspaceId ?? bundle?.session.workspaceId ?? null;
+          projectId = projectId ?? bundle?.session.projectId ?? null;
+        }
         const message = typeof body.message === 'string'
           ? body.message.trim()
           : typeof body.instruction === 'string'
@@ -186,6 +211,14 @@ export async function POST(request: NextRequest) {
         const messageExecutionOverrideId = typeof body.messageExecutionOverrideId === 'string'
           ? normalizeExecutionTargetId(body.messageExecutionOverrideId)
           : null;
+        const sessionIntelligenceSelection = normalizeIntelligenceSelection(body.sessionIntelligenceSelection, 'session');
+        const messageIntelligenceOverride = body.messageIntelligenceOverride && typeof body.messageIntelligenceOverride === 'object' && !Array.isArray(body.messageIntelligenceOverride)
+          ? normalizeIntelligenceSelection(body.messageIntelligenceOverride, 'message')
+          : null;
+        const selectedIntelligenceSelection = normalizeIntelligenceSelection(
+          body.intelligenceSelection ?? messageIntelligenceOverride ?? sessionIntelligenceSelection,
+          messageIntelligenceOverride ? 'message' : sessionIntelligenceSelection.selectionSource,
+        );
         const providerStatus = getStudioProviderStatus();
         const startedAt = Date.now();
         task = await createAgentTask({
@@ -223,6 +256,11 @@ export async function POST(request: NextRequest) {
               sessionDefault: sessionExecutionTargetId,
               messageOverride: messageExecutionOverrideId,
             },
+            intelligenceSelection: {
+              selected: selectedIntelligenceSelection,
+              sessionDefault: sessionIntelligenceSelection,
+              messageOverride: messageIntelligenceOverride,
+            },
           },
           executionMetadata: {
             runtime: 'super-agentos',
@@ -242,8 +280,13 @@ export async function POST(request: NextRequest) {
               messageOverride: messageExecutionOverrideId,
               failurePolicy: selectedExecutionTarget.failurePolicy,
             },
+            intelligenceSelection: {
+              selected: selectedIntelligenceSelection,
+              sessionDefault: sessionIntelligenceSelection,
+              messageOverride: messageIntelligenceOverride,
+            },
           },
-        }).catch(() => null);
+        });
 
         const execution = await createExecution({
           agentId: ctx.agentId,
@@ -257,7 +300,7 @@ export async function POST(request: NextRequest) {
           input: { message, approval: body.approval === true, attachments, invocations },
           metadata: {
             projectId,
-            taskId: task?.id ?? null,
+          taskId: task.id,
             runtime: 'super-agentos',
             executionTarget: {
               selected: selectedExecutionTarget.id,
@@ -266,6 +309,7 @@ export async function POST(request: NextRequest) {
               sessionDefault: sessionExecutionTargetId,
               messageOverride: messageExecutionOverrideId,
             },
+            intelligenceSelection: selectedIntelligenceSelection,
             provider: {
               mode: providerStatus.mode,
               provider: providerStatus.provider,
@@ -274,14 +318,14 @@ export async function POST(request: NextRequest) {
             },
           },
           model: getStudioModelLabel(),
-        }).catch(() => null);
-        executionId = execution?.id ?? null;
-        if (executionId) await updateExecution({
+        });
+        executionId = execution.id;
+        await updateExecution({
           agentId: ctx.agentId,
           executionId,
           patch: { status: 'RUNNING', startedAt: new Date(startedAt).toISOString() },
-        }).catch(() => undefined);
-        if (executionId) await appendExecutionLog({
+        });
+        await appendExecutionLog({
           agentId: ctx.agentId,
           executionId,
           message: 'Super AgentOS request started',
@@ -292,7 +336,7 @@ export async function POST(request: NextRequest) {
             executionTarget: selectedExecutionTarget.displayName,
             messageOverride: messageExecutionOverrideId,
           },
-        }).catch(() => undefined);
+        });
         push('execution', {
           executionId,
           status: 'RUNNING',
@@ -343,6 +387,68 @@ export async function POST(request: NextRequest) {
               push('delta', { text });
               await new Promise(resolve => setTimeout(resolve, 8));
             }
+          } else if (selectedIntelligenceSelection.mode === 'single') {
+            if (!workspaceId) throw new Error('Workspace is required for connected intelligence');
+            push('status', { text: 'Calling selected connected intelligence...' });
+            const connected = await runSingleIntelligenceRuntime({
+              ownerAgentId: ctx.agentId,
+              workspaceId,
+              projectId,
+              sessionId,
+              taskId: task?.id ?? null,
+              executionId,
+              selection: selectedIntelligenceSelection,
+              workspaceContext,
+              message,
+              attachments,
+              invocations,
+              recentMessages,
+              signal: request.signal,
+              onDelta: text => {
+                partialReply += text;
+                push('delta', { text });
+              },
+            });
+            partialReply = connected.text || partialReply;
+            intelligenceInvocation = {
+              id: connected.invocation.id,
+              connectionId: connected.connection.id,
+              vendor: connected.connection.vendor,
+              modelId: connected.modelId,
+              finishReason: connected.finishReason,
+              usage: connected.usage,
+            };
+          } else if (selectedIntelligenceSelection.mode === 'consensus') {
+            if (!workspaceId) throw new Error('Workspace is required for Standard Consensus');
+            push('status', { text: 'Running Standard Consensus...' });
+            const consensus = await runStandardConsensusRuntime({
+              ownerAgentId: ctx.agentId,
+              workspaceId,
+              projectId,
+              sessionId,
+              taskId: task?.id ?? null,
+              executionId,
+              selection: selectedIntelligenceSelection,
+              workspaceContext,
+              message,
+              intent,
+              recentMessages,
+              signal: request.signal,
+            });
+            partialReply = consensus.text;
+            for (const text of replyChunks(partialReply)) {
+              push('delta', { text });
+              await new Promise(resolve => setTimeout(resolve, 8));
+            }
+            intelligenceInvocation = {
+              kind: 'standard_consensus',
+              consensusRecordId: consensus.record.id,
+              workerRunId: consensus.workerRun.id,
+              consensusConfigurationId: consensus.record.consensusConfigurationId,
+              consensusHash: consensus.record.consensusHash,
+              dissentCount: consensus.trace.dissentCount,
+              usage: consensus.record.usage,
+            };
           } else {
             const completedReply = await streamStudioChatReply({
               message,
@@ -371,8 +477,8 @@ export async function POST(request: NextRequest) {
             assistantPersisted = true;
           }
 
-          const payload = { kind: 'chat_reply', intent, statusText, reply: partialReply };
-          if (executionId) await updateExecution({
+          const payload = { kind: 'chat_reply', intent, statusText, reply: partialReply, intelligenceInvocation };
+          await updateExecution({
             agentId: ctx.agentId,
             executionId,
             patch: {
@@ -381,8 +487,8 @@ export async function POST(request: NextRequest) {
               durationMs: Date.now() - startedAt,
               completedAt: new Date().toISOString(),
             },
-          }).catch(() => undefined);
-          if (task) await updateAgentTask({
+          });
+          await updateAgentTask({
             userId: ctx.agentId,
             taskId: task.id,
             patch: {
@@ -391,20 +497,21 @@ export async function POST(request: NextRequest) {
               resultSummary: partialReply.slice(0, 1000),
               metadata: { ...task.metadata, executionId },
             },
-          }).catch(() => undefined);
-          if (executionId) await appendExecutionLog({
+          });
+          await appendExecutionLog({
             agentId: ctx.agentId,
             executionId,
             message: 'Super AgentOS request completed',
             data: {
               kind: 'chat_reply',
               providerMode: providerStatus.mode,
+              intelligenceInvocation,
               executionTrace: selectedExecutionTarget.type === 'orchestrator'
                 ? ['Orchestrator analyzed request', 'Super AgentOS validated and delivered the result']
                 : ['Super AgentOS analyzed request', 'Super AgentOS delivered the result'],
               executionTarget: selectedExecutionTarget.displayName,
             },
-          }).catch(() => undefined);
+          });
           await createNotification({
             agentId: ctx.agentId,
             workspaceId,
@@ -419,10 +526,70 @@ export async function POST(request: NextRequest) {
           return;
         }
 
+        if (selectedIntelligenceSelection.mode === 'single') {
+          if (!workspaceId) throw new Error('Workspace is required for connected intelligence');
+          push('status', { text: 'Requesting connected proposal for Super AgentOS validation...' });
+          const recentMessages = await loadRecentConversation(ctx.agentId, sessionId);
+          const proposal = await requestConnectedProposalOnly({
+            ownerAgentId: ctx.agentId,
+            workspaceId,
+            projectId,
+            sessionId,
+            taskId: task?.id ?? null,
+            executionId,
+            selection: selectedIntelligenceSelection,
+            workspaceContext,
+            message,
+            intent,
+            attachments,
+            invocations,
+            recentMessages,
+            signal: request.signal,
+          });
+          connectedProposal = proposal.trace;
+          if (executionId) await appendExecutionLog({
+            agentId: ctx.agentId,
+            executionId,
+            message: 'Connected intelligence proposal recorded for Super AgentOS validation',
+            data: connectedProposal,
+          }).catch(() => undefined);
+        } else if (selectedIntelligenceSelection.mode === 'consensus') {
+          if (!workspaceId) throw new Error('Workspace is required for Standard Consensus');
+          push('status', { text: 'Requesting Standard Consensus proposal for Super AgentOS validation...' });
+          const recentMessages = await loadRecentConversation(ctx.agentId, sessionId);
+          const proposal = await requestStandardConsensusProposalOnly({
+            ownerAgentId: ctx.agentId,
+            workspaceId,
+            projectId,
+            sessionId,
+            taskId: task?.id ?? null,
+            executionId,
+            selection: selectedIntelligenceSelection,
+            workspaceContext,
+            message,
+            intent,
+            recentMessages,
+            signal: request.signal,
+          });
+          connectedProposal = proposal.trace;
+          if (executionId) await appendExecutionLog({
+            agentId: ctx.agentId,
+            executionId,
+            message: 'Standard Consensus proposal recorded for Super AgentOS validation',
+            data: connectedProposal,
+          }).catch(() => undefined);
+        }
+
+        const intentBody = {
+          ...body,
+          runtimeTaskId: task.id,
+          runtimeExecutionId: executionId,
+          ...(connectedProposal ? { intelligenceProposal: connectedProposal } : {}),
+        };
         const response = await fetch(new URL('/api/studio/intent', request.url), {
           method: 'POST',
-          headers,
-          body: JSON.stringify(body),
+          headers: internalIntentHeaders,
+          body: JSON.stringify(intentBody),
           signal: request.signal,
         });
         const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -432,6 +599,7 @@ export async function POST(request: NextRequest) {
         if (failed) {
           throw new Error(typeof payload.error === 'string' ? payload.error : 'Intent request failed');
         }
+        mixedExecution = buildMixedExecutionVerification({ payload, proposal: connectedProposal });
 
         if (typeof payload.statusText === 'string') {
           push('status', { text: payload.statusText });
@@ -444,39 +612,38 @@ export async function POST(request: NextRequest) {
           push('approval', {
             confirmToken: payload.confirmToken,
             reply: partialReply,
+            mixedExecution,
           });
         }
 
         const paused = payload.kind === 'approval_required';
-        if (executionId) await updateExecution({
+        await updateExecution({
           agentId: ctx.agentId,
           executionId,
           patch: {
-            status: paused ? 'PAUSED' : 'COMPLETED',
-            output: payload,
-            durationMs: Date.now() - startedAt,
-            completedAt: new Date().toISOString(),
+              status: paused ? 'PAUSED' : 'COMPLETED',
+              output: { ...payload, mixedExecution },
+              durationMs: Date.now() - startedAt,
+              completedAt: new Date().toISOString(),
           },
-        }).catch(() => undefined);
-        if (task) {
-          await updateAgentTask({
-            userId: ctx.agentId,
-            taskId: task.id,
-            patch: {
-              status: paused ? 'awaiting_confirmation' : 'completed',
-              confirmationStatus: paused ? 'pending' : 'not_required',
-              progress: paused ? 55 : 100,
-              resultSummary: partialReply.slice(0, 1000),
-              metadata: { ...task.metadata, executionId, payloadKind: payload.kind },
-            },
-          }).catch(() => undefined);
-        }
-        if (executionId) await appendExecutionLog({
+        });
+        await updateAgentTask({
+          userId: ctx.agentId,
+          taskId: task.id,
+          patch: {
+            status: paused ? 'awaiting_confirmation' : 'completed',
+            confirmationStatus: paused ? 'pending' : 'not_required',
+            progress: paused ? 55 : 100,
+            resultSummary: partialReply.slice(0, 1000),
+            metadata: { ...task.metadata, executionId, payloadKind: payload.kind, connectedProposal, mixedExecution },
+          },
+        });
+        await appendExecutionLog({
           agentId: ctx.agentId,
           executionId,
           message: paused ? 'Super AgentOS request paused for approval' : 'Super AgentOS request completed',
-          data: { kind: payload.kind, status: response.status, providerMode: providerStatus.mode },
-        }).catch(() => undefined);
+          data: { kind: payload.kind, status: response.status, providerMode: providerStatus.mode, connectedProposal, mixedExecution },
+        });
         await createNotification({
           agentId: ctx.agentId,
           workspaceId,
@@ -490,6 +657,7 @@ export async function POST(request: NextRequest) {
           executionId,
           status: paused ? 'PAUSED' : 'COMPLETED',
           ...(typeof payload.navigateTo === 'string' ? { navigateTo: payload.navigateTo } : {}),
+          mixedExecution,
         });
       } catch (error) {
         const stopped = request.signal.aborted || (error instanceof DOMException && error.name === 'AbortError');

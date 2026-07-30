@@ -6,6 +6,7 @@ import { validate, keySchema, ttlSchema } from '../utils/validation.js';
 import { NotFoundError, QuotaError } from '../utils/errors.js';
 import { getFFPClient } from '../ffp/client.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
+import { deleteMemoryEntry, getOwnedMemoryEntry, listAccessibleMemoryEntries, upsertMemoryEntry } from '../memory/service.js';
 import type { AgentContext } from '../auth/permissions.js';
 
 const DEFAULT_TTL = 60 * 60 * 24 * 7;
@@ -26,6 +27,14 @@ function getLocalMemoryUsage(state: Awaited<ReturnType<typeof readLocalRuntimeSt
     }
     return total + Buffer.byteLength(record.value, 'utf8');
   }, 0);
+}
+
+function durableMemoryFallbackAllowed(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
+
+function memoryNamespaceId(ctx: AgentContext): string {
+  return ctx.agentId;
 }
 
 async function withMemFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
@@ -65,6 +74,21 @@ export async function memSet(ctx: AgentContext, input: unknown): Promise<{ key: 
       await adjustMemoryUsage(ctx.agentId, delta);
       return { key };
     }, async () => {
+      if (durableMemoryFallbackAllowed()) {
+        const entry = await upsertMemoryEntry({
+          ownerAgentId: ctx.agentId,
+          key,
+          content: serialized,
+          namespaceType: 'agent',
+          namespaceId: memoryNamespaceId(ctx),
+          metadata: {
+            source: 'agentos.mem_set',
+            ttlSeconds: ttl ?? DEFAULT_TTL,
+            bytes,
+          },
+        });
+        return { key: entry.key };
+      }
       return updateLocalRuntimeState(state => {
         state.mem[ctx.agentId] ??= {};
         const existing = state.mem[ctx.agentId][key];
@@ -107,6 +131,19 @@ export async function memGet(ctx: AgentContext, input: unknown): Promise<{ key: 
         throw new Error(`Corrupted value for key: ${key}`);
       }
     }, async () => {
+      if (durableMemoryFallbackAllowed()) {
+        const entry = await getOwnedMemoryEntry({
+          ownerAgentId: ctx.agentId,
+          key,
+          namespaceType: 'agent',
+          namespaceId: memoryNamespaceId(ctx),
+        });
+        try {
+          return { key, value: JSON.parse(entry.content) as unknown };
+        } catch {
+          throw new Error(`Corrupted value for key: ${key}`);
+        }
+      }
       const state = await readLocalRuntimeState();
       const record = state.mem[ctx.agentId]?.[key];
       if (!record || isExpired(record.expiresAt)) {
@@ -143,6 +180,14 @@ export async function memDelete(ctx: AgentContext, input: unknown): Promise<{ ke
 
       return { key, deleted: deleted > 0 };
     }, async () => {
+      if (durableMemoryFallbackAllowed()) {
+        return deleteMemoryEntry({
+          ownerAgentId: ctx.agentId,
+          key,
+          namespaceType: 'agent',
+          namespaceId: memoryNamespaceId(ctx),
+        }).then(result => ({ key, deleted: result.deleted }));
+      }
       return updateLocalRuntimeState(state => {
         const record = state.mem[ctx.agentId]?.[key];
         if (!record) {
@@ -172,6 +217,21 @@ export async function memList(ctx: AgentContext, input: unknown): Promise<{ keys
         keys: rawKeys.slice(0, 1000).map(item => item.slice(prefixToStrip.length)),
       };
     }, async () => {
+      if (durableMemoryFallbackAllowed()) {
+        const entries = await listAccessibleMemoryEntries({
+          viewerAgentId: ctx.agentId,
+          ownerAgentId: ctx.agentId,
+          namespaceType: 'agent',
+          namespaceId: memoryNamespaceId(ctx),
+          limit: 1000,
+        });
+        return {
+          keys: entries
+            .map(entry => entry.key)
+            .filter(key => key.startsWith(prefix))
+            .slice(0, 1000),
+        };
+      }
       return updateLocalRuntimeState(state => {
         state.mem[ctx.agentId] ??= {};
         const keys = Object.entries(state.mem[ctx.agentId])

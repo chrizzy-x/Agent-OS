@@ -488,7 +488,7 @@ export async function runCrewCron() {
           status: 'completed',
           priority: 20,
           payload: { summary: activeEval.summary },
-          result: triage ? { suggestion: triage } : { suggestion: 'No AI triage suggestion available.' },
+          result: triage ? { suggestion: triage } : { suggestion: 'No triage suggestion available.' },
         });
       }
     }

@@ -4,7 +4,7 @@ This document keeps public docs, in-app copy, and release notes aligned with the
 
 ## Product Thesis
 
-AgentOS is an AI operating ecosystem. Super AgentOS is the command layer, and the workspace routes work into apps, skills, workflows, subagents, projects, Library assets, memory, Vault secrets, Universal MCP tools, and future FFP primitives.
+AgentOS is an operating intelligence ecosystem. Super AgentOS is the command layer, and the workspace routes work into apps, skills, workflows, subagents, projects, Library assets, memory, Vault secrets, Universal MCP tools, and future FFP primitives.
 
 AgentOS must not be described as only a chatbot, only a coding assistant, only an app marketplace, or only an MCP host.
 

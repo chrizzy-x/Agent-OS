@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/os/ui';
 import { useStudio } from '@/components/studio/StudioProvider';
-import type { StudioFileNode } from '@/src/studio/types';
+import type { StudioFileNode, StudioTerminalEvent } from '@/src/studio/types';
 
 const DEV_TASK_PRESETS = [
   {
@@ -81,6 +81,17 @@ function FileTree(props: { nodes: StudioFileNode[]; onOpen: (path: string) => vo
 
 function countFiles(nodes: StudioFileNode[]): number {
   return nodes.reduce((count, node) => count + (node.kind === 'file' ? 1 : 0) + (node.children ? countFiles(node.children) : 0), 0);
+}
+
+function terminalEventIcon(event: StudioTerminalEvent): { icon: string; color: string; background: string } {
+  if (event.type === 'stderr' || event.type === 'error') return { icon: '!', color: '#fee2e2', background: 'rgba(239, 68, 68, 0.22)' };
+  if (event.type === 'exit') return event.exitCode === 0
+    ? { icon: 'OK', color: '#dcfce7', background: 'rgba(34, 197, 94, 0.22)' }
+    : { icon: 'X', color: '#ffedd5', background: 'rgba(249, 115, 22, 0.22)' };
+  if (event.type === 'status') return { icon: event.status === 'running' ? 'RUN' : 'ST', color: '#dbeafe', background: 'rgba(59, 130, 246, 0.22)' };
+  if (event.type === 'sync') return { icon: 'SYNC', color: '#fef3c7', background: 'rgba(245, 158, 11, 0.22)' };
+  if (event.type === 'session') return { icon: '$', color: '#ccfbf1', background: 'rgba(20, 184, 166, 0.22)' };
+  return { icon: '>', color: '#e0e7ff', background: 'rgba(99, 102, 241, 0.22)' };
 }
 
 export default function CodeStudioPanel() {
@@ -292,11 +303,33 @@ export default function CodeStudioPanel() {
           )}
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: 10, fontFamily: 'var(--font-mono), monospace', fontSize: 12, lineHeight: 1.55 }}>
-          {terminalEvents.length > 0 ? terminalEvents.map(event => (
-            <div key={event.id} style={{ color: event.type === 'stderr' || event.type === 'error' ? '#fecaca' : 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
-              {event.chunk ?? event.message ?? ''}
-            </div>
-          )) : (
+          {terminalEvents.length > 0 ? terminalEvents.map(event => {
+            const visual = terminalEventIcon(event);
+            return (
+              <div key={event.id} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'start', gap: 8, color: event.type === 'stderr' || event.type === 'error' ? '#fecaca' : 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    minWidth: 22,
+                    height: 18,
+                    padding: '0 5px',
+                    borderRadius: 6,
+                    background: visual.background,
+                    color: visual.color,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                  }}
+                >
+                  {visual.icon}
+                </span>
+                <span>{event.chunk ?? event.message ?? ''}</span>
+              </div>
+            );
+          }) : (
             <span style={{ color: 'var(--text-secondary)' }}>Terminal output will appear here.</span>
           )}
         </div>

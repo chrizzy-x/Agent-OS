@@ -105,14 +105,14 @@ describe('POST /api/super-agent/message', () => {
     const response = await POST(new NextRequest('http://localhost/api/super-agent/message', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'research AI agents and save it' }),
+      body: JSON.stringify({ message: 'research agents and save it' }),
     }));
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mocks.detectAgentOSIntent).toHaveBeenCalledWith('research AI agents and save it');
+    expect(mocks.detectAgentOSIntent).toHaveBeenCalledWith('research agents and save it');
     expect(mocks.generateStudioChatReply).toHaveBeenCalledWith({
-      message: 'research AI agents and save it',
+      message: 'research agents and save it',
       intent: 'RESEARCH',
       executionTargetId: 'super_agentos',
     });
