@@ -899,6 +899,17 @@ export function StudioProvider(props: {
             workspaceId: activeSession.workspaceId,
             projectId: activeProjectId,
             sessionId: activeSession.id,
+            session: {
+              id: activeSession.id,
+              workspaceId: activeSession.workspaceId,
+              projectId: activeSession.projectId,
+              title: activeSession.title,
+              status: activeSession.archivedAt ? 'archived' : 'active',
+              visibility: activeSession.visibility,
+              pinnedAt: activeSession.pinnedAt ?? null,
+              archivedAt: activeSession.archivedAt ?? null,
+              updatedAt: activeSession.updatedAt,
+            },
           });
         }
       }

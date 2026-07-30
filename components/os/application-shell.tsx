@@ -66,12 +66,21 @@ type ApplicationShellContextValue = {
   setActiveWorkspace: (workspaceId: string) => void;
   setActiveProject: (projectId: string | null) => void;
   setActiveSession: (sessionId: string | null) => void;
-  syncContext: (context: { workspaceId?: string | null; projectId?: string | null; sessionId?: string | null }) => void;
+  syncContext: (context: ShellSyncContext) => void;
   refreshShell: () => Promise<void>;
   leftCollapsed: boolean;
   rightCollapsed: boolean;
   setLeftCollapsed: (value: boolean) => void;
   setRightCollapsed: (value: boolean) => void;
+};
+
+type ShellSyncContext = {
+  workspaceId?: string | null;
+  projectId?: string | null;
+  sessionId?: string | null;
+  workspace?: WorkspaceRef | null;
+  project?: ProjectRef | null;
+  session?: SessionRef | null;
 };
 
 const ApplicationShellContext = createContext<ApplicationShellContextValue>({
@@ -781,7 +790,25 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
     await refreshShell();
   }, [activeSessionId, pathname, refreshShell, router, searchParams, setActiveSession]);
 
-  const syncContext = useCallback((context: { workspaceId?: string | null; projectId?: string | null; sessionId?: string | null }) => {
+  const syncContext = useCallback((context: ShellSyncContext) => {
+    setPayload(current => ({
+      ...current,
+      workspaces: context.workspace && !current.workspaces.some(item => item.id === context.workspace?.id)
+        ? [context.workspace, ...current.workspaces]
+        : current.workspaces,
+      projects: context.project
+        ? [
+          context.project,
+          ...current.projects.filter(item => item.id !== context.project?.id),
+        ]
+        : current.projects,
+      sessions: context.session
+        ? [
+          context.session,
+          ...current.sessions.filter(item => item.id !== context.session?.id),
+        ]
+        : current.sessions,
+    }));
     if (context.workspaceId !== undefined) {
       setActiveWorkspaceId(context.workspaceId);
       writeStored('agentos.shell.workspace', context.workspaceId);
@@ -917,7 +944,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             <span>{project?.name ?? 'No project'}</span>
             <span>{activeSession?.title ?? 'No session'}</span>
             {pathname === '/studio' ? <span>{formatMode(mode)}</span> : null}
-            {pathname === '/studio' ? <span>{process.env.NEXT_PUBLIC_AGENTOS_MODEL ?? 'Default model'}</span> : null}
+            {pathname === '/studio' ? <span>{process.env.NEXT_PUBLIC_AGENTOS_MODEL ?? 'Native Super AgentOS'}</span> : null}
           </div>
           <div className="agentos-global-header-actions">
             <form className="agentos-global-search" role="search" onSubmit={submitShellSearch}>

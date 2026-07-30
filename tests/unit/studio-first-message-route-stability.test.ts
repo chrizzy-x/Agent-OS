@@ -9,6 +9,7 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('replaceCurrentHistoryRoute');
     expect(source).toContain('window.history.replaceState');
     expect(source).toContain('const activeProjectId = activeSession.projectId ?? currentProject?.id ?? requestedProjectId ?? null;');
+    expect(source).toContain('session: {');
     expect(source).not.toContain('if (createdSession) {');
   });
 });
