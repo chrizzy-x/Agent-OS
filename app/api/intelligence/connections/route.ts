@@ -14,7 +14,7 @@ import {
   getKnownIntelligenceModels,
   type ConnectedIntelligenceModel,
 } from '@/src/intelligence/adapters';
-import { createRuntimeSecretGrant, upsertVaultSecret } from '@/src/vault/service';
+import { assignVaultSecret, createRuntimeSecretGrant, upsertVaultSecret } from '@/src/vault/service';
 import { redactSecretsInString } from '@/src/security/secret-redaction';
 import { toErrorResponse, ValidationError } from '@/src/utils/errors';
 
@@ -97,6 +97,12 @@ export async function POST(request: NextRequest) {
       workspaceId,
       name: secretNameForVendor(vendor),
       value: credential,
+    });
+    await assignVaultSecret({
+      ownerAgentId: ctx.agentId,
+      secretId: secret.id,
+      subjectType: 'super_agentos',
+      subjectId: ctx.agentId,
     });
 
     let discoveredModels: ConnectedIntelligenceModel[] = [];

@@ -540,8 +540,13 @@ export async function updateExecution(params: {
     delete legacyPatch.metadata;
     delete legacyPatch.paused_at;
     delete legacyPatch.cancelled_at;
+    delete legacyPatch.action_type;
     delete legacyPatch.action_source;
+    delete legacyPatch.notification_id;
     delete legacyPatch.deep_link;
+    delete legacyPatch.recovery_action;
+    delete legacyPatch.recovery_requested_at;
+    delete legacyPatch.status_detail;
     delete legacyPatch.model;
     delete legacyPatch.token_prompt;
     delete legacyPatch.token_completion;

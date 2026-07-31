@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 const routeMocks = vi.hoisted(() => ({
   requireRouteCapability: vi.fn(),
   upsertVaultSecret: vi.fn(),
+  assignVaultSecret: vi.fn(),
   createRuntimeSecretGrant: vi.fn(),
   discoverConnectedIntelligenceModels: vi.fn(),
   createIntelligenceConnection: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('../../src/auth/request.js', () => ({
 
 vi.mock('../../src/vault/service.js', () => ({
   upsertVaultSecret: routeMocks.upsertVaultSecret,
+  assignVaultSecret: routeMocks.assignVaultSecret,
   createRuntimeSecretGrant: routeMocks.createRuntimeSecretGrant,
 }));
 
@@ -74,6 +76,7 @@ describe('intelligence connections route', () => {
       name: 'SUPER_AGENTOS_OPENAI_KEY',
       maskedValue: '************cret',
     });
+    routeMocks.assignVaultSecret.mockResolvedValue({ id: 'assignment-1' });
     routeMocks.createRuntimeSecretGrant.mockResolvedValue({ id: 'grant-1' });
     routeMocks.discoverConnectedIntelligenceModels.mockResolvedValue([
       { id: 'gpt-5', label: 'gpt-5', vendor: 'openai', default: true, capabilities: ['text', 'streaming'] },
@@ -110,6 +113,13 @@ describe('intelligence connections route', () => {
       workspaceId: 'workspace-1',
       name: 'SUPER_AGENTOS_OPENAI_KEY',
     }));
+    expect(routeMocks.assignVaultSecret).toHaveBeenCalledWith({
+      ownerAgentId: 'agent-1',
+      secretId: 'secret-1',
+      subjectType: 'super_agentos',
+      subjectId: 'agent-1',
+    });
+    expect(routeMocks.assignVaultSecret.mock.invocationCallOrder[0]).toBeLessThan(routeMocks.createRuntimeSecretGrant.mock.invocationCallOrder[0]);
     expect(routeMocks.createIntelligenceConnection).toHaveBeenCalledWith(expect.objectContaining({
       status: 'active',
       selectedModelId: 'gpt-5',
