@@ -608,9 +608,20 @@ async function main() {
       await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
       await waitForStudio(page);
 
+      const logoutResponse = page.waitForResponse(response => {
+        try {
+          const url = new URL(response.url());
+          return url.pathname === '/api/session' && response.request().method() === 'DELETE';
+        } catch {
+          return false;
+        }
+      }, { timeout: 90000 });
       await page.getByLabel('Open account menu').click();
       await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
-      await page.waitForTimeout(1200);
+      const logoutResult = await logoutResponse;
+      if (logoutResult.status() !== 200) throw new Error(`Logout API returned ${logoutResult.status()}`);
+      await page.waitForURL(/\/signin/, { timeout: 30000 }).catch(() => undefined);
+      await page.waitForTimeout(2600);
       const signedOut = await api(page, '/api/session?optional=1', { label: 'session-after-logout' });
       if (signedOut.json?.authenticated) throw new Error('Logout did not clear the browser session.');
 

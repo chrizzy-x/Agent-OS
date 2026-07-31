@@ -23,16 +23,44 @@ export interface BrowserTokenCredentials {
   expiresIn: string;
 }
 
+declare global {
+  interface Window {
+    __agentosSessionLogoutBlockedUntil?: number;
+  }
+}
+
 const KNOWN_SESSION_KEY = 'agentos.browserSessionSeen';
 const KNOWN_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 120;
 let logoutRefreshBlockedUntil = 0;
+let sessionStateEpoch = 0;
 
 function blockRefreshForLogout(ms: number): void {
-  logoutRefreshBlockedUntil = Math.max(logoutRefreshBlockedUntil, Date.now() + ms);
+  const blockedUntil = Math.max(logoutRefreshBlockedUntil, Date.now() + ms);
+  logoutRefreshBlockedUntil = blockedUntil;
+  sessionStateEpoch += 1;
+  if (typeof window !== 'undefined') {
+    window.__agentosSessionLogoutBlockedUntil = Math.max(window.__agentosSessionLogoutBlockedUntil ?? 0, blockedUntil);
+  }
 }
 
-function isLogoutRefreshBlocked(): boolean {
-  return Date.now() < logoutRefreshBlockedUntil;
+export function isBrowserSessionLogoutBlocked(): boolean {
+  const windowBlockedUntil = typeof window === 'undefined' ? 0 : window.__agentosSessionLogoutBlockedUntil ?? 0;
+  return Date.now() < Math.max(logoutRefreshBlockedUntil, windowBlockedUntil);
+}
+
+function signedOutAfterLogout(): BrowserSessionState {
+  clearLegacyBrowserAuth();
+  forgetBrowserSession();
+  return { state: 'signed_out', session: null };
+}
+
+export function resetBrowserSessionLogoutBlockForTests(): void {
+  if (process.env.NODE_ENV !== 'test') return;
+  logoutRefreshBlockedUntil = 0;
+  sessionStateEpoch += 1;
+  if (typeof window !== 'undefined') {
+    window.__agentosSessionLogoutBlockedUntil = 0;
+  }
 }
 
 function readStorage(storage: Storage | undefined, key: string): string | null {
@@ -102,7 +130,7 @@ function hasKnownBrowserSession(): boolean {
 }
 
 async function refreshBrowserSession(): Promise<boolean> {
-  if (isLogoutRefreshBlocked()) return false;
+  if (isBrowserSessionLogoutBlocked()) return false;
   const response = await fetch('/api/session/refresh', {
     method: 'POST',
     cache: 'no-store',
@@ -114,10 +142,13 @@ async function refreshBrowserSession(): Promise<boolean> {
 }
 
 async function readBrowserSession(optional = true): Promise<BrowserSessionState> {
+  if (isBrowserSessionLogoutBlocked()) return signedOutAfterLogout();
+  const readEpoch = sessionStateEpoch;
   const response = await fetch(`/api/session${optional ? '?optional=1' : ''}`, {
     cache: 'no-store',
     credentials: 'include',
   });
+  if (isBrowserSessionLogoutBlocked() || readEpoch !== sessionStateEpoch) return signedOutAfterLogout();
   if (!response.ok) {
     clearLegacyBrowserAuth();
     return {
@@ -127,6 +158,7 @@ async function readBrowserSession(optional = true): Promise<BrowserSessionState>
   }
 
   const payload = await response.json() as { authenticated?: boolean; session?: BrowserSession };
+  if (isBrowserSessionLogoutBlocked() || readEpoch !== sessionStateEpoch) return signedOutAfterLogout();
   if (payload.authenticated) {
     rememberBrowserSession();
     return {
@@ -142,11 +174,7 @@ async function readBrowserSession(optional = true): Promise<BrowserSessionState>
 }
 
 export async function fetchBrowserSessionState(): Promise<BrowserSessionState> {
-  if (isLogoutRefreshBlocked()) {
-    clearLegacyBrowserAuth();
-    forgetBrowserSession();
-    return { state: 'signed_out', session: null };
-  }
+  if (isBrowserSessionLogoutBlocked()) return signedOutAfterLogout();
   const current = await readBrowserSession(true);
   if (current.state === 'active') return current;
 
@@ -169,6 +197,11 @@ export async function fetchBrowserSession(): Promise<BrowserSession | null> {
 export async function fetchWithBrowserSession(input: RequestInfo | URL, init?: RequestInit): Promise<{ response: Response; authState: BrowserSessionAuthState }> {
   const requestInit: RequestInit = { ...init, credentials: init?.credentials ?? 'include' };
   const response = await fetch(input, requestInit);
+  if (isBrowserSessionLogoutBlocked()) {
+    clearLegacyBrowserAuth();
+    forgetBrowserSession();
+    return { response, authState: 'signed_out' };
+  }
   if (response.status !== 401) {
     if (response.ok) rememberBrowserSession();
     return { response, authState: 'active' };
@@ -184,6 +217,11 @@ export async function fetchWithBrowserSession(input: RequestInfo | URL, init?: R
   }
 
   const retry = await fetch(input, requestInit);
+  if (isBrowserSessionLogoutBlocked()) {
+    clearLegacyBrowserAuth();
+    forgetBrowserSession();
+    return { response: retry, authState: 'signed_out' };
+  }
   if (retry.ok) {
     rememberBrowserSession();
     return { response: retry, authState: 'active' };
