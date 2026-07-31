@@ -35,6 +35,9 @@ export type AgentOSActionType =
   | 'uninstall_skill'
   | 'create_workflow'
   | 'run_workflow'
+  | 'pause_workflow'
+  | 'resume_workflow'
+  | 'delete_workflow'
   | 'publish_workflow'
   | 'create_project'
   | 'update_project'
@@ -80,6 +83,9 @@ const ACTION_CAPABILITIES: Partial<Record<AgentOSActionType, Capability>> = {
   uninstall_skill: 'install_skill',
   create_workflow: 'create_private_workflow',
   run_workflow: 'run_workflow',
+  pause_workflow: 'create_private_workflow',
+  resume_workflow: 'create_private_workflow',
+  delete_workflow: 'create_private_workflow',
   publish_workflow: 'create_app',
   create_project: 'use_nl_studio',
   update_project: 'use_nl_studio',
@@ -628,6 +634,67 @@ export async function executeAgentOSAction(ctx: AgentContext, input: AgentOSActi
       sessionId: input.sessionId,
       workflowId: requireString(payload, 'workflowId'),
     });
+  } else if (input.action === 'pause_workflow' || input.action === 'resume_workflow') {
+    const workflowId = requireString(payload, 'workflowId');
+    const status = input.action === 'pause_workflow' ? 'paused' : 'active';
+    const tracked = await runTrackedExecution({
+      agentId: ctx.agentId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      sourceType: 'workflow',
+      sourceId: workflowId,
+      title: `${status === 'paused' ? 'Pause' : 'Resume'} Primeflow ${workflowId}`,
+      input: { workflowId, status },
+      run: async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from('agent_workflows')
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq('id', workflowId)
+          .eq('agent_id', ctx.agentId)
+          .select('id,name,status')
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) throw new ValidationError('Primeflow not found');
+        return data;
+      },
+    });
+    output = { result: { workflow: tracked.result }, execution: tracked.execution };
+  } else if (input.action === 'delete_workflow') {
+    const workflowId = requireString(payload, 'workflowId');
+    const tracked = await runTrackedExecution({
+      agentId: ctx.agentId,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      sourceType: 'workflow',
+      sourceId: workflowId,
+      title: `Delete Primeflow ${workflowId}`,
+      input: { workflowId },
+      run: async () => {
+        const supabase = getSupabaseAdmin();
+        const { data: workflow } = await supabase
+          .from('agent_workflows')
+          .select('task_id')
+          .eq('id', workflowId)
+          .eq('agent_id', ctx.agentId)
+          .maybeSingle();
+        const { error, count } = await supabase
+          .from('agent_workflows')
+          .delete({ count: 'exact' })
+          .eq('id', workflowId)
+          .eq('agent_id', ctx.agentId);
+        if (error) throw error;
+        if (!count) throw new ValidationError('Primeflow not found');
+        if (workflow && typeof workflow.task_id === 'string' && workflow.task_id.length > 0) {
+          await supabase
+            .from('scheduled_tasks')
+            .update({ enabled: false })
+            .eq('id', workflow.task_id)
+            .eq('agent_id', ctx.agentId);
+        }
+        return { deleted: true, workflowId };
+      },
+    });
+    output = { result: tracked.result, execution: tracked.execution };
   } else if (input.action === 'publish_workflow') {
     output = {
       result: {

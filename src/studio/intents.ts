@@ -36,8 +36,8 @@ export function detectIntentHeuristically(input: string): AgentOSIntent {
   if (/\b(agent|subagent|assistant agent)\b/.test(message)) return 'AGENT_TASK';
   if (/\b(pause|resume|retry|cancel|rollback|inspect)\s+(execution|task|run)\b/.test(message)) return 'EXECUTION_TASK';
   if (/\b(panic|stop all|cancel all active executions|stop active executions)\b/.test(message)) return 'EXECUTION_TASK';
-  if (/\b(workflow|automation|schedule|cron)\b/.test(message)) {
-    if (/\b(run|execute|start|trigger)\b/.test(message)) return 'WORKFLOW_EXECUTION';
+  if (/\b(primeflow|workflow|automation|schedule|cron)\b/.test(message)) {
+    if (/^\s*(run|execute|start|trigger)\s+(?:a\s+|the\s+)?(?:primeflow|workflow|automation|schedule|cron)\b/.test(message)) return 'WORKFLOW_EXECUTION';
     return 'WORKFLOW_DESIGN';
   }
   if (/\b(publish|submit|release)\b.*\bapp\b|\bapp\b.*\b(publish|release)\b/.test(message)) return 'APP_PUBLISH';
@@ -102,6 +102,7 @@ export function translateMessageToStudioCommand(input: string): string | null {
   if (/\b(agent status|workspace status|show status)\b/.test(lower)) return 'agent status';
   if (/\b(list tools|show tools|available tools)\b/.test(lower)) return 'tools list';
   if (/\b(list mcp|show connectors|show mcp)\b/.test(lower)) return 'mcp list';
+  if (/^(?:tool run|mcp call|skills use)\s/.test(lower)) return message;
 
   const installSkillMatch = lower.match(/\binstall skill\s+([a-z0-9._-]+)/);
   if (installSkillMatch) return `skills install ${installSkillMatch[1]}`;

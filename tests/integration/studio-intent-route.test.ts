@@ -15,6 +15,9 @@ const intentRouteMocks = vi.hoisted(() => ({
   requestExecutionAction: vi.fn(),
   updateExecution: vi.fn(),
   updateAgentTask: vi.fn(),
+  listAgentApps: vi.fn(),
+  publishAgentApp: vi.fn(),
+  getSupabaseAdmin: vi.fn(),
 }));
 
 vi.mock('../../src/studio/planner.js', () => ({
@@ -49,6 +52,15 @@ vi.mock('../../src/tasks/service.js', () => ({
   updateAgentTask: intentRouteMocks.updateAgentTask,
 }));
 
+vi.mock('../../src/appstore/service.js', () => ({
+  listAgentApps: intentRouteMocks.listAgentApps,
+  publishAgentApp: intentRouteMocks.publishAgentApp,
+}));
+
+vi.mock('../../src/storage/supabase.js', () => ({
+  getSupabaseAdmin: intentRouteMocks.getSupabaseAdmin,
+}));
+
 import { POST } from '../../app/api/studio/intent/route.js';
 
 describe('POST /api/studio/intent', () => {
@@ -63,8 +75,98 @@ describe('POST /api/studio/intent', () => {
       title: 'Execution target',
       status: 'COMPLETED',
     });
+    intentRouteMocks.listAgentApps.mockResolvedValue([]);
+    intentRouteMocks.publishAgentApp.mockResolvedValue({
+      id: 'app-1',
+      name: 'Quick Proof App',
+      slug: 'quick-proof-app-1234abcd',
+      visibility: 'private',
+      published: false,
+    });
+    intentRouteMocks.getSupabaseAdmin.mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { tier: 'enterprise', metadata: { plan: 'enterprise_plus' } },
+          error: null,
+        }),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+      })),
+    });
     intentRouteMocks.updateExecution.mockResolvedValue({});
     intentRouteMocks.updateAgentTask.mockResolvedValue({});
+  });
+
+  it('requires approval before Studio creates a real private app', async () => {
+    const token = createAgentToken('agent-1', { expiresIn: '1h' });
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: 'Create private app Quick Proof App',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+      }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.kind).toBe('approval_required');
+    expect(body.reply).toBe('Create private app Quick Proof App?');
+    expect(body.confirmToken).toBeTruthy();
+    expect(intentRouteMocks.confirmTokenSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^studio:confirm:/),
+      1800,
+      expect.stringContaining('"type":"app_create"'),
+    );
+    expect(intentRouteMocks.publishAgentApp).not.toHaveBeenCalled();
+  });
+
+  it('creates the private app after approval', async () => {
+    intentRouteMocks.confirmTokenGet.mockResolvedValue(JSON.stringify({
+      type: 'app_create',
+      agentId: 'agent-1',
+      sessionId: 'session-1',
+      workspaceId: 'workspace-1',
+      name: 'Quick Proof App',
+      slug: 'quick-proof-app-1234abcd',
+      intent: 'APP_BUILD',
+    }));
+    const token = createAgentToken('agent-1', { expiresIn: '1h' });
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ confirm: true, confirmToken: 'confirm-token', sessionId: 'session-1' }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.kind).toBe('completed');
+    expect(body.executed).toBe(true);
+    expect(body.reply).toBe('Created private app Quick Proof App.');
+    expect(body.navigateTo).toBe('/appstore/quick-proof-app-1234abcd');
+    expect(intentRouteMocks.publishAgentApp).toHaveBeenCalledWith(expect.objectContaining({
+      publisherId: 'agent-1',
+      workspaceId: 'workspace-1',
+      name: 'Quick Proof App',
+      slug: 'quick-proof-app-1234abcd',
+      visibility: 'private',
+      published: false,
+      manifest: expect.objectContaining({
+        runtime: 'agentos-app',
+        entrypoint: 'agentos://apps/quick-proof-app-1234abcd',
+      }),
+    }));
   });
 
   it('redacts secret-like tool output before returning confirmed intent results', async () => {

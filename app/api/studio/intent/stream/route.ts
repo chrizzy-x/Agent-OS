@@ -351,23 +351,23 @@ export async function POST(request: NextRequest) {
         const statusText = humanStatusForIntent(intent);
         push('status', { text: statusText });
 
-        if (isDirectConversation(intent, message)) {
-          if (sessionId) {
-            await appendStudioMessage({
-              ownerAgentId: ctx.agentId,
-              sessionId,
-              role: 'user',
-              content: message,
-            });
-            userPersisted = true;
-            await appendStudioEvent({
-              ownerAgentId: ctx.agentId,
-              sessionId,
-              type: 'thinking_started',
-              payload: { intent, statusText },
-            }).catch(() => undefined);
-          }
+        if (sessionId) {
+          await appendStudioMessage({
+            ownerAgentId: ctx.agentId,
+            sessionId,
+            role: 'user',
+            content: message,
+          });
+          userPersisted = true;
+          await appendStudioEvent({
+            ownerAgentId: ctx.agentId,
+            sessionId,
+            type: 'thinking_started',
+            payload: { intent, statusText },
+          }).catch(() => undefined);
+        }
 
+        if (isDirectConversation(intent, message)) {
           const names = await loadConversationNames({
             agentId: ctx.agentId,
             sessionId,

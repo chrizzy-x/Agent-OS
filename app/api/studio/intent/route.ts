@@ -28,7 +28,7 @@ import { listWorkspaces } from '@/src/workspaces/service';
 import { listVaultSecrets } from '@/src/vault/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
-import { listAgentApps } from '@/src/appstore/service';
+import { listAgentApps, publishAgentApp } from '@/src/appstore/service';
 import { updateAgentTask } from '@/src/tasks/service';
 
 export const runtime = 'nodejs';
@@ -91,6 +91,15 @@ type PendingStudioAction = PendingRuntimeRecord & (
     workspaceId: string | null;
     slug: string;
     name: string;
+    intent: AgentOSIntent;
+  }
+  | {
+    type: 'app_create';
+    agentId: string;
+    sessionId: string | null;
+    workspaceId: string;
+    name: string;
+    slug: string;
     intent: AgentOSIntent;
   }
   | {
@@ -213,12 +222,37 @@ function parseProjectAction(message: string, projectId: string | null): { kind: 
 }
 
 function parseCreateAgentName(message: string): string | null {
-  const match = message.match(/\bcreate(?:\s+private)?\s+(?:agent|subagent)\s+(.+)$/i);
+  const match = message.match(/\bcreate(?:\s+private)?\s+(?:prime\s+agent|agent|subagent)\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+}
+
+function appSlugFromName(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return `${slug || 'studio-app'}-${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function parseCreateAppName(message: string): string | null {
+  const match = message.match(/\bcreate(?:\s+private)?\s+app\s+(.+)$/i);
+  const raw = match?.[1]?.trim();
+  if (!raw) return null;
+  return raw
+    .replace(/\s+(?:and|then)\s+.*$/i, '')
+    .replace(/[.?!]+$/g, '')
+    .trim()
+    .slice(0, 80) || null;
 }
 
 function parseInspectReference(message: string, subject: 'app' | 'skill'): string | null {
   const match = message.match(new RegExp(`\\b(?:inspect|open|show)\\s+${subject}\\s+(.+)$`, 'i'));
+  return match?.[1]?.trim() || null;
+}
+
+function parseOpenAppReference(message: string): string | null {
+  const match = message.match(/\bopen\s+app\s+(.+)$/i);
   return match?.[1]?.trim() || null;
 }
 
@@ -230,6 +264,21 @@ function parseInstallReference(message: string, subject: 'app' | 'skill'): strin
 function parsePublishWorkflowReference(message: string): string | null {
   const match = message.match(/\bpublish workflow(?:\s+(.+))?$/i);
   return match?.[1]?.trim() || null;
+}
+
+function parseWorkflowLifecycleRequest(message: string): {
+  action: Extract<AgentOSActionType, 'pause_workflow' | 'resume_workflow' | 'delete_workflow'>;
+  reference: string;
+  label: string;
+} | null {
+  const match = message.match(/\b(pause|resume|delete|remove)\s+(?:primeflow|workflow)\s+(.+)$/i);
+  if (!match) return null;
+  const verb = match[1].toLowerCase();
+  const reference = match[2].trim();
+  if (!reference) return null;
+  if (verb === 'pause') return { action: 'pause_workflow', reference, label: 'Pause' };
+  if (verb === 'resume') return { action: 'resume_workflow', reference, label: 'Resume' };
+  return { action: 'delete_workflow', reference, label: 'Delete' };
 }
 
 function parseSaveResultLabel(message: string): string | null {
@@ -653,7 +702,7 @@ async function executePendingAction(params: {
       },
     });
     const subagent = (action.result as { subagent: { id: string; name: string } }).subagent;
-    const reply = `Created incognito agent ${subagent.name}.`;
+    const reply = `Created Prime Agent ${subagent.name}.`;
     await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
     await recordStudioEvent(params.ctx.agentId, params.pending.sessionId, 'subagent_created', {
       subagentId: subagent.id,
@@ -667,6 +716,61 @@ async function executePendingAction(params: {
       executed: true,
       subagent,
       navigateTo: `/agents/${subagent.id}`,
+    });
+  }
+
+  if (params.pending.type === 'app_create') {
+    const app = await publishAgentApp({
+      publisherId: params.ctx.agentId,
+      publisherName: 'AgentOS Workspace',
+      workspaceId: params.pending.workspaceId,
+      name: params.pending.name,
+      slug: params.pending.slug,
+      category: 'Utilities',
+      description: `Private app created by Super AgentOS from Studio: ${params.pending.name}.`,
+      longDescription: 'Super AgentOS created this private app listing from an approved NL Studio request. No deployed runtime is claimed.',
+      appUrl: null,
+      repositoryUrl: null,
+      deviceTargets: ['Web'],
+      platforms: ['Web'],
+      visibility: 'private',
+      published: false,
+      manifest: {
+        schemaVersion: 'agentos.app.v1',
+        version: '1.0.0',
+        runtime: 'agentos-app',
+        entrypoint: `agentos://apps/${params.pending.slug}`,
+        primitives: ['agentos.mem_get'],
+        permissions: [],
+        requiredSecrets: [],
+        commands: [
+          {
+            name: 'launch',
+            description: 'Open this private app listing.',
+          },
+        ],
+      },
+      defaultConfig: {
+        createdBy: 'super_agentos',
+        studioSessionId: params.pending.sessionId,
+      },
+      tags: ['studio-created'],
+      features: ['Private app listing', 'AgentOS manifest', 'No fake deployment claim'],
+    });
+    const reply = `Created private app ${app.name}.`;
+    await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
+    await recordStudioEvent(params.ctx.agentId, params.pending.sessionId, 'task_completed', {
+      action: 'create_app',
+      appSlug: app.slug,
+    });
+    return NextResponse.json({
+      kind: 'completed',
+      intent: params.pending.intent,
+      statusText: 'Done.',
+      reply,
+      executed: true,
+      app: sanitizeOutput(app),
+      navigateTo: `/appstore/${app.slug}`,
     });
   }
 
@@ -1162,6 +1266,48 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const openAppReference = parseOpenAppReference(trimmedMessage);
+    if (openAppReference) {
+      const app = await findAppRecord({
+        agentId: ctx.agentId,
+        workspaceId,
+        reference: openAppReference,
+      });
+      if (!app) {
+        const reply = `No app matched "${openAppReference}".`;
+        await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+        return NextResponse.json({
+          kind: 'unsupported',
+          intent,
+          statusText: 'Unavailable.',
+          reply,
+          code: 'NOT_FOUND',
+        }, { status: 404 });
+      }
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'agentos_action',
+        agentId: ctx.agentId,
+        ...requestRuntimeRecord,
+        sessionId,
+        workspaceId,
+        projectId,
+        action: 'open_app',
+        payload: { slug: app.slug, target: 'web' },
+        successReply: `Opened app ${app.name}.`,
+        intent,
+      } satisfies PendingStudioAction));
+      const reply = `Open app ${app.name}?`;
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply,
+        confirmToken,
+      });
+    }
+
     const inspectSkillReference = parseInspectReference(trimmedMessage, 'skill');
     if (inspectSkillReference) {
       const skill = await findSkillRecord(inspectSkillReference);
@@ -1259,7 +1405,7 @@ export async function POST(req: NextRequest) {
         name: createAgentName,
         intent,
       } satisfies PendingStudioAction));
-      const reply = `Create incognito agent ${createAgentName}?`;
+      const reply = `Create Prime Agent ${createAgentName}?`;
       await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
       return NextResponse.json({
         kind: 'approval_required',
@@ -1270,7 +1416,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (/\bcreate private app\b/i.test(trimmedMessage) || /\bcreate app\b/i.test(trimmedMessage)) {
+    const createAppName = parseCreateAppName(trimmedMessage);
+    if ((/\bcreate private app\b/i.test(trimmedMessage) || /\bcreate app\b/i.test(trimmedMessage)) && createAppName && workspaceId) {
       if (!hasCapability(ctx.tier, 'create_app')) {
         const reply = capabilityMessage('create_app');
         await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
@@ -1282,14 +1429,26 @@ export async function POST(req: NextRequest) {
           code: 'FORBIDDEN',
         }, { status: 403 });
       }
-      const reply = 'Opening the app publishing flow for a private or workspace-scoped app.';
+      const slug = appSlugFromName(createAppName);
+      const reply = `Create private app ${createAppName}?`;
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'app_create',
+        agentId: ctx.agentId,
+        ...requestRuntimeRecord,
+        sessionId,
+        workspaceId,
+        name: createAppName,
+        slug,
+        intent,
+      } satisfies PendingStudioAction));
       await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
       return NextResponse.json({
-        kind: 'completed',
+        kind: 'approval_required',
         intent,
-        statusText: 'Done.',
+        statusText: 'Approval required.',
         reply,
-        navigateTo: '/developer/publish',
+        confirmToken,
       });
     }
 
@@ -1301,7 +1460,7 @@ export async function POST(req: NextRequest) {
         reference: runWorkflowReference,
       });
       if (!workflow) {
-        const reply = `No workflow matched "${runWorkflowReference}".`;
+        const reply = `No Primeflow matched "${runWorkflowReference}".`;
         await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
         return NextResponse.json({
           kind: 'unsupported',
@@ -1321,10 +1480,52 @@ export async function POST(req: NextRequest) {
         projectId,
         action: 'run_workflow',
         payload: { workflowId: workflow.id },
-        successReply: `Ran workflow ${workflow.name}.`,
+        successReply: `Ran Primeflow ${workflow.name}.`,
         intent,
       } satisfies PendingStudioAction));
-      const reply = `Run workflow ${workflow.name}?`;
+      const reply = `Run Primeflow ${workflow.name}?`;
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply,
+        confirmToken,
+      });
+    }
+
+    const workflowLifecycle = parseWorkflowLifecycleRequest(trimmedMessage);
+    if (workflowLifecycle) {
+      const workflow = await findWorkflowRecord({
+        agentId: ctx.agentId,
+        projectId,
+        reference: workflowLifecycle.reference,
+      });
+      if (!workflow) {
+        const reply = `No Primeflow matched "${workflowLifecycle.reference}".`;
+        await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+        return NextResponse.json({
+          kind: 'unsupported',
+          intent,
+          statusText: 'Unavailable.',
+          reply,
+          code: 'NOT_FOUND',
+        }, { status: 404 });
+      }
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'agentos_action',
+        agentId: ctx.agentId,
+        ...requestRuntimeRecord,
+        sessionId,
+        workspaceId,
+        projectId,
+        action: workflowLifecycle.action,
+        payload: { workflowId: workflow.id },
+        successReply: `${workflowLifecycle.label}d Primeflow ${workflow.name}.`,
+        intent,
+      } satisfies PendingStudioAction));
+      const reply = `${workflowLifecycle.label} Primeflow ${workflow.name}?`;
       await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
       return NextResponse.json({
         kind: 'approval_required',

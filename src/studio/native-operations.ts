@@ -62,7 +62,7 @@ export function buildNativeWorkflowPlan(message: string): WorkflowPlan {
   const instruction = cleanInstruction(message);
   const key = `studio.workflow.${crypto.createHash('sha256').update(instruction).digest('hex').slice(0, 16)}`;
   return {
-    summary: `Create a native AgentOS workflow for: ${instruction}`,
+    summary: `Create a native AgentOS Primeflow for: ${instruction}`,
     schedule: scheduleForMessage(message),
     steps: [
       {
@@ -72,7 +72,7 @@ export function buildNativeWorkflowPlan(message: string): WorkflowPlan {
           key,
           value: instruction,
         },
-        description: 'Store the approved workflow request in AgentOS memory for the saved Primeflow record.',
+        description: 'Store the approved Primeflow request in AgentOS memory for the saved Primeflow record.',
       },
     ],
   };

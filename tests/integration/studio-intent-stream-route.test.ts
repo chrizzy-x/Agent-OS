@@ -534,6 +534,40 @@ describe('POST /api/studio/intent/stream', () => {
     expect(mocks.runSingleIntelligenceRuntime).not.toHaveBeenCalled();
   });
 
+  it('persists non-chat Studio task prompts before approval routing', async () => {
+    mocks.detectAgentOSIntent.mockResolvedValue('APP_BUILD');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'approval_required',
+      intent: 'APP_BUILD',
+      statusText: 'Approval required.',
+      reply: 'Create private app Quick Proof App?',
+      confirmToken: 'confirm-1',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Create private app Quick Proof App',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        projectId: 'project-1',
+      }),
+    }));
+    const body = await response.text();
+
+    expect(body).toContain('Create private app Quick Proof App?');
+    expect(body).toContain('"status":"PAUSED"');
+    expect(mocks.appendStudioMessage).toHaveBeenCalledWith(expect.objectContaining({
+      ownerAgentId: 'agent-1',
+      sessionId: 'session-1',
+      role: 'user',
+      content: 'Create private app Quick Proof App',
+    }));
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
   it('returns a generic error without exposing the thrown message', async () => {
     mocks.streamStudioChatReply.mockRejectedValue(new Error('secret provider stack'));
 

@@ -48,7 +48,7 @@ describe('native Studio operations', () => {
 
   it('builds native workflow plans without provider output', () => {
     const plan = buildNativeWorkflowPlan('create workflow Daily release report daily');
-    expect(plan.summary).toContain('Create a native AgentOS workflow');
+    expect(plan.summary).toContain('Create a native AgentOS Primeflow');
     expect(plan.schedule).toBe('@daily');
     expect(plan.steps).toEqual([
       expect.objectContaining({
