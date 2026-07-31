@@ -289,7 +289,12 @@ async function approve(page, opts = {}) {
     await page.locator('.nl-approval-row').waitFor({ state: 'detached', timeout: 30000 }).catch(() => undefined);
   }
   if (opts.expectText) {
-    await page.waitForFunction(pattern => new RegExp(pattern, 'i').test(document.body.innerText), opts.expectText.source, { timeout: 90000 });
+    await page.waitForFunction(pattern => new RegExp(pattern, 'i').test(document.body.innerText), opts.expectText.source, { timeout: 90000 })
+      .catch(async error => {
+        if (!opts.sessionId) throw error;
+        await openStudio(page, opts.sessionId);
+        await page.waitForFunction(pattern => new RegExp(pattern, 'i').test(document.body.innerText), opts.expectText.source, { timeout: 90000 });
+      });
   }
   return { approvalText, text: await latestAssistantText(page).catch(() => '') };
 }
@@ -634,19 +639,19 @@ async function main() {
 
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `install app dezypher`, /deZypher|Install app/i);
-    const installApp = await approve(page, { expectText: /Installed app|Installed/i });
+    const installApp = await approve(page, { expectText: /Installed app|Installed/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `open app dezypher`, /Open app/i);
-    const openApp = await approve(page, { expectText: /Opened app/i });
+    const openApp = await approve(page, { expectText: /Opened app/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `install skill ${ids.skillSlug}`, /Install skill|Previewing install|Proof Normalizer/i);
-    const installSkill = await approve(page, { expectText: /Installed/i });
+    const installSkill = await approve(page, { expectText: /Installed/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `skills use ${ids.skillSlug} normalize --json {"text":"Quick App Proof ${runToken}"}`, /normalize|Quick App Proof|skills\.use/i);
-    const runSkill = await approve(page, { expectText: /Executed/i });
+    const runSkill = await approve(page, { expectText: /Executed/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `mcp call agentos mem_set --json {"key":"proof.${runToken}.mcp","value":"mcp ok ${runToken}"}`, /proof|mcp|mem_set/i);
-    const mcpSet = await approve(page, { expectText: /Executed/i });
+    const mcpSet = await approve(page, { expectText: /Executed/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
     const mcpGet = await sendAndWait(page,
       `tool run agentos.mem_get --json {"key":"proof.${runToken}.mcp"}`,
@@ -666,26 +671,26 @@ async function main() {
     await page.goto(`${BASE_URL}/studio?mode=nl&session=${encodeURIComponent(ids.sessionId ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await waitForStudio(page);
     await sendForApproval(page, `Run Prime Agent ${primeAgentName} with tools list`, /Run Prime Agent/i);
-    const runPrimeAgent = await approve(page, { expectText: /Prime Agent|Loaded|tools/i, timeout: 120000 });
+    const runPrimeAgent = await approve(page, { expectText: /Prime Agent|Loaded|tools/i, timeout: 120000, sessionId: ids.sessionId });
     await sendForApproval(page, `Create Primeflow ${primeflowName}`, /Create a native AgentOS Primeflow|Create Primeflow/i);
-    const createPrimeflow = await approve(page, { expectText: /Primeflow|Done/i, timeout: 120000 });
+    const createPrimeflow = await approve(page, { expectText: /Primeflow|Done/i, timeout: 120000, sessionId: ids.sessionId });
     await sendForApproval(page, `Run Primeflow ${primeflowName}`, /Run Primeflow/i);
-    const runPrimeflow = await approve(page, { expectText: /Ran Primeflow|Done/i, timeout: 120000 });
+    const runPrimeflow = await approve(page, { expectText: /Ran Primeflow|Done/i, timeout: 120000, sessionId: ids.sessionId });
     const executions = await api(page, `/api/executions?workspaceId=${encodeURIComponent(ids.workspaceId)}&limit=20`, { label: 'executions-after-primeflow' });
     const executionId = executions.json?.executions?.find?.(item => `${item.title ?? ''}`.includes('Primeflow') || item.sourceType === 'workflow' || item.source_type === 'workflow')?.id
       ?? executions.json?.items?.find?.(item => `${item.title ?? ''}`.includes('Primeflow') || item.sourceType === 'workflow' || item.source_type === 'workflow')?.id
       ?? null;
     await sendForApproval(page, `Pause Primeflow ${primeflowName}`, /Pause Primeflow/i);
-    const pausePrimeflow = await approve(page, { expectText: /Paused Primeflow|Done/i, timeout: 120000 });
+    const pausePrimeflow = await approve(page, { expectText: /Paused Primeflow|Done/i, timeout: 120000, sessionId: ids.sessionId });
     await sendForApproval(page, `Resume Primeflow ${primeflowName}`, /Resume Primeflow/i);
-    const resumePrimeflow = await approve(page, { expectText: /Resumed Primeflow|Done/i, timeout: 120000 });
+    const resumePrimeflow = await approve(page, { expectText: /Resumed Primeflow|Done/i, timeout: 120000, sessionId: ids.sessionId });
     let retryPrimeflow = { text: '' };
     if (executionId) {
       await sendForApproval(page, `Retry execution ${executionId}`, /Retry execution/i);
-      retryPrimeflow = await approve(page, { expectText: /retry|completed|Done/i, timeout: 120000 });
+      retryPrimeflow = await approve(page, { expectText: /retry|completed|Done/i, timeout: 120000, sessionId: ids.sessionId });
     }
     await sendForApproval(page, `Delete Primeflow ${primeflowName}`, /Delete Primeflow/i);
-    const deletePrimeflow = await approve(page, { expectText: /Deleted Primeflow|Done/i, timeout: 120000 });
+    const deletePrimeflow = await approve(page, { expectText: /Deleted Primeflow|Done/i, timeout: 120000, sessionId: ids.sessionId });
     task('Prime Agent + Primeflow lifecycle', executionId ? 'PASS' : 'FAIL', {
       primeAgentRun: runPrimeAgent.text.slice(0, 500),
       createPrimeflow: createPrimeflow.text.slice(0, 400),
