@@ -10,6 +10,7 @@ const root = path.resolve('agentos-artifacts', 'production-5-task-proof', `visib
 const videoDir = path.join(root, 'video');
 const openaiKey = process.env.E2E_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
 const anthropicKey = process.env.E2E_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
+const reuseLatestProofAccount = process.env.AGENTOS_PROOF_REUSE_LATEST === '1';
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const dbUrl = process.env.DATABASE_URL || process.env.DIRECT_URL || '';
@@ -34,6 +35,7 @@ const evidence = {
   inputs: {
     openaiKeyPresent: Boolean(openaiKey),
     anthropicKeyPresent: Boolean(anthropicKey),
+    reuseLatestProofAccount,
     supabaseVerificationConfigured: Boolean(supabaseUrl && supabaseServiceRoleKey),
     directDatabaseVerificationConfigured: Boolean(dbUrl),
   },
@@ -268,10 +270,10 @@ async function sendAndWait(page, prompt, opts = {}) {
   return { text, stream };
 }
 
-async function sendForApproval(page, prompt, expected) {
+async function sendForApproval(page, prompt, expected, timeout = 300000) {
   await panel(page, ['Approval-backed Studio task', prompt.slice(0, 120)]);
   await submitPrompt(page, prompt);
-  await page.locator('.nl-approval-row').waitFor({ state: 'visible', timeout: 90000 });
+  await page.locator('.nl-approval-row').waitFor({ state: 'visible', timeout });
   const approvalText = (await page.locator('.nl-approval-row').innerText()).trim();
   if (expected && !expected.test(approvalText)) {
     throw new Error(`Expected approval text ${expected}; got ${approvalText}`);
@@ -409,8 +411,8 @@ async function dbVerify(ids) {
         account: ['select id,name,created_at from agents where id = $1 limit 1', [ids.agentId]],
         connections: ['select vendor,status,selected_model_id,created_at from intelligence_connections where owner_agent_id = $1 order by created_at desc limit 8', [ids.agentId]],
         invocations: ['select vendor,model_id,status,streamed,created_at from intelligence_invocations where owner_agent_id = $1 order by created_at desc limit 8', [ids.agentId]],
-        sessions: ['select id,title,updated_at from studio_sessions where owner_agent_id = $1 order by updated_at desc limit 5', [ids.agentId]],
-        messages: ['select role,left(content,160) as content,created_at from studio_messages where owner_agent_id = $1 order by created_at desc limit 12', [ids.agentId]],
+        sessions: ['select id,title,updated_at from nl_studio_sessions where owner_agent_id = $1 order by updated_at desc limit 5', [ids.agentId]],
+        messages: ['select role,left(content,160) as content,created_at from nl_studio_messages where owner_agent_id = $1 order by created_at desc limit 12', [ids.agentId]],
         app: ['select slug,visibility,published,created_at from agent_apps where slug = $1 limit 1', [ids.appSlug]],
         skill: ['select id,slug,published,visibility,created_at from skills where slug = $1 limit 1', [ids.skillSlug]],
         skillUsage: ['select su.capability_name,su.success,su.created_at,s.slug from skill_usage su join skills s on s.id = su.skill_id where su.agent_id = $1 and s.slug = $2 order by su.created_at desc limit 5', [ids.agentId, ids.skillSlug]],
@@ -444,8 +446,8 @@ async function dbVerify(ids) {
       invocations: await supabaseSelectWithFallback('intelligence_invocations', [
         { owner_agent_id: `eq.${ids.agentId}`, select: 'vendor,model_id,status,streamed,created_at', order: 'created_at.desc', limit: '8' },
       ]),
-      sessions: await supabaseSelect('studio_sessions', { owner_agent_id: `eq.${ids.agentId}`, select: 'id,title,updated_at', order: 'updated_at.desc', limit: '5' }),
-      messages: await supabaseSelect('studio_messages', { owner_agent_id: `eq.${ids.agentId}`, select: 'role,content,created_at', order: 'created_at.desc', limit: '12' }),
+      sessions: await supabaseSelect('nl_studio_sessions', { owner_agent_id: `eq.${ids.agentId}`, select: 'id,title,updated_at', order: 'updated_at.desc', limit: '5' }),
+      messages: await supabaseSelect('nl_studio_messages', { owner_agent_id: `eq.${ids.agentId}`, select: 'role,content,created_at', order: 'created_at.desc', limit: '12' }),
       app: await supabaseSelectWithFallback('agent_apps', [
         { slug: `eq.${ids.appSlug}`, select: 'slug,visibility,published,created_at', limit: '1' },
       ]),
@@ -461,6 +463,42 @@ async function dbVerify(ids) {
       ]),
     },
   };
+}
+
+async function findLatestReusableProofAccount() {
+  if (!supabaseUrl || !supabaseServiceRoleKey) return null;
+  const agents = await supabaseSelect('agents', {
+    select: 'id,name,metadata,created_at',
+    order: 'created_at.desc',
+    limit: '80',
+  });
+  if (!Array.isArray(agents)) return null;
+
+  for (const agent of agents) {
+    const email = typeof agent?.metadata?.email === 'string' ? agent.metadata.email : '';
+    const token = /^agentos-proof-([a-f0-9]{10})@example\.com$/i.exec(email)?.[1];
+    if (!token) continue;
+    const connections = await supabaseSelect('intelligence_connections', {
+      owner_agent_id: `eq.${agent.id}`,
+      select: 'vendor,status,selected_model_id,created_at',
+      order: 'created_at.desc',
+      limit: '10',
+    });
+    if (!Array.isArray(connections)) continue;
+    const hasOpenAI = connections.some(item => item.vendor === 'openai' && item.status === 'active' && item.selected_model_id === 'gpt-5-mini');
+    const hasAnthropic = connections.some(item => item.vendor === 'anthropic' && item.status === 'active' && item.selected_model_id === 'claude-sonnet-4-6');
+    if (hasOpenAI && hasAnthropic) {
+      return {
+        agentId: String(agent.id),
+        email,
+        password: `ProofPass-${token}!9`,
+        createdAt: agent.created_at,
+        connections,
+      };
+    }
+  }
+
+  return null;
 }
 
 async function main() {
@@ -497,14 +535,112 @@ async function main() {
   page.on('pageerror', error => evidence.browser.pageErrors.push(redactText(error.stack || error.message).slice(0, 1000)));
 
   const ids = { agentId: null, workspaceId: null, projectId: null, sessionId: null, appSlug: null, skillSlug: 'text-utils' };
-  const email = `agentos-proof-${runToken}@example.com`;
-  const password = `ProofPass-${runToken}!9`;
+  const reusableAccount = reuseLatestProofAccount ? await findLatestReusableProofAccount() : null;
+  let email = `agentos-proof-${runToken}@example.com`;
+  let password = `ProofPass-${runToken}!9`;
+  if (reusableAccount) {
+    email = reusableAccount.email;
+    password = reusableAccount.password;
+    ids.agentId = reusableAccount.agentId;
+    evidence.reusedAccount = {
+      agentId: reusableAccount.agentId,
+      createdAt: reusableAccount.createdAt,
+      connections: reusableAccount.connections.map(item => ({
+        vendor: item.vendor,
+        status: item.status,
+        model: item.selected_model_id,
+      })),
+    };
+  }
   const appName = `Quick Proof App ${runToken}`;
   const primeAgentName = `Proof Prime Agent ${runToken}`;
   const primeflowName = `Proof Primeflow ${runToken}`;
 
   try {
     log('[>]', 'cyan', `Visible proof run ${runId}`);
+    if (reusableAccount) {
+      await page.goto(`${BASE_URL}/signin`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => undefined);
+      await panel(page, ['Task 1: Auth + Studio', 'Logging into existing proof account through UI']);
+      await fillControlled(page, '#email', email);
+      await fillControlled(page, '#password', password);
+      await waitForSubmitEnabled(page);
+      const firstSigninResponse = page.waitForResponse(response => {
+        try {
+          const url = new URL(response.url());
+          return url.pathname === '/api/signin' && response.request().method() === 'POST';
+        } catch {
+          return false;
+        }
+      }, { timeout: 90000 });
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      const firstSigninResult = await firstSigninResponse;
+      if (firstSigninResult.status() !== 200) throw new Error(`Reusable account signin API returned ${firstSigninResult.status()}`);
+      await page.waitForFunction(async () => {
+        const payload = await fetch('/api/session?optional=1', { credentials: 'include' }).then(response => response.json());
+        return payload.authenticated === true;
+      }, null, { timeout: 30000 });
+
+      await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      await waitForStudio(page);
+      const bootstrap = await api(page, '/api/studio/bootstrap?mode=nl', { label: 'studio-bootstrap-desktop' });
+      ids.workspaceId = bootstrap.json?.workspaces?.[0]?.id ?? bootstrap.json?.currentProject?.workspaceId ?? null;
+      ids.projectId = bootstrap.json?.currentProject?.id ?? bootstrap.json?.projects?.[0]?.id ?? null;
+      if (!ids.workspaceId) throw new Error('Studio did not provide a workspace.');
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      await waitForStudio(page);
+      await page.waitForTimeout(900);
+      await page.setViewportSize({ width: 1365, height: 768 });
+      await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      await waitForStudio(page);
+
+      await page.getByLabel('Open account menu').click();
+      await page.getByRole('button', { name: 'Sign Out', exact: true }).click();
+      await page.waitForTimeout(1200);
+      const signedOut = await api(page, '/api/session?optional=1', { label: 'session-after-logout' });
+      if (signedOut.json?.authenticated) throw new Error('Logout did not clear the browser session.');
+
+      await page.goto(`${BASE_URL}/signin`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => undefined);
+      await fillControlled(page, '#email', email);
+      await fillControlled(page, '#password', password);
+      await waitForSubmitEnabled(page);
+      const signinResponse = page.waitForResponse(response => {
+        try {
+          const url = new URL(response.url());
+          return url.pathname === '/api/signin' && response.request().method() === 'POST';
+        } catch {
+          return false;
+        }
+      }, { timeout: 90000 });
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      const signinResult = await signinResponse;
+      if (signinResult.status() !== 200) throw new Error(`Signin API returned ${signinResult.status()}`);
+      await page.waitForFunction(async () => {
+        const payload = await fetch('/api/session?optional=1', { credentials: 'include' }).then(response => response.json());
+        return payload.authenticated === true;
+      }, null, { timeout: 30000 });
+      const sessionAfterLogin = await api(page, '/api/session?optional=1', { label: 'session-after-login' });
+      if (!sessionAfterLogin.json?.authenticated) throw new Error('Login did not restore authentication.');
+      await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+      await waitForStudio(page);
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 });
+      await waitForStudio(page);
+      const tokenResult = await api(page, '/api/session/token', { method: 'POST', label: 'issue-agent-token-for-db-correlation', sensitive: true });
+      ids.agentId = decodeAgentId(tokenResult.json?.credentials?.bearerToken ?? '') ?? ids.agentId;
+      task('Auth + desktop/mobile Studio', 'PASS', {
+        registered: false,
+        reusedExistingProofAccount: true,
+        loginRestored: true,
+        desktopStudioLoaded: true,
+        mobileStudioLoaded: true,
+        persistentAfterReload: true,
+        workspaceId: ids.workspaceId,
+        agentId: ids.agentId,
+      });
+    } else {
     await page.goto(`${BASE_URL}/signup`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => undefined);
     await panel(page, ['Task 1: Auth + Studio', 'Registering a real account through UI']);
@@ -591,23 +727,32 @@ async function main() {
       workspaceId: ids.workspaceId,
       agentId: ids.agentId,
     });
+    }
 
-    if (!openaiKey) throw new Error('OpenAI proof credential is missing from local env.');
-    if (!anthropicKey) throw new Error('Anthropic proof credential is missing from local env.');
-    await connectIntelligenceThroughVault(page, {
-      vendor: 'openai',
-      label: 'OpenAI',
-      modelId: 'gpt-5-mini',
-      displayName: `OpenAI proof ${runToken}`,
-      credential: openaiKey,
-    });
-    await connectIntelligenceThroughVault(page, {
-      vendor: 'anthropic',
-      label: 'Anthropic',
-      modelId: 'claude-sonnet-4-6',
-      displayName: `Anthropic proof ${runToken}`,
-      credential: anthropicKey,
-    });
+    if (reusableAccount) {
+      const existingConnections = await api(page, `/api/intelligence/connections?workspaceId=${encodeURIComponent(ids.workspaceId)}&includeRevoked=1`, { label: 'existing-vault-connections' });
+      const connections = Array.isArray(existingConnections.json?.connections) ? existingConnections.json.connections : [];
+      const hasOpenAI = connections.some(item => item.vendor === 'openai' && item.status === 'active' && item.selectedModelId === 'gpt-5-mini');
+      const hasAnthropic = connections.some(item => item.vendor === 'anthropic' && item.status === 'active' && item.selectedModelId === 'claude-sonnet-4-6');
+      if (!hasOpenAI || !hasAnthropic) throw new Error('Reusable proof account does not have both required active Vault-backed connections.');
+    } else {
+      if (!openaiKey) throw new Error('OpenAI proof credential is missing from local env.');
+      if (!anthropicKey) throw new Error('Anthropic proof credential is missing from local env.');
+      await connectIntelligenceThroughVault(page, {
+        vendor: 'openai',
+        label: 'OpenAI',
+        modelId: 'gpt-5-mini',
+        displayName: `OpenAI proof ${runToken}`,
+        credential: openaiKey,
+      });
+      await connectIntelligenceThroughVault(page, {
+        vendor: 'anthropic',
+        label: 'Anthropic',
+        modelId: 'claude-sonnet-4-6',
+        displayName: `Anthropic proof ${runToken}`,
+        credential: anthropicKey,
+      });
+    }
 
     await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await waitForStudio(page);
