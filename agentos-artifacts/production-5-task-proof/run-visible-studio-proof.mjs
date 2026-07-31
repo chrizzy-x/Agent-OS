@@ -179,15 +179,27 @@ async function panel(page, lines) {
   }, [...lines, ...recent].join('\n')).catch(() => undefined);
 }
 
-async function waitForStudio(page) {
-  await page.waitForLoadState('domcontentloaded');
-  await page.getByLabel('Message Super AgentOS').waitFor({ state: 'visible', timeout: 90000 });
+async function waitForStudio(page, timeout = 120000) {
+  await page.waitForLoadState('domcontentloaded').catch(() => undefined);
+  await page.locator('textarea[aria-label="Message Super AgentOS"], textarea[placeholder^="Message Super AgentOS"]').first()
+    .waitFor({ state: 'visible', timeout });
 }
 
 async function openStudio(page, sessionId = null) {
   const session = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
-  await page.goto(`${BASE_URL}/studio?mode=nl${session}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-  await waitForStudio(page);
+  const url = `${BASE_URL}/studio?mode=nl${session}`;
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
+      await waitForStudio(page, 120000);
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => undefined);
+    }
+  }
+  throw lastError ?? new Error('Studio did not load');
 }
 
 async function fillControlled(page, selector, value) {
