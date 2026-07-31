@@ -485,6 +485,7 @@ function LeftSidebar(props: {
             <Link
               key={item.href}
               href={appendShellContextToHref(item.href, props.navigationContext)}
+              prefetch={false}
               className={[
                 isProductSurfaceActivePath(props.pathname, item) ? 'active' : '',
                 item.status === 'coming_soon' ? 'coming-soon' : '',
@@ -934,7 +935,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
             <span className="agentos-shell-mobile-icon menu" aria-hidden="true" />
             <span className="agentos-sr-only">Open navigation</span>
           </button>
-          <Link href="/" className="agentos-global-brand" aria-label="AgentOS Home">
+          <Link href="/" prefetch={false} className="agentos-global-brand" aria-label="AgentOS Home">
             <Image src="/logo.png" alt="" width={26} height={26} />
             <strong>AgentOS</strong>
           </Link>
@@ -951,7 +952,7 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
               <input value={shellSearch} onChange={event => setShellSearch(event.target.value)} placeholder="Search" aria-label="Search AgentOS" />
             </form>
             {primaryAction ? (
-              <Link className="agentos-global-primary-action" href={appendShellContextToHref(primaryAction.href, navigationContext)}>
+              <Link className="agentos-global-primary-action" href={appendShellContextToHref(primaryAction.href, navigationContext)} prefetch={false}>
                 <span className="agentos-global-primary-action-icon" aria-hidden="true" />
                 <span className="agentos-global-primary-action-label">{primaryAction.label}</span>
               </Link>
@@ -977,13 +978,13 @@ export default function ApplicationShell({ children }: { children: ReactNode }) 
                     <span>{session.planLabel ?? session.plan ?? 'Current plan'}</span>
                   </div>
                   {ACCOUNT_MENU_LINKS.map(item => (
-                    <Link key={item.label} href={item.href}>{item.label}</Link>
+                    <Link key={item.label} href={item.href} prefetch={false}>{item.label}</Link>
                   ))}
                   <button type="button" aria-label="Sign Out" onClick={() => void logout()}>Logout</button>
                   <button type="button" aria-label="Sign Out All Devices" onClick={() => void logoutAllDevices()}>Logout All Devices</button>
                 </div>
               </details>
-            ) : <Link href="/signin">Sign in</Link>}
+            ) : <Link href="/signin" prefetch={false}>Sign in</Link>}
           </div>
           <button type="button" className="agentos-shell-mobile-button right" onClick={() => setRightDrawerOpen(true)} aria-label="Open context">
             <span className="agentos-shell-mobile-icon context" aria-hidden="true" />
