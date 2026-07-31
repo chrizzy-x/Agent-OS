@@ -91,6 +91,7 @@ describe.sequential('app visibility routes', () => {
       state.agentApps.catalog = [
         appRecord({ slug: 'public-app', visibility: 'public' }),
         appRecord({ slug: 'private-app', visibility: 'private' }),
+        appRecord({ slug: 'slug-only-private', name: 'Plain Tool', description: 'Owner-only utility', longDescription: 'Owner-only utility', visibility: 'private' }),
         appRecord({ slug: 'unlisted-app', visibility: 'unlisted' }),
       ];
     });
@@ -183,6 +184,17 @@ describe.sequential('app visibility routes', () => {
       { params: Promise.resolve({ slug: 'private-app' }) },
     );
     expect(adminResponse.status).toBe(200);
+  });
+
+  it('matches owner private app search by slug', async () => {
+    const ownerToken = createAgentToken('owner-agent', { expiresIn: '1h' });
+    const response = await getApps(new NextRequest('http://localhost/api/apps?mine=1&search=slug-only-private', {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.apps.map((app: { slug: string }) => app.slug)).toContain('slug-only-private');
   });
 
   it('recovers older SDK registrations into factual public listings', async () => {

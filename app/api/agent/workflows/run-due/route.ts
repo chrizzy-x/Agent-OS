@@ -64,6 +64,10 @@ function normalizeToolName(tool: string): string {
   return tool.replace(/^agentos\./, '');
 }
 
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -200,7 +204,9 @@ export async function POST(request: NextRequest) {
 
       const { data: task, error: taskError } = workflow.task_id
         ? await taskQuery.eq('id', workflow.task_id).maybeSingle()
-        : await taskQuery.eq('workflow_id', workflow.id).maybeSingle();
+        : isUuid(workflow.id)
+          ? await taskQuery.eq('workflow_id', workflow.id).maybeSingle()
+          : { data: null, error: null };
 
       if (taskError) throw taskError;
       if (task) {

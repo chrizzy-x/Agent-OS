@@ -13,6 +13,11 @@ export const runtime = 'nodejs';
 const FULL_SKILL_SELECT = 'id,name,slug,version,author_id,author_name,workspace_id,category,description,long_description,icon,icon_url,banner_url,video_url,website_url,documentation_url,support_url,privacy_policy_url,terms_url,release_notes,changelog,gallery,media_assets,compatible_apps,compatible_agents,compatible_workflows,rejection_reason,spotlight,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,permissions_required,required_secrets,required_skills,optional_skills,compatibility,examples,inputs,outputs,dependencies,publish_state,published,verified,visibility,created_at,updated_at';
 const LEGACY_SKILL_SELECT = 'id,name,slug,version,author_id,author_name,category,description,icon,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,published,verified,created_at,updated_at';
 
+function isMissingColumnError(error: unknown): boolean {
+  const value = error as { code?: unknown; message?: unknown } | null | undefined;
+  return value?.code === '42703' || value?.code === 'PGRST204' || /column .* (does not exist|schema cache|could not find)/i.test(String(value?.message ?? ''));
+}
+
 function compareBySort(sort: string, left: Record<string, unknown>, right: Record<string, unknown>): number {
   if (sort === 'recent') {
     return String(right.created_at ?? '').localeCompare(String(left.created_at ?? ''));
@@ -56,7 +61,7 @@ async function fetchSupabaseSkills(params: {
       count: primary.count ?? 0,
     };
   }
-  if (primary.error.code !== '42703') {
+  if (!isMissingColumnError(primary.error)) {
     throw primary.error;
   }
 
@@ -254,7 +259,7 @@ export async function POST(request: NextRequest) {
       .select('id, slug')
       .single();
 
-    if (error?.code === '42703') {
+    if (isMissingColumnError(error)) {
       const {
         workspace_id: _workspaceId,
         visibility: _visibility,

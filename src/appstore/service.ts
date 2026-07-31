@@ -791,6 +791,7 @@ async function loadStoredApps(): Promise<AgentAppListing[]> {
 function appMatchesSearch(app: AgentAppListing, search: string): boolean {
   const haystack = [
     app.name,
+    app.slug,
     app.description,
     app.longDescription,
     app.category,

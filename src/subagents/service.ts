@@ -39,6 +39,11 @@ function mapSubagent(row: Record<string, unknown>): PrivateSubagent {
   };
 }
 
+function isMissingColumnError(error: unknown): boolean {
+  const value = error as { code?: unknown; message?: unknown } | null | undefined;
+  return value?.code === '42703' || value?.code === 'PGRST204' || /column .* (does not exist|schema cache|could not find)/i.test(String(value?.message ?? ''));
+}
+
 export async function listPrivateSubagents(params: {
   ownerAgentId: string;
   workspaceId?: string | null;
@@ -123,9 +128,7 @@ export async function createPrivateSubagent(params: {
   });
 
   const now = new Date().toISOString();
-  const { data, error } = await getSupabaseAdmin()
-    .from('private_subagents')
-    .insert({
+  const fullPayload = {
       id: crypto.randomUUID(),
       workspace_id: params.workspaceId,
       project_id: project.id,
@@ -138,12 +141,43 @@ export async function createPrivateSubagent(params: {
       status: 'active',
       created_at: now,
       updated_at: now,
-    })
+  };
+  let result = await getSupabaseAdmin()
+    .from('private_subagents')
+    .insert(fullPayload)
     .select()
     .single();
 
-  if (error) throw new Error(`Failed to create incognito subagent: ${error.message}`);
-  return mapSubagent(data as Record<string, unknown>);
+  if (isMissingColumnError(result.error)) {
+    const { exposed_capabilities: _exposedCapabilities, ...withoutExposedCapabilities } = fullPayload;
+    result = await getSupabaseAdmin()
+      .from('private_subagents')
+      .insert(withoutExposedCapabilities)
+      .select()
+      .single();
+  }
+
+  if (isMissingColumnError(result.error)) {
+    const { visibility: _visibility, ...withoutVisibility } = fullPayload;
+    const { exposed_capabilities: _exposedCapabilities, ...legacyPayload } = withoutVisibility;
+    result = await getSupabaseAdmin()
+      .from('private_subagents')
+      .insert(legacyPayload)
+      .select()
+      .single();
+  }
+
+  if (isMissingColumnError(result.error)) {
+    const { project_id: _projectId, visibility: _visibility, exposed_capabilities: _exposedCapabilities, ...legacyPayload } = fullPayload;
+    result = await getSupabaseAdmin()
+      .from('private_subagents')
+      .insert(legacyPayload)
+      .select()
+      .single();
+  }
+
+  if (result.error) throw new Error(`Failed to create incognito subagent: ${result.error.message}`);
+  return mapSubagent(result.data as Record<string, unknown>);
 }
 
 export async function updatePrivateSubagent(params: {

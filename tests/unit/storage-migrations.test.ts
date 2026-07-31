@@ -239,6 +239,15 @@ describe('storage migrations', () => {
     expect(sql).toContain('-- ROLLBACK:');
   });
 
+  it('converts stale UUID workflow references to text for prefixed Primeflow ids', () => {
+    const sql = migrationSql('040_workflow_reference_text_catchup.sql');
+
+    expect(sql).toContain('ALTER COLUMN workflow_id TYPE TEXT USING workflow_id::text');
+    expect(sql).toContain('ALTER COLUMN linked_workflow_id TYPE TEXT USING linked_workflow_id::text');
+    expect(sql).toContain("NOTIFY pgrst, 'reload schema'");
+    expect(sql).toContain('-- ROLLBACK:');
+  });
+
   it('formalizes FFP execution logs and removes legacy persisted plan identifiers', () => {
     const sql = migrationSql('023_ffp_audit_and_plan_cleanup.sql');
 
