@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken, verifyAgentTokenClaims, verifyAgentTokenWithTier } from '@/src/auth/agent-identity';
 import { getPlanDescriptor } from '@/src/auth/capabilities';
-import { findRefreshSessionByToken, revokeRefreshSession } from '@/src/auth/browser-sessions';
+import { findRefreshSessionByToken, revokeAllRefreshSessions, revokeRefreshSession } from '@/src/auth/browser-sessions';
 import { rotateBrowserSession } from '@/src/auth/browser-auth';
 import {
   clearAgentSessionCookies,
@@ -94,15 +94,34 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  let agentIdToRevoke: string | null = null;
   const refreshToken = readRefreshToken(request.headers);
   if (refreshToken) {
     try {
       const session = await findRefreshSessionByToken(refreshToken);
       if (session) {
+        agentIdToRevoke = session.agentId;
         await revokeRefreshSession({ agentId: session.agentId, sessionId: session.id });
       }
     } catch {
       // Continue clearing cookies even if revocation fails.
+    }
+  }
+  if (!agentIdToRevoke) {
+    const accessToken = readAccessToken(request.headers);
+    if (accessToken) {
+      try {
+        agentIdToRevoke = verifyAgentTokenClaims(accessToken).sub;
+      } catch {
+        // Continue clearing cookies even if the access token cannot be read.
+      }
+    }
+  }
+  if (agentIdToRevoke) {
+    try {
+      await revokeAllRefreshSessions(agentIdToRevoke);
+    } catch {
+      // Cookie clearing is still authoritative for this browser.
     }
   }
 

@@ -109,4 +109,27 @@ describe('browser session persistence', () => {
     expect(localStorageMock.getItem('apiKey')).toBeNull();
     expect(localStorageMock.getItem('agentId')).toBeNull();
   });
+
+  it('does not refresh while logout is in flight', async () => {
+    localStorageMock.setItem(SESSION_MARKER_KEY, JSON.stringify({ seenAt: Date.now() }));
+    let resolveLogout: (response: Response) => void = () => undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/api/session') {
+        return new Promise<Response>(resolve => {
+          resolveLogout = resolve;
+        });
+      }
+      return Promise.resolve(jsonResponse({ authenticated: true }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const logout = destroyBrowserSession();
+    const state = await fetchBrowserSessionState();
+    resolveLogout(jsonResponse({ success: true }));
+    await logout;
+
+    expect(state.state).toBe('signed_out');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/session/refresh', expect.anything());
+  });
 });

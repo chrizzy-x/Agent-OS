@@ -2,8 +2,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createAgentToken } from '../../src/auth/agent-identity.js';
 import { mockSupabase } from '../setup.js';
-import { DELETE, GET } from '../../app/api/session/route.js';
 import { POST as issueToken } from '../../app/api/session/token/route.js';
+
+const browserSessionMocks = vi.hoisted(() => ({
+  findRefreshSessionByToken: vi.fn(),
+  revokeRefreshSession: vi.fn(),
+  revokeAllRefreshSessions: vi.fn(),
+}));
+
+vi.mock('../../src/auth/browser-sessions.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/auth/browser-sessions.js')>('../../src/auth/browser-sessions.js');
+  return {
+    ...actual,
+    findRefreshSessionByToken: browserSessionMocks.findRefreshSessionByToken,
+    revokeRefreshSession: browserSessionMocks.revokeRefreshSession,
+    revokeAllRefreshSessions: browserSessionMocks.revokeAllRefreshSessions,
+  };
+});
+
+import { DELETE, GET } from '../../app/api/session/route.js';
 
 describe('session routes', () => {
   beforeEach(() => {
@@ -17,6 +34,9 @@ describe('session routes', () => {
         error: null,
       }),
     });
+    browserSessionMocks.findRefreshSessionByToken.mockResolvedValue(null);
+    browserSessionMocks.revokeRefreshSession.mockResolvedValue(undefined);
+    browserSessionMocks.revokeAllRefreshSessions.mockResolvedValue(undefined);
   });
 
   it('returns 401 and clears the cookie when no session is present', async () => {
@@ -89,5 +109,24 @@ describe('session routes', () => {
     expect(body.success).toBe(true);
     expect(response.headers.get('set-cookie')).toContain('agent_session=');
     expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  it('revokes all refresh sessions for the signed out account', async () => {
+    browserSessionMocks.findRefreshSessionByToken.mockResolvedValue({
+      id: 'refresh-1',
+      agentId: 'agent-1',
+    });
+    const request = new NextRequest('http://localhost/api/session', {
+      method: 'DELETE',
+      headers: {
+        Cookie: 'agent_refresh=selector.secret',
+      },
+    });
+
+    const response = await DELETE(request);
+
+    expect(response.status).toBe(200);
+    expect(browserSessionMocks.revokeRefreshSession).toHaveBeenCalledWith({ agentId: 'agent-1', sessionId: 'refresh-1' });
+    expect(browserSessionMocks.revokeAllRefreshSessions).toHaveBeenCalledWith('agent-1');
   });
 });

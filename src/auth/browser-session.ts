@@ -25,6 +25,15 @@ export interface BrowserTokenCredentials {
 
 const KNOWN_SESSION_KEY = 'agentos.browserSessionSeen';
 const KNOWN_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 120;
+let logoutRefreshBlockedUntil = 0;
+
+function blockRefreshForLogout(ms: number): void {
+  logoutRefreshBlockedUntil = Math.max(logoutRefreshBlockedUntil, Date.now() + ms);
+}
+
+function isLogoutRefreshBlocked(): boolean {
+  return Date.now() < logoutRefreshBlockedUntil;
+}
 
 function readStorage(storage: Storage | undefined, key: string): string | null {
   try {
@@ -93,6 +102,7 @@ function hasKnownBrowserSession(): boolean {
 }
 
 async function refreshBrowserSession(): Promise<boolean> {
+  if (isLogoutRefreshBlocked()) return false;
   const response = await fetch('/api/session/refresh', {
     method: 'POST',
     cache: 'no-store',
@@ -132,6 +142,11 @@ async function readBrowserSession(optional = true): Promise<BrowserSessionState>
 }
 
 export async function fetchBrowserSessionState(): Promise<BrowserSessionState> {
+  if (isLogoutRefreshBlocked()) {
+    clearLegacyBrowserAuth();
+    forgetBrowserSession();
+    return { state: 'signed_out', session: null };
+  }
   const current = await readBrowserSession(true);
   if (current.state === 'active') return current;
 
@@ -184,9 +199,16 @@ export async function fetchWithBrowserSession(input: RequestInfo | URL, init?: R
 }
 
 export async function destroyBrowserSession(): Promise<void> {
-  await fetch('/api/session', { method: 'DELETE', credentials: 'include' });
+  blockRefreshForLogout(15_000);
   clearLegacyBrowserAuth();
   forgetBrowserSession();
+  try {
+    await fetch('/api/session', { method: 'DELETE', credentials: 'include' });
+  } finally {
+    clearLegacyBrowserAuth();
+    forgetBrowserSession();
+    blockRefreshForLogout(2_000);
+  }
 }
 
 export async function issueBrowserToken(): Promise<BrowserTokenCredentials> {
