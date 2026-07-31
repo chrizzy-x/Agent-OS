@@ -355,6 +355,10 @@ async function resolveMcpRoutePreview(reference: string | null): Promise<{
   };
 }
 
+function isUuidReference(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 async function findSkillRecord(reference: string): Promise<{ id: string; name: string; slug: string } | null> {
   const supabase = getSupabaseAdmin();
   const needle = reference.trim();
@@ -363,7 +367,7 @@ async function findSkillRecord(reference: string): Promise<{ id: string; name: s
   const exact = await supabase
     .from('skills')
     .select('id,name,slug')
-    .or(`slug.eq.${needle},id.eq.${needle}`)
+    .eq(isUuidReference(needle) ? 'id' : 'slug', needle)
     .limit(1)
     .maybeSingle();
 

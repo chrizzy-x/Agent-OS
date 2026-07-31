@@ -180,6 +180,60 @@ describe('POST /api/studio/intent', () => {
     );
   });
 
+  it('resolves non-UUID Skill slugs before approval-backed Studio install', async () => {
+    const token = createAgentToken('agent-1', { expiresIn: '1h' });
+    const eq = vi.fn((_column: string, _value: string) => chain);
+    const chain = {
+      select: vi.fn(() => chain),
+      eq,
+      order: vi.fn(() => chain),
+      limit: vi.fn(() => chain),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: { id: 'skill-1', name: 'Proof Normalizer', slug: 'proof-normalizer-token' },
+        error: null,
+      }),
+      ilike: vi.fn(() => chain),
+    };
+    intentRouteMocks.getSupabaseAdmin.mockReturnValue({
+      from: vi.fn((table: string) => table === 'skills'
+        ? chain
+        : {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { tier: 'enterprise', metadata: { plan: 'enterprise_plus' } },
+            error: null,
+          }),
+          order: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+        }),
+    });
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: 'install skill proof-normalizer-token',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+      }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.kind).toBe('approval_required');
+    expect(body.reply).toBe('Install skill Proof Normalizer?');
+    expect(eq).toHaveBeenCalledWith('slug', 'proof-normalizer-token');
+    expect(intentRouteMocks.confirmTokenSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^studio:confirm:/),
+      1800,
+      expect.stringContaining('"type":"skill_install"'),
+    );
+  });
+
   it('creates the private app after approval', async () => {
     intentRouteMocks.confirmTokenGet.mockResolvedValue(JSON.stringify({
       type: 'app_create',
