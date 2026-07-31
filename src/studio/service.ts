@@ -3,10 +3,10 @@ import jwt from 'jsonwebtoken';
 import { getPublicAppUrl } from '../config/env.js';
 import { listUniversalMcpTools, executeUniversalToolCall } from '../mcp/registry.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
-import { getRedisClient, agentKey } from '../storage/redis.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
 import { runInstalledSkill } from '../skills/service.js';
 import { STUDIO_COMMAND_DEFINITIONS } from './catalog.js';
+import { tokenDel, tokenGet, tokenSet } from './confirm-tokens.js';
 import type { StudioCommandResponse, StudioPreview } from './types.js';
 import type { AgentContext } from '../auth/permissions.js';
 import { ValidationError, NotFoundError, PermissionError } from '../utils/errors.js';
@@ -390,8 +390,8 @@ export function isMutatingStudioCommand(parsed: ParsedStudioCommand): boolean {
 async function createStudioConfirmToken(agentId: string, command: string, advancedMode: boolean): Promise<string> {
   const nonce = crypto.randomUUID();
   const commandHash = sha256(normalizeCommandForSigning(command, advancedMode));
-  const key = agentKey('studio-confirm', agentId, nonce);
-  await getRedisClient().set(key, commandHash, 'EX', STUDIO_CONFIRM_TTL_SECONDS);
+  const key = `studio:command-confirm:${agentId}:${nonce}`;
+  await tokenSet(key, STUDIO_CONFIRM_TTL_SECONDS, commandHash);
 
   return jwt.sign(
     { sub: agentId, scope: 'studio-confirm', nonce, hash: commandHash },
@@ -423,13 +423,13 @@ export async function consumeStudioConfirmToken(params: {
     throw new ValidationError('Studio confirmation token does not match the current command');
   }
 
-  const key = agentKey('studio-confirm', params.agentId, payload.nonce);
-  const cachedHash = await getRedisClient().get(key);
+  const key = `studio:command-confirm:${params.agentId}:${payload.nonce}`;
+  const cachedHash = await tokenGet(key);
   if (!cachedHash || cachedHash !== expectedHash) {
     throw new ValidationError('Studio confirmation token has already been used or expired');
   }
 
-  await getRedisClient().del(key);
+  await tokenDel(key);
 }
 
 function formatJson(value: unknown): string {
@@ -509,6 +509,7 @@ await mcp('db_create_table', {
 async function resolveSkill(reference: string): Promise<SkillSummary> {
   const supabase = getSupabaseAdmin();
   const skillFields = 'id,slug,name,category,description,pricing_model,total_installs,published';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(reference);
 
   const bySlug = await supabase
     .from('skills')
@@ -519,6 +520,10 @@ async function resolveSkill(reference: string): Promise<SkillSummary> {
 
   if (!bySlug.error && bySlug.data) {
     return bySlug.data as SkillSummary;
+  }
+
+  if (!isUuid) {
+    throw new NotFoundError(`Published skill '${reference}' was not found`);
   }
 
   const byId = await supabase

@@ -41,8 +41,10 @@ describe('studio service', () => {
     ]);
     studioMocks.executeUniversalToolCall.mockResolvedValue({ ok: true });
     studioMocks.runInstalledSkill.mockResolvedValue({ result: { ok: true }, executionTimeMs: 42, stderr: '' });
+    (mockRedis as typeof mockRedis & { setex: ReturnType<typeof vi.fn> }).setex = vi.fn().mockResolvedValue('OK');
     mockRedis.set.mockResolvedValue('OK');
     mockRedis.get.mockReset();
+    mockRedis.get.mockResolvedValue(null);
     mockRedis.del.mockResolvedValue(1);
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === 'skill_installations') {
@@ -139,6 +141,20 @@ describe('studio service', () => {
       command: 'skills install pdf-processor',
       confirmToken: preview.confirmToken,
     })).rejects.toThrow(ValidationError);
+  });
+
+  it('previews Skill execution when Redis token storage is unavailable', async () => {
+    (mockRedis as typeof mockRedis & { setex: ReturnType<typeof vi.fn> }).setex.mockRejectedValueOnce(new Error('redis unavailable'));
+    mockRedis.get.mockRejectedValueOnce(new Error('redis unavailable'));
+
+    const preview = await executeStudioCommand({
+      agentContext: { agentId: 'agent-1', allowedDomains: [], quotas: { storageQuotaBytes: 1, memoryQuotaBytes: 1, rateLimitPerMin: 1 } },
+      command: 'skills use pdf-processor read_pdf --json {"file_path":"/docs/report.pdf"}',
+    });
+
+    expect(preview.kind).toBe('preview');
+    expect(preview.confirmToken).toBeTruthy();
+    expect(preview.summary).toContain('Previewing skill execution');
   });
 
   it('requires advanced mode before sandbox commands can be previewed', async () => {
