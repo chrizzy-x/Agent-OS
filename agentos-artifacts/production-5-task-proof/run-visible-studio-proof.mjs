@@ -8,8 +8,8 @@ const runId = new Date().toISOString().replace(/[:.]/g, '-');
 const runToken = crypto.randomBytes(5).toString('hex');
 const root = path.resolve('agentos-artifacts', 'production-5-task-proof', `visible-${runId}`);
 const videoDir = path.join(root, 'video');
-const openaiKey = process.env.E2E_OPENAI_API_KEY || '';
-const anthropicKey = process.env.E2E_ANTHROPIC_API_KEY || '';
+const openaiKey = process.env.E2E_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
+const anthropicKey = process.env.E2E_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const dbUrl = process.env.DATABASE_URL || process.env.DIRECT_URL || '';
@@ -327,6 +327,54 @@ async function selectNative(page) {
   await panel(page, ['Selected intelligence: Native Super AgentOS']);
 }
 
+async function connectIntelligenceThroughVault(page, params) {
+  await page.goto(`${BASE_URL}/vault`, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => undefined);
+  await panel(page, [
+    'Vault connection setup through UI',
+    `Adding ${params.label} / ${params.modelId}`,
+  ]);
+  await page.getByRole('tab', { name: 'Connected Intelligence' }).click();
+  await page.getByLabel('Connection vendor').selectOption(params.vendor);
+  await page.getByLabel('Exact model').selectOption(params.modelId);
+  await page.getByPlaceholder('Connection name').fill(params.displayName);
+  await page.getByPlaceholder('Credential value').fill(params.credential);
+  await page.waitForFunction(() => {
+    const button = Array.from(document.querySelectorAll('button'))
+      .find(node => node.textContent?.includes('Validate and connect'));
+    return button instanceof HTMLButtonElement && !button.disabled;
+  }, null, { timeout: 15000 });
+  const connectResponse = page.waitForResponse(response => {
+    try {
+      const url = new URL(response.url());
+      return url.pathname === '/api/intelligence/connections' && response.request().method() === 'POST';
+    } catch {
+      return false;
+    }
+  }, { timeout: 120000 });
+  await page.getByRole('button', { name: 'Validate and connect' }).click();
+  const response = await connectResponse;
+  const payload = await response.json().catch(() => ({}));
+  evidence.api.push({
+    at: new Date().toISOString(),
+    label: `vault-ui-connect-${params.vendor}`,
+    path: '/api/intelligence/connections',
+    status: response.status(),
+    ok: response.ok(),
+    body: redactDeep({
+      connectionStatus: payload?.connection?.status,
+      selectedModelId: payload?.connection?.selectedModelId,
+      validated: payload?.validated,
+      error: payload?.error,
+    }),
+  });
+  await page.waitForFunction(() => /Connection validated|Connection saved as invalid/i.test(document.body.innerText), null, { timeout: 90000 });
+  if (!response.ok() || payload?.connection?.status !== 'active') {
+    throw new Error(`${params.label} connection failed: ${response.status()}`);
+  }
+  return payload.connection;
+}
+
 async function api(page, pathName, { method = 'GET', body, label = pathName, sensitive = false } = {}) {
   const result = await page.evaluate(async ({ pathName, method, body }) => {
     const response = await fetch(pathName, {
@@ -364,7 +412,8 @@ async function dbVerify(ids) {
         sessions: ['select id,title,updated_at from studio_sessions where owner_agent_id = $1 order by updated_at desc limit 5', [ids.agentId]],
         messages: ['select role,left(content,160) as content,created_at from studio_messages where owner_agent_id = $1 order by created_at desc limit 12', [ids.agentId]],
         app: ['select slug,visibility,published,created_at from agent_apps where slug = $1 limit 1', [ids.appSlug]],
-        skill: ['select slug,published,visibility,created_at from skills where slug = $1 limit 1', [ids.skillSlug]],
+        skill: ['select id,slug,published,visibility,created_at from skills where slug = $1 limit 1', [ids.skillSlug]],
+        skillUsage: ['select su.capability_name,su.success,su.created_at,s.slug from skill_usage su join skills s on s.id = su.skill_id where su.agent_id = $1 and s.slug = $2 order by su.created_at desc limit 5', [ids.agentId, ids.skillSlug]],
         primeAgents: ['select id,name,status,created_at from private_subagents where owner_agent_id = $1 order by created_at desc limit 5', [ids.agentId]],
         memory: ['select key,namespace_type,visibility,updated_at from agent_memory_store where owner_agent_id = $1 and key like $2 order by updated_at desc limit 10', [ids.agentId, `%${runToken}%`]],
         executions: ['select source_type,status,title,created_at from agent_executions where agent_id = $1 order by created_at desc limit 15', [ids.agentId]],
@@ -400,7 +449,8 @@ async function dbVerify(ids) {
       app: await supabaseSelectWithFallback('agent_apps', [
         { slug: `eq.${ids.appSlug}`, select: 'slug,visibility,published,created_at', limit: '1' },
       ]),
-      skill: await supabaseSelect('skills', { slug: `eq.${ids.skillSlug}`, select: 'slug,published,visibility,created_at', limit: '1' }),
+      skill: await supabaseSelect('skills', { slug: `eq.${ids.skillSlug}`, select: 'id,slug,published,visibility,created_at', limit: '1' }),
+      skillUsage: await supabaseSelect('skill_usage', { agent_id: `eq.${ids.agentId}`, select: 'skill_id,capability_name,success,created_at', order: 'created_at.desc', limit: '8' }),
       primeAgents: await supabaseSelect('private_subagents', { owner_agent_id: `eq.${ids.agentId}`, select: 'id,name,status,created_at', order: 'created_at.desc', limit: '5' }),
       memory: await supabaseSelectWithFallback('agent_memory_store', [
         { owner_agent_id: `eq.${ids.agentId}`, key: `like.*${runToken}*`, select: 'key,namespace_type,visibility,updated_at', order: 'updated_at.desc', limit: '10' },
@@ -446,7 +496,7 @@ async function main() {
   page.on('console', msg => evidence.browser.console.push(redactText(`${msg.type()}: ${msg.text()}`).slice(0, 500)));
   page.on('pageerror', error => evidence.browser.pageErrors.push(redactText(error.stack || error.message).slice(0, 1000)));
 
-  const ids = { agentId: null, workspaceId: null, projectId: null, sessionId: null, appSlug: null, skillSlug: `proof-normalizer-${runToken}` };
+  const ids = { agentId: null, workspaceId: null, projectId: null, sessionId: null, appSlug: null, skillSlug: 'text-utils' };
   const email = `agentos-proof-${runToken}@example.com`;
   const password = `ProofPass-${runToken}!9`;
   const appName = `Quick Proof App ${runToken}`;
@@ -542,29 +592,22 @@ async function main() {
       agentId: ids.agentId,
     });
 
-    await panel(page, ['Vault-backed connection setup', 'Creating user-owned OpenAI and Anthropic connections']);
-    const openaiConnection = openaiKey
-      ? await api(page, '/api/intelligence/connections', {
-        method: 'POST',
-        label: 'connect-openai',
-        sensitive: true,
-        body: { workspaceId: ids.workspaceId, vendor: 'openai', credential: openaiKey, modelId: 'gpt-5-mini', displayName: `OpenAI proof ${runToken}` },
-      })
-      : { ok: false, status: 0, json: { error: 'missing OpenAI key' } };
-    const anthropicConnection = anthropicKey
-      ? await api(page, '/api/intelligence/connections', {
-        method: 'POST',
-        label: 'connect-anthropic',
-        sensitive: true,
-        body: { workspaceId: ids.workspaceId, vendor: 'anthropic', credential: anthropicKey, modelId: 'claude-sonnet-4-6', displayName: `Anthropic proof ${runToken}` },
-      })
-      : { ok: false, status: 0, json: { error: 'missing Anthropic key' } };
-    if (!openaiConnection.ok || openaiConnection.json?.connection?.status !== 'active') {
-      throw new Error(`OpenAI connection failed: ${openaiConnection.status}`);
-    }
-    if (!anthropicConnection.ok || anthropicConnection.json?.connection?.status !== 'active') {
-      throw new Error(`Anthropic connection failed: ${anthropicConnection.status}`);
-    }
+    if (!openaiKey) throw new Error('OpenAI proof credential is missing from local env.');
+    if (!anthropicKey) throw new Error('Anthropic proof credential is missing from local env.');
+    await connectIntelligenceThroughVault(page, {
+      vendor: 'openai',
+      label: 'OpenAI',
+      modelId: 'gpt-5-mini',
+      displayName: `OpenAI proof ${runToken}`,
+      credential: openaiKey,
+    });
+    await connectIntelligenceThroughVault(page, {
+      vendor: 'anthropic',
+      label: 'Anthropic',
+      modelId: 'claude-sonnet-4-6',
+      displayName: `Anthropic proof ${runToken}`,
+      credential: anthropicKey,
+    });
 
     await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await waitForStudio(page);
@@ -618,36 +661,16 @@ async function main() {
     });
 
     await openStudio(page, ids.sessionId);
-    await panel(page, ['Task 4 setup', 'Creating a private published Skill record for visible install/use']);
-    const createSkill = await api(page, '/api/skills', {
-      method: 'POST',
-      label: 'create-proof-skill',
-      body: {
-        name: `Proof Normalizer ${runToken}`,
-        slug: ids.skillSlug,
-        category: 'Utilities',
-        description: 'Normalizes proof text in a live backend execution.',
-        publish_state: 'published',
-        visibility: 'private',
-        capabilities: [{ name: 'normalize', description: 'Normalize text to a compact slug.' }],
-        source_code: "class Skill { normalize(params) { const text = String(params.text || ''); return { normalized: text.trim().toLowerCase().replace(/\\s+/g, '-'), length: text.length }; } }",
-        pricing_model: 'free',
-        price_per_call: 0,
-      },
-    });
-    if (!createSkill.ok) throw new Error(`Skill setup failed: ${createSkill.status}`);
-
-    await openStudio(page, ids.sessionId);
     await sendForApproval(page, `install app dezypher`, /deZypher|Install app/i);
     const installApp = await approve(page, { expectText: /Installed app|Installed/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `open app dezypher`, /Open app/i);
     const openApp = await approve(page, { expectText: /Opened app/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
-    await sendForApproval(page, `install skill ${ids.skillSlug}`, /Install skill|Previewing install|Proof Normalizer/i);
+    await sendForApproval(page, `install skill ${ids.skillSlug}`, /Install skill|Previewing install|Text Utilities/i);
     const installSkill = await approve(page, { expectText: /Installed/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
-    await sendForApproval(page, `skills use ${ids.skillSlug} normalize --json {"text":"Quick App Proof ${runToken}"}`, /normalize|Quick App Proof|skills\.use/i);
+    await sendForApproval(page, `skills use ${ids.skillSlug} slugify --json {"text":"Quick App Proof ${runToken}"}`, /slugify|Quick App Proof|skills\.use/i);
     const runSkill = await approve(page, { expectText: /Executed/i, sessionId: ids.sessionId });
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `mcp call agentos mem_set --json {"key":"proof.${runToken}.mcp","value":"mcp ok ${runToken}"}`, /proof|mcp|mem_set/i);
