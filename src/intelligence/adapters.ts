@@ -213,14 +213,16 @@ function parseGeminiText(payload: unknown): string {
 }
 
 function openAIBody(params: ConnectedIntelligenceRequest & { modelId: string }, stream: boolean): Record<string, unknown> {
-  return {
-    model: cleanModelId(params.modelId),
+  const model = cleanModelId(params.modelId);
+  const body: Record<string, unknown> = {
+    model,
     instructions: params.system,
     input: params.user,
     max_output_tokens: clampMaxTokens(params.maxTokens),
-    temperature: params.temperature ?? 0.2,
     stream,
   };
+  if (!model.startsWith('gpt-5')) body.temperature = params.temperature ?? 0.2;
+  return body;
 }
 
 function anthropicBody(params: ConnectedIntelligenceRequest & { modelId: string }, stream: boolean): Record<string, unknown> {

@@ -94,6 +94,7 @@ describe('connected intelligence adapters', () => {
       headers: expect.objectContaining({ authorization: 'Bearer vault-owned-secret' }),
       signal: expect.any(AbortSignal),
     }));
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).not.toHaveProperty('temperature');
     expect(adapterMocks.cleanupRuntimeSecretGrant).toHaveBeenCalledWith({
       ownerAgentId: 'agent-1',
       grantId: 'grant-1',
