@@ -635,14 +635,19 @@ async function main() {
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `install app dezypher`, /deZypher|Install app/i);
     const installApp = await approve(page, { expectText: /Installed app|Installed/i });
+    await openStudio(page, ids.sessionId);
     await sendForApproval(page, `open app dezypher`, /Open app/i);
     const openApp = await approve(page, { expectText: /Opened app/i });
+    await openStudio(page, ids.sessionId);
     await sendForApproval(page, `install skill ${ids.skillSlug}`, /Install skill|Previewing install|Proof Normalizer/i);
     const installSkill = await approve(page, { expectText: /Installed/i });
+    await openStudio(page, ids.sessionId);
     await sendForApproval(page, `skills use ${ids.skillSlug} normalize --json {"text":"Quick App Proof ${runToken}"}`, /normalize|Quick App Proof|skills\.use/i);
     const runSkill = await approve(page, { expectText: /Executed/i });
+    await openStudio(page, ids.sessionId);
     await sendForApproval(page, `mcp call agentos mem_set --json {"key":"proof.${runToken}.mcp","value":"mcp ok ${runToken}"}`, /proof|mcp|mem_set/i);
     const mcpSet = await approve(page, { expectText: /Executed/i });
+    await openStudio(page, ids.sessionId);
     const mcpGet = await sendAndWait(page,
       `tool run agentos.mem_get --json {"key":"proof.${runToken}.mcp"}`,
       { expect: /mcp ok|Executed/i, panelLines: ['Task 4: Universal MCP verification'] });
