@@ -128,6 +128,58 @@ describe('POST /api/studio/intent', () => {
     expect(intentRouteMocks.publishAgentApp).not.toHaveBeenCalled();
   });
 
+  it('requires approval before Studio runs a Prime Agent command', async () => {
+    const from = vi.fn((table: string) => {
+      if (table === 'private_subagents') {
+        const chain = {
+          select: vi.fn(() => chain),
+          eq: vi.fn(() => chain),
+          order: vi.fn(() => chain),
+          limit: vi.fn(() => Promise.resolve({
+            data: [{ id: 'prime-agent-1', name: 'Proof Runner', workspace_id: 'workspace-1', project_id: null }],
+            error: null,
+          })),
+        };
+        return chain;
+      }
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { tier: 'enterprise', metadata: { plan: 'enterprise_plus' } },
+          error: null,
+        }),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+      };
+    });
+    intentRouteMocks.getSupabaseAdmin.mockReturnValue({ from });
+    const token = createAgentToken('agent-1', { expiresIn: '1h' });
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: 'Run Prime Agent Proof Runner with tools list',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+      }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.kind).toBe('approval_required');
+    expect(body.reply).toBe('Run Prime Agent Proof Runner with "tools list"?');
+    expect(intentRouteMocks.confirmTokenSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^studio:confirm:/),
+      1800,
+      expect.stringContaining('"type":"prime_agent_command"'),
+    );
+  });
+
   it('creates the private app after approval', async () => {
     intentRouteMocks.confirmTokenGet.mockResolvedValue(JSON.stringify({
       type: 'app_create',

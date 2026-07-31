@@ -85,6 +85,15 @@ type PendingStudioAction = PendingRuntimeRecord & (
     intent: AgentOSIntent;
   }
   | {
+    type: 'prime_agent_command';
+    agentId: string;
+    sessionId: string | null;
+    primeAgentId: string;
+    primeAgentName: string;
+    command: string;
+    intent: AgentOSIntent;
+  }
+  | {
     type: 'app_install';
     agentId: string;
     sessionId: string | null;
@@ -224,6 +233,14 @@ function parseProjectAction(message: string, projectId: string | null): { kind: 
 function parseCreateAgentName(message: string): string | null {
   const match = message.match(/\bcreate(?:\s+private)?\s+(?:prime\s+agent|agent|subagent)\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+}
+
+function parsePrimeAgentRunRequest(message: string): { reference: string; command: string } | null {
+  const match = message.match(/\b(?:run|execute|test)\s+(?:prime\s+agent|agent|subagent)\s+(.+?)\s+(?:with|using|to)\s+(.+)$/i);
+  const reference = match?.[1]?.trim();
+  const command = match?.[2]?.trim();
+  if (!reference || !command) return null;
+  return { reference, command };
 }
 
 function appSlugFromName(name: string): string {
@@ -400,6 +417,30 @@ async function findWorkflowRecord(params: {
   if (!params.reference) return rows[0] ?? null;
   const needle = params.reference.toLowerCase();
   return rows.find(row => row.name.toLowerCase().includes(needle) || row.id === params.reference) ?? null;
+}
+
+async function findPrimeAgentRecord(params: {
+  agentId: string;
+  workspaceId: string | null;
+  projectId: string | null;
+  reference: string;
+}): Promise<{ id: string; name: string } | null> {
+  let query = getSupabaseAdmin()
+    .from('private_subagents')
+    .select('id,name,workspace_id,project_id,updated_at')
+    .eq('owner_agent_id', params.agentId)
+    .eq('status', 'active');
+
+  if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
+  if (params.projectId) query = query.eq('project_id', params.projectId);
+
+  query = query.order('updated_at', { ascending: false }).limit(20);
+  const { data, error } = await query;
+  if (error) return null;
+  const needle = params.reference.toLowerCase();
+  return ((data ?? []) as Array<Record<string, unknown>>)
+    .map(row => ({ id: String(row.id), name: String(row.name ?? 'Prime Agent') }))
+    .find(row => row.id === params.reference || row.name.toLowerCase().includes(needle)) ?? null;
 }
 
 async function findAppRecord(params: {
@@ -716,6 +757,30 @@ async function executePendingAction(params: {
       executed: true,
       subagent,
       navigateTo: `/agents/${subagent.id}`,
+    });
+  }
+
+  if (params.pending.type === 'prime_agent_command') {
+    const result = await executeStudioCommand({
+      agentContext: withStudioDefaultAllowedDomains({ ...params.ctx, studioSessionId: params.pending.sessionId }),
+      command: params.pending.command,
+    });
+    const reply = `Prime Agent ${params.pending.primeAgentName} completed: ${formatExecutionReply(result.summary, result.result)}`;
+    await recordStudioTurn(params.ctx.agentId, params.pending.sessionId, 'assistant', reply);
+    await recordStudioEvent(params.ctx.agentId, params.pending.sessionId, 'task_completed', {
+      action: 'prime_agent_command',
+      primeAgentId: params.pending.primeAgentId,
+      command: params.pending.command,
+      summary: result.summary,
+    });
+    return NextResponse.json({
+      kind: result.kind === 'result' ? 'completed' : 'chat_reply',
+      intent: params.pending.intent,
+      statusText: result.kind === 'result' ? 'Done.' : 'Completed.',
+      reply,
+      executed: result.kind === 'result',
+      result: sanitizeOutput(result.result),
+      warnings: result.warnings?.map(warning => sanitizeErrorMessage(warning)),
     });
   }
 
@@ -1406,6 +1471,47 @@ export async function POST(req: NextRequest) {
         intent,
       } satisfies PendingStudioAction));
       const reply = `Create Prime Agent ${createAgentName}?`;
+      await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+      return NextResponse.json({
+        kind: 'approval_required',
+        intent,
+        statusText: 'Approval required.',
+        reply,
+        confirmToken,
+      });
+    }
+
+    const primeAgentRun = parsePrimeAgentRunRequest(trimmedMessage);
+    if (primeAgentRun) {
+      const primeAgent = await findPrimeAgentRecord({
+        agentId: ctx.agentId,
+        workspaceId,
+        projectId,
+        reference: primeAgentRun.reference,
+      });
+      if (!primeAgent) {
+        const reply = `No Prime Agent matched "${primeAgentRun.reference}".`;
+        await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
+        return NextResponse.json({
+          kind: 'unsupported',
+          intent,
+          statusText: 'Unavailable.',
+          reply,
+          code: 'NOT_FOUND',
+        }, { status: 404 });
+      }
+      const confirmToken = crypto.randomUUID().replace(/-/g, '');
+      await tokenSet(`studio:confirm:${confirmToken}`, TOKEN_TTL_SECONDS, JSON.stringify({
+        type: 'prime_agent_command',
+        agentId: ctx.agentId,
+        ...requestRuntimeRecord,
+        sessionId,
+        primeAgentId: primeAgent.id,
+        primeAgentName: primeAgent.name,
+        command: primeAgentRun.command,
+        intent,
+      } satisfies PendingStudioAction));
+      const reply = `Run Prime Agent ${primeAgent.name} with "${primeAgentRun.command}"?`;
       await recordStudioTurn(ctx.agentId, sessionId, 'assistant', reply);
       return NextResponse.json({
         kind: 'approval_required',
