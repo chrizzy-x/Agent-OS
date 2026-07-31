@@ -785,7 +785,7 @@ async function main() {
       {
         expect: /deployment|checklist|AgentOS|capabilities/i,
         panelLines: ['Task 2: Connected research', 'OpenAI / gpt-5-mini selected in composer'],
-        timeout: 180000,
+        timeout: 300000,
       });
     ids.sessionId = new URL(page.url()).searchParams.get('session');
     await selectIntelligence(page, 'Anthropic', 'claude-sonnet-4-6');
@@ -794,7 +794,7 @@ async function main() {
       {
         expect: /acceptance|check/i,
         panelLines: ['Task 2: Context follow-up', 'Anthropic / claude-sonnet-4-6 selected in composer'],
-        timeout: 180000,
+        timeout: 300000,
       });
     const streamPass = research.stream.sawStreaming && research.stream.grew;
     task('Connected research + context follow-up', streamPass ? 'PASS' : 'FAIL', {

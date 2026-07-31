@@ -1037,6 +1037,16 @@ export function StudioProvider(props: {
       streamAbortRef.current = null;
       activeStreamExecutionIdRef.current = null;
       setActiveExecutionId(null);
+      setStreamingStatus(null);
+      setSending(false);
+      setMessageExecutionOverrideId(null);
+      setMessageIntelligenceOverrideState(null);
+      setComposerAttachments([]);
+      setComposerInvocations([]);
+      settleStream();
+      if (streamSettledRef.current === streamSettled) {
+        streamSettledRef.current = null;
+      }
       try {
         if (finalState === 'complete') {
           await loadSessionBundle(executionSession.id);
@@ -1054,17 +1064,6 @@ export function StudioProvider(props: {
         await refreshRuntimeState();
       } catch {
         // Keep the completed client response when background refresh fails.
-      } finally {
-        setStreamingStatus(null);
-        setSending(false);
-        setMessageExecutionOverrideId(null);
-        setMessageIntelligenceOverrideState(null);
-        setComposerAttachments([]);
-        setComposerInvocations([]);
-        settleStream();
-        if (streamSettledRef.current === streamSettled) {
-          streamSettledRef.current = null;
-        }
       }
     }
   }, [applicationShell.syncContext, composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, messageIntelligenceOverride, mode, refreshRuntimeState, replaceCurrentHistoryRoute, requestedProjectId, router, sending, session, sessionIntelligenceSelection]);
