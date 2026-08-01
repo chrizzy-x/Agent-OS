@@ -12,6 +12,15 @@ export const runtime = 'nodejs';
 
 const FULL_SKILL_SELECT = 'id,name,slug,version,author_id,author_name,workspace_id,category,description,long_description,icon,icon_url,banner_url,video_url,website_url,documentation_url,support_url,privacy_policy_url,terms_url,release_notes,changelog,gallery,media_assets,compatible_apps,compatible_agents,compatible_workflows,rejection_reason,spotlight,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,permissions_required,required_secrets,required_skills,optional_skills,compatibility,examples,inputs,outputs,dependencies,publish_state,published,verified,visibility,created_at,updated_at';
 const LEGACY_SKILL_SELECT = 'id,name,slug,version,author_id,author_name,category,description,icon,pricing_model,price_per_call,free_tier_calls,total_installs,total_calls,rating,review_count,primitives_required,capabilities,tags,published,verified,created_at,updated_at';
+const SKILL_QUERY_TIMEOUT_MS = 4_000;
+
+function applySkillQueryTimeout<T>(query: T): T {
+  const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
+  return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
+    ? abortable.abortSignal(timeout(SKILL_QUERY_TIMEOUT_MS))
+    : query;
+}
 
 function isMissingColumnError(error: unknown): boolean {
   const value = error as { code?: unknown; message?: unknown } | null | undefined;
@@ -42,7 +51,7 @@ async function fetchSupabaseSkills(params: {
   const runQuery = async (selectClause: string) => {
     let query = supabase
       .from('skills')
-      .select(selectClause, { count: 'exact' });
+      .select(selectClause);
 
     if (params.authorId) query = query.eq('author_id', params.authorId);
     if (params.category && params.category !== 'all' && params.category !== 'All') query = query.ilike('category', params.category);
@@ -51,14 +60,14 @@ async function fetchSupabaseSkills(params: {
     if (params.sort === 'recent') query = query.order('created_at', { ascending: false });
     if (params.sort === 'rating') query = query.order('rating', { ascending: false });
 
-    return query.range(offset, offset + params.limit - 1);
+    return applySkillQueryTimeout(query.range(offset, offset + params.limit - 1));
   };
 
   const primary = await runQuery(FULL_SKILL_SELECT);
   if (!primary.error) {
     return {
       data: (primary.data ?? []) as unknown as Array<Record<string, unknown>>,
-      count: primary.count ?? 0,
+      count: primary.count ?? primary.data?.length ?? 0,
     };
   }
   if (!isMissingColumnError(primary.error)) {
@@ -73,7 +82,7 @@ async function fetchSupabaseSkills(params: {
       workspace_id: null,
       visibility: skill.published === true ? 'public' : 'private',
     })),
-    count: legacy.count ?? 0,
+    count: legacy.count ?? legacy.data?.length ?? 0,
   };
 }
 
