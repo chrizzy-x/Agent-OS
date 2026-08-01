@@ -10,14 +10,16 @@ import {
   getCookieRequestContext,
 } from '@/src/auth/session-cookie';
 import { findAccountById } from '@/src/auth/agent-store';
-import { reconcileAgentOSProvisioning } from '@/src/agentos/provisioning';
 
 export const runtime = 'nodejs';
 
-function readAccessToken(headers: Headers | globalThis.Headers): string | undefined {
+function readAccessToken(headers: Headers | globalThis.Headers): { token: string; source: 'bearer' | 'cookie' } | null {
   const authHeader = headers.get('authorization') ?? headers.get('Authorization') ?? undefined;
   const cookieHeader = headers.get('cookie') ?? headers.get('Cookie') ?? undefined;
-  return extractBearerToken(authHeader) ?? extractAccessTokenFromCookie(cookieHeader);
+  const bearerToken = extractBearerToken(authHeader);
+  if (bearerToken) return { token: bearerToken, source: 'bearer' };
+  const cookieToken = extractAccessTokenFromCookie(cookieHeader);
+  return cookieToken ? { token: cookieToken, source: 'cookie' } : null;
 }
 
 function readRefreshToken(headers: Headers | globalThis.Headers): string | undefined {
@@ -26,11 +28,6 @@ function readRefreshToken(headers: Headers | globalThis.Headers): string | undef
 }
 
 async function buildSessionPayload(agentId: string, token: string) {
-  try {
-    await reconcileAgentOSProvisioning(agentId);
-  } catch {
-    // Session checks should continue even if reconciliation fails.
-  }
   const claims = verifyAgentTokenClaims(token);
   const agent = await findAccountById(agentId);
   const plan = getPlanDescriptor(agent?.metadata.plan);
@@ -61,8 +58,10 @@ export async function GET(request: NextRequest) {
   const accessToken = readAccessToken(request.headers);
   if (accessToken) {
     try {
-      const context = await verifyAgentTokenWithTier(accessToken);
-      return NextResponse.json(await buildSessionPayload(context.agentId, accessToken));
+      const agentId = accessToken.source === 'bearer'
+        ? (await verifyAgentTokenWithTier(accessToken.token)).agentId
+        : verifyAgentTokenClaims(accessToken.token).sub;
+      return NextResponse.json(await buildSessionPayload(agentId, accessToken.token));
     } catch {
       // Continue to refresh session fallback.
     }
@@ -111,7 +110,7 @@ export async function DELETE(request: NextRequest) {
     const accessToken = readAccessToken(request.headers);
     if (accessToken) {
       try {
-        agentIdToRevoke = verifyAgentTokenClaims(accessToken).sub;
+        agentIdToRevoke = verifyAgentTokenClaims(accessToken.token).sub;
       } catch {
         // Continue clearing cookies even if the access token cannot be read.
       }
