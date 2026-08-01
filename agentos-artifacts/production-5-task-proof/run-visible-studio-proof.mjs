@@ -388,6 +388,10 @@ async function approve(page, opts = {}) {
   return { approvalText, text: await latestAssistantText(page).catch(() => '') };
 }
 
+function cssAttributeValue(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 async function selectIntelligence(page, label, modelId, detailText = '') {
   await waitForConnectedIntelligence(page);
   await page.getByLabel('Choose intelligence').click();
@@ -399,7 +403,7 @@ async function selectIntelligence(page, label, modelId, detailText = '') {
       return modelMatches && labelMatches;
     });
   }, { modelId, detailText }, { timeout: 30000 });
-  const options = page.locator('.nl-intelligence-option').filter({ hasText: modelId });
+  const options = page.locator(`.nl-intelligence-option[data-intelligence-model-id="${cssAttributeValue(modelId)}"]`);
   const option = detailText ? options.filter({ hasText: detailText }).first() : options.first();
   if (await option.count() === 0) {
     const menuText = await page.locator('.nl-intelligence-menu').innerText().catch(() => '');
