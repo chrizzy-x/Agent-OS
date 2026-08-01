@@ -98,6 +98,20 @@ function workspaceCapabilityReply(context: Awaited<ReturnType<typeof buildWorksp
   ].join('\n\n');
 }
 
+function safeStreamFailureReply(error: unknown): string {
+  const message = sanitizeErrorMessage(error);
+  if (/\b401\b|unauthori[sz]ed|authentication/i.test(message)) {
+    return 'The selected connected intelligence credential was rejected by the provider. Update or revoke that Vault connection, then retry. No silent fallback was used.';
+  }
+  if (/\b429\b|rate limit/i.test(message)) {
+    return 'The selected connected intelligence provider rate-limited this request. Retry later or select another configured connection. No silent fallback was used.';
+  }
+  if (/\btimeout\b|timed out|cancelled/i.test(message)) {
+    return 'The selected connected intelligence request timed out or was cancelled before completion. Retry or select another configured connection. No silent fallback was used.';
+  }
+  return 'I could not complete that response. Try again.';
+}
+
 async function loadConversationNames(params: {
   agentId: string;
   sessionId: string | null;
@@ -671,7 +685,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (error) {
         const stopped = request.signal.aborted || (error instanceof DOMException && error.name === 'AbortError');
-        const safeReply = stopped ? partialReply : 'I could not complete that response. Try again.';
+        const safeReply = stopped ? partialReply : safeStreamFailureReply(error);
 
         if (stopped && agentId && sessionId && userPersisted && partialReply.trim() && !assistantPersisted) {
           await appendStudioMessage({
@@ -679,6 +693,13 @@ export async function POST(request: NextRequest) {
             sessionId,
             role: 'assistant',
             content: partialReply,
+          }).catch(() => undefined);
+        } else if (!stopped && agentId && sessionId && userPersisted && !assistantPersisted) {
+          await appendStudioMessage({
+            ownerAgentId: agentId,
+            sessionId,
+            role: 'assistant',
+            content: safeReply,
           }).catch(() => undefined);
         }
 

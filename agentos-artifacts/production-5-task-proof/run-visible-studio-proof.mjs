@@ -380,21 +380,22 @@ async function approve(page, opts = {}) {
   return { approvalText, text: await latestAssistantText(page).catch(() => '') };
 }
 
-async function selectIntelligence(page, label, modelId) {
+async function selectIntelligence(page, label, modelId, detailText = '') {
   await waitForStudio(page);
   await page.getByLabel('Choose intelligence').click();
   await page.locator('.nl-intelligence-menu').waitFor({ state: 'visible', timeout: 30000 });
-  const option = page.locator('.nl-intelligence-option').filter({ hasText: modelId }).first();
+  const options = page.locator('.nl-intelligence-option').filter({ hasText: modelId });
+  const option = detailText ? options.filter({ hasText: detailText }).first() : options.first();
   if (await option.count() === 0) {
     const menuText = await page.locator('.nl-intelligence-menu').innerText().catch(() => '');
-    throw new Error(`${label} model ${modelId} is not selectable. Menu: ${menuText.slice(0, 1000)}`);
+    throw new Error(`${label} model ${modelId}${detailText ? ` on ${detailText}` : ''} is not selectable. Menu: ${menuText.slice(0, 1000)}`);
   }
   await option.locator('button[role="menuitemradio"]').first().click();
   await page.waitForFunction(model => {
     const trigger = document.querySelector('button[aria-label="Choose intelligence"]');
     return Boolean(trigger?.textContent?.includes(model));
   }, modelId, { timeout: 30000 });
-  await panel(page, [`Selected intelligence: ${label} / ${modelId}`]);
+  await panel(page, [`Selected intelligence: ${label} / ${modelId}${detailText ? ` / ${detailText}` : ''}`]);
 }
 
 async function selectNative(page) {
@@ -819,12 +820,24 @@ async function main() {
     });
     }
 
+    let anthropicSelectionLabel = '';
+
     if (reusableAccount) {
       const existingConnections = await api(page, `/api/intelligence/connections?workspaceId=${encodeURIComponent(ids.workspaceId)}&includeRevoked=1`, { label: 'existing-vault-connections' });
       const connections = Array.isArray(existingConnections.json?.connections) ? existingConnections.json.connections : [];
       const hasOpenAI = connections.some(item => item.vendor === 'openai' && item.status === 'active' && item.selectedModelId === 'gpt-5-mini');
       const hasAnthropic = connections.some(item => item.vendor === 'anthropic' && item.status === 'active' && item.selectedModelId === 'claude-sonnet-4-6');
       if (!hasOpenAI || !hasAnthropic) throw new Error('Reusable proof account does not have both required active Vault-backed connections.');
+      if (anthropicKey) {
+        const connection = await connectIntelligenceThroughVault(page, {
+          vendor: 'anthropic',
+          label: 'Anthropic',
+          modelId: 'claude-sonnet-4-6',
+          displayName: `Anthropic proof ${runToken}`,
+          credential: anthropicKey,
+        });
+        anthropicSelectionLabel = connection.displayName ?? `Anthropic proof ${runToken}`;
+      }
     } else {
       if (!openaiKey) throw new Error('OpenAI proof credential is missing from local env.');
       if (!anthropicKey) throw new Error('Anthropic proof credential is missing from local env.');
@@ -835,13 +848,14 @@ async function main() {
         displayName: `OpenAI proof ${runToken}`,
         credential: openaiKey,
       });
-      await connectIntelligenceThroughVault(page, {
+      const anthropicConnection = await connectIntelligenceThroughVault(page, {
         vendor: 'anthropic',
         label: 'Anthropic',
         modelId: 'claude-sonnet-4-6',
         displayName: `Anthropic proof ${runToken}`,
         credential: anthropicKey,
       });
+      anthropicSelectionLabel = anthropicConnection.displayName ?? `Anthropic proof ${runToken}`;
     }
 
     await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
@@ -855,7 +869,7 @@ async function main() {
         timeout: 300000,
       });
     ids.sessionId = new URL(page.url()).searchParams.get('session');
-    await selectIntelligence(page, 'Anthropic', 'claude-sonnet-4-6');
+    await selectIntelligence(page, 'Anthropic', 'claude-sonnet-4-6', anthropicSelectionLabel);
     const followup = await sendAndWait(page,
       `Use the previous answer in this same session. Return only the top three acceptance checks for the deployment checklist app. Proof token ${runToken}.`,
       {

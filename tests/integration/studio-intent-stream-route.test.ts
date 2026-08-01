@@ -339,6 +339,38 @@ describe('POST /api/studio/intent/stream', () => {
     expect(mocks.streamStudioChatReply).not.toHaveBeenCalled();
   });
 
+  it('surfaces selected connected credential rejection without native fallback', async () => {
+    mocks.runSingleIntelligenceRuntime.mockRejectedValue(new Error('Connected intelligence request failed with status 401.'));
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Use selected model',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        projectId: 'project-1',
+        intelligenceSelection: {
+          mode: 'single',
+          connectionId: 'connection-1',
+          modelId: 'gpt-5',
+          consensusConfigurationId: null,
+          selectionSource: 'message',
+        },
+      }),
+    }));
+    const body = await response.text();
+
+    expect(body).toContain('credential was rejected by the provider');
+    expect(body).toContain('No silent fallback was used.');
+    expect(body).toContain('"status":"FAILED"');
+    expect(mocks.streamStudioChatReply).not.toHaveBeenCalled();
+    expect(mocks.appendStudioMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      role: 'assistant',
+      content: expect.stringContaining('credential was rejected by the provider'),
+    }));
+  });
+
   it('streams Standard Consensus direct conversation results without native fallback', async () => {
     const response = await POST(new NextRequest('http://localhost/api/studio/intent/stream', {
       method: 'POST',
