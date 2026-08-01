@@ -187,6 +187,14 @@ async function waitForStudio(page, timeout = 120000) {
     .waitFor({ state: 'visible', timeout });
 }
 
+async function waitForConnectedIntelligence(page, timeout = 60000) {
+  await waitForStudio(page, timeout);
+  await page.waitForFunction(() => {
+    const panel = document.querySelector('.nl-studio-panel');
+    return Number(panel?.getAttribute('data-intelligence-active-connections') ?? '0') > 0;
+  }, null, { timeout });
+}
+
 async function waitForStudioSession(page, sessionId, timeout = 120000) {
   if (!sessionId) return;
   await page.waitForFunction(id => {
@@ -381,20 +389,30 @@ async function approve(page, opts = {}) {
 }
 
 async function selectIntelligence(page, label, modelId, detailText = '') {
-  await waitForStudio(page);
+  await waitForConnectedIntelligence(page);
   await page.getByLabel('Choose intelligence').click();
   await page.locator('.nl-intelligence-menu').waitFor({ state: 'visible', timeout: 30000 });
+  await page.waitForFunction(({ modelId, detailText }) => {
+    return Array.from(document.querySelectorAll('.nl-intelligence-option')).some(node => {
+      const modelMatches = node.getAttribute('data-intelligence-model-id') === modelId;
+      const labelMatches = !detailText || node.getAttribute('data-intelligence-label') === detailText || Boolean(node.textContent?.includes(detailText));
+      return modelMatches && labelMatches;
+    });
+  }, { modelId, detailText }, { timeout: 30000 });
   const options = page.locator('.nl-intelligence-option').filter({ hasText: modelId });
   const option = detailText ? options.filter({ hasText: detailText }).first() : options.first();
   if (await option.count() === 0) {
     const menuText = await page.locator('.nl-intelligence-menu').innerText().catch(() => '');
     throw new Error(`${label} model ${modelId}${detailText ? ` on ${detailText}` : ''} is not selectable. Menu: ${menuText.slice(0, 1000)}`);
   }
+  const connectionId = await option.evaluate(node => node.getAttribute('data-intelligence-connection-id') ?? '');
   await option.locator('button[role="menuitemradio"]').first().click();
-  await page.waitForFunction(model => {
-    const trigger = document.querySelector('button[aria-label="Choose intelligence"]');
-    return Boolean(trigger?.textContent?.includes(model));
-  }, modelId, { timeout: 30000 });
+  await page.waitForFunction(({ modelId, connectionId }) => {
+    const panel = document.querySelector('.nl-studio-panel');
+    return panel?.getAttribute('data-intelligence-mode') === 'single'
+      && panel.getAttribute('data-intelligence-model') === modelId
+      && (!connectionId || panel.getAttribute('data-intelligence-connection') === connectionId);
+  }, { modelId, connectionId }, { timeout: 30000 });
   await panel(page, [`Selected intelligence: ${label} / ${modelId}${detailText ? ` / ${detailText}` : ''}`]);
 }
 
@@ -403,8 +421,9 @@ async function selectNative(page) {
   await page.getByLabel('Choose intelligence').click();
   await page.locator('.nl-intelligence-section.native button[role="menuitemradio"]').click();
   await page.waitForFunction(() => {
-    const trigger = document.querySelector('button[aria-label="Choose intelligence"]');
-    return Boolean(trigger?.textContent?.includes('Native Super AgentOS'));
+    const panel = document.querySelector('.nl-studio-panel');
+    return panel?.getAttribute('data-intelligence-mode') === 'native'
+      && panel.getAttribute('data-intelligence-model') === '';
   }, null, { timeout: 30000 });
   await panel(page, ['Selected intelligence: Native Super AgentOS']);
 }
@@ -820,14 +839,16 @@ async function main() {
     });
     }
 
+    let openaiSelectionLabel = '';
     let anthropicSelectionLabel = '';
 
     if (reusableAccount) {
       const existingConnections = await api(page, `/api/intelligence/connections?workspaceId=${encodeURIComponent(ids.workspaceId)}&includeRevoked=1`, { label: 'existing-vault-connections' });
       const connections = Array.isArray(existingConnections.json?.connections) ? existingConnections.json.connections : [];
-      const hasOpenAI = connections.some(item => item.vendor === 'openai' && item.status === 'active' && item.selectedModelId === 'gpt-5-mini');
-      const hasAnthropic = connections.some(item => item.vendor === 'anthropic' && item.status === 'active' && item.selectedModelId === 'claude-sonnet-4-6');
-      if (!hasOpenAI || !hasAnthropic) throw new Error('Reusable proof account does not have both required active Vault-backed connections.');
+      const openaiConnection = connections.find(item => item.vendor === 'openai' && item.status === 'active' && item.selectedModelId === 'gpt-5-mini');
+      const anthropicConnection = connections.find(item => item.vendor === 'anthropic' && item.status === 'active' && item.selectedModelId === 'claude-sonnet-4-6');
+      openaiSelectionLabel = openaiConnection?.displayName ?? '';
+      if (!openaiConnection || !anthropicConnection) throw new Error('Reusable proof account does not have both required active Vault-backed connections.');
       if (anthropicKey) {
         const connection = await connectIntelligenceThroughVault(page, {
           vendor: 'anthropic',
@@ -848,6 +869,7 @@ async function main() {
         displayName: `OpenAI proof ${runToken}`,
         credential: openaiKey,
       });
+      openaiSelectionLabel = `OpenAI proof ${runToken}`;
       const anthropicConnection = await connectIntelligenceThroughVault(page, {
         vendor: 'anthropic',
         label: 'Anthropic',
@@ -860,7 +882,7 @@ async function main() {
 
     await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await waitForStudio(page);
-    await selectIntelligence(page, 'OpenAI', 'gpt-5-mini');
+    await selectIntelligence(page, 'OpenAI', 'gpt-5-mini', openaiSelectionLabel);
     const research = await sendAndWait(page,
       `Research a quick app idea for AgentOS builders: a tiny deployment checklist app. Compare user need, risks, required AgentOS capabilities, and a 3-step implementation path. Proof token ${runToken}.`,
       {

@@ -174,6 +174,7 @@ export default function NLStudioPanel() {
   const selectedIntelligenceDescription = selectedIntelligenceSelection.mode === 'single'
     ? `${selectedConnection?.displayName ?? 'Connected intelligence'} using ${selectedIntelligenceSelection.modelId ?? selectedConnection?.selectedModelId ?? 'selected model'}`
     : 'Native AgentOS runtime';
+  const activeIntelligenceConnectionCount = intelligenceConnections.filter(connection => connection.status === 'active').length;
   const normalizedChatSearch = chatSearchQuery.trim().toLowerCase();
   const lastUserMessage = useMemo(
     () => [...messages].reverse().find(message => message.role === 'user')?.content ?? '',
@@ -393,6 +394,10 @@ export default function NLStudioPanel() {
       data-active-conversation={activeConversation ? 'true' : 'false'}
       data-session-id={session?.id ?? ''}
       data-studio-loading={loading ? 'true' : 'false'}
+      data-intelligence-mode={selectedIntelligenceSelection.mode}
+      data-intelligence-model={selectedIntelligenceSelection.modelId ?? ''}
+      data-intelligence-connection={selectedIntelligenceSelection.connectionId ?? ''}
+      data-intelligence-active-connections={activeIntelligenceConnectionCount}
     >
       <main className="nl-conversation" ref={conversationRef} aria-live="polite">
         {!activeConversation ? (
@@ -597,7 +602,12 @@ export default function NLStudioPanel() {
                 <div className="nl-intelligence-menu" role="menu" aria-label="Intelligence options">
                   <div className="nl-intelligence-section native">
                     <div className="nl-intelligence-section-label">Native</div>
-                    <div className="nl-intelligence-option">
+                    <div
+                      className="nl-intelligence-option"
+                      data-intelligence-mode={nativeIntelligenceOption.selection.mode}
+                      data-intelligence-model-id=""
+                      data-intelligence-connection-id=""
+                    >
                       <button
                         type="button"
                         role="menuitemradio"
@@ -627,7 +637,15 @@ export default function NLStudioPanel() {
                     <div key={vendor} className="nl-intelligence-section">
                       <div className="nl-intelligence-section-label">{VENDOR_LABELS[vendor] ?? vendor}</div>
                       {options.map(option => (
-                        <div key={option.key} className="nl-intelligence-option">
+                        <div
+                          key={option.key}
+                          className="nl-intelligence-option"
+                          data-intelligence-mode={option.selection.mode}
+                          data-intelligence-vendor={vendor}
+                          data-intelligence-model-id={option.selection.modelId ?? ''}
+                          data-intelligence-connection-id={option.selection.connectionId ?? ''}
+                          data-intelligence-label={option.detail}
+                        >
                           <button
                             type="button"
                             role="menuitemradio"

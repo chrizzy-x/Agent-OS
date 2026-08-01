@@ -378,6 +378,8 @@ export function StudioProvider(props: {
   const [intelligenceConnections, setIntelligenceConnections] = useState<IntelligenceConnectionRecord[]>([]);
   const [sessionIntelligenceSelection, setSessionIntelligenceSelectionState] = useState<IntelligenceSelection>(() => createNativeIntelligenceSelection('native_default'));
   const [messageIntelligenceOverride, setMessageIntelligenceOverrideState] = useState<IntelligenceSelection | null>(null);
+  const sessionIntelligenceSelectionRef = useRef(sessionIntelligenceSelection);
+  const messageIntelligenceOverrideRef = useRef(messageIntelligenceOverride);
   const [mode, setModeState] = useState<StudioMode>(requestedMode);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
@@ -415,6 +417,19 @@ export function StudioProvider(props: {
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamSettledRef = useRef<Promise<void> | null>(null);
   const activeStreamExecutionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    sessionIntelligenceSelectionRef.current = sessionIntelligenceSelection;
+  }, [sessionIntelligenceSelection]);
+
+  useEffect(() => {
+    messageIntelligenceOverrideRef.current = messageIntelligenceOverride;
+  }, [messageIntelligenceOverride]);
+
+  const setMessageIntelligenceOverride = useCallback((selection: IntelligenceSelection | null) => {
+    messageIntelligenceOverrideRef.current = selection;
+    setMessageIntelligenceOverrideState(selection);
+  }, []);
 
   const currentWorkspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? requestedWorkspaceId ?? workspaces[0]?.id ?? null;
   const activeSubagent = useMemo(
@@ -490,7 +505,10 @@ export function StudioProvider(props: {
     setSessionExecutionTargetId(typeof payload.sessionExecutionTargetId === 'string' ? payload.sessionExecutionTargetId : 'super_agentos');
     setMessageExecutionOverrideId(null);
     setIntelligenceConnections((payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[]);
-    setSessionIntelligenceSelectionState(normalizeIntelligenceSelection(payload.sessionIntelligenceSelection, 'session'));
+    const bootstrapIntelligenceSelection = normalizeIntelligenceSelection(payload.sessionIntelligenceSelection, 'session');
+    sessionIntelligenceSelectionRef.current = bootstrapIntelligenceSelection;
+    messageIntelligenceOverrideRef.current = null;
+    setSessionIntelligenceSelectionState(bootstrapIntelligenceSelection);
     setMessageIntelligenceOverrideState(null);
     setVaultSecrets((payload.vaultSecrets ?? []) as VaultSecretRecord[]);
     setInstalledSkills(mapInstalledSkills(payload.installedSkills));
@@ -543,7 +561,10 @@ export function StudioProvider(props: {
     if (payload.messages) setMessages(payload.messages.map(message => ({ ...message, state: 'complete' })));
     if (payload.events) setEvents(payload.events);
     if (payload.lineage) setLineage(payload.lineage);
-    setSessionIntelligenceSelectionState(normalizeIntelligenceSelection(payload.intelligenceSelection ?? payload.session?.state?.intelligenceSelection, 'session'));
+    const nextIntelligenceSelection = normalizeIntelligenceSelection(payload.intelligenceSelection ?? payload.session?.state?.intelligenceSelection, 'session');
+    sessionIntelligenceSelectionRef.current = nextIntelligenceSelection;
+    messageIntelligenceOverrideRef.current = null;
+    setSessionIntelligenceSelectionState(nextIntelligenceSelection);
     setMessageIntelligenceOverrideState(null);
     return payload;
   }, []);
@@ -695,6 +716,8 @@ export function StudioProvider(props: {
   const setSessionIntelligenceSelection = useCallback(async (selection: IntelligenceSelection) => {
     const nextSelection = normalizeIntelligenceSelection(selection, 'session');
     const previousSelection = sessionIntelligenceSelection;
+    sessionIntelligenceSelectionRef.current = nextSelection;
+    messageIntelligenceOverrideRef.current = null;
     setSessionIntelligenceSelectionState(nextSelection);
     setMessageIntelligenceOverrideState(null);
     if (!session?.id) return;
@@ -704,11 +727,13 @@ export function StudioProvider(props: {
       body: JSON.stringify({ intelligenceSelection: nextSelection }),
     });
     if (!response.response.ok) {
+      sessionIntelligenceSelectionRef.current = previousSelection;
       setSessionIntelligenceSelectionState(previousSelection);
       return;
     }
     const payload = await response.response.json().catch(() => ({})) as { intelligenceSelection?: IntelligenceSelection };
     const persistedSelection = normalizeIntelligenceSelection(payload.intelligenceSelection ?? nextSelection, 'session');
+    sessionIntelligenceSelectionRef.current = persistedSelection;
     setSessionIntelligenceSelectionState(persistedSelection);
     setSession(current => current ? { ...current, state: { ...(current.state ?? {}), intelligenceSelection: persistedSelection } } : current);
     setSessions(current => current.map(item => item.id === session.id ? { ...item, state: { ...(item.state ?? {}), intelligenceSelection: persistedSelection } } : item));
@@ -716,6 +741,7 @@ export function StudioProvider(props: {
 
   const createSession = useCallback(async (options?: { linkedSubagentId?: string | null; title?: string }) => {
     if (!currentWorkspaceId) return null;
+    const currentIntelligenceSelection = sessionIntelligenceSelectionRef.current;
     const response = await fetchWithBrowserSession('/api/studio/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -724,8 +750,8 @@ export function StudioProvider(props: {
         projectId: currentProject?.id ?? requestedProjectId,
         linkedSubagentId: options?.linkedSubagentId ?? null,
         title: options?.title ?? 'New chat',
-        initialState: { intelligenceSelection: sessionIntelligenceSelection },
-        intelligenceSelection: sessionIntelligenceSelection,
+        initialState: { intelligenceSelection: currentIntelligenceSelection },
+        intelligenceSelection: currentIntelligenceSelection,
       }),
     });
     if (!response.response.ok) return null;
@@ -736,7 +762,7 @@ export function StudioProvider(props: {
     setSidebarOpen(false);
     pushRoute(mode, payload.session.id, payload.session.projectId ?? currentProject?.id ?? null);
     return payload.session;
-  }, [currentProject?.id, currentWorkspaceId, mode, pushRoute, requestedProjectId, sessionIntelligenceSelection]);
+  }, [currentProject?.id, currentWorkspaceId, mode, pushRoute, requestedProjectId]);
 
   const focusSubagent = useCallback(async (subagentId: string) => {
     const target = subagents.find(item => item.id === subagentId);
@@ -869,6 +895,8 @@ export function StudioProvider(props: {
     let finalState: StudioMessageRecord['state'] = 'complete';
     let receivedTerminalEvent = false;
     let failureMessage = RESPONSE_FAILURE_MESSAGE;
+    const activeSessionIntelligenceSelection = sessionIntelligenceSelectionRef.current;
+    const activeMessageIntelligenceOverride = messageIntelligenceOverrideRef.current;
 
     streamAbortRef.current = abortController;
     streamSettledRef.current = streamSettled;
@@ -901,8 +929,8 @@ export function StudioProvider(props: {
             workspaceId: currentWorkspaceId,
             projectId: currentProject?.id ?? requestedProjectId,
             title: nextMessage.slice(0, 80) || 'New chat',
-            initialState: { intelligenceSelection: sessionIntelligenceSelection },
-            intelligenceSelection: sessionIntelligenceSelection,
+            initialState: { intelligenceSelection: activeSessionIntelligenceSelection },
+            intelligenceSelection: activeSessionIntelligenceSelection,
           }),
           signal: abortController.signal,
         });
@@ -956,9 +984,9 @@ export function StudioProvider(props: {
           sessionId: executionSession.id,
           workspaceId: executionSession.workspaceId,
           projectId: currentProject?.id,
-          intelligenceSelection: messageIntelligenceOverride ?? sessionIntelligenceSelection,
-          sessionIntelligenceSelection,
-          messageIntelligenceOverride,
+          intelligenceSelection: activeMessageIntelligenceOverride ?? activeSessionIntelligenceSelection,
+          sessionIntelligenceSelection: activeSessionIntelligenceSelection,
+          messageIntelligenceOverride: activeMessageIntelligenceOverride,
           attachments: composerAttachments,
           invocations: composerInvocations,
         }),
@@ -1033,7 +1061,7 @@ export function StudioProvider(props: {
       setStreamingStatus(null);
       setSending(false);
       setMessageExecutionOverrideId(null);
-      setMessageIntelligenceOverrideState(null);
+      setMessageIntelligenceOverride(null);
       setComposerAttachments([]);
       setComposerInvocations([]);
       settleStream();
@@ -1063,7 +1091,7 @@ export function StudioProvider(props: {
         // Keep the completed client response when background refresh fails.
       }
     }
-  }, [applicationShell.syncContext, composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, messageIntelligenceOverride, mode, refreshRuntimeState, replaceCurrentHistoryRoute, requestedProjectId, router, sending, session, sessionIntelligenceSelection]);
+  }, [applicationShell.syncContext, composerAttachments, composerInvocations, composerValue, currentProject?.id, currentWorkspaceId, loadSessionBundle, mode, refreshRuntimeState, replaceCurrentHistoryRoute, requestedProjectId, router, sending, session, setMessageIntelligenceOverride]);
 
   const stopGeneration = useCallback(async () => {
     const abortController = streamAbortRef.current;
@@ -1102,10 +1130,10 @@ export function StudioProvider(props: {
     setComposerAttachments([]);
     setComposerInvocations([]);
     setPendingApproval(null);
-    setMessageIntelligenceOverrideState(null);
+    setMessageIntelligenceOverride(null);
     setSidebarOpen(false);
     pushRoute('nl', null, currentProject?.id ?? null);
-  }, [currentProject?.id, pushRoute, stopGeneration]);
+  }, [currentProject?.id, pushRoute, setMessageIntelligenceOverride, stopGeneration]);
 
   const selectSession = useCallback(async (sessionId: string) => {
     if (streamAbortRef.current || streamSettledRef.current) await stopGeneration();
@@ -1284,7 +1312,7 @@ export function StudioProvider(props: {
     sessionIntelligenceSelection,
     messageIntelligenceOverride,
     setSessionIntelligenceSelection,
-    setMessageIntelligenceOverride: setMessageIntelligenceOverrideState,
+    setMessageIntelligenceOverride,
     mode,
     setMode,
     sidebarOpen,
@@ -1371,6 +1399,7 @@ export function StudioProvider(props: {
     sessionIntelligenceSelection,
     messageIntelligenceOverride,
     setSessionIntelligenceSelection,
+    setMessageIntelligenceOverride,
     closeContext,
     composerAttachments,
     composerInvocations,
