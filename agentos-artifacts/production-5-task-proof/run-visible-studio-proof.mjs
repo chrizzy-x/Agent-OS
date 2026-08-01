@@ -185,6 +185,14 @@ async function waitForStudio(page, timeout = 120000) {
     .waitFor({ state: 'visible', timeout });
 }
 
+async function waitForStudioSession(page, sessionId, timeout = 120000) {
+  if (!sessionId) return;
+  await page.waitForFunction(id => {
+    return document.querySelector('.nl-studio-panel')?.getAttribute('data-session-id') === id;
+  }, sessionId, { timeout });
+  await waitForAssistantHistorySettled(page, 15000);
+}
+
 async function openStudio(page, sessionId = null) {
   const session = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
   const url = `${BASE_URL}/studio?mode=nl${session}`;
@@ -193,6 +201,7 @@ async function openStudio(page, sessionId = null) {
     try {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
       await waitForStudio(page, 120000);
+      await waitForStudioSession(page, sessionId, 120000);
       return;
     } catch (error) {
       lastError = error;
@@ -866,8 +875,7 @@ async function main() {
     await approve(page, { waitForUrl: /\/appstore\//, timeout: 90000 });
     ids.appSlug = new URL(page.url()).pathname.split('/').filter(Boolean).pop();
     const appVisible = await page.locator('body').innerText({ timeout: 30000 });
-    await page.goto(`${BASE_URL}/studio?mode=nl&session=${encodeURIComponent(ids.sessionId ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await waitForStudio(page);
+    await openStudio(page, ids.sessionId);
     await selectNative(page);
     const paper = await sendAndWait(page,
       `Paper trade without Derek: place one sandbox buy order for BTC or a stock and return the order id. If AgentOS lacks a connected non-Derek broker, say the missing capability and do not create an order. Proof token ${runToken}.`,
@@ -915,8 +923,7 @@ async function main() {
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `Create Prime Agent ${primeAgentName}`, /Create Prime Agent/i);
     await approve(page, { timeout: 90000 });
-    await page.goto(`${BASE_URL}/studio?mode=nl&session=${encodeURIComponent(ids.sessionId ?? '')}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await waitForStudio(page);
+    await openStudio(page, ids.sessionId);
     await sendForApproval(page, `Run Prime Agent ${primeAgentName} with tools list`, /Run Prime Agent/i);
     const runPrimeAgent = await approve(page, { expectText: /Prime Agent|Loaded|tools/i, timeout: 120000, sessionId: ids.sessionId });
     await sendForApproval(page, `Create Primeflow ${primeflowName}`, /Create a native AgentOS Primeflow|Create Primeflow/i);

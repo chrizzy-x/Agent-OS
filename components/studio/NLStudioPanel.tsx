@@ -387,7 +387,11 @@ export default function NLStudioPanel() {
     }, {});
 
   return (
-    <div className={`nl-studio-panel${activeConversation ? ' active' : ' empty'}`} data-active-conversation={activeConversation ? 'true' : 'false'}>
+    <div
+      className={`nl-studio-panel${activeConversation ? ' active' : ' empty'}`}
+      data-active-conversation={activeConversation ? 'true' : 'false'}
+      data-session-id={session?.id ?? ''}
+    >
       <main className="nl-conversation" ref={conversationRef} aria-live="polite">
         {!activeConversation ? (
           <section className="nl-empty-state">
