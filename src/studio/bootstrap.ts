@@ -62,6 +62,38 @@ function activeConnectionsByVendor(connections: IntelligenceConnectionRecord[]):
     }, {});
 }
 
+const BOOTSTRAP_OPTION_TIMEOUT_MS = 8000;
+const BOOTSTRAP_PROVISIONING_TIMEOUT_MS = 5000;
+
+function withBootstrapTimeout<T>(
+  promise: Promise<T>,
+  fallback: T,
+  timeoutMs = BOOTSTRAP_OPTION_TIMEOUT_MS,
+): Promise<T> {
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve(fallback);
+    }, timeoutMs);
+    promise.then(
+      value => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
 function selectionUsable(selection: IntelligenceSelection, connections: IntelligenceConnectionRecord[]): boolean {
   if (selection.mode !== 'single') return true;
   return connections.some(connection =>
@@ -148,17 +180,30 @@ export async function buildStudioBootstrap(params: {
   workspaceId?: string | null;
   mode?: StudioMode;
 }): Promise<Record<string, unknown>> {
-  await reconcileAgentOSProvisioning(params.ownerAgentId).catch(() => undefined);
+  await withBootstrapTimeout(
+    reconcileAgentOSProvisioning(params.ownerAgentId),
+    null,
+    BOOTSTRAP_PROVISIONING_TIMEOUT_MS,
+  );
   const providerStatus = getStudioProviderStatus();
 
   const [workspaces, sessions] = await Promise.all([
-    listWorkspaces(params.ownerAgentId).catch(() => [] as Awaited<ReturnType<typeof listWorkspaces>>),
-    listStudioSessions(params.ownerAgentId, { status: 'active' }).catch(() => [] as StudioSessionRecord[]),
+    withBootstrapTimeout(
+      listWorkspaces(params.ownerAgentId),
+      [] as Awaited<ReturnType<typeof listWorkspaces>>,
+    ),
+    withBootstrapTimeout(
+      listStudioSessions(params.ownerAgentId, { status: 'active' }),
+      [] as StudioSessionRecord[],
+    ),
   ]);
 
   const defaultWorkspace = workspaces.find(workspace => workspace.id === params.workspaceId)
     ?? workspaces[0]
-    ?? await resolveDefaultWorkspaceForAgent(params.ownerAgentId);
+    ?? await withBootstrapTimeout<Awaited<ReturnType<typeof resolveDefaultWorkspaceForAgent>> | null>(
+      resolveDefaultWorkspaceForAgent(params.ownerAgentId),
+      null,
+    );
   const scopedSessions = params.workspaceId
     ? sessions.filter(session => session.workspaceId === params.workspaceId)
     : sessions;
@@ -171,11 +216,14 @@ export async function buildStudioBootstrap(params: {
   let session: StudioSessionRecord | null = preferredSession;
   let draftProjectId: string | null = null;
   if (!session && defaultWorkspace) {
-    const project = await resolveProjectForWorkspace({
-      ownerAgentId: params.ownerAgentId,
-      workspaceId: defaultWorkspace.id,
-      projectId: params.projectId ?? null,
-    }).catch(() => null);
+    const project = await withBootstrapTimeout<Awaited<ReturnType<typeof resolveProjectForWorkspace>> | null>(
+      resolveProjectForWorkspace({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: defaultWorkspace.id,
+        projectId: params.projectId ?? null,
+      }),
+      null,
+    );
     if (!project) {
       return {
         syncContract: buildStudioSyncContract(),
@@ -207,20 +255,26 @@ export async function buildStudioBootstrap(params: {
     if (params.mode === 'nl' && !params.sessionId) {
       session = null;
     } else {
-      const superAgent = await getSuperAgentProfile({
-        ownerAgentId: params.ownerAgentId,
-        workspaceId: defaultWorkspace.id,
-      }).catch(() => null);
-      session = await createStudioSession({
-        ownerAgentId: params.ownerAgentId,
-        workspaceId: defaultWorkspace.id,
-        projectId: project.id,
-        superAgentId: superAgent?.id ?? null,
-        title: project.name === 'Default Project' ? 'New Studio Session' : `${project.name} session`,
-        initialState: {
-          mode: studioModeInitialState(params.mode ?? 'nl'),
-        },
-      }).catch(() => null);
+      const superAgent = await withBootstrapTimeout<Awaited<ReturnType<typeof getSuperAgentProfile>> | null>(
+        getSuperAgentProfile({
+          ownerAgentId: params.ownerAgentId,
+          workspaceId: defaultWorkspace.id,
+        }),
+        null,
+      );
+      session = await withBootstrapTimeout<StudioSessionRecord | null>(
+        createStudioSession({
+          ownerAgentId: params.ownerAgentId,
+          workspaceId: defaultWorkspace.id,
+          projectId: project.id,
+          superAgentId: superAgent?.id ?? null,
+          title: project.name === 'Default Project' ? 'New Studio Session' : `${project.name} session`,
+          initialState: {
+            mode: studioModeInitialState(params.mode ?? 'nl'),
+          },
+        }),
+        null,
+      );
       if (session) {
         sessions.unshift(session);
       }
@@ -229,11 +283,14 @@ export async function buildStudioBootstrap(params: {
 
   const activeWorkspaceId = session?.workspaceId ?? defaultWorkspace?.id ?? null;
   const projects = activeWorkspaceId
-    ? await listProjects({
-      ownerAgentId: params.ownerAgentId,
-      workspaceId: activeWorkspaceId,
-      status: 'all',
-    }).catch(() => [])
+    ? await withBootstrapTimeout(
+      listProjects({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: activeWorkspaceId,
+        status: 'all',
+      }),
+      [] as Awaited<ReturnType<typeof listProjects>>,
+    )
     : [];
   const activeProjectId = session?.projectId ?? params.projectId ?? draftProjectId ?? projects[0]?.id ?? null;
   const activeProject = activeProjectId
@@ -241,48 +298,63 @@ export async function buildStudioBootstrap(params: {
     : null;
 
   const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries, workspaceAssets, intelligenceConnections, workspaceDefault] = await Promise.all([
-    session ? getStudioSessionBundle(params.ownerAgentId, session.id).catch(() => null) : Promise.resolve(null),
-    loadBootstrapWorkflows(params.ownerAgentId).catch(() => []),
-    loadBootstrapInstalledSkills(params.ownerAgentId).catch(() => []),
-    listInstalledAgentApps(params.ownerAgentId).catch(() => []),
+    session ? withBootstrapTimeout<Awaited<ReturnType<typeof getStudioSessionBundle>> | null>(
+      getStudioSessionBundle(params.ownerAgentId, session.id),
+      null,
+    ) : Promise.resolve(null),
+    withBootstrapTimeout(loadBootstrapWorkflows(params.ownerAgentId), []),
+    withBootstrapTimeout(loadBootstrapInstalledSkills(params.ownerAgentId), []),
+    withBootstrapTimeout(listInstalledAgentApps(params.ownerAgentId), []),
     activeWorkspaceId
-      ? listVaultSecrets({ ownerAgentId: params.ownerAgentId, workspaceId: activeWorkspaceId }).catch(() => ({ secrets: [] }))
-      : Promise.resolve({ secrets: [] }),
+      ? withBootstrapTimeout(
+        listVaultSecrets({ ownerAgentId: params.ownerAgentId, workspaceId: activeWorkspaceId }),
+        { vaultId: '', workspaceId: activeWorkspaceId, secrets: [] } as Awaited<ReturnType<typeof listVaultSecrets>>,
+      )
+      : Promise.resolve({ vaultId: '', workspaceId: '', secrets: [] } as Awaited<ReturnType<typeof listVaultSecrets>>),
     activeWorkspaceId
-      ? getSuperAgentProfile({ ownerAgentId: params.ownerAgentId, workspaceId: activeWorkspaceId }).catch(() => null)
+      ? withBootstrapTimeout<Awaited<ReturnType<typeof getSuperAgentProfile>> | null>(
+        getSuperAgentProfile({ ownerAgentId: params.ownerAgentId, workspaceId: activeWorkspaceId }),
+        null,
+      )
       : Promise.resolve(null),
     activeProjectId
-      ? listProjectFiles({ ownerAgentId: params.ownerAgentId, projectId: activeProjectId }).catch(() => [])
+      ? withBootstrapTimeout(listProjectFiles({ ownerAgentId: params.ownerAgentId, projectId: activeProjectId }), [])
       : Promise.resolve([]),
-    listAccessibleSubagents({
+    withBootstrapTimeout(listAccessibleSubagents({
       viewerAgentId: params.ownerAgentId,
       workspaceIds: activeWorkspaceId ? [activeWorkspaceId] : undefined,
       workspaceId: activeWorkspaceId,
       projectId: activeProjectId,
-    }).catch(() => []),
-    listAccessibleMemoryEntries({
+    }), []),
+    withBootstrapTimeout(listAccessibleMemoryEntries({
       viewerAgentId: params.ownerAgentId,
       workspaceId: activeWorkspaceId ?? undefined,
       limit: 24,
-    }).catch(() => []),
-    listLibrary({
+    }), []),
+    withBootstrapTimeout(listLibrary({
       ownerAgentId: params.ownerAgentId,
       workspaceId: activeWorkspaceId,
       projectId: activeProjectId,
       limit: 120,
-    }).catch(() => ({ items: [], groups: {}, summary: {} })),
+    }), { items: [], groups: {}, summary: {} } as unknown as Awaited<ReturnType<typeof listLibrary>>),
     activeWorkspaceId
-      ? listIntelligenceConnections({
-        ownerAgentId: params.ownerAgentId,
-        workspaceId: activeWorkspaceId,
-      }).catch(() => [] as IntelligenceConnectionRecord[])
+      ? withBootstrapTimeout(
+        listIntelligenceConnections({
+          ownerAgentId: params.ownerAgentId,
+          workspaceId: activeWorkspaceId,
+        }),
+        [] as IntelligenceConnectionRecord[],
+      )
       : Promise.resolve([] as IntelligenceConnectionRecord[]),
     activeWorkspaceId
-      ? getIntelligenceDefault({
-        ownerAgentId: params.ownerAgentId,
-        workspaceId: activeWorkspaceId,
-        scope: 'workspace',
-      }).catch(() => null)
+      ? withBootstrapTimeout<Awaited<ReturnType<typeof getIntelligenceDefault>> | null>(
+        getIntelligenceDefault({
+          ownerAgentId: params.ownerAgentId,
+          workspaceId: activeWorkspaceId,
+          scope: 'workspace',
+        }),
+        null,
+      )
       : Promise.resolve(null),
   ]);
 
