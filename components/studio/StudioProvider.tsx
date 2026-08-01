@@ -857,9 +857,43 @@ export function StudioProvider(props: {
   const sendMessage = useCallback(async (message?: string) => {
     const nextMessage = (message ?? composerValue).trim();
     if (!nextMessage || sending) return;
-    let activeSession = session;
-    if (!activeSession) {
-      if (currentWorkspaceId) {
+
+    const createdAt = new Date().toISOString();
+    const assistantMessageId = `streaming-assistant-${Date.now()}`;
+    const abortController = new AbortController();
+    let settleStream: () => void = () => undefined;
+    const streamSettled = new Promise<void>(resolve => {
+      settleStream = resolve;
+    });
+    let executionSession: StudioSessionRecord | null = null;
+    let finalState: StudioMessageRecord['state'] = 'complete';
+    let receivedTerminalEvent = false;
+    let failureMessage = RESPONSE_FAILURE_MESSAGE;
+
+    streamAbortRef.current = abortController;
+    streamSettledRef.current = streamSettled;
+    activeStreamExecutionIdRef.current = null;
+    setSending(true);
+    setStreamingStatus(session ? 'Generating...' : 'Preparing chat...');
+    setPendingApproval(null);
+    setMessages(current => [...current, {
+      id: `optimistic-user-${Date.now()}`,
+      role: 'user',
+      content: nextMessage,
+      createdAt,
+      state: 'complete',
+    }, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      createdAt,
+      state: 'streaming',
+    }]);
+    setComposerValue('');
+
+    try {
+      let activeSession = session;
+      if (!activeSession && currentWorkspaceId) {
         const response = await fetchWithBrowserSession('/api/studio/sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -870,18 +904,13 @@ export function StudioProvider(props: {
             initialState: { intelligenceSelection: sessionIntelligenceSelection },
             intelligenceSelection: sessionIntelligenceSelection,
           }),
+          signal: abortController.signal,
         });
         if (!response.response.ok) {
-          setMessages(current => [...current, {
-            id: `session-error-${Date.now()}`,
-            role: 'assistant',
-            content: response.response.status === 401
-              ? 'Your browser session expired. Sign in again, then retry.'
-              : 'Chat storage is temporarily unavailable. Please retry.',
-            createdAt: new Date().toISOString(),
-            state: 'error',
-          }]);
-          return;
+          failureMessage = response.response.status === 401
+            ? 'Your browser session expired. Sign in again, then retry.'
+            : 'Chat storage is temporarily unavailable. Please retry.';
+          throw new Error('SESSION_UNAVAILABLE');
         }
         const payload = await response.response.json() as { session?: StudioSessionRecord };
         activeSession = payload.session ?? null;
@@ -913,48 +942,12 @@ export function StudioProvider(props: {
           });
         }
       }
-    }
-    if (!activeSession) {
-      setMessages(current => [...current, {
-        id: `session-error-${Date.now()}`,
-        role: 'assistant',
-        content: 'No workspace is available for this chat. Refresh Studio, then retry.',
-        createdAt: new Date().toISOString(),
-        state: 'error',
-      }]);
-      return;
-    }
-    const executionSession = activeSession;
-    setSending(true);
-    setStreamingStatus('Generating...');
-    setPendingApproval(null);
-    const assistantMessageId = `streaming-assistant-${Date.now()}`;
-    const abortController = new AbortController();
-    let settleStream: () => void = () => undefined;
-    const streamSettled = new Promise<void>(resolve => {
-      settleStream = resolve;
-    });
-    streamAbortRef.current = abortController;
-    streamSettledRef.current = streamSettled;
-    activeStreamExecutionIdRef.current = null;
-    const createdAt = new Date().toISOString();
-    setMessages(current => [...current, {
-      id: `optimistic-user-${Date.now()}`,
-      role: 'user',
-      content: nextMessage,
-      createdAt,
-      state: 'complete',
-    }, {
-      id: assistantMessageId,
-      role: 'assistant',
-      content: '',
-      createdAt,
-      state: 'streaming',
-    }]);
-    setComposerValue('');
-    let finalState: StudioMessageRecord['state'] = 'complete';
-    let receivedTerminalEvent = false;
-    try {
+      if (!activeSession) {
+        failureMessage = 'No workspace is available for this chat. Refresh Studio, then retry.';
+        throw new Error('NO_WORKSPACE');
+      }
+      executionSession = activeSession;
+      setStreamingStatus('Generating...');
       const response = await fetchWithBrowserSession('/api/studio/intent/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1029,7 +1022,7 @@ export function StudioProvider(props: {
       setMessages(current => current.map(item => item.id === assistantMessageId
         ? {
           ...item,
-          content: item.content || (stopped ? '' : streamUnavailable ? STREAM_UNAVAILABLE_MESSAGE : RESPONSE_FAILURE_MESSAGE),
+          content: item.content || (stopped ? '' : streamUnavailable ? STREAM_UNAVAILABLE_MESSAGE : failureMessage),
           state: finalState,
         }
         : item));
@@ -1048,7 +1041,9 @@ export function StudioProvider(props: {
         streamSettledRef.current = null;
       }
       try {
-        if (finalState === 'complete') {
+        if (!executionSession) {
+          await refreshRuntimeState();
+        } else if (finalState === 'complete') {
           await loadSessionBundle(executionSession.id);
         } else if (finalState === 'stopped') {
           await new Promise(resolve => setTimeout(resolve, 150));
@@ -1060,8 +1055,10 @@ export function StudioProvider(props: {
               setMessages(persisted.map(item => ({ ...item, state: 'complete' })));
             }
           }
+          await refreshRuntimeState();
+        } else {
+          await refreshRuntimeState();
         }
-        await refreshRuntimeState();
       } catch {
         // Keep the completed client response when background refresh fails.
       }
