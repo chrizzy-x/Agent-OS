@@ -258,6 +258,10 @@ const KERNEL_REGISTRY_DISCOVERY_SELECT = 'agent_id,workspace_id,product,command_
 const KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_PRE_WORKSPACE = 'agent_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
 const APPSTORE_DIRECT_LOOKUP_TIMEOUT_MS = 12_000;
+const APPSTORE_LIST_QUERY_TIMEOUT_MS = 4_000;
+const APPSTORE_CATALOG_LIMIT = 100;
+const APPSTORE_VERSION_HISTORY_LIMIT = 500;
+const APPSTORE_REGISTRY_RECONCILIATION_LIMIT = 100;
 const OFFICIAL_DEZYPHER_APP_ID = '66f34c19-9e72-46b5-9819-887c3ae18b50';
 const DEZYPHER_SPOT_URL = 'https://dezypher.vercel.app/spot';
 
@@ -265,12 +269,27 @@ function allowLocalAppstoreFallback(): boolean {
   return process.env.NODE_ENV !== 'production' && process.env.AGENTOS_ALLOW_LOCAL_APPSTORE_FALLBACK === '1';
 }
 
-function applyQueryTimeout<T>(query: T): T {
+function applyQueryTimeout<T>(query: T, timeoutMs = APPSTORE_DIRECT_LOOKUP_TIMEOUT_MS): T {
   const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
   const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
   return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
-    ? abortable.abortSignal(timeout(APPSTORE_DIRECT_LOOKUP_TIMEOUT_MS))
+    ? abortable.abortSignal(timeout(timeoutMs))
     : query;
+}
+
+function applyQueryLimit<T>(query: T, count: number): T {
+  const limitable = query as T & { limit?: (limit: number) => T };
+  return typeof limitable.limit === 'function' ? limitable.limit(count) : query;
+}
+
+function isQueryTimeoutError(error: unknown): boolean {
+  if (!error) return false;
+  const message = error instanceof Error
+    ? error.message
+    : isRecord(error) && typeof error.message === 'string'
+      ? error.message
+      : String(error);
+  return /abort|timeout|timed out|signal/i.test(message);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -738,11 +757,11 @@ async function loadAppVersionHistory(appIds: string[]): Promise<Map<string, Agen
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await applyQueryTimeout(supabase
+    const { data, error } = await applyQueryTimeout(applyQueryLimit(supabase
       .from('agent_app_versions')
       .select(APP_VERSION_SELECT)
       .in('app_id', normalizedIds)
-      .order('created_at', { ascending: false }));
+      .order('created_at', { ascending: false }), APPSTORE_VERSION_HISTORY_LIMIT), APPSTORE_LIST_QUERY_TIMEOUT_MS);
     if (!error) {
       for (const row of (data ?? []) as DbAgentAppVersionRow[]) {
         const appId = stringValue(row.app_id);
@@ -778,19 +797,31 @@ async function attachAppVersionHistory(apps: AgentAppListing[]): Promise<AgentAp
 async function loadStoredApps(): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await applyQueryTimeout(supabase.from('agent_apps').select(APP_SELECT));
+    const { data, error } = await applyQueryTimeout(
+      applyQueryLimit(supabase.from('agent_apps').select(APP_SELECT), APPSTORE_CATALOG_LIMIT),
+      APPSTORE_LIST_QUERY_TIMEOUT_MS,
+    );
     if (!error) {
       return attachAppVersionHistory(((data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
-    const legacy = await applyQueryTimeout(supabase.from('agent_apps').select(APP_SELECT_LEGACY));
+    if (isQueryTimeoutError(error)) return [];
+    const legacy = await applyQueryTimeout(
+      applyQueryLimit(supabase.from('agent_apps').select(APP_SELECT_LEGACY), APPSTORE_CATALOG_LIMIT),
+      APPSTORE_LIST_QUERY_TIMEOUT_MS,
+    );
     if (!legacy.error) {
       return attachAppVersionHistory(((legacy.data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
-    const pre019 = await applyQueryTimeout(supabase.from('agent_apps').select(APP_SELECT_PRE_019));
+    if (isQueryTimeoutError(legacy.error)) return [];
+    const pre019 = await applyQueryTimeout(
+      applyQueryLimit(supabase.from('agent_apps').select(APP_SELECT_PRE_019), APPSTORE_CATALOG_LIMIT),
+      APPSTORE_LIST_QUERY_TIMEOUT_MS,
+    );
     if (!pre019.error) {
       return attachAppVersionHistory(((pre019.data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
-  } catch {
+  } catch (error) {
+    if (isQueryTimeoutError(error) && !allowLocalAppstoreFallback()) return [];
     // Local fallback below.
   }
 
@@ -1317,21 +1348,23 @@ async function saveAgentApp(input: SaveAgentAppInput): Promise<AgentAppListing> 
 async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
-    const primary = await supabase
+    const primary = await applyQueryTimeout(applyQueryLimit(supabase
       .from('kernel_registry')
       .select(KERNEL_REGISTRY_DISCOVERY_SELECT)
-      .order('registered_at', { ascending: false });
+      .order('registered_at', { ascending: false }), APPSTORE_REGISTRY_RECONCILIATION_LIMIT), APPSTORE_LIST_QUERY_TIMEOUT_MS);
+    if (isQueryTimeoutError(primary.error)) return existingApps;
     const legacy = primary.error
-      ? await supabase
+      ? await applyQueryTimeout(applyQueryLimit(supabase
         .from('kernel_registry')
         .select(KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY)
-        .order('registered_at', { ascending: false })
+        .order('registered_at', { ascending: false }), APPSTORE_REGISTRY_RECONCILIATION_LIMIT), APPSTORE_LIST_QUERY_TIMEOUT_MS)
       : { data: primary.data, error: primary.error };
+    if (isQueryTimeoutError(legacy.error)) return existingApps;
     const preWorkspace = legacy.error
-      ? await supabase
+      ? await applyQueryTimeout(applyQueryLimit(supabase
         .from('kernel_registry')
         .select(KERNEL_REGISTRY_DISCOVERY_SELECT_PRE_WORKSPACE)
-        .order('registered_at', { ascending: false })
+        .order('registered_at', { ascending: false }), APPSTORE_REGISTRY_RECONCILIATION_LIMIT), APPSTORE_LIST_QUERY_TIMEOUT_MS)
       : { data: legacy.data ?? primary.data, error: legacy.error };
     const registryRows = (preWorkspace.data ?? legacy.data ?? primary.data) as DbKernelRegistryRow[] | null;
 
@@ -1346,10 +1379,10 @@ async function reconcileLegacySdkApps(existingApps: AgentAppListing[]): Promise<
     )];
     const { data: ownerRows } = ownerIds.length === 0
       ? { data: [] }
-      : await supabase
+      : await applyQueryTimeout(supabase
         .from('agents')
         .select('id,name,tier,metadata')
-        .in('id', ownerIds);
+        .in('id', ownerIds), APPSTORE_LIST_QUERY_TIMEOUT_MS);
 
     const owners = new Map<string, { name: string; enterprise: boolean }>();
     for (const row of (ownerRows ?? []) as Array<Record<string, unknown>>) {
