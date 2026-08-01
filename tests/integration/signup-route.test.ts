@@ -19,28 +19,42 @@ function createSignupRequest(body: Record<string, unknown>) {
 function mockSignupDatabase(options: { duplicateInsert?: boolean } = {}) {
   const insertedAgents: Record<string, unknown>[] = [];
   const upserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
+  const selectCalls: Array<{ table: string; args: unknown[] }> = [];
+  const abortSignals: Array<{ table: string; signal: AbortSignal }> = [];
 
-  mockSupabase.from.mockImplementation((table: string) => ({
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockResolvedValue({ data: [], error: null, count: 0 }),
-    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-    single: vi.fn().mockResolvedValue({ data: null, error: null }),
-    order: vi.fn().mockReturnThis(),
-    insert: vi.fn(async (payload: Record<string, unknown>) => {
+  mockSupabase.from.mockImplementation((table: string) => {
+    const result = { data: [], error: null, count: 0 };
+    const query = {
+      select: vi.fn((...args: unknown[]) => {
+        selectCalls.push({ table, args });
+        return query;
+      }),
+      eq: vi.fn().mockReturnThis(),
+      abortSignal: vi.fn((signal: AbortSignal) => {
+        abortSignals.push({ table, signal });
+        return query;
+      }),
+      limit: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+      single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      order: vi.fn().mockReturnThis(),
+      insert: vi.fn(async (payload: Record<string, unknown>) => {
       if (table === 'agents' && options.duplicateInsert) {
         return { error: { code: '23505', message: 'duplicate key value violates unique constraint agents_email' } };
       }
       if (table === 'agents') insertedAgents.push(payload);
       return { error: null };
-    }),
-    upsert: vi.fn(async (payload: Record<string, unknown>) => {
-      upserts.push({ table, payload });
-      return { error: null };
-    }),
-  }));
+      }),
+      upsert: vi.fn(async (payload: Record<string, unknown>) => {
+        upserts.push({ table, payload });
+        return { error: null };
+      }),
+      then: resultPromise => Promise.resolve(result).then(resultPromise),
+    };
+    return query;
+  });
 
-  return { insertedAgents, upserts };
+  return { insertedAgents, upserts, selectCalls, abortSignals };
 }
 
 describe('POST /api/signup', () => {
@@ -134,5 +148,18 @@ describe('POST /api/signup', () => {
       plan: 'enterprise_plus',
       plan_selection_skipped: true,
     });
+  });
+
+  it('uses a bounded email lookup without requesting an exact count', async () => {
+    const db = mockSignupDatabase();
+
+    const response = await POST(createSignupRequest({ accountType: 'enterprise', selectedPlan: 'enterprise_plus' }));
+
+    expect(response.status).toBe(201);
+    expect(db.selectCalls).toContainEqual({
+      table: 'agents',
+      args: ['id, name, metadata'],
+    });
+    expect(db.abortSignals.some(item => item.table === 'agents')).toBe(true);
   });
 });

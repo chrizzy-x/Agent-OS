@@ -3,6 +3,8 @@ import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
+const AUTH_STORE_QUERY_TIMEOUT_MS = 12_000;
+
 export type AgentAccount = {
   id: string;
   name: string;
@@ -62,6 +64,14 @@ function mapSupabaseAccount(row: Record<string, unknown>): AgentAccount {
   };
 }
 
+function applyAuthStoreQueryTimeout<T>(query: T): T {
+  const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
+  return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
+    ? abortable.abortSignal(timeout(AUTH_STORE_QUERY_TIMEOUT_MS))
+    : query;
+}
+
 async function readLocalAccounts(): Promise<AgentAccount[]> {
   const state = await readLocalRuntimeState();
   return Object.values(state.accounts).map(mapLocalAccount);
@@ -70,11 +80,11 @@ async function readLocalAccounts(): Promise<AgentAccount[]> {
 export async function findAccountsByEmail(email: string): Promise<AgentAccount[]> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyAuthStoreQueryTimeout(supabase
       .from('agents')
-      .select('id, name, metadata', { count: 'exact' })
+      .select('id, name, metadata')
       .eq('metadata->>email', email)
-      .limit(10);
+      .limit(10));
 
     if (!error) {
       return ((data ?? []) as Record<string, unknown>[]).map(mapSupabaseAccount);
@@ -90,11 +100,11 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
 export async function findAccountById(agentId: string): Promise<AgentAccount | null> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyAuthStoreQueryTimeout(supabase
       .from('agents')
       .select('id, name, metadata')
       .eq('id', agentId)
-      .maybeSingle();
+      .maybeSingle());
 
     if (!error && data) {
       return mapSupabaseAccount(data as Record<string, unknown>);
@@ -129,7 +139,7 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
         plan_selection_skipped: Boolean(input.planSelectionSkipped),
       },
     };
-    const { error } = await supabase.from('agents').insert(payload);
+    const { error } = await applyAuthStoreQueryTimeout(supabase.from('agents').insert(payload));
 
     if (!error) {
       return { duplicate: false };
@@ -187,11 +197,11 @@ export async function setPasswordResetToken(
 ): Promise<boolean> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyAuthStoreQueryTimeout(supabase
       .from('agents')
       .select('id, metadata')
       .eq('metadata->>email', email)
-      .limit(2);
+      .limit(2));
 
     if (!error && Array.isArray(data)) {
       if (data.length !== 1) {
@@ -209,7 +219,7 @@ export async function setPasswordResetToken(
         },
       };
 
-      const update = await supabase.from('agents').update({ metadata: nextMetadata }).eq('id', agent.id);
+      const update = await applyAuthStoreQueryTimeout(supabase.from('agents').update({ metadata: nextMetadata }).eq('id', agent.id));
       return !update.error;
     }
   } catch {
