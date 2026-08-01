@@ -54,7 +54,7 @@ export type ConnectedIntelligenceAdapter = {
 export class ConnectedIntelligenceError extends Error {
   constructor(
     message: string,
-    public readonly code: 'cancelled' | 'invalid_request' | 'unauthorized' | 'rate_limited' | 'upstream_unavailable' | 'upstream_error',
+    public readonly code: 'cancelled' | 'timeout' | 'invalid_request' | 'unauthorized' | 'rate_limited' | 'upstream_unavailable' | 'upstream_error',
     public readonly vendor: IntelligenceVendor,
     public readonly statusCode: number,
     public readonly retryable: boolean,
@@ -118,9 +118,11 @@ function known(vendor: IntelligenceVendor, ids: string[], defaultModelId: string
   }));
 }
 
-function createBoundedSignal(signal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
+function createBoundedSignal(vendor: IntelligenceVendor, signal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CONNECTED_INTELLIGENCE_TIMEOUT_MS);
+  const timeout = setTimeout(() => {
+    controller.abort(new ConnectedIntelligenceError('Connected intelligence request timed out.', 'timeout', vendor, 504, true));
+  }, CONNECTED_INTELLIGENCE_TIMEOUT_MS);
   const abort = () => controller.abort(signal?.reason);
 
   if (signal?.aborted) controller.abort(signal.reason);
@@ -135,8 +137,9 @@ function createBoundedSignal(signal?: AbortSignal): { signal: AbortSignal; clean
   };
 }
 
-function normalizeError(vendor: IntelligenceVendor, error: unknown): ConnectedIntelligenceError {
+function normalizeError(vendor: IntelligenceVendor, error: unknown, signal?: AbortSignal): ConnectedIntelligenceError {
   if (error instanceof ConnectedIntelligenceError) return error;
+  if (signal?.aborted && signal.reason instanceof ConnectedIntelligenceError) return signal.reason;
   if (error instanceof Error && error.name === 'AbortError') {
     return new ConnectedIntelligenceError('Connected intelligence request was cancelled.', 'cancelled', vendor, 499, false);
   }
@@ -253,9 +256,11 @@ function openAIBody(params: ConnectedIntelligenceRequest & { modelId: string }, 
     instructions: params.system,
     input: params.user,
     max_output_tokens: clampMaxTokens(params.maxTokens),
+    store: false,
     stream,
   };
-  if (!model.startsWith('gpt-5')) body.temperature = params.temperature ?? 0.2;
+  if (model.startsWith('gpt-5')) body.reasoning = { effort: 'minimal' };
+  else body.temperature = params.temperature ?? 0.2;
   return body;
 }
 
@@ -365,7 +370,7 @@ async function generateOpenAI(params: ConnectedIntelligenceRequest & { modelId: 
       streamed: false,
     };
   } catch (error) {
-    throw normalizeError(vendor, error);
+    throw normalizeError(vendor, error, params.signal);
   }
 }
 
@@ -429,7 +434,7 @@ async function generateAnthropic(params: ConnectedIntelligenceRequest & { modelI
       streamed: false,
     };
   } catch (error) {
-    throw normalizeError(vendor, error);
+    throw normalizeError(vendor, error, params.signal);
   }
 }
 
@@ -490,7 +495,7 @@ async function generateGemini(params: ConnectedIntelligenceRequest & { modelId: 
       streamed: false,
     };
   } catch (error) {
-    throw normalizeError(vendor, error);
+    throw normalizeError(vendor, error, params.signal);
   }
 }
 
@@ -589,7 +594,7 @@ export async function generateConnectedIntelligenceText(params: {
     ownerAgentId: params.ownerAgentId,
     grantId: params.vaultRuntimeGrantId,
   });
-  const bounded = createBoundedSignal(params.request.signal);
+  const bounded = createBoundedSignal(params.vendor, params.request.signal);
   try {
     return await adapter.generate({
       ...params.request,
@@ -617,7 +622,7 @@ export async function discoverConnectedIntelligenceModels(params: {
     ownerAgentId: params.ownerAgentId,
     grantId: params.vaultRuntimeGrantId,
   });
-  const bounded = createBoundedSignal(params.signal);
+  const bounded = createBoundedSignal(params.vendor, params.signal);
   try {
     return await adapter.discoverModels({
       credential: consumed.value,

@@ -20,6 +20,7 @@ import { normalizeIntelligenceSelection, type IntelligenceSelection } from './se
 
 type WorkspaceContextPackage = Awaited<ReturnType<typeof buildWorkspaceContextPackage>>;
 export type IntelligenceRuntimePurpose = 'conversation' | 'proposal_only' | 'multi_worker';
+const CONNECTED_INTELLIGENCE_RUNTIME_TIMEOUT_MS = 55_000;
 
 export type SingleIntelligenceRuntimeResult = {
   text: string;
@@ -37,6 +38,38 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function hashObject(value: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(redactSecretsDeep(value))).digest('hex');
+}
+
+function connectedRuntimeTimeout(vendor: IntelligenceConnectionRecord['vendor']): ConnectedIntelligenceError {
+  return new ConnectedIntelligenceError('Connected intelligence request timed out.', 'timeout', vendor, 504, true);
+}
+
+async function withConnectedRuntimeTimeout<T>(
+  vendor: IntelligenceConnectionRecord['vendor'],
+  parentSignal: AbortSignal | undefined,
+  work: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = CONNECTED_INTELLIGENCE_RUNTIME_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+  if (parentSignal?.aborted) controller.abort(parentSignal.reason);
+  else parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+  try {
+    return await Promise.race([
+      work(controller.signal),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          const timeoutError = connectedRuntimeTimeout(vendor);
+          controller.abort(timeoutError);
+          reject(timeoutError);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    parentSignal?.removeEventListener('abort', abortFromParent);
+  }
 }
 
 function sanitizePromptText(value: string, maxLength = 1000): string {
@@ -266,17 +299,21 @@ export async function runSingleIntelligenceRuntime(params: {
       recentMessages: params.recentMessages,
       purpose: params.purpose,
     });
-    const result = await generateConnectedIntelligenceText({
-      ownerAgentId: params.ownerAgentId,
-      vaultRuntimeGrantId: grant.id,
-      vendor: resolved.connection.vendor,
-      modelId: resolved.modelId,
-      request: {
-        ...prompt,
-        signal: params.signal,
-        onDelta: params.onDelta,
-      },
-    });
+    const result = await withConnectedRuntimeTimeout(
+      resolved.connection.vendor,
+      params.signal,
+      signal => generateConnectedIntelligenceText({
+        ownerAgentId: params.ownerAgentId,
+        vaultRuntimeGrantId: grant.id,
+        vendor: resolved.connection.vendor,
+        modelId: resolved.modelId,
+        request: {
+          ...prompt,
+          signal,
+          onDelta: params.onDelta,
+        },
+      }),
+    );
     invocation = await updateIntelligenceInvocation({
       ownerAgentId: params.ownerAgentId,
       invocationId: invocation.id,

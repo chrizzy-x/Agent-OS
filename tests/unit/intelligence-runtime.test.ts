@@ -382,4 +382,64 @@ describe('single intelligence runtime', () => {
     });
     expect(JSON.stringify(updatedInvocation)).not.toContain('sk-secret');
   });
+
+  it('fails and records timeout when a provider call never settles', async () => {
+    vi.useFakeTimers();
+    let updatedInvocation: Record<string, unknown> | null = null;
+    let capturedSignal: AbortSignal | null = null;
+    try {
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === 'intelligence_connections') return maybeSingleBuilder(connectionRow);
+        if (table === 'vault_secrets') return maybeSingleBuilder({ id: 'secret-1', name: 'OPENAI_API_KEY', status: 'active' });
+        if (table === 'intelligence_invocations') {
+          return {
+            ...insertBuilder(() => {}),
+            ...updateBuilder(row => { updatedInvocation = row; }, {
+              id: 'invocation-1',
+              owner_agent_id: 'agent-1',
+              workspace_id: 'workspace-1',
+              connection_id: 'connection-1',
+              mode: 'single',
+              vendor: 'openai',
+              model_id: 'gpt-5',
+              selection_source: 'message',
+              context_manifest: {},
+              usage: {},
+              created_at: '2026-07-24T00:00:00.000Z',
+            }),
+          };
+        }
+        throw new Error(`unexpected table ${table}`);
+      });
+      runtimeMocks.generateConnectedIntelligenceText.mockImplementation(params => {
+        capturedSignal = params.request.signal;
+        return new Promise(() => {});
+      });
+
+      const pending = runSingleIntelligenceRuntime({
+        ownerAgentId: 'agent-1',
+        workspaceId: 'workspace-1',
+        selection: {
+          mode: 'single',
+          connectionId: 'connection-1',
+          modelId: 'gpt-5',
+          consensusConfigurationId: null,
+          selectionSource: 'message',
+        },
+        workspaceContext: workspaceContext(),
+        message: 'Use selected model',
+      });
+
+      const expectation = expect(pending).rejects.toMatchObject({ code: 'timeout' });
+      await vi.advanceTimersByTimeAsync(55_000);
+      await expectation;
+      expect(capturedSignal?.aborted).toBe(true);
+      expect(updatedInvocation).toMatchObject({
+        status: 'failed',
+        error_code: 'timeout',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
