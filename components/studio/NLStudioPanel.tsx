@@ -120,6 +120,7 @@ async function fileData(file: File): Promise<string> {
 
 export default function NLStudioPanel() {
   const {
+    loading,
     messages,
     composerValue,
     setComposerValue,
@@ -391,6 +392,7 @@ export default function NLStudioPanel() {
       className={`nl-studio-panel${activeConversation ? ' active' : ' empty'}`}
       data-active-conversation={activeConversation ? 'true' : 'false'}
       data-session-id={session?.id ?? ''}
+      data-studio-loading={loading ? 'true' : 'false'}
     >
       <main className="nl-conversation" ref={conversationRef} aria-live="polite">
         {!activeConversation ? (
@@ -582,10 +584,12 @@ export default function NLStudioPanel() {
                 aria-haspopup="menu"
                 aria-expanded={intelligenceMenuOpen}
                 aria-label="Choose intelligence"
-                title={selectedIntelligenceDescription}
+                aria-busy={loading ? 'true' : undefined}
+                disabled={loading}
+                title={loading ? 'Loading Studio connections' : selectedIntelligenceDescription}
               >
-                <span>{selectedIntelligenceLabel}</span>
-                {messageIntelligenceOverride ? <em>Once</em> : null}
+                <span>{loading ? 'Loading intelligence...' : selectedIntelligenceLabel}</span>
+                {!loading && messageIntelligenceOverride ? <em>Once</em> : null}
               </button>
               {intelligenceMenuOpen ? (
                 <>
@@ -651,7 +655,9 @@ export default function NLStudioPanel() {
                       ))}
                     </div>
                   ))}
-                  {Object.keys(connectedIntelligenceGroups).length === 0 ? (
+                  {loading ? (
+                    <div className="nl-intelligence-empty">Loading Vault connections...</div>
+                  ) : Object.keys(connectedIntelligenceGroups).length === 0 ? (
                     <div className="nl-intelligence-empty">No connected intelligence in Vault.</div>
                   ) : null}
                   {messageIntelligenceOverride ? (

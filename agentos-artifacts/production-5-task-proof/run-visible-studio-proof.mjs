@@ -183,6 +183,8 @@ async function waitForStudio(page, timeout = 120000) {
   await page.waitForLoadState('domcontentloaded').catch(() => undefined);
   await page.locator('textarea[aria-label="Message Super AgentOS"], textarea[placeholder^="Message Super AgentOS"]').first()
     .waitFor({ state: 'visible', timeout });
+  await page.locator('.nl-studio-panel[data-studio-loading="false"]').first()
+    .waitFor({ state: 'visible', timeout });
 }
 
 async function waitForStudioSession(page, sessionId, timeout = 120000) {
