@@ -165,6 +165,40 @@ async function parseErrorDetails(response: Response): Promise<Record<string, unk
   }
 }
 
+function abortError(): Error {
+  const error = new Error('Connected intelligence request was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
+
+async function readStreamChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal?: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (!signal) return reader.read();
+  if (signal.aborted) throw abortError();
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      cleanup();
+      reader.cancel(signal.reason).catch(() => undefined);
+      reject(abortError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    reader.read().then(
+      value => {
+        cleanup();
+        resolve(value);
+      },
+      error => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
 async function assertOk(vendor: IntelligenceVendor, response: Response): Promise<void> {
   if (response.ok) return;
   const details = await parseErrorDetails(response);
@@ -247,13 +281,17 @@ function geminiBody(params: ConnectedIntelligenceRequest & { modelId: string }):
   };
 }
 
-async function readSse(body: ReadableStream<Uint8Array>, onData: (data: string) => Promise<void> | void): Promise<void> {
+async function readSse(
+  body: ReadableStream<Uint8Array>,
+  onData: (data: string) => Promise<void> | void,
+  signal?: AbortSignal,
+): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
 
   while (true) {
-    const { value, done } = await reader.read();
+    const { value, done } = await readStreamChunk(reader, signal);
     buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, '\n');
     const frames = buffer.split('\n\n');
     buffer = frames.pop() ?? '';
@@ -309,7 +347,7 @@ async function generateOpenAI(params: ConnectedIntelligenceRequest & { modelId: 
         } catch {
           // Ignore malformed stream frames.
         }
-      });
+      }, params.signal);
       return { vendor, modelId: cleanModelId(params.modelId), text: text.trim(), usage, finishReason, streamed: true };
     }
 
@@ -373,7 +411,7 @@ async function generateAnthropic(params: ConnectedIntelligenceRequest & { modelI
         } catch {
           // Ignore malformed stream frames.
         }
-      });
+      }, params.signal);
       return { vendor, modelId: cleanModelId(params.modelId), text: text.trim(), usage, finishReason, streamed: true };
     }
 
@@ -432,7 +470,7 @@ async function generateGemini(params: ConnectedIntelligenceRequest & { modelId: 
         } catch {
           // Ignore malformed stream frames.
         }
-      });
+      }, params.signal);
       return { vendor, modelId, text: text.trim(), usage, finishReason, streamed: true };
     }
 
