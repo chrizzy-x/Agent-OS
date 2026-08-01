@@ -234,6 +234,36 @@ async function waitForQuiet(page, timeout = 120000) {
   }, null, { timeout });
 }
 
+async function assistantHistoryKey(page) {
+  return await page.evaluate(() => {
+    const messages = Array.from(document.querySelectorAll('.nl-message.assistant'));
+    const latest = messages[messages.length - 1];
+    return {
+      count: messages.length,
+      text: latest?.textContent?.trim() ?? '',
+      streaming: Boolean(document.querySelector('.nl-message.assistant.streaming')),
+      stop: Boolean(document.querySelector('button[aria-label="Stop generation"]')),
+    };
+  }).catch(() => ({ count: 0, text: '', streaming: false, stop: false }));
+}
+
+async function waitForAssistantHistorySettled(page, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  let lastKey = '';
+  let stableSince = Date.now();
+  while (Date.now() < deadline) {
+    const sample = await assistantHistoryKey(page);
+    const key = `${sample.count}:${sample.text.length}:${sample.text.slice(0, 160)}`;
+    if (!sample.streaming && !sample.stop && key === lastKey && Date.now() - stableSince >= 1200) return sample;
+    if (key !== lastKey || sample.streaming || sample.stop) {
+      lastKey = key;
+      stableSince = Date.now();
+    }
+    await page.waitForTimeout(250);
+  }
+  return assistantHistoryKey(page);
+}
+
 async function submitPrompt(page, prompt) {
   await waitForStudio(page);
   const input = page.getByLabel('Message Super AgentOS');
@@ -271,10 +301,18 @@ async function observeStreaming(page, beforeAssistantCount, timeout = 45000) {
 
 async function sendAndWait(page, prompt, opts = {}) {
   await panel(page, opts.panelLines ?? ['Studio task running', prompt.slice(0, 120)]);
+  await waitForAssistantHistorySettled(page, opts.historyTimeout ?? 15000);
   const before = await page.locator('.nl-message.assistant').count();
   await submitPrompt(page, prompt);
   const stream = await observeStreaming(page, before, opts.streamTimeout ?? 45000);
   await waitForQuiet(page, opts.timeout ?? 180000);
+  const responseArrived = await page.waitForFunction(count => {
+    return document.querySelectorAll('.nl-message.assistant').length > count;
+  }, before, { timeout: opts.responseTimeout ?? 15000 }).then(() => true).catch(() => false);
+  if (!responseArrived) {
+    const stale = await latestAssistantText(page).catch(() => '');
+    throw new Error(`No new assistant response appeared after prompt; latest stale text: ${stale.slice(0, 500)}`);
+  }
   const text = await latestAssistantText(page);
   if (opts.expect && !opts.expect.test(text)) {
     throw new Error(`Expected assistant text to match ${opts.expect}; got ${text.slice(0, 500)}`);
