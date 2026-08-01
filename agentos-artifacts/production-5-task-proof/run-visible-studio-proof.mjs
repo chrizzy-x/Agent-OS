@@ -266,10 +266,28 @@ async function waitForAssistantHistorySettled(page, timeout = 15000) {
 
 async function submitPrompt(page, prompt) {
   await waitForStudio(page);
-  const input = page.getByLabel('Message Super AgentOS');
+  const beforeUserCount = await page.locator('.nl-message.user').count();
+  const input = page.getByLabel('Message Super AgentOS').first();
   await input.fill(prompt);
+  const filled = await page.waitForFunction(text => {
+    const node = document.querySelector('textarea[aria-label="Message Super AgentOS"], textarea[placeholder^="Message Super AgentOS"]');
+    return node instanceof HTMLTextAreaElement && node.value === text;
+  }, prompt, { timeout: 5000 }).then(() => true).catch(() => false);
+  if (!filled) {
+    await input.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type(prompt, { delay: 3 });
+    await page.waitForFunction(text => {
+      const node = document.querySelector('textarea[aria-label="Message Super AgentOS"], textarea[placeholder^="Message Super AgentOS"]');
+      return node instanceof HTMLTextAreaElement && node.value === text;
+    }, prompt, { timeout: 20000 });
+  }
+  await waitForSubmitEnabled(page);
   await page.getByLabel('Send message').click();
-  await page.waitForFunction(text => document.body.innerText.includes(text), prompt, { timeout: 20000 });
+  await page.waitForFunction(count => {
+    return document.querySelectorAll('.nl-message.user').length > count;
+  }, beforeUserCount, { timeout: 30000 });
 }
 
 async function observeStreaming(page, beforeAssistantCount, timeout = 45000) {
