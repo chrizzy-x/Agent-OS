@@ -248,6 +248,16 @@ describe('storage migrations', () => {
     expect(sql).toContain('-- ROLLBACK:');
   });
 
+  it('seeds the real deZypher Appstore listing for native install/open', () => {
+    const sql = migrationSql('041_dezypher_app_listing.sql');
+
+    expect(sql).toContain("slug = 'dezypher'");
+    expect(sql).toContain('https://dezypher.vercel.app/spot');
+    expect(sql).toContain("ON CONFLICT (slug) DO UPDATE");
+    expect(sql).toContain("NOTIFY pgrst, 'reload schema'");
+    expect(sql).toContain('-- ROLLBACK:');
+  });
+
   it('formalizes FFP execution logs and removes legacy persisted plan identifiers', () => {
     const sql = migrationSql('023_ffp_audit_and_plan_cleanup.sql');
 

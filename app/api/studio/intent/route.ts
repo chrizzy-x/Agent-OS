@@ -28,7 +28,7 @@ import { listWorkspaces } from '@/src/workspaces/service';
 import { listVaultSecrets } from '@/src/vault/service';
 import { toErrorResponse } from '@/src/utils/errors';
 import { sanitizeErrorMessage, sanitizeOutput } from '@/src/utils/output-sanitizer';
-import { listAgentApps, publishAgentApp } from '@/src/appstore/service';
+import { getAgentAppBySlug, normalizeAgentAppSlug, publishAgentApp } from '@/src/appstore/service';
 import { updateAgentTask } from '@/src/tasks/service';
 
 export const runtime = 'nodejs';
@@ -452,15 +452,13 @@ async function findAppRecord(params: {
   workspaceId: string | null;
   reference: string;
 }): Promise<{ id: string; name: string; slug: string } | null> {
-  const apps = await listAgentApps({
+  const viewer = {
     viewerAgentId: params.agentId,
     viewerWorkspaceIds: params.workspaceId ? [params.workspaceId] : undefined,
-    includeHidden: true,
-    search: params.reference,
-    sort: 'recent',
-  });
-  const needle = params.reference.toLowerCase();
-  const match = apps.find(app => app.slug === params.reference || app.name.toLowerCase().includes(needle));
+  };
+  const normalizedReference = normalizeAgentAppSlug(params.reference);
+  const match = await getAgentAppBySlug(normalizedReference, viewer)
+    ?? await getAgentAppBySlug(params.reference, viewer);
   return match ? { id: match.id, name: match.name, slug: match.slug } : null;
 }
 

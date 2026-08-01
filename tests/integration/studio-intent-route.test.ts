@@ -15,7 +15,7 @@ const intentRouteMocks = vi.hoisted(() => ({
   requestExecutionAction: vi.fn(),
   updateExecution: vi.fn(),
   updateAgentTask: vi.fn(),
-  listAgentApps: vi.fn(),
+  getAgentAppBySlug: vi.fn(),
   publishAgentApp: vi.fn(),
   getSupabaseAdmin: vi.fn(),
 }));
@@ -53,7 +53,12 @@ vi.mock('../../src/tasks/service.js', () => ({
 }));
 
 vi.mock('../../src/appstore/service.js', () => ({
-  listAgentApps: intentRouteMocks.listAgentApps,
+  getAgentAppBySlug: intentRouteMocks.getAgentAppBySlug,
+  normalizeAgentAppSlug: (value: string) => value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64),
   publishAgentApp: intentRouteMocks.publishAgentApp,
 }));
 
@@ -75,7 +80,7 @@ describe('POST /api/studio/intent', () => {
       title: 'Execution target',
       status: 'COMPLETED',
     });
-    intentRouteMocks.listAgentApps.mockResolvedValue([]);
+    intentRouteMocks.getAgentAppBySlug.mockResolvedValue(null);
     intentRouteMocks.publishAgentApp.mockResolvedValue({
       id: 'app-1',
       name: 'Quick Proof App',
@@ -231,6 +236,42 @@ describe('POST /api/studio/intent', () => {
       expect.stringMatching(/^studio:confirm:/),
       1800,
       expect.stringContaining('"type":"skill_install"'),
+    );
+  });
+
+  it('requires approval before installing a matched Appstore app by exact slug', async () => {
+    intentRouteMocks.getAgentAppBySlug.mockResolvedValueOnce({
+      id: 'app-dezypher',
+      name: 'deZypher',
+      slug: 'dezypher',
+    });
+    const token = createAgentToken('agent-1', { expiresIn: '1h' });
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: 'install app dezypher',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+      }),
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.kind).toBe('approval_required');
+    expect(body.reply).toBe('Install app deZypher?');
+    expect(intentRouteMocks.getAgentAppBySlug).toHaveBeenCalledWith('dezypher', {
+      viewerAgentId: 'agent-1',
+      viewerWorkspaceIds: ['workspace-1'],
+    });
+    expect(intentRouteMocks.confirmTokenSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^studio:confirm:/),
+      1800,
+      expect.stringContaining('"type":"app_install"'),
     );
   });
 

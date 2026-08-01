@@ -257,9 +257,20 @@ const APP_VERSION_SELECT = 'id,app_id,version,change_summary,created_at';
 const KERNEL_REGISTRY_DISCOVERY_SELECT = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,health_status,endpoint_status,version,registered_at,last_heartbeat_at,last_error,disabled,heartbeat_count';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_LEGACY = 'agent_id,workspace_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
 const KERNEL_REGISTRY_DISCOVERY_SELECT_PRE_WORKSPACE = 'agent_id,product,command_topic,status_topic,available_commands,status,registered_at,last_heartbeat_at,last_status_payload';
+const APPSTORE_DIRECT_LOOKUP_TIMEOUT_MS = 12_000;
+const OFFICIAL_DEZYPHER_APP_ID = '66f34c19-9e72-46b5-9819-887c3ae18b50';
+const DEZYPHER_SPOT_URL = 'https://dezypher.vercel.app/spot';
 
 function allowLocalAppstoreFallback(): boolean {
   return process.env.NODE_ENV !== 'production' && process.env.AGENTOS_ALLOW_LOCAL_APPSTORE_FALLBACK === '1';
+}
+
+function applyQueryTimeout<T>(query: T): T {
+  const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
+  return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
+    ? abortable.abortSignal(timeout(APPSTORE_DIRECT_LOOKUP_TIMEOUT_MS))
+    : query;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -727,11 +738,11 @@ async function loadAppVersionHistory(appIds: string[]): Promise<Map<string, Agen
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyQueryTimeout(supabase
       .from('agent_app_versions')
       .select(APP_VERSION_SELECT)
       .in('app_id', normalizedIds)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }));
     if (!error) {
       for (const row of (data ?? []) as DbAgentAppVersionRow[]) {
         const appId = stringValue(row.app_id);
@@ -767,15 +778,15 @@ async function attachAppVersionHistory(apps: AgentAppListing[]): Promise<AgentAp
 async function loadStoredApps(): Promise<AgentAppListing[]> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase.from('agent_apps').select(APP_SELECT);
+    const { data, error } = await applyQueryTimeout(supabase.from('agent_apps').select(APP_SELECT));
     if (!error) {
       return attachAppVersionHistory(((data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
-    const legacy = await supabase.from('agent_apps').select(APP_SELECT_LEGACY);
+    const legacy = await applyQueryTimeout(supabase.from('agent_apps').select(APP_SELECT_LEGACY));
     if (!legacy.error) {
       return attachAppVersionHistory(((legacy.data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
-    const pre019 = await supabase.from('agent_apps').select(APP_SELECT_PRE_019);
+    const pre019 = await applyQueryTimeout(supabase.from('agent_apps').select(APP_SELECT_PRE_019));
     if (!pre019.error) {
       return attachAppVersionHistory(((pre019.data ?? []) as DbAgentAppRow[]).map(fromDbRow));
     }
@@ -786,6 +797,143 @@ async function loadStoredApps(): Promise<AgentAppListing[]> {
   if (!allowLocalAppstoreFallback()) return [];
   const state = await readLocalRuntimeState();
   return (state.agentApps.catalog ?? []).map(normalizeLocalApp);
+}
+
+function buildOfficialDezypherApp(now = new Date().toISOString()): AgentAppListing {
+  return {
+    id: OFFICIAL_DEZYPHER_APP_ID,
+    workspaceId: null,
+    name: 'deZypher',
+    slug: 'dezypher',
+    category: 'Finance',
+    description: 'Open the deZypher spot experience from AgentOS.',
+    longDescription: 'deZypher is the live spot experience linked from AgentOS. This listing lets Super AgentOS install and open the product through the governed Appstore path with execution records, approvals, and Library visibility.',
+    logoUrl: null,
+    bannerUrl: null,
+    videoUrl: null,
+    websiteUrl: DEZYPHER_SPOT_URL,
+    documentationUrl: DEZYPHER_SPOT_URL,
+    supportUrl: null,
+    privacyPolicyUrl: null,
+    termsUrl: null,
+    releaseNotes: 'Initial AgentOS Appstore listing.',
+    changelog: ['Initial AgentOS Appstore listing.'],
+    pricing: { model: 'free' },
+    gallery: [],
+    mediaAssets: [],
+    rejectionReason: null,
+    spotlight: true,
+    publisherId: 'agentos_official',
+    publisherName: 'AgentOS Labs',
+    developerHandle: 'agentos-labs',
+    appUrl: DEZYPHER_SPOT_URL,
+    repositoryUrl: 'https://github.com/chrizzy-x/Agent-OS',
+    deviceTargets: ['AgentOS Cloud'],
+    platforms: ['web'],
+    manifest: {
+      schemaVersion: 'agentos.app.v1',
+      version: '1.0.0',
+      runtime: 'external-app',
+      entrypoint: DEZYPHER_SPOT_URL,
+      primitives: [],
+      skills: [],
+      requiredSkills: [],
+      bundledSkills: [],
+      permissions: [],
+      requiredSecrets: [],
+      commands: [{ name: 'open', description: 'Open the deZypher spot experience.' }],
+      distribution: { webUrl: DEZYPHER_SPOT_URL },
+    },
+    defaultConfig: { launchPath: DEZYPHER_SPOT_URL },
+    permissionsRequired: [],
+    requiredSecrets: [],
+    screenshots: [],
+    keywords: ['dezypher', 'spot', 'finance'],
+    tags: ['dezypher', 'spot', 'finance'],
+    features: ['Governed AgentOS launch', 'Appstore install record', 'Execution-backed open event'],
+    source: 'internal',
+    visibility: 'public',
+    runtimeType: 'external-app',
+    kernelProduct: null,
+    kernelCommandTopic: null,
+    kernelStatusTopic: null,
+    distribution: {
+      webUrl: DEZYPHER_SPOT_URL,
+      androidUrl: null,
+      iosUrl: null,
+    },
+    healthStatus: 'online',
+    endpointStatus: 'healthy',
+    lastHeartbeatAt: null,
+    lastCommandAt: null,
+    lastError: null,
+    disabled: false,
+    heartbeatCount: 0,
+    openCount: 0,
+    webOpenCount: 0,
+    androidDownloadCount: 0,
+    iosDownloadCount: 0,
+    installCount: 0,
+    downloadCount: 0,
+    activeUserCount: 0,
+    rating: 0,
+    reviewCount: 0,
+    verified: true,
+    published: true,
+    createdAt: now,
+    updatedAt: now,
+    versionHistory: [],
+  };
+}
+
+async function seedOfficialAppBySlug(slug: string): Promise<AgentAppListing | null> {
+  if (slug !== 'dezypher') return null;
+
+  try {
+    const app = buildOfficialDezypherApp();
+    const stored = await applyQueryTimeout(
+      getSupabaseAdmin()
+        .from('agent_apps')
+        .upsert(toDbPayload(app, 'published'), { onConflict: 'slug' })
+        .select(APP_SELECT),
+    ).single();
+    return stored.error || !stored.data ? null : fromDbRow(stored.data as DbAgentAppRow);
+  } catch {
+    return null;
+  }
+}
+
+async function loadStoredAppBySlug(slug: string): Promise<AgentAppListing | null> {
+  const normalizedSlug = normalizeAgentAppSlug(slug);
+  if (!normalizedSlug) return null;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const primary = await applyQueryTimeout(
+      supabase.from('agent_apps').select(APP_SELECT).eq('slug', normalizedSlug).limit(1),
+    ).maybeSingle();
+    if (!primary.error && primary.data) return fromDbRow(primary.data as DbAgentAppRow);
+
+    const legacy = await applyQueryTimeout(
+      supabase.from('agent_apps').select(APP_SELECT_LEGACY).eq('slug', normalizedSlug).limit(1),
+    ).maybeSingle();
+    if (!legacy.error && legacy.data) return fromDbRow(legacy.data as DbAgentAppRow);
+
+    const pre019 = await applyQueryTimeout(
+      supabase.from('agent_apps').select(APP_SELECT_PRE_019).eq('slug', normalizedSlug).limit(1),
+    ).maybeSingle();
+    if (!pre019.error && pre019.data) return fromDbRow(pre019.data as DbAgentAppRow);
+  } catch {
+    // Local fallback below.
+  }
+
+  const officialApp = await seedOfficialAppBySlug(normalizedSlug);
+  if (officialApp) return officialApp;
+
+  if (!allowLocalAppstoreFallback()) return null;
+  const state = await readLocalRuntimeState();
+  const row = (state.agentApps.catalog ?? []).find(app => app.slug === normalizedSlug);
+  return row ? normalizeLocalApp(row) : null;
 }
 
 function appMatchesSearch(app: AgentAppListing, search: string): boolean {
@@ -1336,8 +1484,7 @@ export async function listAgentApps(options: ListAgentAppsOptions = {}): Promise
 
 export async function getAgentAppBySlug(slug: string, options: AgentAppAccessOptions = {}): Promise<AgentAppListing | null> {
   const normalizedSlug = normalizeAgentAppSlug(slug);
-  const apps = await reconcileLegacySdkApps(await loadStoredApps());
-  const app = apps.find(item => item.slug === normalizedSlug) ?? null;
+  const app = await loadStoredAppBySlug(normalizedSlug);
   if (!app) return null;
   return canAccessAppBySlug(app, options) ? app : null;
 }
