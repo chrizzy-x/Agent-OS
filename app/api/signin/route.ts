@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
 import { issueBrowserSession } from '@/src/auth/browser-auth';
 import { verifyPassword } from '@/src/auth/password';
-import { findAccountsByEmail } from '@/src/auth/agent-store';
+import { authStoreUnavailableResponse, findAccountsByEmail, isAuthStoreUnavailableError } from '@/src/auth/agent-store';
 import { hasCapability } from '@/src/auth/capabilities';
 
 export const runtime = 'nodejs';
@@ -30,7 +30,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_password', message: 'Password required' }, { status: 400 });
   }
 
-  const accounts = await findAccountsByEmail(email);
+  let accounts;
+  try {
+    accounts = await findAccountsByEmail(email);
+  } catch (error) {
+    if (isAuthStoreUnavailableError(error)) {
+      return NextResponse.json(authStoreUnavailableResponse(), { status: 503 });
+    }
+    throw error;
+  }
   if (accounts.length === 0) {
     return NextResponse.json(
       { error: 'not_found', message: 'No account found for that email. Please sign up first.' },

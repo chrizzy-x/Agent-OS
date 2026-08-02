@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
 import { issueBrowserSession } from '@/src/auth/browser-auth';
 import { hashPassword } from '@/src/auth/password';
-import { createAgentAccount, findAccountsByEmail } from '@/src/auth/agent-store';
+import { authStoreUnavailableResponse, createAgentAccount, findAccountsByEmail, isAuthStoreUnavailableError } from '@/src/auth/agent-store';
 import { defaultPlanForAccountType, parseAccountTypeSelection, parsePlanSelection, PLAN_LABELS, type AccountType, type AgentPlan } from '@/src/auth/tiers';
 import { getPlanDescriptor } from '@/src/auth/capabilities';
 import { provisionAgentOSAccount } from '@/src/agentos/provisioning';
@@ -55,7 +55,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const existingAccounts = await findAccountsByEmail(email);
+  let existingAccounts;
+  try {
+    existingAccounts = await findAccountsByEmail(email);
+  } catch (error) {
+    if (isAuthStoreUnavailableError(error)) {
+      return NextResponse.json(authStoreUnavailableResponse(), { status: 503 });
+    }
+    throw error;
+  }
   if (existingAccounts.length > 0) {
     return NextResponse.json(
       { error: 'conflict', message: 'An account with this email already exists. Please sign in.' },

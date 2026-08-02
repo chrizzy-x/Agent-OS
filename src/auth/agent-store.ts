@@ -3,7 +3,25 @@ import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
-const AUTH_STORE_QUERY_TIMEOUT_MS = 12_000;
+const AUTH_STORE_QUERY_TIMEOUT_MS = 30_000;
+
+export class AuthStoreUnavailableError extends Error {
+  constructor(message = 'Authentication store is temporarily unavailable') {
+    super(message);
+    this.name = 'AuthStoreUnavailableError';
+  }
+}
+
+export function isAuthStoreUnavailableError(error: unknown): boolean {
+  return error instanceof AuthStoreUnavailableError;
+}
+
+export function authStoreUnavailableResponse(): { error: string; message: string } {
+  return {
+    error: 'auth_store_unavailable',
+    message: 'Authentication is temporarily unavailable. Try again in a moment.',
+  };
+}
 
 export type AgentAccount = {
   id: string;
@@ -78,8 +96,15 @@ async function readLocalAccounts(): Promise<AgentAccount[]> {
 }
 
 export async function findAccountsByEmail(email: string): Promise<AgentAccount[]> {
+  let supabase;
   try {
-    const supabase = getSupabaseAdmin();
+    supabase = getSupabaseAdmin();
+  } catch {
+    const accounts = await readLocalAccounts();
+    return accounts.filter(account => account.email === email);
+  }
+
+  try {
     const { data, error } = await applyAuthStoreQueryTimeout(supabase
       .from('agents')
       .select('id, name, metadata')
@@ -90,11 +115,10 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
       return ((data ?? []) as Record<string, unknown>[]).map(mapSupabaseAccount);
     }
   } catch {
-    // Fall back to local state below.
+    throw new AuthStoreUnavailableError();
   }
 
-  const accounts = await readLocalAccounts();
-  return accounts.filter(account => account.email === email);
+  throw new AuthStoreUnavailableError();
 }
 
 export async function findAccountById(agentId: string): Promise<AgentAccount | null> {

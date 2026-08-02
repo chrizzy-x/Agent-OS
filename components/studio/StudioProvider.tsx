@@ -418,6 +418,7 @@ export function StudioProvider(props: {
   const streamSettledRef = useRef<Promise<void> | null>(null);
   const activeStreamExecutionIdRef = useRef<string | null>(null);
   const streamingSessionIdRef = useRef<string | null>(null);
+  const studioVisibleRef = useRef(false);
 
   useEffect(() => {
     sessionIntelligenceSelectionRef.current = sessionIntelligenceSelection;
@@ -462,13 +463,16 @@ export function StudioProvider(props: {
   }, [router]);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (!studioVisibleRef.current) setLoading(true);
     const auth = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
     setBrowserSession(auth.session);
     if (!auth.session) {
+      studioVisibleRef.current = false;
       setLoading(false);
       return;
     }
+    studioVisibleRef.current = true;
+    setLoading(false);
 
     const params = new URLSearchParams();
     params.set('mode', activeBootstrapModeRef.current);
