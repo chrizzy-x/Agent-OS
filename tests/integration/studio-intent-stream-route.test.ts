@@ -600,6 +600,47 @@ describe('POST /api/studio/intent/stream', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
+  it('returns missing capability for paper trading before expensive runtime context', async () => {
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Paper trade 1 share of AAPL without Derek using a non-Derek broker.',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        projectId: 'project-1',
+      }),
+    }));
+    const body = await response.text();
+
+    expect(body).toContain('Missing capability');
+    expect(body).toContain('No order was placed');
+    expect(body).toContain('"status":"COMPLETED"');
+    expect(mocks.buildWorkspaceContextPackage).not.toHaveBeenCalled();
+    expect(mocks.streamStudioChatReply).not.toHaveBeenCalled();
+    expect(mocks.appendStudioMessage).toHaveBeenCalledWith(expect.objectContaining({
+      role: 'user',
+      content: 'Paper trade 1 share of AAPL without Derek using a non-Derek broker.',
+    }));
+    expect(mocks.appendStudioMessage).toHaveBeenCalledWith(expect.objectContaining({
+      role: 'assistant',
+      content: expect.stringContaining('No order was placed'),
+    }));
+    expect(mocks.createExecution).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        missingCapability: 'non_derek_paper_broker_execution',
+      }),
+    }));
+    expect(mocks.updateExecution).toHaveBeenCalledWith(expect.objectContaining({
+      patch: expect.objectContaining({
+        output: expect.objectContaining({
+          code: 'MISSING_CAPABILITY',
+          executed: false,
+        }),
+      }),
+    }));
+  });
+
   it('returns a generic error without exposing the thrown message', async () => {
     mocks.streamStudioChatReply.mockRejectedValue(new Error('secret provider stack'));
 
