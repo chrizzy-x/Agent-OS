@@ -33,14 +33,25 @@ const KNOWN_SESSION_KEY = 'agentos.browserSessionSeen';
 const KNOWN_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 120;
 let logoutRefreshBlockedUntil = 0;
 let sessionStateEpoch = 0;
+let logoutBlockGeneration = 0;
 
-function blockRefreshForLogout(ms: number): void {
-  const blockedUntil = Math.max(logoutRefreshBlockedUntil, Date.now() + ms);
+function setLogoutRefreshBlock(blockedUntil: number): void {
   logoutRefreshBlockedUntil = blockedUntil;
   sessionStateEpoch += 1;
   if (typeof window !== 'undefined') {
-    window.__agentosSessionLogoutBlockedUntil = Math.max(window.__agentosSessionLogoutBlockedUntil ?? 0, blockedUntil);
+    window.__agentosSessionLogoutBlockedUntil = blockedUntil;
   }
+}
+
+function beginLogoutRefreshBlock(ms: number): number {
+  logoutBlockGeneration += 1;
+  setLogoutRefreshBlock(Math.max(logoutRefreshBlockedUntil, Date.now() + ms));
+  return logoutBlockGeneration;
+}
+
+function settleLogoutRefreshBlock(generation: number, ms: number): void {
+  if (generation !== logoutBlockGeneration) return;
+  setLogoutRefreshBlock(Date.now() + ms);
 }
 
 export function isBrowserSessionLogoutBlocked(): boolean {
@@ -57,6 +68,7 @@ function signedOutAfterLogout(): BrowserSessionState {
 export function resetBrowserSessionLogoutBlockForTests(): void {
   if (process.env.NODE_ENV !== 'test') return;
   logoutRefreshBlockedUntil = 0;
+  logoutBlockGeneration = 0;
   sessionStateEpoch += 1;
   if (typeof window !== 'undefined') {
     window.__agentosSessionLogoutBlockedUntil = 0;
@@ -237,7 +249,7 @@ export async function fetchWithBrowserSession(input: RequestInfo | URL, init?: R
 }
 
 export async function destroyBrowserSession(): Promise<void> {
-  blockRefreshForLogout(15_000);
+  const logoutGeneration = beginLogoutRefreshBlock(15_000);
   clearLegacyBrowserAuth();
   forgetBrowserSession();
   try {
@@ -245,7 +257,7 @@ export async function destroyBrowserSession(): Promise<void> {
   } finally {
     clearLegacyBrowserAuth();
     forgetBrowserSession();
-    blockRefreshForLogout(2_000);
+    settleLogoutRefreshBlock(logoutGeneration, 2_000);
   }
 }
 

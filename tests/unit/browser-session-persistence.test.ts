@@ -51,6 +51,7 @@ describe('browser session persistence', () => {
 
   afterEach(() => {
     resetBrowserSessionLogoutBlockForTests();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -132,6 +133,39 @@ describe('browser session persistence', () => {
     expect(state.state).toBe('signed_out');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalledWith('/api/session/refresh', expect.anything());
+  });
+
+  it('allows same-tab session reads shortly after logout completes', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await destroyBrowserSession();
+
+    expect(window.__agentosSessionLogoutBlockedUntil).toBe(Date.now() + 2_000);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(jsonResponse({
+      authenticated: true,
+      session: {
+        agentName: 'Agent One',
+        plan: 'retail_free',
+        planLabel: 'Free',
+        accountType: 'retail',
+        capabilities: ['use_nl_studio'],
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      },
+    }));
+
+    vi.advanceTimersByTime(2_001);
+    const state = await fetchBrowserSessionState();
+
+    expect(state.state).toBe('active');
+    expect(state.session?.agentName).toBe('Agent One');
+    expect(fetchMock).toHaveBeenCalledWith('/api/session?optional=1', {
+      cache: 'no-store',
+      credentials: 'include',
+    });
   });
 
   it('ignores stale session reads that started before logout', async () => {

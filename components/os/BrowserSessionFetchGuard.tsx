@@ -50,6 +50,10 @@ function blockLogoutRefresh(ms: number): void {
   window.__agentosSessionLogoutBlockedUntil = Math.max(window.__agentosSessionLogoutBlockedUntil ?? 0, Date.now() + ms);
 }
 
+function settleLogoutRefresh(ms: number): void {
+  window.__agentosSessionLogoutBlockedUntil = Date.now() + ms;
+}
+
 function signedOutSessionResponse(): Response {
   return new Response(JSON.stringify({ authenticated: false, error: 'unauthorized', message: 'Not signed in' }), {
     status: 200,
@@ -72,7 +76,7 @@ export default function BrowserSessionFetchGuard() {
       if (sessionEndpoint && method === 'GET' && isLogoutBlocked()) return signedOutSessionResponse();
 
       const first = await nativeFetch(input, guarded ? withCredentials(init) : init);
-      if (logoutRequest) blockLogoutRefresh(2_000);
+      if (logoutRequest) settleLogoutRefresh(2_000);
       if (!guarded || first.status !== 401 || sessionEndpoint || isLogoutBlocked()) return first;
 
       const refresh = await nativeFetch('/api/session/refresh', {
