@@ -13,6 +13,8 @@ import { findAccountById } from '@/src/auth/agent-store';
 
 export const runtime = 'nodejs';
 
+const LOGOUT_REVOCATION_TIMEOUT_MS = 2500;
+
 function readAccessToken(headers: Headers | globalThis.Headers): { token: string; source: 'bearer' | 'cookie' } | null {
   const authHeader = headers.get('authorization') ?? headers.get('Authorization') ?? undefined;
   const cookieHeader = headers.get('cookie') ?? headers.get('Cookie') ?? undefined;
@@ -25,6 +27,22 @@ function readAccessToken(headers: Headers | globalThis.Headers): { token: string
 function readRefreshToken(headers: Headers | globalThis.Headers): string | undefined {
   const cookieHeader = headers.get('cookie') ?? headers.get('Cookie') ?? undefined;
   return extractRefreshTokenFromCookie(cookieHeader);
+}
+
+async function revokeCurrentRefreshSession(refreshToken: string): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  await Promise.race([
+    (async () => {
+      const session = await findRefreshSessionByToken(refreshToken);
+      if (session) {
+        await revokeRefreshSession({ agentId: session.agentId, sessionId: session.id });
+      }
+    })(),
+    new Promise<void>(resolve => {
+      timeout = setTimeout(resolve, LOGOUT_REVOCATION_TIMEOUT_MS);
+    }),
+  ]).catch(() => undefined);
+  if (timeout) clearTimeout(timeout);
 }
 
 async function buildSessionPayload(agentId: string, token: string) {
@@ -95,14 +113,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const refreshToken = readRefreshToken(request.headers);
   if (refreshToken) {
-    try {
-      const session = await findRefreshSessionByToken(refreshToken);
-      if (session) {
-        await revokeRefreshSession({ agentId: session.agentId, sessionId: session.id });
-      }
-    } catch {
-      // Continue clearing cookies even if revocation fails.
-    }
+    await revokeCurrentRefreshSession(refreshToken);
   }
 
   const response = NextResponse.json({ success: true });

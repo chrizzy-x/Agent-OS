@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createAgentToken } from '../../src/auth/agent-identity.js';
 import { mockSupabase } from '../setup.js';
@@ -85,6 +85,10 @@ describe('session routes', () => {
     expect(response.headers.get('set-cookie')).toContain('agent_session=');
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('does not mark browser session cookies as secure on localhost http requests', async () => {
     const token = createAgentToken('agent-1', { expiresIn: '1h' });
     const request = new NextRequest('http://127.0.0.1:3000/api/session/token', {
@@ -128,5 +132,27 @@ describe('session routes', () => {
     expect(response.status).toBe(200);
     expect(browserSessionMocks.revokeRefreshSession).toHaveBeenCalledWith({ agentId: 'agent-1', sessionId: 'refresh-1' });
     expect(browserSessionMocks.revokeAllRefreshSessions).not.toHaveBeenCalled();
+  });
+
+  it('clears browser cookies even when refresh session revocation stalls', async () => {
+    vi.useFakeTimers();
+    browserSessionMocks.findRefreshSessionByToken.mockReturnValue(new Promise(() => undefined));
+    const request = new NextRequest('http://localhost/api/session', {
+      method: 'DELETE',
+      headers: {
+        Cookie: 'agent_refresh=selector.secret',
+      },
+    });
+
+    const responsePromise = DELETE(request);
+    await vi.advanceTimersByTimeAsync(2500);
+    const response = await responsePromise;
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(response.headers.get('set-cookie')).toContain('agent_session=');
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+    expect(browserSessionMocks.revokeRefreshSession).not.toHaveBeenCalled();
   });
 });
