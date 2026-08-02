@@ -111,7 +111,7 @@ describe('session routes', () => {
     expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
   });
 
-  it('revokes all refresh sessions for the signed out account', async () => {
+  it('revokes only the current refresh session for normal sign out', async () => {
     browserSessionMocks.findRefreshSessionByToken.mockResolvedValue({
       id: 'refresh-1',
       agentId: 'agent-1',
@@ -127,6 +127,6 @@ describe('session routes', () => {
 
     expect(response.status).toBe(200);
     expect(browserSessionMocks.revokeRefreshSession).toHaveBeenCalledWith({ agentId: 'agent-1', sessionId: 'refresh-1' });
-    expect(browserSessionMocks.revokeAllRefreshSessions).toHaveBeenCalledWith('agent-1');
+    expect(browserSessionMocks.revokeAllRefreshSessions).not.toHaveBeenCalled();
   });
 });
