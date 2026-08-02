@@ -417,6 +417,7 @@ export function StudioProvider(props: {
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamSettledRef = useRef<Promise<void> | null>(null);
   const activeStreamExecutionIdRef = useRef<string | null>(null);
+  const streamingSessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     sessionIntelligenceSelectionRef.current = sessionIntelligenceSelection;
@@ -494,7 +495,10 @@ export function StudioProvider(props: {
     setSession(nextSession);
     setSessions((payload.sessions ?? []) as StudioSessionRecord[]);
     setLineage((payload.lineage ?? { parent: null, children: [] }) as StudioLineage);
-    setMessages((payload.messages ?? []) as StudioMessageRecord[]);
+    const activeStreamingSessionId = streamingSessionIdRef.current;
+    if (!activeStreamingSessionId || nextSession?.id !== activeStreamingSessionId) {
+      setMessages((payload.messages ?? []) as StudioMessageRecord[]);
+    }
     setEvents((payload.events ?? []) as StudioEventRecord[]);
     setWorkspaces((payload.workspaces ?? []) as WorkspaceRecord[]);
     setProjects(nextProjects);
@@ -558,7 +562,9 @@ export function StudioProvider(props: {
         ...current.filter(item => item.id !== payload.session?.id),
       ]);
     }
-    if (payload.messages) setMessages(payload.messages.map(message => ({ ...message, state: 'complete' })));
+    if (payload.messages && streamingSessionIdRef.current !== sessionId) {
+      setMessages(payload.messages.map(message => ({ ...message, state: 'complete' })));
+    }
     if (payload.events) setEvents(payload.events);
     if (payload.lineage) setLineage(payload.lineage);
     const nextIntelligenceSelection = normalizeIntelligenceSelection(payload.intelligenceSelection ?? payload.session?.state?.intelligenceSelection, 'session');
@@ -975,6 +981,7 @@ export function StudioProvider(props: {
         throw new Error('NO_WORKSPACE');
       }
       executionSession = activeSession;
+      streamingSessionIdRef.current = activeSession.id;
       setStreamingStatus('Generating...');
       const response = await fetchWithBrowserSession('/api/studio/intent/stream', {
         method: 'POST',
@@ -1057,6 +1064,7 @@ export function StudioProvider(props: {
     } finally {
       streamAbortRef.current = null;
       activeStreamExecutionIdRef.current = null;
+      streamingSessionIdRef.current = null;
       setActiveExecutionId(null);
       setStreamingStatus(null);
       setSending(false);
