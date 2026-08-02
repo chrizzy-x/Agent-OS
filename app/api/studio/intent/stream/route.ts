@@ -439,6 +439,253 @@ export async function POST(request: NextRequest) {
           return;
         }
 
+        if (shouldRouteNativeAgentOSOperationFirst(message)) {
+          const providerStatus = getStudioProviderStatus();
+          const startedAt = Date.now();
+          const sessionExecutionTargetId = normalizeExecutionTargetId(body.sessionExecutionTargetId);
+          const messageExecutionOverrideId = typeof body.messageExecutionOverrideId === 'string'
+            ? normalizeExecutionTargetId(body.messageExecutionOverrideId)
+            : null;
+          const sessionIntelligenceSelection = normalizeIntelligenceSelection(body.sessionIntelligenceSelection, 'session');
+          const messageIntelligenceOverride = body.messageIntelligenceOverride && typeof body.messageIntelligenceOverride === 'object' && !Array.isArray(body.messageIntelligenceOverride)
+            ? normalizeIntelligenceSelection(body.messageIntelligenceOverride, 'message')
+            : null;
+          const selectedIntelligenceSelection = normalizeIntelligenceSelection(
+            body.intelligenceSelection ?? messageIntelligenceOverride ?? sessionIntelligenceSelection,
+            messageIntelligenceOverride ? 'message' : sessionIntelligenceSelection.selectionSource,
+          );
+          const intent = await detectAgentOSIntent(message);
+          const statusText = humanStatusForIntent(intent);
+
+          task = await createAgentTask({
+            userId: ctx.agentId,
+            workspaceId,
+            projectId,
+            sessionId,
+            title: message.slice(0, 180),
+            originalPrompt: message,
+            status: 'planning',
+            plan: [
+              { step: 'receive_user_intent', status: 'completed' },
+              { step: 'route_native_agentos_operation', status: 'completed' },
+            ],
+            capabilityIds: [],
+            plannerVersion: 'super-agentos-native-direct-operation',
+            contextVersion: null,
+            progress: 25,
+            metadata: {
+              attachmentCount: attachments.length,
+              invocationCount: invocations.length,
+              providerStatus: {
+                mode: providerStatus.mode,
+                provider: providerStatus.provider,
+                model: providerStatus.model,
+                label: providerStatus.label,
+              },
+              executionTarget: {
+                selected: 'super_agentos',
+                type: 'native',
+                displayName: 'Super AgentOS',
+                sessionDefault: sessionExecutionTargetId,
+                messageOverride: messageExecutionOverrideId,
+              },
+              intelligenceSelection: {
+                selected: selectedIntelligenceSelection,
+                sessionDefault: sessionIntelligenceSelection,
+                messageOverride: messageIntelligenceOverride,
+              },
+            },
+            executionMetadata: {
+              runtime: 'super-agentos',
+              directNativeOperation: true,
+              provider: {
+                mode: providerStatus.mode,
+                provider: providerStatus.provider,
+                model: providerStatus.model,
+                label: providerStatus.label,
+              },
+              executionTarget: {
+                selected: 'super_agentos',
+                type: 'native',
+                displayName: 'Super AgentOS',
+                sessionDefault: sessionExecutionTargetId,
+                messageOverride: messageExecutionOverrideId,
+              },
+              intelligenceSelection: {
+                selected: selectedIntelligenceSelection,
+                sessionDefault: sessionIntelligenceSelection,
+                messageOverride: messageIntelligenceOverride,
+              },
+            },
+          });
+
+          const execution = await createExecution({
+            agentId: ctx.agentId,
+            workspaceId,
+            projectId,
+            sessionId,
+            sourceType: 'super_agent',
+            type: 'CHAT_EXECUTION',
+            sourceId: sessionId,
+            title: message.slice(0, 180),
+            input: { message, approval: body.approval === true, attachments, invocations },
+            metadata: {
+              projectId,
+              taskId: task.id,
+              runtime: 'super-agentos',
+              directNativeOperation: true,
+              executionTarget: {
+                selected: 'super_agentos',
+                type: 'native',
+                displayName: 'Super AgentOS',
+                sessionDefault: sessionExecutionTargetId,
+                messageOverride: messageExecutionOverrideId,
+              },
+              intelligenceSelection: selectedIntelligenceSelection,
+              provider: {
+                mode: providerStatus.mode,
+                provider: providerStatus.provider,
+                model: providerStatus.model,
+                label: providerStatus.label,
+              },
+            },
+            model: getStudioModelLabel(),
+          });
+          executionId = execution.id;
+          await updateExecution({
+            agentId: ctx.agentId,
+            executionId,
+            patch: { status: 'RUNNING', startedAt: new Date(startedAt).toISOString() },
+          });
+          await appendExecutionLog({
+            agentId: ctx.agentId,
+            executionId,
+            message: 'Super AgentOS request started',
+            data: {
+              providerMode: providerStatus.mode,
+              provider: providerStatus.provider,
+              model: providerStatus.model,
+              executionTarget: 'Super AgentOS',
+              directNativeOperation: true,
+            },
+          });
+          push('execution', {
+            executionId,
+            status: 'RUNNING',
+            providerMode: providerStatus.mode,
+            providerLabel: providerStatus.label,
+            executionTarget: 'Super AgentOS',
+          });
+          push('status', { text: statusText });
+          push('status', { text: 'Routing native AgentOS operation...' });
+          await appendExecutionLog({
+            agentId: ctx.agentId,
+            executionId,
+            message: 'Native AgentOS operation routed without connected proposal',
+            data: {
+              selectionMode: selectedIntelligenceSelection.mode,
+              operationAuthority: 'super_agentos',
+              directNativeOperation: true,
+            },
+          }).catch(() => undefined);
+
+          if (sessionId) {
+            await appendStudioMessage({
+              ownerAgentId: ctx.agentId,
+              sessionId,
+              role: 'user',
+              content: message,
+            });
+            userPersisted = true;
+            await appendStudioEvent({
+              ownerAgentId: ctx.agentId,
+              sessionId,
+              type: 'thinking_started',
+              payload: { intent, statusText, directNativeOperation: true },
+            }).catch(() => undefined);
+          }
+
+          const response = await fetch(new URL('/api/studio/intent', request.url), {
+            method: 'POST',
+            headers: internalIntentHeaders,
+            body: JSON.stringify({
+              ...body,
+              runtimeTaskId: task.id,
+              runtimeExecutionId: executionId,
+            }),
+            signal: request.signal,
+          });
+          const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+          partialReply = typeof payload.reply === 'string' ? payload.reply : '';
+          const failed = !response.ok || payload.kind === 'error';
+
+          if (failed) {
+            throw new Error(typeof payload.error === 'string' ? payload.error : 'Intent request failed');
+          }
+          mixedExecution = buildMixedExecutionVerification({ payload, proposal: null });
+
+          if (typeof payload.statusText === 'string') {
+            push('status', { text: payload.statusText });
+          }
+          for (const text of replyChunks(partialReply)) {
+            push('delta', { text });
+            await new Promise(resolve => setTimeout(resolve, 8));
+          }
+          if (typeof payload.confirmToken === 'string') {
+            push('approval', {
+              confirmToken: payload.confirmToken,
+              reply: partialReply,
+              mixedExecution,
+            });
+          }
+
+          const paused = payload.kind === 'approval_required';
+          await updateExecution({
+            agentId: ctx.agentId,
+            executionId,
+            patch: {
+              status: paused ? 'PAUSED' : 'COMPLETED',
+              output: { ...payload, mixedExecution },
+              durationMs: Date.now() - startedAt,
+              completedAt: new Date().toISOString(),
+            },
+          });
+          await updateAgentTask({
+            userId: ctx.agentId,
+            taskId: task.id,
+            patch: {
+              status: paused ? 'awaiting_confirmation' : 'completed',
+              confirmationStatus: paused ? 'pending' : 'not_required',
+              progress: paused ? 55 : 100,
+              resultSummary: partialReply.slice(0, 1000),
+              metadata: { ...task.metadata, executionId, payloadKind: payload.kind, mixedExecution },
+            },
+          });
+          await appendExecutionLog({
+            agentId: ctx.agentId,
+            executionId,
+            message: paused ? 'Super AgentOS request paused for approval' : 'Super AgentOS request completed',
+            data: { kind: payload.kind, status: response.status, providerMode: providerStatus.mode, directNativeOperation: true, mixedExecution },
+          });
+          await createNotification({
+            agentId: ctx.agentId,
+            workspaceId,
+            sessionId,
+            executionId,
+            type: paused ? 'approval_request' : 'execution_completed',
+            title: paused ? 'Approval required' : 'Task completed',
+            body: partialReply.slice(0, 500),
+          }).catch(() => undefined);
+          push('done', {
+            executionId,
+            status: paused ? 'PAUSED' : 'COMPLETED',
+            ...(typeof payload.navigateTo === 'string' ? { navigateTo: payload.navigateTo } : {}),
+            mixedExecution,
+          });
+          close();
+          return;
+        }
+
         const workspaceContext = await buildWorkspaceContextPackage({
           ctx,
           workspaceId,

@@ -541,6 +541,7 @@ describe('POST /api/studio/intent/stream', () => {
     expect(body).toContain('Install app deZypher?');
     expect(body).toContain('"status":"PAUSED"');
     expect(forwarded.intelligenceProposal).toBeUndefined();
+    expect(mocks.buildWorkspaceContextPackage).not.toHaveBeenCalled();
     expect(mocks.runSingleIntelligenceRuntime).not.toHaveBeenCalled();
     expect(mocks.requestStandardConsensusProposalOnly).not.toHaveBeenCalled();
     expect(mocks.appendExecutionLog).toHaveBeenCalledWith(expect.objectContaining({
