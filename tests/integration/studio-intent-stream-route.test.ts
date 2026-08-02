@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   streamStudioChatReply: vi.fn(),
   detectAgentOSIntent: vi.fn(),
   humanStatusForIntent: vi.fn(),
+  shouldRouteNativeAgentOSOperationFirst: vi.fn(),
   translateMessageToStudioCommand: vi.fn(),
   appendStudioEvent: vi.fn(),
   appendStudioMessage: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock('../../src/studio/conversation.js', () => ({
 vi.mock('../../src/studio/intents.js', () => ({
   detectAgentOSIntent: mocks.detectAgentOSIntent,
   humanStatusForIntent: mocks.humanStatusForIntent,
+  shouldRouteNativeAgentOSOperationFirst: mocks.shouldRouteNativeAgentOSOperationFirst,
   translateMessageToStudioCommand: mocks.translateMessageToStudioCommand,
 }));
 vi.mock('../../src/studio/persistence.js', () => ({
@@ -145,6 +147,7 @@ describe('POST /api/studio/intent/stream', () => {
     mocks.createNotification.mockResolvedValue({});
     mocks.detectAgentOSIntent.mockResolvedValue('NORMAL_CHAT');
     mocks.humanStatusForIntent.mockReturnValue('Thinking...');
+    mocks.shouldRouteNativeAgentOSOperationFirst.mockReturnValue(false);
     mocks.translateMessageToStudioCommand.mockReturnValue(null);
     mocks.appendStudioEvent.mockResolvedValue({});
     mocks.appendStudioMessage.mockResolvedValue({});
@@ -500,6 +503,49 @@ describe('POST /api/studio/intent/stream', () => {
       }),
     }));
     expect(mocks.streamStudioChatReply).not.toHaveBeenCalled();
+  });
+
+  it('routes direct native AgentOS operations before selected connected proposal calls', async () => {
+    mocks.detectAgentOSIntent.mockResolvedValue('EXECUTION_TASK');
+    mocks.shouldRouteNativeAgentOSOperationFirst.mockReturnValue(true);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'approval_required',
+      intent: 'EXECUTION_TASK',
+      statusText: 'Approval required.',
+      reply: 'Install app deZypher?',
+      confirmToken: 'confirm-app',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'install app dezypher',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        projectId: 'project-1',
+        intelligenceSelection: {
+          mode: 'single',
+          connectionId: 'connection-1',
+          modelId: 'gpt-5',
+          consensusConfigurationId: null,
+          selectionSource: 'message',
+        },
+      }),
+    }));
+    const body = await response.text();
+    const forwarded = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as Record<string, unknown>;
+
+    expect(body).toContain('Routing native AgentOS operation');
+    expect(body).toContain('Install app deZypher?');
+    expect(body).toContain('"status":"PAUSED"');
+    expect(forwarded.intelligenceProposal).toBeUndefined();
+    expect(mocks.runSingleIntelligenceRuntime).not.toHaveBeenCalled();
+    expect(mocks.requestStandardConsensusProposalOnly).not.toHaveBeenCalled();
+    expect(mocks.appendExecutionLog).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Native AgentOS operation routed without connected proposal',
+    }));
   });
 
   it('uses Standard Consensus as proposal-only before AgentOS approval routing', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectIntentHeuristically, translateMessageToStudioCommand } from '../../src/studio/intents.js';
+import { detectIntentHeuristically, shouldRouteNativeAgentOSOperationFirst, translateMessageToStudioCommand } from '../../src/studio/intents.js';
 
 describe('Studio intent command translation', () => {
   it('passes exact executable Studio command forms through from NL Studio', () => {
@@ -14,5 +14,13 @@ describe('Studio intent command translation', () => {
   it('detects Primeflow requests as workflow execution intents', () => {
     expect(detectIntentHeuristically('Create Primeflow Proof Run')).toBe('WORKFLOW_DESIGN');
     expect(detectIntentHeuristically('Run Primeflow Proof Run')).toBe('WORKFLOW_EXECUTION');
+  });
+
+  it('routes direct AgentOS operations before connected proposal calls', () => {
+    expect(shouldRouteNativeAgentOSOperationFirst('install app dezypher')).toBe(true);
+    expect(shouldRouteNativeAgentOSOperationFirst('mcp call agentos mem_set --json {"key":"proof","value":"ok"}')).toBe(true);
+    expect(shouldRouteNativeAgentOSOperationFirst('Create Prime Agent Proof Runner')).toBe(true);
+    expect(shouldRouteNativeAgentOSOperationFirst('Run Primeflow Proof Run')).toBe(true);
+    expect(shouldRouteNativeAgentOSOperationFirst('research AgentOS provider selection')).toBe(false);
   });
 });

@@ -16,7 +16,7 @@ import { streamStudioChatReply } from '@/src/studio/conversation';
 import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from '@/src/studio/execution-targets';
 import { getStudioModelLabel, getStudioProviderStatus } from '@/src/studio/providers';
-import { detectAgentOSIntent, humanStatusForIntent, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
+import { detectAgentOSIntent, humanStatusForIntent, shouldRouteNativeAgentOSOperationFirst, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
 import { detectNativeMissingCapability } from '@/src/studio/native-operations';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle } from '@/src/studio/persistence';
 import { createAgentTask, updateAgentTask, type AgentTaskRecord } from '@/src/tasks/service';
@@ -589,6 +589,7 @@ export async function POST(request: NextRequest) {
 
         const intent = await detectAgentOSIntent(message);
         const statusText = humanStatusForIntent(intent);
+        const nativeOperationFirst = shouldRouteNativeAgentOSOperationFirst(message);
         push('status', { text: statusText });
 
         if (sessionId) {
@@ -776,7 +777,20 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        if (selectedIntelligenceSelection.mode === 'single') {
+        if (nativeOperationFirst) {
+          if (selectedIntelligenceSelection.mode !== 'native') {
+            push('status', { text: 'Routing native AgentOS operation...' });
+            await appendExecutionLog({
+              agentId: ctx.agentId,
+              executionId,
+              message: 'Native AgentOS operation routed without connected proposal',
+              data: {
+                selectionMode: selectedIntelligenceSelection.mode,
+                operationAuthority: 'super_agentos',
+              },
+            }).catch(() => undefined);
+          }
+        } else if (selectedIntelligenceSelection.mode === 'single') {
           if (!workspaceId) throw new Error('Workspace is required for connected intelligence');
           push('status', { text: 'Requesting connected proposal for Super AgentOS validation...' });
           const recentMessages = await loadRecentConversation(ctx.agentId, sessionId);

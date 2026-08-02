@@ -116,6 +116,32 @@ export function translateMessageToStudioCommand(input: string): string | null {
   return null;
 }
 
+export function shouldRouteNativeAgentOSOperationFirst(input: string): boolean {
+  const message = input.trim();
+  const lower = message.toLowerCase();
+  if (!message) return false;
+  if (translateMessageToStudioCommand(message)) return true;
+
+  return [
+    /\binstall\s+(?:app|skill)\s+[a-z0-9._-]+\b/i,
+    /\b(?:open|launch|show|inspect|view)\s+(?:app|skill)\s+.+$/i,
+    /\bcreate\s+project\s+.+$/i,
+    /\brename\s+project(?:\s+to)?\s+.+$/i,
+    /\barchive\s+project\b/i,
+    /\bcreate(?:\s+private)?\s+(?:app|prime\s+agent|agent|subagent)\s+.+$/i,
+    /\b(?:run|execute|test)\s+(?:prime\s+agent|agent|subagent)\s+.+?\s+(?:with|using|to)\s+.+$/i,
+    /\b(?:run|execute|start|trigger)\s+(?:primeflow|workflow)\s+.+$/i,
+    /\b(?:pause|resume|delete|remove)\s+(?:primeflow|workflow)\s+.+$/i,
+    /\bpublish\s+workflow\b/i,
+    /\broute\b.+\bthrough\b\s+(?:app|skill|workflow|mcp)(?:\s+.+)?$/i,
+    /\bsave\s+result\b/i,
+    /\b(?:panic|stop all|cancel all active executions|stop active executions)\b/i,
+    /\b(?:pause|resume|retry|cancel|rollback|inspect)\s+(?:execution|task|run)\s+[a-z0-9._:-]+\b/i,
+    /\b(?:open|show|go to|navigate to|launch)\b.*\b(?:vault|library|apps|skills|prime agents|agents|subagents|primeflows|workflows|mcp|projects|notifications|approvals)\b/i,
+    /\b(?:vault|library|apps|skills|prime agents|agents|subagents|primeflows|workflows|mcp|projects|notifications|approvals)\b.*\b(?:open|show|go to|navigate to|launch)\b/i,
+  ].some(pattern => pattern.test(lower));
+}
+
 export function isWorkflowIntent(intent: AgentOSIntent): boolean {
   return intent === 'WORKFLOW_DESIGN' || intent === 'WORKFLOW_EXECUTION';
 }
