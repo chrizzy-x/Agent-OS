@@ -89,6 +89,8 @@ describe('v6.6.8 Super AgentOS contract', () => {
     expect(contextService).toContain('contextVersion');
     expect(contextService).toContain('contextObjects');
     expect(contextService).toContain('dependencyHash');
+    expect(contextService).toContain('CONTEXT_QUERY_TIMEOUT_MS');
+    expect(contextService).toContain('withContextTimeout');
     expect(contextService).toContain('availableSecretMetadataOnly');
     expect(contextService).not.toContain('maskedValue');
     expect(contextService).not.toContain('encrypted_value');

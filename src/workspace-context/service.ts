@@ -32,6 +32,30 @@ type WorkspaceContextObject = {
   searchIndexRef: string | null;
 };
 
+const CONTEXT_QUERY_TIMEOUT_MS = 4_000;
+
+function applyContextQueryTimeout<T>(query: T, timeoutMs = CONTEXT_QUERY_TIMEOUT_MS): T {
+  const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
+  return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
+    ? abortable.abortSignal(timeout(timeoutMs))
+    : query;
+}
+
+async function withContextTimeout<T>(promise: Promise<T>, fallback: T, timeoutMs = CONTEXT_QUERY_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>(resolve => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -98,10 +122,10 @@ function roleForTier(tier: unknown): UserRole {
 
 async function loadUserProfile(agentId: string): Promise<{ displayName: string; preferences: Record<string, unknown>; roleOverride: UserRole | null }> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await applyContextQueryTimeout(getSupabaseAdmin()
       .from('agents')
       .select('id,name,agent_name,metadata,preferences')
-      .eq('id', agentId)
+      .eq('id', agentId))
       .maybeSingle();
     if (error || !data) return { displayName: agentId, preferences: {}, roleOverride: null };
     const metadata = asRecord(data.metadata);
@@ -123,11 +147,11 @@ async function loadUserProfile(agentId: string): Promise<{ displayName: string; 
 
 async function listInstalledSkills(agentId: string): Promise<Array<Record<string, unknown>>> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await applyContextQueryTimeout(getSupabaseAdmin()
       .from('skill_installations')
       .select('id,workspace_id,status,installed_at,skill:skills(id,name,slug,category,description,capabilities,permissions_required,required_secrets)')
       .eq('agent_id', agentId)
-      .order('installed_at', { ascending: false });
+      .order('installed_at', { ascending: false }));
     if (error) throw new Error(error.message);
     return (data ?? []) as Array<Record<string, unknown>>;
   } catch {
@@ -143,7 +167,7 @@ async function listWorkflows(agentId: string, workspaceId: string | null): Promi
       .eq('agent_id', agentId)
       .order('updated_at', { ascending: false });
     if (workspaceId) query = query.eq('workspace_id', workspaceId);
-    const { data, error } = await query;
+    const { data, error } = await applyContextQueryTimeout(query);
     if (error) throw new Error(error.message);
     return (data ?? []) as Array<Record<string, unknown>>;
   } catch {
@@ -153,10 +177,10 @@ async function listWorkflows(agentId: string, workspaceId: string | null): Promi
 
 async function listMcpConnections(): Promise<Array<Record<string, unknown>>> {
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await applyContextQueryTimeout(getSupabaseAdmin()
       .from('mcp_servers')
       .select('id,name,description,active,requires_consensus,tools,updated_at,last_error')
-      .order('updated_at', { ascending: false });
+      .order('updated_at', { ascending: false }));
     if (error) throw new Error(error.message);
     return ((data ?? []) as Array<Record<string, unknown>>).map(row => ({
       id: String(row.id ?? row.name),
@@ -191,12 +215,12 @@ export async function buildWorkspaceContextPackage(params: {
 }) {
   const startedAt = Date.now();
   const [userProfile, workspaces] = await Promise.all([
-    loadUserProfile(params.ctx.agentId),
-    listWorkspaces(params.ctx.agentId).catch(() => []),
+    withContextTimeout(loadUserProfile(params.ctx.agentId), { displayName: params.ctx.agentId, preferences: {}, roleOverride: null }),
+    withContextTimeout(listWorkspaces(params.ctx.agentId).catch(() => []), []),
   ]);
   const defaultWorkspace = params.workspaceId
     ? workspaces.find(item => item.id === params.workspaceId) ?? null
-    : workspaces[0] ?? await resolveDefaultWorkspaceForAgent(params.ctx.agentId).catch(() => null);
+    : workspaces[0] ?? await withContextTimeout(resolveDefaultWorkspaceForAgent(params.ctx.agentId).catch(() => null), null);
   const workspaceId = params.workspaceId ?? defaultWorkspace?.id ?? null;
   const projectId = params.projectId ?? null;
 
@@ -214,14 +238,14 @@ export async function buildWorkspaceContextPackage(params: {
     vault,
     capabilityGraph,
   ] = await Promise.all([
-    workspaceId ? listProjects({ ownerAgentId: params.ctx.agentId, workspaceId, status: 'all' }).catch(() => []) : Promise.resolve([]),
-    listInstalledAgentApps(params.ctx.agentId).catch(() => []),
-    listInstalledSkills(params.ctx.agentId),
-    listWorkflows(params.ctx.agentId, workspaceId),
-    listAccessibleSubagents({ viewerAgentId: params.ctx.agentId, workspaceId, projectId }).catch(() => []),
-    listMcpConnections(),
-    listLibrary({ ownerAgentId: params.ctx.agentId, workspaceId, projectId, limit: 100 }).catch(() => ({ items: [], groups: {}, summary: {} })),
-    listAgentTasks({ userId: params.ctx.agentId, workspaceId, status: 'all', limit: 50 }).then(tasks => tasks.filter(task => [
+    withContextTimeout(workspaceId ? listProjects({ ownerAgentId: params.ctx.agentId, workspaceId, status: 'all' }).catch(() => []) : Promise.resolve([]), []),
+    withContextTimeout(listInstalledAgentApps(params.ctx.agentId).catch(() => []), []),
+    withContextTimeout(listInstalledSkills(params.ctx.agentId), []),
+    withContextTimeout(listWorkflows(params.ctx.agentId, workspaceId), []),
+    withContextTimeout(listAccessibleSubagents({ viewerAgentId: params.ctx.agentId, workspaceId, projectId }).catch(() => []), []),
+    withContextTimeout(listMcpConnections(), []),
+    withContextTimeout(listLibrary({ ownerAgentId: params.ctx.agentId, workspaceId, projectId, limit: 100 }).catch(() => ({ items: [], groups: {}, summary: {} })), { items: [], groups: {}, summary: {} }),
+    withContextTimeout(listAgentTasks({ userId: params.ctx.agentId, workspaceId, status: 'all', limit: 50 }).then(tasks => tasks.filter(task => [
       'created',
       'queued',
       'planning',
@@ -233,11 +257,11 @@ export async function buildWorkspaceContextPackage(params: {
       'paused',
       'retrying',
       'cancelling',
-    ].includes(task.status))).catch(() => []),
-    listAgentTasks({ userId: params.ctx.agentId, workspaceId, status: 'all', limit: 20 }).catch(() => []),
-    listAccessibleMemoryEntries({ viewerAgentId: params.ctx.agentId, ownerAgentId: params.ctx.agentId, workspaceId, limit: 40 }).catch(() => []),
-    workspaceId ? listVaultSecrets({ ownerAgentId: params.ctx.agentId, workspaceId }).catch(() => ({ secrets: [] })) : Promise.resolve({ secrets: [] }),
-    buildCapabilityGraph({ ownerAgentId: params.ctx.agentId, workspaceId, projectId }).catch(() => createEmptyCapabilityGraph()),
+    ].includes(task.status))).catch(() => []), []),
+    withContextTimeout(listAgentTasks({ userId: params.ctx.agentId, workspaceId, status: 'all', limit: 20 }).catch(() => []), []),
+    withContextTimeout(listAccessibleMemoryEntries({ viewerAgentId: params.ctx.agentId, ownerAgentId: params.ctx.agentId, workspaceId, limit: 40 }).catch(() => []), []),
+    withContextTimeout(workspaceId ? listVaultSecrets({ ownerAgentId: params.ctx.agentId, workspaceId }).catch(() => ({ secrets: [] })) : Promise.resolve({ secrets: [] }), { secrets: [] }),
+    withContextTimeout(buildCapabilityGraph({ ownerAgentId: params.ctx.agentId, workspaceId, projectId }).catch(() => createEmptyCapabilityGraph()), createEmptyCapabilityGraph()),
   ]);
 
   const plan = getPlanDescriptor(params.ctx.tier);
