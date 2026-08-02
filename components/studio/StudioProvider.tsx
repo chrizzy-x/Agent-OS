@@ -508,7 +508,8 @@ export function StudioProvider(props: {
     setExecutionTargets((payload.executionTargets ?? []) as ExecutionTarget[]);
     setSessionExecutionTargetId(typeof payload.sessionExecutionTargetId === 'string' ? payload.sessionExecutionTargetId : 'super_agentos');
     setMessageExecutionOverrideId(null);
-    setIntelligenceConnections((payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[]);
+    const bootstrapIntelligenceConnections = (payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[];
+    setIntelligenceConnections(bootstrapIntelligenceConnections);
     const bootstrapIntelligenceSelection = normalizeIntelligenceSelection(payload.sessionIntelligenceSelection, 'session');
     sessionIntelligenceSelectionRef.current = bootstrapIntelligenceSelection;
     messageIntelligenceOverrideRef.current = null;
@@ -521,12 +522,25 @@ export function StudioProvider(props: {
     setSubagents((payload.subagents ?? []) as SubagentRecord[]);
     setMemoryEntries((payload.memoryEntries ?? []) as MemoryEntryRecord[]);
     setFileTree((payload.fileTree ?? []) as StudioFileNode[]);
+    const nextWorkspaceId = nextSession?.workspaceId ?? nextCurrentProject?.workspaceId ?? requestedWorkspaceId;
     applicationShell.syncContext({
-      workspaceId: nextSession?.workspaceId ?? nextCurrentProject?.workspaceId ?? requestedWorkspaceId,
+      workspaceId: nextWorkspaceId,
       projectId: nextCurrentProject?.id ?? null,
       sessionId: nextSession?.id ?? null,
     });
     setLoading(false);
+    if (bootstrapIntelligenceConnections.length === 0 && nextWorkspaceId) {
+      void fetchWithBrowserSession(`/api/intelligence/connections?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
+        cache: 'no-store',
+      }).then(async ({ response: connectionsResponse }) => {
+        if (!connectionsResponse.ok) return;
+        const connectionsPayload = await connectionsResponse.json().catch(() => null) as { connections?: unknown[] } | null;
+        const connections = Array.isArray(connectionsPayload?.connections)
+          ? connectionsPayload.connections as IntelligenceConnectionRecord[]
+          : [];
+        if (connections.length > 0) setIntelligenceConnections(connections);
+      }).catch(() => undefined);
+    }
   }, [applicationShell.syncContext, requestedProjectId, requestedSessionId, requestedWorkspaceId]);
 
   const refreshLinkedFiles = useCallback(async () => {

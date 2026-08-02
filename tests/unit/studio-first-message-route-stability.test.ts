@@ -22,4 +22,13 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('streamingSessionIdRef.current = activeSession.id;');
     expect(source).toContain('streamingSessionIdRef.current = null;');
   });
+
+  it('backfills connected intelligence when bootstrap returns an empty connection list', () => {
+    const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
+
+    expect(source).toContain('const bootstrapIntelligenceConnections = (payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[];');
+    expect(source).toContain('bootstrapIntelligenceConnections.length === 0 && nextWorkspaceId');
+    expect(source).toContain('/api/intelligence/connections?workspaceId=');
+    expect(source).toContain('setIntelligenceConnections(connections)');
+  });
 });
