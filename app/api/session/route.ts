@@ -106,7 +106,9 @@ export async function GET(request: NextRequest) {
     { authenticated: false, error: 'unauthorized', message: 'Not signed in' },
     { status: optional ? 200 : 401 },
   );
-  clearAgentSessionCookies(response, getCookieRequestContext(request));
+  if (accessToken || refreshToken) {
+    clearAgentSessionCookies(response, getCookieRequestContext(request));
+  }
   return response;
 }
 

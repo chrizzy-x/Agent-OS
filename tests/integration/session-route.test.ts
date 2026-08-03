@@ -39,8 +39,23 @@ describe('session routes', () => {
     browserSessionMocks.revokeAllRefreshSessions.mockResolvedValue(undefined);
   });
 
-  it('returns 401 and clears the cookie when no session is present', async () => {
+  it('returns 401 without clearing cookies when no session cookie is present', async () => {
     const request = new NextRequest('http://localhost/api/session', { method: 'GET' });
+    const response = await GET(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(401);
+    expect(body.authenticated).toBe(false);
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('clears browser cookies when a presented session cookie is invalid', async () => {
+    const request = new NextRequest('http://localhost/api/session', {
+      method: 'GET',
+      headers: {
+        Cookie: 'agent_access=not.a.jwt',
+      },
+    });
     const response = await GET(request);
     const body = await response.json();
 
@@ -48,6 +63,16 @@ describe('session routes', () => {
     expect(body.authenticated).toBe(false);
     expect(response.headers.get('set-cookie')).toContain('agent_session=');
     expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  });
+
+  it('does not clear fresh login cookies from an optional no-cookie probe', async () => {
+    const request = new NextRequest('http://localhost/api/session?optional=1', { method: 'GET' });
+    const response = await GET(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.authenticated).toBe(false);
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it('returns the authenticated session from the secure session cookie', async () => {
