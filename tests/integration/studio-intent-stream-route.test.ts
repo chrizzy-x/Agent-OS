@@ -77,9 +77,12 @@ vi.mock('../../src/workspaces/service.js', () => ({
 
 import { POST } from '../../app/api/studio/intent/stream/route.js';
 
+const originalMissingCapabilityFastPathMs = process.env.AGENTOS_MISSING_CAPABILITY_FAST_PATH_MS;
+
 describe('POST /api/studio/intent/stream', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.AGENTOS_MISSING_CAPABILITY_FAST_PATH_MS = originalMissingCapabilityFastPathMs;
     mocks.requireRouteCapability.mockResolvedValue({
       agentId: 'agent-1',
       allowedDomains: [],
@@ -183,6 +186,7 @@ describe('POST /api/studio/intent/stream', () => {
   });
 
   afterEach(() => {
+    process.env.AGENTOS_MISSING_CAPABILITY_FAST_PATH_MS = originalMissingCapabilityFastPathMs;
     vi.unstubAllGlobals();
   });
 
@@ -688,6 +692,32 @@ describe('POST /api/studio/intent/stream', () => {
         }),
       }),
     }));
+  });
+
+  it('does not hold unsupported paper-trade streaming open on slow evidence persistence', async () => {
+    process.env.AGENTOS_MISSING_CAPABILITY_FAST_PATH_MS = '5';
+    mocks.createAgentTask.mockImplementation(() => new Promise(() => undefined));
+
+    const response = await POST(new NextRequest('http://localhost/api/studio/intent/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Paper trade without Derek: place one sandbox buy order and return the order id.',
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        projectId: 'project-1',
+      }),
+    }));
+    const body = await Promise.race([
+      response.text(),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('stream did not close')), 1000)),
+    ]);
+
+    expect(body).toContain('Missing capability');
+    expect(body).toContain('No order was placed');
+    expect(body).toContain('"status":"COMPLETED"');
+    expect(mocks.buildWorkspaceContextPackage).not.toHaveBeenCalled();
+    expect(mocks.streamStudioChatReply).not.toHaveBeenCalled();
   });
 
   it('returns a generic error without exposing the thrown message', async () => {

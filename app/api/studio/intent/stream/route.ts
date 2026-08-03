@@ -1,4 +1,5 @@
-import { NextRequest } from 'next/server';
+import { after, NextRequest } from 'next/server';
+import type { AgentContext } from '@/src/auth/permissions';
 import { requireRouteCapability } from '@/src/auth/request';
 import { appendExecutionLog, createExecution, updateExecution } from '@/src/execution/service';
 import { requestStandardConsensusProposalOnly, runStandardConsensusRuntime } from '@/src/intelligence/consensus';
@@ -17,7 +18,7 @@ import { withStudioDefaultAllowedDomains } from '@/src/studio/domains';
 import { buildExecutionTargets, normalizeExecutionTargetId, resolveExecutionTarget } from '@/src/studio/execution-targets';
 import { getStudioModelLabel, getStudioProviderStatus } from '@/src/studio/providers';
 import { detectAgentOSIntent, humanStatusForIntent, shouldRouteNativeAgentOSOperationFirst, translateMessageToStudioCommand, type AgentOSIntent } from '@/src/studio/intents';
-import { detectNativeMissingCapability } from '@/src/studio/native-operations';
+import { detectNativeMissingCapability, type NativeMissingCapabilityResponse } from '@/src/studio/native-operations';
 import { appendStudioEvent, appendStudioMessage, getStudioSessionBundle } from '@/src/studio/persistence';
 import { createAgentTask, updateAgentTask, type AgentTaskRecord } from '@/src/tasks/service';
 import { sanitizeErrorMessage } from '@/src/utils/output-sanitizer';
@@ -26,9 +27,19 @@ import { buildWorkspaceContextPackage } from '@/src/workspace-context/service';
 import { listWorkspaces } from '@/src/workspaces/service';
 
 export const runtime = 'nodejs';
+const DEFAULT_MISSING_CAPABILITY_FAST_PATH_MS = 1_500;
 
 function encodeEvent(event: string, payload: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+function boundedNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function missingCapabilityFastPathMs(): number {
+  return boundedNumber(process.env.AGENTOS_MISSING_CAPABILITY_FAST_PATH_MS, DEFAULT_MISSING_CAPABILITY_FAST_PATH_MS);
 }
 
 function buildInternalIntentHeaders(requestHeaders: Headers): Headers {
@@ -149,6 +160,245 @@ async function loadConversationNames(params: {
   };
 }
 
+type MissingCapabilityEvidenceResult = {
+  taskId: string | null;
+  executionId: string | null;
+};
+
+function captureMissingCapabilityEvidence(work: Promise<MissingCapabilityEvidenceResult>): Promise<MissingCapabilityEvidenceResult | null> {
+  return work.catch(error => {
+    if (process.env.NODE_ENV !== 'test') {
+      console.error('[studio] missing capability evidence persistence failed:', sanitizeErrorMessage(error));
+    }
+    return null;
+  });
+}
+
+function continueAfterResponse(work: Promise<unknown>): void {
+  try {
+    after(() => work);
+  } catch {
+    void work;
+  }
+}
+
+async function waitForFastEvidence(work: Promise<MissingCapabilityEvidenceResult | null>): Promise<MissingCapabilityEvidenceResult | null> {
+  return Promise.race([
+    work,
+    new Promise<null>(resolve => setTimeout(() => resolve(null), missingCapabilityFastPathMs())),
+  ]);
+}
+
+async function persistMissingCapabilityEvidence(params: {
+  ctx: AgentContext;
+  message: string;
+  sessionId: string | null;
+  workspaceId: string | null;
+  projectId: string | null;
+  approval: boolean;
+  attachments: unknown[];
+  invocations: unknown[];
+  missingCapability: NativeMissingCapabilityResponse;
+  providerStatus: ReturnType<typeof getStudioProviderStatus>;
+  sessionExecutionTargetId: string;
+  messageExecutionOverrideId: string | null;
+  sessionIntelligenceSelection: ReturnType<typeof normalizeIntelligenceSelection>;
+  messageIntelligenceOverride: ReturnType<typeof normalizeIntelligenceSelection> | null;
+  selectedIntelligenceSelection: ReturnType<typeof normalizeIntelligenceSelection>;
+  intent: AgentOSIntent;
+  statusText: string;
+  reply: string;
+  startedAt: number;
+}): Promise<MissingCapabilityEvidenceResult> {
+  const taskRecord = await createAgentTask({
+    userId: params.ctx.agentId,
+    workspaceId: params.workspaceId,
+    projectId: params.projectId,
+    sessionId: params.sessionId,
+    title: params.message.slice(0, 180),
+    originalPrompt: params.message,
+    status: 'planning',
+    plan: [
+      { step: 'receive_user_intent', status: 'completed' },
+      { step: 'validate_missing_capability', status: 'completed', capability: params.missingCapability.capability },
+    ],
+    capabilityIds: [],
+    plannerVersion: 'super-agentos-native-capability-check',
+    contextVersion: null,
+    progress: 20,
+    metadata: {
+      attachmentCount: params.attachments.length,
+      invocationCount: params.invocations.length,
+      missingCapability: params.missingCapability.capability,
+      providerStatus: {
+        mode: params.providerStatus.mode,
+        provider: params.providerStatus.provider,
+        model: params.providerStatus.model,
+        label: params.providerStatus.label,
+      },
+      executionTarget: {
+        selected: 'super_agentos',
+        type: 'native',
+        displayName: 'Super AgentOS',
+        sessionDefault: params.sessionExecutionTargetId,
+        messageOverride: params.messageExecutionOverrideId,
+      },
+      intelligenceSelection: {
+        selected: params.selectedIntelligenceSelection,
+        sessionDefault: params.sessionIntelligenceSelection,
+        messageOverride: params.messageIntelligenceOverride,
+      },
+    },
+    executionMetadata: {
+      runtime: 'super-agentos',
+      missingCapability: params.missingCapability.capability,
+      provider: {
+        mode: params.providerStatus.mode,
+        provider: params.providerStatus.provider,
+        model: params.providerStatus.model,
+        label: params.providerStatus.label,
+      },
+      executionTarget: {
+        selected: 'super_agentos',
+        type: 'native',
+        displayName: 'Super AgentOS',
+        sessionDefault: params.sessionExecutionTargetId,
+        messageOverride: params.messageExecutionOverrideId,
+      },
+      intelligenceSelection: {
+        selected: params.selectedIntelligenceSelection,
+        sessionDefault: params.sessionIntelligenceSelection,
+        messageOverride: params.messageIntelligenceOverride,
+      },
+    },
+  });
+
+  const execution = await createExecution({
+    agentId: params.ctx.agentId,
+    workspaceId: params.workspaceId,
+    projectId: params.projectId,
+    sessionId: params.sessionId,
+    sourceType: 'super_agent',
+    type: 'CHAT_EXECUTION',
+    sourceId: params.sessionId,
+    title: params.message.slice(0, 180),
+    input: { message: params.message, approval: params.approval, attachments: params.attachments, invocations: params.invocations },
+    metadata: {
+      projectId: params.projectId,
+      taskId: taskRecord.id,
+      runtime: 'super-agentos',
+      missingCapability: params.missingCapability.capability,
+      executionTarget: {
+        selected: 'super_agentos',
+        type: 'native',
+        displayName: 'Super AgentOS',
+        sessionDefault: params.sessionExecutionTargetId,
+        messageOverride: params.messageExecutionOverrideId,
+      },
+      intelligenceSelection: params.selectedIntelligenceSelection,
+      provider: {
+        mode: params.providerStatus.mode,
+        provider: params.providerStatus.provider,
+        model: params.providerStatus.model,
+        label: params.providerStatus.label,
+      },
+    },
+    model: getStudioModelLabel(),
+  });
+
+  await updateExecution({
+    agentId: params.ctx.agentId,
+    executionId: execution.id,
+    patch: { status: 'RUNNING', startedAt: new Date(params.startedAt).toISOString() },
+  });
+  await appendExecutionLog({
+    agentId: params.ctx.agentId,
+    executionId: execution.id,
+    message: 'Super AgentOS request started',
+    data: {
+      providerMode: params.providerStatus.mode,
+      provider: params.providerStatus.provider,
+      model: params.providerStatus.model,
+      executionTarget: 'Super AgentOS',
+      missingCapability: params.missingCapability.capability,
+    },
+  });
+
+  if (params.sessionId) {
+    await appendStudioMessage({
+      ownerAgentId: params.ctx.agentId,
+      sessionId: params.sessionId,
+      role: 'user',
+      content: params.message,
+    });
+    await appendStudioEvent({
+      ownerAgentId: params.ctx.agentId,
+      sessionId: params.sessionId,
+      type: 'thinking_started',
+      payload: { intent: params.intent, statusText: params.statusText, missingCapability: params.missingCapability.capability },
+    }).catch(() => undefined);
+    await appendStudioMessage({
+      ownerAgentId: params.ctx.agentId,
+      sessionId: params.sessionId,
+      role: 'assistant',
+      content: params.reply,
+    });
+    await appendStudioEvent({
+      ownerAgentId: params.ctx.agentId,
+      sessionId: params.sessionId,
+      type: 'task_completed',
+      payload: { intent: params.intent, missingCapability: params.missingCapability.capability, executed: false },
+    }).catch(() => undefined);
+  }
+
+  const payload = {
+    kind: 'unsupported',
+    intent: params.intent,
+    statusText: params.statusText,
+    reply: params.reply,
+    code: 'MISSING_CAPABILITY',
+    executed: false,
+    missingCapability: params.missingCapability.capability,
+  };
+  await updateExecution({
+    agentId: params.ctx.agentId,
+    executionId: execution.id,
+    patch: {
+      status: 'COMPLETED',
+      output: payload,
+      durationMs: Date.now() - params.startedAt,
+      completedAt: new Date().toISOString(),
+    },
+  });
+  await updateAgentTask({
+    userId: params.ctx.agentId,
+    taskId: taskRecord.id,
+    patch: {
+      status: 'completed',
+      progress: 100,
+      resultSummary: params.reply.slice(0, 1000),
+      metadata: { ...taskRecord.metadata, executionId: execution.id, missingCapability: params.missingCapability.capability },
+    },
+  });
+  await appendExecutionLog({
+    agentId: params.ctx.agentId,
+    executionId: execution.id,
+    message: 'Super AgentOS request completed',
+    data: { kind: 'unsupported', missingCapability: params.missingCapability.capability, executed: false },
+  });
+  await createNotification({
+    agentId: params.ctx.agentId,
+    workspaceId: params.workspaceId,
+    sessionId: params.sessionId,
+    executionId: execution.id,
+    type: 'execution_completed',
+    title: 'Capability missing',
+    body: params.reply.slice(0, 500),
+  }).catch(() => undefined);
+
+  return { taskId: taskRecord.id, executionId: execution.id };
+}
+
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
@@ -230,210 +480,46 @@ export async function POST(request: NextRequest) {
           );
           const intent: AgentOSIntent = 'EXECUTION_TASK';
           const statusText = 'Missing capability.';
-
-          task = await createAgentTask({
-            userId: ctx.agentId,
-            workspaceId,
-            projectId,
-            sessionId,
-            title: message.slice(0, 180),
-            originalPrompt: message,
-            status: 'planning',
-            plan: [
-              { step: 'receive_user_intent', status: 'completed' },
-              { step: 'validate_missing_capability', status: 'completed', capability: earlyMissingCapability.capability },
-            ],
-            capabilityIds: [],
-            plannerVersion: 'super-agentos-native-capability-check',
-            contextVersion: null,
-            progress: 20,
-            metadata: {
-              attachmentCount: attachments.length,
-              invocationCount: invocations.length,
-              missingCapability: earlyMissingCapability.capability,
-              providerStatus: {
-                mode: providerStatus.mode,
-                provider: providerStatus.provider,
-                model: providerStatus.model,
-                label: providerStatus.label,
-              },
-              executionTarget: {
-                selected: 'super_agentos',
-                type: 'native',
-                displayName: 'Super AgentOS',
-                sessionDefault: sessionExecutionTargetId,
-                messageOverride: messageExecutionOverrideId,
-              },
-              intelligenceSelection: {
-                selected: selectedIntelligenceSelection,
-                sessionDefault: sessionIntelligenceSelection,
-                messageOverride: messageIntelligenceOverride,
-              },
-            },
-            executionMetadata: {
-              runtime: 'super-agentos',
-              missingCapability: earlyMissingCapability.capability,
-              provider: {
-                mode: providerStatus.mode,
-                provider: providerStatus.provider,
-                model: providerStatus.model,
-                label: providerStatus.label,
-              },
-              executionTarget: {
-                selected: 'super_agentos',
-                type: 'native',
-                displayName: 'Super AgentOS',
-                sessionDefault: sessionExecutionTargetId,
-                messageOverride: messageExecutionOverrideId,
-              },
-              intelligenceSelection: {
-                selected: selectedIntelligenceSelection,
-                sessionDefault: sessionIntelligenceSelection,
-                messageOverride: messageIntelligenceOverride,
-              },
-            },
-          });
-
-          const execution = await createExecution({
-            agentId: ctx.agentId,
-            workspaceId,
-            projectId,
-            sessionId,
-            sourceType: 'super_agent',
-            type: 'CHAT_EXECUTION',
-            sourceId: sessionId,
-            title: message.slice(0, 180),
-            input: { message, approval: body.approval === true, attachments, invocations },
-            metadata: {
-              projectId,
-              taskId: task.id,
-              runtime: 'super-agentos',
-              missingCapability: earlyMissingCapability.capability,
-              executionTarget: {
-                selected: 'super_agentos',
-                type: 'native',
-                displayName: 'Super AgentOS',
-                sessionDefault: sessionExecutionTargetId,
-                messageOverride: messageExecutionOverrideId,
-              },
-              intelligenceSelection: selectedIntelligenceSelection,
-              provider: {
-                mode: providerStatus.mode,
-                provider: providerStatus.provider,
-                model: providerStatus.model,
-                label: providerStatus.label,
-              },
-            },
-            model: getStudioModelLabel(),
-          });
-          executionId = execution.id;
-          await updateExecution({
-            agentId: ctx.agentId,
-            executionId,
-            patch: { status: 'RUNNING', startedAt: new Date(startedAt).toISOString() },
-          });
-          await appendExecutionLog({
-            agentId: ctx.agentId,
-            executionId,
-            message: 'Super AgentOS request started',
-            data: {
-              providerMode: providerStatus.mode,
-              provider: providerStatus.provider,
-              model: providerStatus.model,
-              executionTarget: 'Super AgentOS',
-              missingCapability: earlyMissingCapability.capability,
-            },
-          });
-          push('execution', {
-            executionId,
-            status: 'RUNNING',
-            providerMode: providerStatus.mode,
-            providerLabel: providerStatus.label,
-            executionTarget: 'Super AgentOS',
-          });
-          push('status', { text: statusText });
-
-          if (sessionId) {
-            await appendStudioMessage({
-              ownerAgentId: ctx.agentId,
-              sessionId,
-              role: 'user',
-              content: message,
-            });
-            userPersisted = true;
-            await appendStudioEvent({
-              ownerAgentId: ctx.agentId,
-              sessionId,
-              type: 'thinking_started',
-              payload: { intent, statusText, missingCapability: earlyMissingCapability.capability },
-            }).catch(() => undefined);
-          }
-
           partialReply = earlyMissingCapability.reply;
+          const evidenceWork = captureMissingCapabilityEvidence(persistMissingCapabilityEvidence({
+            ctx,
+            message,
+            sessionId,
+            workspaceId,
+            projectId,
+            approval: body.approval === true,
+            attachments,
+            invocations,
+            missingCapability: earlyMissingCapability,
+            providerStatus,
+            sessionExecutionTargetId,
+            messageExecutionOverrideId,
+            sessionIntelligenceSelection,
+            messageIntelligenceOverride,
+            selectedIntelligenceSelection,
+            intent,
+            statusText,
+            reply: partialReply,
+            startedAt,
+          }));
+          const fastEvidence = await waitForFastEvidence(evidenceWork);
+          if (fastEvidence?.executionId) executionId = fastEvidence.executionId;
+          if (!fastEvidence) continueAfterResponse(evidenceWork);
+
+          if (executionId) {
+            push('execution', {
+              executionId,
+              status: 'COMPLETED',
+              providerMode: providerStatus.mode,
+              providerLabel: providerStatus.label,
+              executionTarget: 'Super AgentOS',
+            });
+          }
+          push('status', { text: statusText });
           for (const text of replyChunks(partialReply)) {
             push('delta', { text });
             await new Promise(resolve => setTimeout(resolve, 8));
           }
-          if (sessionId) {
-            await appendStudioMessage({
-              ownerAgentId: ctx.agentId,
-              sessionId,
-              role: 'assistant',
-              content: partialReply,
-            });
-            assistantPersisted = true;
-            await appendStudioEvent({
-              ownerAgentId: ctx.agentId,
-              sessionId,
-              type: 'task_completed',
-              payload: { intent, missingCapability: earlyMissingCapability.capability, executed: false },
-            }).catch(() => undefined);
-          }
-
-          const payload = {
-            kind: 'unsupported',
-            intent,
-            statusText,
-            reply: partialReply,
-            code: 'MISSING_CAPABILITY',
-            executed: false,
-            missingCapability: earlyMissingCapability.capability,
-          };
-          await updateExecution({
-            agentId: ctx.agentId,
-            executionId,
-            patch: {
-              status: 'COMPLETED',
-              output: payload,
-              durationMs: Date.now() - startedAt,
-              completedAt: new Date().toISOString(),
-            },
-          });
-          await updateAgentTask({
-            userId: ctx.agentId,
-            taskId: task.id,
-            patch: {
-              status: 'completed',
-              progress: 100,
-              resultSummary: partialReply.slice(0, 1000),
-              metadata: { ...task.metadata, executionId, missingCapability: earlyMissingCapability.capability },
-            },
-          });
-          await appendExecutionLog({
-            agentId: ctx.agentId,
-            executionId,
-            message: 'Super AgentOS request completed',
-            data: { kind: 'unsupported', missingCapability: earlyMissingCapability.capability, executed: false },
-          });
-          await createNotification({
-            agentId: ctx.agentId,
-            workspaceId,
-            sessionId,
-            executionId,
-            type: 'execution_completed',
-            title: 'Capability missing',
-            body: partialReply.slice(0, 500),
-          }).catch(() => undefined);
           push('done', { executionId, status: 'COMPLETED' });
           close();
           return;
