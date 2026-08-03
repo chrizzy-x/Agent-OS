@@ -19,6 +19,59 @@ import { redactSecretsInString } from '@/src/security/secret-redaction';
 import { toErrorResponse, ValidationError } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
+const DEFAULT_CONNECTION_VALIDATION_TIMEOUT_MS = 55_000;
+
+class ConnectionValidationTimeoutError extends Error {
+  constructor() {
+    super('Credential validation timed out before connected model discovery completed.');
+    this.name = 'ConnectionValidationTimeoutError';
+  }
+}
+
+function connectionValidationTimeoutMs(): number {
+  const configured = Number(process.env.AGENTOS_CONNECTION_VALIDATION_TIMEOUT_MS);
+  if (!Number.isFinite(configured) || configured <= 0) return DEFAULT_CONNECTION_VALIDATION_TIMEOUT_MS;
+  return Math.max(1_000, Math.min(Math.floor(configured), 90_000));
+}
+
+async function validateConnectedModels(params: {
+  ownerAgentId: string;
+  workspaceId: string;
+  secretName: string;
+  vendor: IntelligenceVendor;
+}): Promise<ConnectedIntelligenceModel[]> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const work = (async () => {
+      const grant = await createRuntimeSecretGrant({
+        ownerAgentId: params.ownerAgentId,
+        workspaceId: params.workspaceId,
+        name: params.secretName,
+        expiresInMs: 60_000,
+        metadata: { purpose: 'intelligence_connection_validation', vendor: params.vendor },
+      });
+      return discoverConnectedIntelligenceModels({
+        ownerAgentId: params.ownerAgentId,
+        vaultRuntimeGrantId: grant.id,
+        vendor: params.vendor,
+        signal: controller.signal,
+      });
+    })();
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          const error = new ConnectionValidationTimeoutError();
+          controller.abort(error);
+          reject(error);
+        }, connectionValidationTimeoutMs());
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 function parseVendor(value: unknown): IntelligenceVendor {
   const vendor = typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -108,16 +161,10 @@ export async function POST(request: NextRequest) {
     let discoveredModels: ConnectedIntelligenceModel[] = [];
     let validationError: string | null = null;
     try {
-      const grant = await createRuntimeSecretGrant({
+      discoveredModels = await validateConnectedModels({
         ownerAgentId: ctx.agentId,
         workspaceId,
-        name: secret.name,
-        expiresInMs: 60_000,
-        metadata: { purpose: 'intelligence_connection_validation', vendor },
-      });
-      discoveredModels = await discoverConnectedIntelligenceModels({
-        ownerAgentId: ctx.agentId,
-        vaultRuntimeGrantId: grant.id,
+        secretName: secret.name,
         vendor,
       });
     } catch (error) {

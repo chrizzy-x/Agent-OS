@@ -157,6 +157,39 @@ describe('intelligence connections route', () => {
     expect(body.validated).toBe(false);
   });
 
+  it('records invalid status honestly when credential validation times out', async () => {
+    const previousTimeout = process.env.AGENTOS_CONNECTION_VALIDATION_TIMEOUT_MS;
+    process.env.AGENTOS_CONNECTION_VALIDATION_TIMEOUT_MS = '1';
+    routeMocks.discoverConnectedIntelligenceModels.mockImplementation(() => new Promise(() => {}));
+    routeMocks.createIntelligenceConnection.mockResolvedValue(connection({
+      status: 'invalid',
+      lastError: 'Credential validation timed out before connected model discovery completed.',
+    }));
+
+    try {
+      const response = await POST(request('http://localhost/api/intelligence/connections', 'POST', {
+        workspaceId: 'workspace-1',
+        vendor: 'openai',
+        credential: 'sk-live-secret-value',
+        modelId: 'gpt-5',
+      }));
+      const body = await response.json();
+
+      expect(response.status).toBe(202);
+      expect(routeMocks.createIntelligenceConnection).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'invalid',
+        validated: false,
+        lastError: expect.stringMatching(/timed out/i),
+      }));
+      expect(routeMocks.setIntelligenceDefault).not.toHaveBeenCalled();
+      expect(JSON.stringify(body)).not.toContain('sk-live-secret-value');
+      expect(body.validated).toBe(false);
+    } finally {
+      if (previousTimeout === undefined) delete process.env.AGENTOS_CONNECTION_VALIDATION_TIMEOUT_MS;
+      else process.env.AGENTOS_CONNECTION_VALIDATION_TIMEOUT_MS = previousTimeout;
+    }
+  });
+
   it('lists safe connection metadata and known exact models', async () => {
     const response = await GET(request('http://localhost/api/intelligence/connections?workspaceId=workspace-1', 'GET'));
     const body = await response.json();

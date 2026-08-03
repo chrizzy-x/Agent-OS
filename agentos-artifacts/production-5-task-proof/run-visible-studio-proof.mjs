@@ -852,8 +852,9 @@ async function main() {
       const openaiConnection = connections.find(item => item.vendor === 'openai' && item.status === 'active' && item.selectedModelId === 'gpt-5-mini');
       const anthropicConnection = connections.find(item => item.vendor === 'anthropic' && item.status === 'active' && item.selectedModelId === 'claude-sonnet-4-6');
       openaiSelectionLabel = openaiConnection?.displayName ?? '';
+      anthropicSelectionLabel = anthropicConnection?.displayName ?? '';
       if (!openaiConnection || !anthropicConnection) throw new Error('Reusable proof account does not have both required active Vault-backed connections.');
-      if (anthropicKey) {
+      if (anthropicKey && process.env.AGENTOS_PROOF_REFRESH_ANTHROPIC === '1') {
         const connection = await connectIntelligenceThroughVault(page, {
           vendor: 'anthropic',
           label: 'Anthropic',
