@@ -211,7 +211,7 @@ async function assertSessionOwner(sessionId: string, ownerAgentId: string): Prom
 
 export async function listStudioSessions(
   ownerAgentId: string,
-  options: { status?: string | 'all'; includeDeleted?: boolean } = {},
+  options: { status?: string | 'all'; includeDeleted?: boolean; limit?: number } = {},
 ): Promise<StudioSessionRecord[]> {
   try {
     const supabase = getSupabaseAdmin();
@@ -231,6 +231,10 @@ export async function listStudioSessions(
       query = query.eq('status', 'active');
     }
 
+    if (typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
+      query = query.limit(Math.floor(options.limit));
+    }
+
     const { data, error } = await query;
     if (!error) return ((data ?? []) as Record<string, unknown>[]).map(mapSession);
   } catch {
@@ -245,7 +249,10 @@ export async function listStudioSessions(
     if (!options.status) return String(row.status) === 'active';
     return true;
   }) as Record<string, unknown>[];
-  return sortSessionRows(rows).map(mapSession);
+  const sorted = sortSessionRows(rows).map(mapSession);
+  return typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0
+    ? sorted.slice(0, Math.floor(options.limit))
+    : sorted;
 }
 
 export async function createStudioSession(params: {

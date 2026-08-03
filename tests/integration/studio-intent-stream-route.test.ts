@@ -539,6 +539,7 @@ describe('POST /api/studio/intent/stream', () => {
 
     expect(body).toContain('Routing native AgentOS operation');
     expect(body).toContain('Install app deZypher?');
+    expect(body).toContain('"sessionId":"session-1"');
     expect(body).toContain('"status":"PAUSED"');
     expect(forwarded.intelligenceProposal).toBeUndefined();
     expect(mocks.buildWorkspaceContextPackage).not.toHaveBeenCalled();
@@ -581,6 +582,7 @@ describe('POST /api/studio/intent/stream', () => {
     const forwarded = JSON.parse(String(fetchMock.mock.calls[0][1]?.body)) as Record<string, unknown>;
 
     expect(body).toContain('Requesting Standard Consensus proposal for Super AgentOS validation');
+    expect(body).toContain('"sessionId":"session-1"');
     expect(body).toContain('"status":"PAUSED"');
     expect(forwarded.runtimeTaskId).toBe('task-1');
     expect(forwarded.runtimeExecutionId).toBe('execution-1');

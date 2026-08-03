@@ -31,4 +31,12 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('/api/intelligence/connections?workspaceId=');
     expect(source).toContain('setIntelligenceConnections(connections)');
   });
+
+  it('keeps approvals tied to the originating Studio session', () => {
+    const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
+
+    expect(source).toContain('sessionId: string | null;');
+    expect(source).toContain('sessionId: typeof event.data.sessionId === \'string\'');
+    expect(source).toContain('pendingApproval.sessionId ?? session?.id ?? requestedSessionId ?? null');
+  });
 });

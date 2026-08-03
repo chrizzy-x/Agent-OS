@@ -634,6 +634,7 @@ export async function POST(request: NextRequest) {
           if (typeof payload.confirmToken === 'string') {
             push('approval', {
               confirmToken: payload.confirmToken,
+              sessionId,
               reply: partialReply,
               mixedExecution,
             });
@@ -1122,6 +1123,7 @@ export async function POST(request: NextRequest) {
         if (typeof payload.confirmToken === 'string') {
           push('approval', {
             confirmToken: payload.confirmToken,
+            sessionId,
             reply: partialReply,
             mixedExecution,
           });

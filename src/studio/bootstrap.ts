@@ -193,7 +193,7 @@ export async function buildStudioBootstrap(params: {
       [] as Awaited<ReturnType<typeof listWorkspaces>>,
     ),
     withBootstrapTimeout(
-      listStudioSessions(params.ownerAgentId, { status: 'active' }),
+      listStudioSessions(params.ownerAgentId, { status: 'active', limit: 60 }),
       [] as StudioSessionRecord[],
     ),
   ]);
@@ -214,8 +214,20 @@ export async function buildStudioBootstrap(params: {
       : scopedSessions[0] ?? null;
 
   let session: StudioSessionRecord | null = preferredSession;
+  const requestedSessionBundle = params.sessionId && !session
+    ? await withBootstrapTimeout<Awaited<ReturnType<typeof getStudioSessionBundle>> | null>(
+      getStudioSessionBundle(params.ownerAgentId, params.sessionId).catch(() => null),
+      null,
+    )
+    : null;
+  if (requestedSessionBundle?.session) {
+    session = requestedSessionBundle.session;
+    if (!sessions.some(item => item.id === requestedSessionBundle.session.id)) {
+      sessions.unshift(requestedSessionBundle.session);
+    }
+  }
   let draftProjectId: string | null = null;
-  if (!session && defaultWorkspace) {
+  if (!session && defaultWorkspace && !params.sessionId) {
     const project = await withBootstrapTimeout<Awaited<ReturnType<typeof resolveProjectForWorkspace>> | null>(
       resolveProjectForWorkspace({
         ownerAgentId: params.ownerAgentId,
@@ -297,11 +309,17 @@ export async function buildStudioBootstrap(params: {
     ? projects.find(project => project.id === activeProjectId) ?? null
     : null;
 
+  const bundlePromise = requestedSessionBundle?.session.id === session?.id
+    ? Promise.resolve(requestedSessionBundle)
+    : session
+      ? withBootstrapTimeout<Awaited<ReturnType<typeof getStudioSessionBundle>> | null>(
+        getStudioSessionBundle(params.ownerAgentId, session.id),
+        null,
+      )
+      : Promise.resolve(null);
+
   const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries, workspaceAssets, intelligenceConnections, workspaceDefault] = await Promise.all([
-    session ? withBootstrapTimeout<Awaited<ReturnType<typeof getStudioSessionBundle>> | null>(
-      getStudioSessionBundle(params.ownerAgentId, session.id),
-      null,
-    ) : Promise.resolve(null),
+    bundlePromise,
     withBootstrapTimeout(loadBootstrapWorkflows(params.ownerAgentId), []),
     withBootstrapTimeout(loadBootstrapInstalledSkills(params.ownerAgentId), []),
     withBootstrapTimeout(listInstalledAgentApps(params.ownerAgentId), []),

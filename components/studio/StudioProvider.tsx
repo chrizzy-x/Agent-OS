@@ -211,6 +211,7 @@ type ProviderStatusRecord = {
 
 type PendingApproval = {
   confirmToken: string;
+  sessionId: string | null;
   reply: string;
 };
 
@@ -1040,6 +1041,9 @@ export function StudioProvider(props: {
         if (event.event === 'approval' && typeof event.data.confirmToken === 'string') {
           setPendingApproval({
             confirmToken: event.data.confirmToken,
+            sessionId: typeof event.data.sessionId === 'string'
+              ? event.data.sessionId
+              : executionSession?.id ?? session?.id ?? requestedSessionId ?? null,
             reply: typeof event.data.reply === 'string' ? event.data.reply : '',
           });
           return;
@@ -1178,7 +1182,7 @@ export function StudioProvider(props: {
       body: JSON.stringify({
         approval: true,
         confirmToken: pendingApproval.confirmToken,
-        sessionId: session?.id ?? null,
+        sessionId: pendingApproval.sessionId ?? session?.id ?? requestedSessionId ?? null,
       }),
     });
     const payload = await response.response.json().catch(() => ({})) as Record<string, unknown>;
@@ -1198,7 +1202,7 @@ export function StudioProvider(props: {
     await refresh();
     await refreshRuntimeState();
     setSending(false);
-  }, [pendingApproval, refresh, refreshRuntimeState, router, session]);
+  }, [pendingApproval, refresh, refreshRuntimeState, requestedSessionId, router, session]);
 
   async function openFile(path: string) {
     const existing = tabs.find(tab => tab.path === path);
