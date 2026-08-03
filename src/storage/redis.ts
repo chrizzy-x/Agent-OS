@@ -1,6 +1,12 @@
 import Redis from 'ioredis';
 
 let client: Redis | null = null;
+const DEFAULT_REDIS_CONNECT_TIMEOUT_MS = 1_000;
+
+function redisConnectTimeoutMs(): number {
+  const parsed = Number.parseInt(process.env.AGENTOS_REDIS_CONNECT_TIMEOUT_MS ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_REDIS_CONNECT_TIMEOUT_MS;
+}
 
 // Returns a shared Redis client, creating it on first call.
 // Uses lazy initialization so tests can control when the connection is made.
@@ -11,9 +17,13 @@ export function getRedisClient(): Redis {
       throw new Error('REDIS_URL environment variable is required');
     }
     client = new Redis(url, {
-      maxRetriesPerRequest: 3,
+      maxRetriesPerRequest: 1,
       enableReadyCheck: true,
       lazyConnect: false,
+      connectTimeout: redisConnectTimeoutMs(),
+      retryStrategy(times) {
+        return times <= 1 ? Math.min(times * 250, 1_000) : null;
+      },
     });
 
     client.on('error', (err) => {

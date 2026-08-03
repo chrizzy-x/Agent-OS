@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockRedis, mockSupabase } from '../setup.js';
 
 const originalNodeEnv = process.env.NODE_ENV;
+const originalRedisTokenTimeout = process.env.AGENTOS_REDIS_TOKEN_TIMEOUT_MS;
+const originalRedisTokenCooldown = process.env.AGENTOS_REDIS_TOKEN_COOLDOWN_MS;
 
 type TokenRow = {
   key_hash: string;
@@ -48,7 +50,10 @@ function installDurableTokenTable(rows: Map<string, TokenRow>) {
 }
 
 beforeEach(() => {
+  vi.resetModules();
   process.env.NODE_ENV = 'production';
+  process.env.AGENTOS_REDIS_TOKEN_TIMEOUT_MS = originalRedisTokenTimeout;
+  process.env.AGENTOS_REDIS_TOKEN_COOLDOWN_MS = originalRedisTokenCooldown;
   mockSupabase.from.mockReset();
   mockRedis.get.mockReset();
   mockRedis.del.mockReset();
@@ -59,6 +64,8 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env.NODE_ENV = originalNodeEnv;
+  process.env.AGENTOS_REDIS_TOKEN_TIMEOUT_MS = originalRedisTokenTimeout;
+  process.env.AGENTOS_REDIS_TOKEN_COOLDOWN_MS = originalRedisTokenCooldown;
 });
 
 describe('Studio confirmation tokens', () => {
@@ -76,5 +83,28 @@ describe('Studio confirmation tokens', () => {
 
     await tokenDel('studio:confirm:test-token');
     expect(await tokenGet('studio:confirm:test-token')).toBeNull();
+  });
+
+  it('does not block durable production tokens on hung Redis', async () => {
+    process.env.AGENTOS_REDIS_TOKEN_TIMEOUT_MS = '5';
+    const rows = new Map<string, TokenRow>();
+    installDurableTokenTable(rows);
+    (mockRedis as typeof mockRedis & { setex: ReturnType<typeof vi.fn> }).setex = vi.fn(() => new Promise(() => undefined));
+    const { tokenGet, tokenSet } = await import('../../src/studio/confirm-tokens.js');
+
+    await tokenSet('studio:confirm:hung-redis', 1800, '{"approved":true}');
+
+    expect(rows.size).toBe(1);
+    expect(await tokenGet('studio:confirm:hung-redis')).toBe('{"approved":true}');
+  });
+
+  it('keeps reading legacy Redis tokens if durable storage is unavailable', async () => {
+    mockSupabase.from.mockImplementation(() => {
+      throw new Error('durable token table unavailable');
+    });
+    mockRedis.get.mockResolvedValue('{"approved":true}');
+    const { tokenGet } = await import('../../src/studio/confirm-tokens.js');
+
+    await expect(tokenGet('studio:confirm:legacy')).resolves.toBe('{"approved":true}');
   });
 });

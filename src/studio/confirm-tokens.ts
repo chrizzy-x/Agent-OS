@@ -4,6 +4,10 @@ import { getSupabaseAdmin } from '../storage/supabase.js';
 
 const LOCAL_TOKENS = new Map<string, { value: string; expiresAt: number }>();
 const DURABLE_TOKEN_TABLE = 'studio_confirm_tokens';
+const DEFAULT_REDIS_TOKEN_TIMEOUT_MS = 800;
+const DEFAULT_REDIS_TOKEN_COOLDOWN_MS = 30_000;
+
+let redisUnavailableUntil = 0;
 
 function pruneTokens() {
   const now = Date.now();
@@ -18,6 +22,42 @@ function isProductionRuntime(): boolean {
 
 function tokenKeyHash(key: string): string {
   return crypto.createHash('sha256').update(key).digest('hex');
+}
+
+function boundedNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function redisTokenTimeoutMs(): number {
+  return boundedNumber(process.env.AGENTOS_REDIS_TOKEN_TIMEOUT_MS, DEFAULT_REDIS_TOKEN_TIMEOUT_MS);
+}
+
+function redisTokenCooldownMs(): number {
+  return boundedNumber(process.env.AGENTOS_REDIS_TOKEN_COOLDOWN_MS, DEFAULT_REDIS_TOKEN_COOLDOWN_MS);
+}
+
+async function withRedisTokenTimeout<T>(operation: () => Promise<T>): Promise<T> {
+  if (Date.now() < redisUnavailableUntil) {
+    throw new Error('Redis confirmation token storage is in cooldown');
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      timer = setTimeout(() => {
+        redisUnavailableUntil = Date.now() + redisTokenCooldownMs();
+        reject(new Error('Redis confirmation token operation timed out'));
+      }, redisTokenTimeoutMs());
+
+      operation().then(resolve, reject);
+    });
+  } catch (error) {
+    redisUnavailableUntil = Date.now() + redisTokenCooldownMs();
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function setDurableToken(key: string, ttlSeconds: number, value: string): Promise<void> {
@@ -74,23 +114,26 @@ async function deleteDurableToken(key: string): Promise<void> {
 }
 
 export async function tokenSet(key: string, ttlSeconds: number, value: string): Promise<void> {
-  try {
-    await getRedisClient().setex(key, ttlSeconds, value);
-    if (isProductionRuntime()) {
+  if (isProductionRuntime()) {
+    try {
+      await setDurableToken(key, ttlSeconds, value);
+    } catch (durableError) {
       try {
-        await setDurableToken(key, ttlSeconds, value);
+        await withRedisTokenTimeout(() => getRedisClient().setex(key, ttlSeconds, value));
+        return;
       } catch {
-        // Redis remains the durable store when it accepts the write.
+        throw durableError;
       }
     }
+    withRedisTokenTimeout(() => getRedisClient().setex(key, ttlSeconds, value)).catch(() => undefined);
     return;
-  } catch {
-    // Fall through to production durable storage or local development state.
   }
 
-  if (isProductionRuntime()) {
-    await setDurableToken(key, ttlSeconds, value);
+  try {
+    await withRedisTokenTimeout(() => getRedisClient().setex(key, ttlSeconds, value));
     return;
+  } catch {
+    // Fall through to local development state.
   }
 
   pruneTokens();
@@ -101,15 +144,20 @@ export async function tokenSet(key: string, ttlSeconds: number, value: string): 
 }
 
 export async function tokenGet(key: string): Promise<string | null> {
-  try {
-    const value = await getRedisClient().get(key);
-    if (value !== null) return value;
-  } catch {
-    // Fall through to production durable storage or local development state.
+  if (isProductionRuntime()) {
+    try {
+      const durableValue = await getDurableToken(key);
+      if (durableValue !== null) return durableValue;
+    } catch {
+      // Fall through to Redis for one-release migration tolerance.
+    }
   }
 
-  if (isProductionRuntime()) {
-    return getDurableToken(key);
+  try {
+    const value = await withRedisTokenTimeout(() => getRedisClient().get(key));
+    if (value !== null) return value;
+  } catch {
+    // Fall through to local development state.
   }
 
   const entry = LOCAL_TOKENS.get(key);
@@ -121,13 +169,21 @@ export async function tokenGet(key: string): Promise<string | null> {
 }
 
 export async function tokenDel(key: string): Promise<void> {
+  if (isProductionRuntime()) {
+    try {
+      await deleteDurableToken(key);
+    } catch {
+      // Redis may still contain legacy confirmation tokens.
+    }
+    withRedisTokenTimeout(() => getRedisClient().del(key)).catch(() => undefined);
+    LOCAL_TOKENS.delete(key);
+    return;
+  }
+
   try {
-    await getRedisClient().del(key);
+    await withRedisTokenTimeout(() => getRedisClient().del(key));
   } catch {
     // Ignore redis failures.
-  }
-  if (isProductionRuntime()) {
-    await deleteDurableToken(key);
   }
   LOCAL_TOKENS.delete(key);
 }

@@ -10,6 +10,10 @@ import { deleteMemoryEntry, getOwnedMemoryEntry, listAccessibleMemoryEntries, up
 import type { AgentContext } from '../auth/permissions.js';
 
 const DEFAULT_TTL = 60 * 60 * 24 * 7;
+const DEFAULT_REDIS_MEMORY_TIMEOUT_MS = 1_000;
+const DEFAULT_REDIS_MEMORY_COOLDOWN_MS = 30_000;
+
+let redisMemoryUnavailableUntil = 0;
 
 function memKey(agentId: string, key: string): string {
   return agentKey('mem', agentId, key);
@@ -37,11 +41,57 @@ function memoryNamespaceId(ctx: AgentContext): string {
   return ctx.agentId;
 }
 
+function boundedNumber(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function redisMemoryTimeoutMs(): number {
+  return boundedNumber(process.env.AGENTOS_REDIS_MEMORY_TIMEOUT_MS, DEFAULT_REDIS_MEMORY_TIMEOUT_MS);
+}
+
+function redisMemoryCooldownMs(): number {
+  return boundedNumber(process.env.AGENTOS_REDIS_MEMORY_COOLDOWN_MS, DEFAULT_REDIS_MEMORY_COOLDOWN_MS);
+}
+
+function shouldCooldownMemoryFallback(error: unknown): boolean {
+  if (error instanceof NotFoundError || error instanceof QuotaError) return false;
+  return !(error instanceof Error && error.message.startsWith('Corrupted value'));
+}
+
+async function withPrimaryMemoryTimeout<T>(operation: () => Promise<T>): Promise<T> {
+  if (Date.now() < redisMemoryUnavailableUntil) {
+    throw new Error('Redis memory storage is in cooldown');
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      timer = setTimeout(() => {
+        redisMemoryUnavailableUntil = Date.now() + redisMemoryCooldownMs();
+        reject(new Error('Redis memory operation timed out'));
+      }, redisMemoryTimeoutMs());
+
+      operation().then(resolve, reject);
+    });
+  } catch (error) {
+    if (shouldCooldownMemoryFallback(error)) {
+      redisMemoryUnavailableUntil = Date.now() + redisMemoryCooldownMs();
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function withMemFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
   try {
-    return await primary();
+    return await withPrimaryMemoryTimeout(primary);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Corrupted value')) {
+    if (
+      error instanceof QuotaError
+      || (error instanceof Error && error.message.startsWith('Corrupted value'))
+    ) {
       throw error;
     }
     return fallback();
