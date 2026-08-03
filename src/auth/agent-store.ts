@@ -3,7 +3,9 @@ import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
-const AUTH_STORE_QUERY_TIMEOUT_MS = 30_000;
+const AUTH_STORE_QUERY_TIMEOUT_MS = 10_000;
+const AUTH_STORE_QUERY_ATTEMPTS = 3;
+const AUTH_STORE_RETRY_DELAY_MS = 250;
 
 export class AuthStoreUnavailableError extends Error {
   constructor(message = 'Authentication store is temporarily unavailable') {
@@ -95,6 +97,10 @@ async function readLocalAccounts(): Promise<AgentAccount[]> {
   return Object.values(state.accounts).map(mapLocalAccount);
 }
 
+function waitForAuthStoreRetry(attempt: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, AUTH_STORE_RETRY_DELAY_MS * attempt));
+}
+
 export async function findAccountsByEmail(email: string): Promise<AgentAccount[]> {
   let supabase;
   try {
@@ -104,18 +110,24 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
     return accounts.filter(account => account.email === email);
   }
 
-  try {
-    const { data, error } = await applyAuthStoreQueryTimeout(supabase
-      .from('agents')
-      .select('id, name, metadata')
-      .eq('metadata->>email', email)
-      .limit(10));
+  for (let attempt = 1; attempt <= AUTH_STORE_QUERY_ATTEMPTS; attempt += 1) {
+    try {
+      const { data, error } = await applyAuthStoreQueryTimeout(supabase
+        .from('agents')
+        .select('id, name, metadata')
+        .eq('metadata->>email', email)
+        .limit(10));
 
-    if (!error) {
-      return ((data ?? []) as Record<string, unknown>[]).map(mapSupabaseAccount);
+      if (!error) {
+        return ((data ?? []) as Record<string, unknown>[]).map(mapSupabaseAccount);
+      }
+    } catch {
+      // Retry below.
     }
-  } catch {
-    throw new AuthStoreUnavailableError();
+
+    if (attempt < AUTH_STORE_QUERY_ATTEMPTS) {
+      await waitForAuthStoreRetry(attempt);
+    }
   }
 
   throw new AuthStoreUnavailableError();
