@@ -62,6 +62,59 @@ type StudioMessageRecord = {
   state?: 'streaming' | 'complete' | 'stopped' | 'error';
 };
 
+function messageCreatedAtOrAfter(message: StudioMessageRecord, createdAt: string): boolean {
+  const messageTime = Date.parse(message.createdAt);
+  const turnTime = Date.parse(createdAt);
+  return !Number.isFinite(messageTime) || !Number.isFinite(turnTime) || messageTime >= turnTime - 1000;
+}
+
+function hasPersistedAssistantForTurn(messages: StudioMessageRecord[], createdAt: string): boolean {
+  return messages.some(message => message.role === 'assistant'
+    && message.content.trim().length > 0
+    && messageCreatedAtOrAfter(message, createdAt));
+}
+
+function preserveCompletedStreamedTurn(params: {
+  current: StudioMessageRecord[];
+  userMessageId: string;
+  assistantMessageId: string;
+  userContent: string;
+  assistantContent: string;
+  createdAt: string;
+}): StudioMessageRecord[] {
+  const hasAssistant = params.current.some(message => (
+    message.id === params.assistantMessageId
+    || (message.role === 'assistant' && message.content.trim().length > 0 && messageCreatedAtOrAfter(message, params.createdAt))
+  ));
+  if (hasAssistant) {
+    return params.current.map(message => message.id === params.assistantMessageId
+      ? { ...message, content: params.assistantContent, state: 'complete' }
+      : message);
+  }
+
+  const hasUser = params.current.some(message => (
+    message.id === params.userMessageId
+    || (message.role === 'user' && message.content === params.userContent && messageCreatedAtOrAfter(message, params.createdAt))
+  ));
+  return [
+    ...params.current,
+    ...(hasUser ? [] : [{
+      id: params.userMessageId,
+      role: 'user' as const,
+      content: params.userContent,
+      createdAt: params.createdAt,
+      state: 'complete' as const,
+    }]),
+    {
+      id: params.assistantMessageId,
+      role: 'assistant' as const,
+      content: params.assistantContent,
+      createdAt: params.createdAt,
+      state: 'complete' as const,
+    },
+  ];
+}
+
 type StudioEventRecord = {
   id: string;
   type: string;
@@ -910,7 +963,9 @@ export function StudioProvider(props: {
     if (!nextMessage || sending) return;
 
     const createdAt = new Date().toISOString();
-    const assistantMessageId = `streaming-assistant-${Date.now()}`;
+    const turnSeed = Date.now();
+    const userMessageId = `optimistic-user-${turnSeed}`;
+    const assistantMessageId = `streaming-assistant-${turnSeed}`;
     const abortController = new AbortController();
     let settleStream: () => void = () => undefined;
     const streamSettled = new Promise<void>(resolve => {
@@ -920,6 +975,7 @@ export function StudioProvider(props: {
     let finalState: StudioMessageRecord['state'] = 'complete';
     let receivedTerminalEvent = false;
     let failureMessage = RESPONSE_FAILURE_MESSAGE;
+    let streamedAssistantContent = '';
     const activeSessionIntelligenceSelection = sessionIntelligenceSelectionRef.current;
     const activeMessageIntelligenceOverride = messageIntelligenceOverrideRef.current;
 
@@ -930,7 +986,7 @@ export function StudioProvider(props: {
     setStreamingStatus(session ? 'Generating...' : 'Preparing chat...');
     setPendingApproval(null);
     setMessages(current => [...current, {
-      id: `optimistic-user-${Date.now()}`,
+      id: userMessageId,
       role: 'user',
       content: nextMessage,
       createdAt,
@@ -1033,6 +1089,7 @@ export function StudioProvider(props: {
           return;
         }
         if (event.event === 'delta' && typeof event.data.text === 'string') {
+          streamedAssistantContent += event.data.text;
           setMessages(current => current.map(item => item.id === assistantMessageId
             ? { ...item, content: `${item.content}${event.data.text}`, state: 'streaming' }
             : item));
@@ -1102,7 +1159,17 @@ export function StudioProvider(props: {
         if (!executionSession) {
           await refreshRuntimeState();
         } else if (finalState === 'complete') {
-          await loadSessionBundle(executionSession.id);
+          const bundle = await loadSessionBundle(executionSession.id);
+          if (streamedAssistantContent.trim() && !hasPersistedAssistantForTurn(bundle?.messages ?? [], createdAt)) {
+            setMessages(current => preserveCompletedStreamedTurn({
+              current,
+              userMessageId,
+              assistantMessageId,
+              userContent: nextMessage,
+              assistantContent: streamedAssistantContent,
+              createdAt,
+            }));
+          }
         } else if (finalState === 'stopped') {
           await new Promise(resolve => setTimeout(resolve, 150));
           const bundle = await fetchWithBrowserSession(`/api/studio/sessions/${executionSession.id}`, { cache: 'no-store' });

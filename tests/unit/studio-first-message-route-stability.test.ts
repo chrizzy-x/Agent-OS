@@ -23,6 +23,15 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('streamingSessionIdRef.current = null;');
   });
 
+  it('preserves completed streamed turns when the immediate bundle reload is stale', () => {
+    const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
+
+    expect(source).toContain('function preserveCompletedStreamedTurn');
+    expect(source).toContain('let streamedAssistantContent = \'\';');
+    expect(source).toContain('streamedAssistantContent += event.data.text;');
+    expect(source).toContain('!hasPersistedAssistantForTurn(bundle?.messages ?? [], createdAt)');
+  });
+
   it('backfills connected intelligence when bootstrap returns an empty connection list', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
 
