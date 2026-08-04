@@ -225,6 +225,8 @@ export async function createAgentAccount(input: CreateAgentAccountInput): Promis
     const { error } = await applyAuthStoreQueryTimeout(supabase.from('agents').insert(payload));
 
     if (!error) {
+      const createdAccount = mapSupabaseAccount(payload);
+      cacheAccountsByEmail(normalizeAuthStoreEmail(input.email), [createdAccount]);
       return { duplicate: false };
     }
 

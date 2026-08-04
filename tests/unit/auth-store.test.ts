@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockSupabase } from '../setup.js';
-import { AuthStoreUnavailableError, findAccountsByEmail } from '../../src/auth/agent-store.js';
+import { AuthStoreUnavailableError, createAgentAccount, findAccountsByEmail } from '../../src/auth/agent-store.js';
 
 describe('auth store', () => {
   beforeEach(() => {
@@ -112,6 +112,45 @@ describe('auth store', () => {
       passwordHash: 'hash',
     });
     expect(successfulQuery.eq).toHaveBeenCalledWith('metadata->>email', 'agentos-proof@example.com');
+    expect(mockSupabase.from).toHaveBeenCalledTimes(4);
+  });
+
+  it('uses a recent created account when the auth store stalls after signup', async () => {
+    const insertQuery = {
+      insert: vi.fn().mockReturnThis(),
+      abortSignal: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({ error: null }).then(resolve),
+    };
+    const failingQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      abortSignal: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({
+        data: null,
+        error: { message: 'query timeout' },
+      }).then(resolve),
+    };
+    mockSupabase.from
+      .mockReturnValueOnce(insertQuery)
+      .mockReturnValue(failingQuery);
+
+    await expect(createAgentAccount({
+      id: 'agent-created',
+      name: 'Created Proof Agent',
+      email: 'Created-Proof@Example.Com',
+      passwordHash: 'created-hash',
+      plan: 'enterprise_plus',
+    })).resolves.toEqual({ duplicate: false });
+
+    const fallback = await findAccountsByEmail('created-proof@example.com');
+
+    expect(fallback).toHaveLength(1);
+    expect(fallback[0]).toMatchObject({
+      id: 'agent-created',
+      email: 'Created-Proof@Example.Com',
+      passwordHash: 'created-hash',
+    });
     expect(mockSupabase.from).toHaveBeenCalledTimes(4);
   });
 });
