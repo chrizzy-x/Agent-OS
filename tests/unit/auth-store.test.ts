@@ -68,4 +68,50 @@ describe('auth store', () => {
     });
     expect(mockSupabase.from).toHaveBeenCalledTimes(2);
   });
+
+  it('uses a recent real lookup when the auth store becomes temporarily unavailable', async () => {
+    const successfulQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      abortSignal: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({
+        data: [{
+          id: 'agent-1',
+          name: 'Proof Agent',
+          metadata: {
+            email: 'agentos-proof@example.com',
+            password_hash: 'hash',
+            plan: 'enterprise_plus',
+          },
+        }],
+        error: null,
+      }).then(resolve),
+    };
+    const failingQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      abortSignal: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({
+        data: null,
+        error: { message: 'query timeout' },
+      }).then(resolve),
+    };
+    mockSupabase.from
+      .mockReturnValueOnce(successfulQuery)
+      .mockReturnValue(failingQuery);
+
+    await expect(findAccountsByEmail('AgentOS-Proof@Example.Com')).resolves.toHaveLength(1);
+    const fallback = await findAccountsByEmail('agentos-proof@example.com');
+
+    expect(fallback).toHaveLength(1);
+    expect(fallback[0]).toMatchObject({
+      id: 'agent-1',
+      email: 'agentos-proof@example.com',
+      passwordHash: 'hash',
+    });
+    expect(successfulQuery.eq).toHaveBeenCalledWith('metadata->>email', 'agentos-proof@example.com');
+    expect(mockSupabase.from).toHaveBeenCalledTimes(4);
+  });
 });

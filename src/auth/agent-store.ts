@@ -6,6 +6,9 @@ import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, ty
 const AUTH_STORE_QUERY_TIMEOUT_MS = 10_000;
 const AUTH_STORE_QUERY_ATTEMPTS = 3;
 const AUTH_STORE_RETRY_DELAY_MS = 250;
+const DEFAULT_AUTH_STORE_FALLBACK_CACHE_TTL_MS = 120_000;
+
+const authLookupCache = new Map<string, { accounts: AgentAccount[]; cachedAt: number }>();
 
 export class AuthStoreUnavailableError extends Error {
   constructor(message = 'Authentication store is temporarily unavailable') {
@@ -43,6 +46,44 @@ export type CreateAgentAccountInput = {
   accountType?: AccountType | null;
   planSelectionSkipped?: boolean;
 };
+
+function authStoreFallbackCacheTtlMs(): number {
+  const configured = Number(process.env.AGENTOS_AUTH_STORE_FALLBACK_CACHE_TTL_MS);
+  if (!Number.isFinite(configured)) return DEFAULT_AUTH_STORE_FALLBACK_CACHE_TTL_MS;
+  return Math.max(0, Math.min(Math.floor(configured), 300_000));
+}
+
+function normalizeAuthStoreEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function cloneAccounts(accounts: AgentAccount[]): AgentAccount[] {
+  return accounts.map(account => ({
+    ...account,
+    metadata: { ...account.metadata },
+  }));
+}
+
+function cacheAccountsByEmail(email: string, accounts: AgentAccount[]): void {
+  const ttl = authStoreFallbackCacheTtlMs();
+  if (ttl <= 0 || accounts.length === 0) return;
+  authLookupCache.set(email, {
+    accounts: cloneAccounts(accounts),
+    cachedAt: Date.now(),
+  });
+}
+
+function getCachedAccountsByEmail(email: string): AgentAccount[] | null {
+  const ttl = authStoreFallbackCacheTtlMs();
+  if (ttl <= 0) return null;
+  const cached = authLookupCache.get(email);
+  if (!cached) return null;
+  if (Date.now() - cached.cachedAt > ttl) {
+    authLookupCache.delete(email);
+    return null;
+  }
+  return cloneAccounts(cached.accounts);
+}
 
 export type CreateAgentAccountResult = {
   duplicate: boolean;
@@ -102,12 +143,13 @@ function waitForAuthStoreRetry(attempt: number): Promise<void> {
 }
 
 export async function findAccountsByEmail(email: string): Promise<AgentAccount[]> {
+  const lookupEmail = normalizeAuthStoreEmail(email);
   let supabase;
   try {
     supabase = getSupabaseAdmin();
   } catch {
     const accounts = await readLocalAccounts();
-    return accounts.filter(account => account.email === email);
+    return accounts.filter(account => normalizeAuthStoreEmail(account.email) === lookupEmail);
   }
 
   for (let attempt = 1; attempt <= AUTH_STORE_QUERY_ATTEMPTS; attempt += 1) {
@@ -115,11 +157,13 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
       const { data, error } = await applyAuthStoreQueryTimeout(supabase
         .from('agents')
         .select('id, name, metadata')
-        .eq('metadata->>email', email)
+        .eq('metadata->>email', lookupEmail)
         .limit(10));
 
       if (!error) {
-        return ((data ?? []) as Record<string, unknown>[]).map(mapSupabaseAccount);
+        const accounts = ((data ?? []) as Record<string, unknown>[]).map(mapSupabaseAccount);
+        cacheAccountsByEmail(lookupEmail, accounts);
+        return accounts;
       }
     } catch {
       // Retry below.
@@ -129,6 +173,9 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
       await waitForAuthStoreRetry(attempt);
     }
   }
+
+  const cachedAccounts = getCachedAccountsByEmail(lookupEmail);
+  if (cachedAccounts) return cachedAccounts;
 
   throw new AuthStoreUnavailableError();
 }
