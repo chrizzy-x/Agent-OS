@@ -177,6 +177,37 @@ type IntelligenceConnectionRecord = {
   updatedAt: string;
 };
 
+const INTELLIGENCE_CONNECTION_CACHE_PREFIX = 'agentos:intelligence-connections:';
+
+function intelligenceConnectionCacheKey(workspaceId: string): string {
+  return `${INTELLIGENCE_CONNECTION_CACHE_PREFIX}${workspaceId}`;
+}
+
+function readCachedIntelligenceConnections(workspaceId: string | null | undefined): IntelligenceConnectionRecord[] {
+  if (!workspaceId || typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(intelligenceConnectionCacheKey(workspaceId)) ?? '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return (parsed as IntelligenceConnectionRecord[])
+      .filter(connection => connection.workspaceId === workspaceId && typeof connection.id === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function cacheIntelligenceConnections(workspaceId: string | null | undefined, connections: IntelligenceConnectionRecord[]): void {
+  if (!workspaceId || typeof window === 'undefined') return;
+  try {
+    if (connections.length === 0) {
+      window.sessionStorage.removeItem(intelligenceConnectionCacheKey(workspaceId));
+      return;
+    }
+    window.sessionStorage.setItem(intelligenceConnectionCacheKey(workspaceId), JSON.stringify(connections));
+  } catch {
+    return;
+  }
+}
+
 type InstalledSkillRecord = {
   id: string;
   name: string;
@@ -430,6 +461,7 @@ export function StudioProvider(props: {
   const [sessionExecutionTargetId, setSessionExecutionTargetId] = useState('super_agentos');
   const [messageExecutionOverrideId, setMessageExecutionOverrideId] = useState<string | null>(null);
   const [intelligenceConnections, setIntelligenceConnections] = useState<IntelligenceConnectionRecord[]>([]);
+  const intelligenceConnectionsWorkspaceIdRef = useRef<string | null>(null);
   const [sessionIntelligenceSelection, setSessionIntelligenceSelectionState] = useState<IntelligenceSelection>(() => createNativeIntelligenceSelection('native_default'));
   const [messageIntelligenceOverride, setMessageIntelligenceOverrideState] = useState<IntelligenceSelection | null>(null);
   const sessionIntelligenceSelectionRef = useRef(sessionIntelligenceSelection);
@@ -567,7 +599,7 @@ export function StudioProvider(props: {
     setSessionExecutionTargetId(typeof payload.sessionExecutionTargetId === 'string' ? payload.sessionExecutionTargetId : 'super_agentos');
     setMessageExecutionOverrideId(null);
     const bootstrapIntelligenceConnections = (payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[];
-    setIntelligenceConnections(bootstrapIntelligenceConnections);
+    const bootstrapIntelligenceConnectionsLoaded = payload.intelligenceConnectionsLoaded !== false;
     const bootstrapIntelligenceSelection = normalizeIntelligenceSelection(payload.sessionIntelligenceSelection, 'session');
     sessionIntelligenceSelectionRef.current = bootstrapIntelligenceSelection;
     messageIntelligenceOverrideRef.current = null;
@@ -581,6 +613,24 @@ export function StudioProvider(props: {
     setMemoryEntries((payload.memoryEntries ?? []) as MemoryEntryRecord[]);
     setFileTree((payload.fileTree ?? []) as StudioFileNode[]);
     const nextWorkspaceId = nextSession?.workspaceId ?? nextCurrentProject?.workspaceId ?? requestedWorkspaceId;
+    if (bootstrapIntelligenceConnections.length > 0) {
+      intelligenceConnectionsWorkspaceIdRef.current = nextWorkspaceId ?? null;
+      cacheIntelligenceConnections(nextWorkspaceId, bootstrapIntelligenceConnections);
+      setIntelligenceConnections(bootstrapIntelligenceConnections);
+    } else if (bootstrapIntelligenceConnectionsLoaded) {
+      intelligenceConnectionsWorkspaceIdRef.current = nextWorkspaceId ?? null;
+      cacheIntelligenceConnections(nextWorkspaceId, []);
+      setIntelligenceConnections([]);
+    } else {
+      const cachedIntelligenceConnections = readCachedIntelligenceConnections(nextWorkspaceId);
+      if (cachedIntelligenceConnections.length > 0) {
+        intelligenceConnectionsWorkspaceIdRef.current = nextWorkspaceId ?? null;
+        setIntelligenceConnections(cachedIntelligenceConnections);
+      } else if (intelligenceConnectionsWorkspaceIdRef.current && intelligenceConnectionsWorkspaceIdRef.current !== nextWorkspaceId) {
+        intelligenceConnectionsWorkspaceIdRef.current = nextWorkspaceId ?? null;
+        setIntelligenceConnections([]);
+      }
+    }
     applicationShell.syncContext({
       workspaceId: nextWorkspaceId,
       projectId: nextCurrentProject?.id ?? null,
@@ -596,7 +646,13 @@ export function StudioProvider(props: {
         const connections = Array.isArray(connectionsPayload?.connections)
           ? connectionsPayload.connections as IntelligenceConnectionRecord[]
           : [];
-        if (connections.length > 0) setIntelligenceConnections(connections);
+        cacheIntelligenceConnections(nextWorkspaceId, connections);
+        if (connections.length > 0) {
+          intelligenceConnectionsWorkspaceIdRef.current = nextWorkspaceId;
+          setIntelligenceConnections(connections);
+        } else if (intelligenceConnectionsWorkspaceIdRef.current === nextWorkspaceId) {
+          setIntelligenceConnections([]);
+        }
       }).catch(() => undefined);
     }
   }, [applicationShell.syncContext, requestedProjectId, requestedSessionId, requestedWorkspaceId]);

@@ -36,9 +36,24 @@ describe('Studio first message route stability', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
 
     expect(source).toContain('const bootstrapIntelligenceConnections = (payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[];');
+    expect(source).toContain('const bootstrapIntelligenceConnectionsLoaded = payload.intelligenceConnectionsLoaded !== false;');
+    expect(source).toContain('cacheIntelligenceConnections(nextWorkspaceId, bootstrapIntelligenceConnections);');
+    expect(source).toContain('const cachedIntelligenceConnections = readCachedIntelligenceConnections(nextWorkspaceId);');
+    expect(source).toContain('intelligenceConnectionsWorkspaceIdRef.current = nextWorkspaceId ?? null;');
+    expect(source).toContain('intelligenceConnectionsWorkspaceIdRef.current !== nextWorkspaceId');
     expect(source).toContain('bootstrapIntelligenceConnections.length === 0 && nextWorkspaceId');
     expect(source).toContain('/api/intelligence/connections?workspaceId=');
+    expect(source).toContain('cacheIntelligenceConnections(nextWorkspaceId, connections);');
     expect(source).toContain('setIntelligenceConnections(connections)');
+  });
+
+  it('keeps bootstrap connection timeout distinguishable from an authoritative empty list', () => {
+    const source = readFileSync(join(process.cwd(), 'src', 'studio', 'bootstrap.ts'), 'utf8');
+
+    expect(source).toContain('function withBootstrapLoadState');
+    expect(source).toContain('resolve({ value: fallback, loaded: false });');
+    expect(source).toContain('resolve({ value, loaded: true });');
+    expect(source).toContain('intelligenceConnectionsLoaded: intelligenceConnectionLoad.loaded');
   });
 
   it('keeps approvals tied to the originating Studio session', () => {

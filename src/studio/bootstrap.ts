@@ -94,6 +94,35 @@ function withBootstrapTimeout<T>(
   });
 }
 
+function withBootstrapLoadState<T>(
+  promise: Promise<T>,
+  fallback: T,
+  timeoutMs = BOOTSTRAP_OPTION_TIMEOUT_MS,
+): Promise<{ value: T; loaded: boolean }> {
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ value: fallback, loaded: false });
+    }, timeoutMs);
+    promise.then(
+      value => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ value, loaded: true });
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ value: fallback, loaded: false });
+      },
+    );
+  });
+}
+
 function selectionUsable(selection: IntelligenceSelection, connections: IntelligenceConnectionRecord[]): boolean {
   if (selection.mode !== 'single') return true;
   return connections.some(connection =>
@@ -318,7 +347,7 @@ export async function buildStudioBootstrap(params: {
       )
       : Promise.resolve(null);
 
-  const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries, workspaceAssets, intelligenceConnections, workspaceDefault] = await Promise.all([
+  const [bundle, workflows, installedSkills, installedApps, vault, superAgent, fileTree, subagents, memoryEntries, workspaceAssets, intelligenceConnectionLoad, workspaceDefault] = await Promise.all([
     bundlePromise,
     withBootstrapTimeout(loadBootstrapWorkflows(params.ownerAgentId), []),
     withBootstrapTimeout(loadBootstrapInstalledSkills(params.ownerAgentId), []),
@@ -356,14 +385,14 @@ export async function buildStudioBootstrap(params: {
       limit: 120,
     }), { items: [], groups: {}, summary: {} } as unknown as Awaited<ReturnType<typeof listLibrary>>),
     activeWorkspaceId
-      ? withBootstrapTimeout(
+      ? withBootstrapLoadState(
         listIntelligenceConnections({
           ownerAgentId: params.ownerAgentId,
           workspaceId: activeWorkspaceId,
         }),
         [] as IntelligenceConnectionRecord[],
       )
-      : Promise.resolve([] as IntelligenceConnectionRecord[]),
+      : Promise.resolve({ value: [] as IntelligenceConnectionRecord[], loaded: true }),
     activeWorkspaceId
       ? withBootstrapTimeout<Awaited<ReturnType<typeof getIntelligenceDefault>> | null>(
         getIntelligenceDefault({
@@ -375,6 +404,7 @@ export async function buildStudioBootstrap(params: {
       )
       : Promise.resolve(null),
   ]);
+  const intelligenceConnections = intelligenceConnectionLoad.value;
 
   const filteredWorkflows = workflows
     .filter(row => !activeWorkspaceId || String(row.workspace_id ?? '') === activeWorkspaceId)
@@ -427,6 +457,7 @@ export async function buildStudioBootstrap(params: {
     executionTargets,
     sessionExecutionTargetId: sessionExecutionTarget.id,
     intelligenceConnections: intelligenceConnections.map(safeIntelligenceConnection),
+    intelligenceConnectionsLoaded: intelligenceConnectionLoad.loaded,
     sessionIntelligenceSelection,
     session: bundle?.session ?? session,
     sessions,
