@@ -234,4 +234,26 @@ describe('product alignment routes', () => {
       title: 'Panic lockdown enabled',
     }));
   });
+
+  it('GET /api/panic returns bounded loading status when status lookup stalls', async () => {
+    const previousTimeout = process.env.AGENTOS_PANIC_STATUS_TIMEOUT_MS;
+    process.env.AGENTOS_PANIC_STATUS_TIMEOUT_MS = '1';
+    routeMocks.getPanicStatus.mockImplementation(() => new Promise(() => {}));
+
+    try {
+      const response = await getPanic(request('http://localhost/api/panic?workspaceId=workspace-1&sessionId=session-1'));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({
+        state: 'warning',
+        activeCount: 0,
+        executions: [],
+      });
+      expect(body.reason).toMatch(/still loading/i);
+    } finally {
+      if (previousTimeout === undefined) delete process.env.AGENTOS_PANIC_STATUS_TIMEOUT_MS;
+      else process.env.AGENTOS_PANIC_STATUS_TIMEOUT_MS = previousTimeout;
+    }
+  });
 });

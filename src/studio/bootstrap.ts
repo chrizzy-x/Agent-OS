@@ -396,17 +396,21 @@ export async function buildStudioBootstrap(params: {
   const executionTargets = buildExecutionTargets({ vaultSecrets: vault.secrets ?? [] });
   const connectionsByVendor = activeConnectionsByVendor(intelligenceConnections);
   const nativeSelection = createNativeIntelligenceSelection('native_default');
+  const fallbackSessionSelection = migrateLegacyExecutionTargetToIntelligenceSelection(
+    activeSessionState.executionTargetId ?? activeSessionState.provider ?? activeSessionState.executionMode,
+    { selectionSource: 'session', connectionsByVendor },
+  );
   const resolvedSessionSelection = session
-    ? (await getStudioSessionIntelligence({
-      ownerAgentId: params.ownerAgentId,
-      sessionId: session.id,
-      connectionsByVendor,
-    }).catch(() => ({
-      selection: migrateLegacyExecutionTargetToIntelligenceSelection(
-        activeSessionState.executionTargetId ?? activeSessionState.provider ?? activeSessionState.executionMode,
-        { selectionSource: 'session', connectionsByVendor },
-      ),
-    }))).selection
+    ? (await withBootstrapTimeout<{ selection: IntelligenceSelection }>(
+      getStudioSessionIntelligence({
+        ownerAgentId: params.ownerAgentId,
+        sessionId: session.id,
+        connectionsByVendor,
+      })
+        .then(record => ({ selection: record.selection }))
+        .catch(() => ({ selection: fallbackSessionSelection })),
+      { selection: fallbackSessionSelection },
+    )).selection
     : workspaceDefault?.selection ?? nativeSelection;
   const sessionIntelligenceSelection = selectionUsable(resolvedSessionSelection, intelligenceConnections)
     ? resolvedSessionSelection

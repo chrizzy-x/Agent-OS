@@ -11,6 +11,9 @@ describe('Studio bootstrap session recovery', () => {
     expect(source).toContain('getStudioSessionBundle(params.ownerAgentId, params.sessionId).catch(() => null)');
     expect(source).toContain('if (!session && defaultWorkspace && !params.sessionId)');
     expect(source).toContain('requestedSessionBundle?.session.id === session?.id');
+    expect(source).toContain('const fallbackSessionSelection = migrateLegacyExecutionTargetToIntelligenceSelection');
+    expect(source).toContain('withBootstrapTimeout<{ selection: IntelligenceSelection }>');
+    expect(source).toContain('.then(record => ({ selection: record.selection }))');
   });
 
   it('keeps bounded session lists available to bootstrap callers', () => {
