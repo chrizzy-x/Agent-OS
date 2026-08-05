@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockSupabase } from '../setup.js';
 import { AuthStoreUnavailableError, createAgentAccount, findAccountsByEmail } from '../../src/auth/agent-store.js';
 
@@ -6,6 +6,11 @@ describe('auth store', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch unavailable')));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('does not convert configured Supabase lookup failures into missing accounts', async () => {
@@ -152,5 +157,49 @@ describe('auth store', () => {
       passwordHash: 'created-hash',
     });
     expect(mockSupabase.from).toHaveBeenCalledTimes(4);
+  });
+
+  it('uses direct Supabase REST lookup when the SDK auth lookup stalls', async () => {
+    const failingQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      abortSignal: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({
+        data: null,
+        error: { message: 'query timeout' },
+      }).then(resolve),
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([{
+        id: 'agent-rest',
+        name: 'REST Proof Agent',
+        metadata: {
+          email: 'agentos-proof@example.com',
+          password_hash: 'rest-hash',
+          plan: 'enterprise_plus',
+        },
+      }]),
+    });
+    mockSupabase.from.mockReturnValue(failingQuery);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const accounts = await findAccountsByEmail('AgentOS-Proof@Example.Com');
+
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]).toMatchObject({
+      id: 'agent-rest',
+      email: 'agentos-proof@example.com',
+      passwordHash: 'rest-hash',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({
+      href: expect.stringContaining('/rest/v1/agents?'),
+    }), expect.objectContaining({
+      headers: expect.objectContaining({
+        apikey: 'test-service-role-key',
+      }),
+    }));
+    expect(decodeURIComponent(String(fetchMock.mock.calls[0]?.[0]))).toContain('metadata->>email=eq.AgentOS-Proof@Example.Com'.toLowerCase());
   });
 });

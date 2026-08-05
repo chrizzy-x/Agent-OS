@@ -1,9 +1,11 @@
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { getSupabaseServiceRoleKey, getSupabaseUrl } from '../config/env.js';
 import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord } from '../storage/local-state.js';
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
 const AUTH_STORE_QUERY_TIMEOUT_MS = 10_000;
+const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 12_000;
 const AUTH_STORE_QUERY_ATTEMPTS = 3;
 const AUTH_STORE_RETRY_DELAY_MS = 250;
 const DEFAULT_AUTH_STORE_FALLBACK_CACHE_TTL_MS = 120_000;
@@ -138,6 +140,31 @@ async function readLocalAccounts(): Promise<AgentAccount[]> {
   return Object.values(state.accounts).map(mapLocalAccount);
 }
 
+async function findSupabaseAccountsByEmailRest(lookupEmail: string): Promise<AgentAccount[] | null> {
+  try {
+    const supabaseUrl = getSupabaseUrl().replace(/\/+$/, '');
+    const serviceRoleKey = getSupabaseServiceRoleKey();
+    const url = new URL(`${supabaseUrl}/rest/v1/agents`);
+    url.searchParams.set('select', 'id,name,metadata');
+    url.searchParams.set('metadata->>email', `eq.${lookupEmail}`);
+    url.searchParams.set('limit', '10');
+    const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+      },
+      signal: typeof timeout === 'function' ? timeout(AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS) : undefined,
+    });
+    if (!response.ok) return null;
+    const rows = await response.json().catch(() => null) as unknown;
+    if (!Array.isArray(rows)) return null;
+    return (rows as Record<string, unknown>[]).map(mapSupabaseAccount);
+  } catch {
+    return null;
+  }
+}
+
 function waitForAuthStoreRetry(attempt: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, AUTH_STORE_RETRY_DELAY_MS * attempt));
 }
@@ -172,6 +199,12 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
     if (attempt < AUTH_STORE_QUERY_ATTEMPTS) {
       await waitForAuthStoreRetry(attempt);
     }
+  }
+
+  const directAccounts = await findSupabaseAccountsByEmailRest(lookupEmail);
+  if (directAccounts) {
+    cacheAccountsByEmail(lookupEmail, directAccounts);
+    return directAccounts;
   }
 
   const cachedAccounts = getCachedAccountsByEmail(lookupEmail);
