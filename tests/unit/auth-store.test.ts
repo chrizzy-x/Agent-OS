@@ -192,4 +192,33 @@ describe('auth store', () => {
     }));
     expect(decodeURIComponent(String(fetchMock.mock.calls[0]?.[0]))).toContain('metadata->>email=eq.AgentOS-Proof@Example.Com'.toLowerCase());
   });
+
+  it('retries transient REST lookup failures before using the SDK auth lookup', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('transient fetch failure'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue([{
+          id: 'agent-rest-retry',
+          name: 'REST Retry Proof Agent',
+          metadata: {
+            email: 'agentos-proof@example.com',
+            password_hash: 'rest-retry-hash',
+            plan: 'enterprise_plus',
+          },
+        }]),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const accounts = await findAccountsByEmail('AgentOS-Proof@Example.Com');
+
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]).toMatchObject({
+      id: 'agent-rest-retry',
+      email: 'agentos-proof@example.com',
+      passwordHash: 'rest-retry-hash',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
 });
