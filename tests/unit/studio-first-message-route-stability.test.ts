@@ -39,13 +39,16 @@ describe('Studio first message route stability', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
 
     expect(source).toContain('const SHELL_WORKSPACE_STORAGE_KEY = \'agentos.shell.workspace\';');
+    expect(source).toContain('const INTELLIGENCE_CONNECTION_BACKFILL_DEDUPE_MS = 10_000;');
     expect(source).toContain('const STUDIO_BOOTSTRAP_CLIENT_TIMEOUT_MS = 15_000;');
     expect(source).toContain('function readStoredStudioWorkspaceId');
     expect(source).toContain('function fetchStudioBootstrapWithTimeout');
     expect(source).toContain('const [storedWorkspaceId, setStoredWorkspaceId] = useState<string | null>(null);');
     expect(source).toContain('applicationShell.activeWorkspaceId ?? storedWorkspaceId');
     expect(source).toContain('const refreshSequenceRef = useRef(0);');
+    expect(source).toContain('const intelligenceConnectionBackfillStartedAtRef = useRef<Map<string, number>>(new Map());');
     expect(source).toContain('const backfillIntelligenceConnections = useCallback');
+    expect(source).toContain('now - lastStartedAt < INTELLIGENCE_CONNECTION_BACKFILL_DEDUPE_MS');
     expect(source).toContain('if (requestedWorkspaceId) backfillIntelligenceConnections(requestedWorkspaceId);');
     expect(source).toContain('const response = await fetchStudioBootstrapWithTimeout');
     expect(source).toContain('const bootstrapIntelligenceConnections = (payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[];');

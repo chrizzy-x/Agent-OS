@@ -4,8 +4,8 @@ import { readLocalRuntimeState, updateLocalRuntimeState, type LocalAccountRecord
 import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.js';
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
-const AUTH_STORE_QUERY_TIMEOUT_MS = 10_000;
-const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 12_000;
+const AUTH_STORE_QUERY_TIMEOUT_MS = 5_000;
+const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 6_000;
 const AUTH_STORE_QUERY_ATTEMPTS = 3;
 const AUTH_STORE_RETRY_DELAY_MS = 250;
 const DEFAULT_AUTH_STORE_FALLBACK_CACHE_TTL_MS = 120_000;
@@ -179,6 +179,12 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
     return accounts.filter(account => normalizeAuthStoreEmail(account.email) === lookupEmail);
   }
 
+  const directAccounts = await findSupabaseAccountsByEmailRest(lookupEmail);
+  if (directAccounts) {
+    cacheAccountsByEmail(lookupEmail, directAccounts);
+    return directAccounts;
+  }
+
   for (let attempt = 1; attempt <= AUTH_STORE_QUERY_ATTEMPTS; attempt += 1) {
     try {
       const { data, error } = await applyAuthStoreQueryTimeout(supabase
@@ -199,12 +205,6 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
     if (attempt < AUTH_STORE_QUERY_ATTEMPTS) {
       await waitForAuthStoreRetry(attempt);
     }
-  }
-
-  const directAccounts = await findSupabaseAccountsByEmailRest(lookupEmail);
-  if (directAccounts) {
-    cacheAccountsByEmail(lookupEmail, directAccounts);
-    return directAccounts;
   }
 
   const cachedAccounts = getCachedAccountsByEmail(lookupEmail);

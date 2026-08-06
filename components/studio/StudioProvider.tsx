@@ -178,6 +178,7 @@ type IntelligenceConnectionRecord = {
 };
 
 const INTELLIGENCE_CONNECTION_CACHE_PREFIX = 'agentos:intelligence-connections:';
+const INTELLIGENCE_CONNECTION_BACKFILL_DEDUPE_MS = 10_000;
 const SHELL_WORKSPACE_STORAGE_KEY = 'agentos.shell.workspace';
 const STUDIO_BOOTSTRAP_CLIENT_TIMEOUT_MS = 15_000;
 
@@ -490,6 +491,7 @@ export function StudioProvider(props: {
   const [messageExecutionOverrideId, setMessageExecutionOverrideId] = useState<string | null>(null);
   const [intelligenceConnections, setIntelligenceConnections] = useState<IntelligenceConnectionRecord[]>([]);
   const intelligenceConnectionsWorkspaceIdRef = useRef<string | null>(null);
+  const intelligenceConnectionBackfillStartedAtRef = useRef<Map<string, number>>(new Map());
   const [sessionIntelligenceSelection, setSessionIntelligenceSelectionState] = useState<IntelligenceSelection>(() => createNativeIntelligenceSelection('native_default'));
   const [messageIntelligenceOverride, setMessageIntelligenceOverrideState] = useState<IntelligenceSelection | null>(null);
   const sessionIntelligenceSelectionRef = useRef(sessionIntelligenceSelection);
@@ -599,6 +601,10 @@ export function StudioProvider(props: {
       intelligenceConnectionsWorkspaceIdRef.current = workspaceId;
       setIntelligenceConnections(cachedIntelligenceConnections);
     }
+    const lastStartedAt = intelligenceConnectionBackfillStartedAtRef.current.get(workspaceId) ?? 0;
+    const now = Date.now();
+    if (now - lastStartedAt < INTELLIGENCE_CONNECTION_BACKFILL_DEDUPE_MS) return;
+    intelligenceConnectionBackfillStartedAtRef.current.set(workspaceId, now);
     void fetchWithBrowserSession(`/api/intelligence/connections?workspaceId=${encodeURIComponent(workspaceId)}`, {
       cache: 'no-store',
     }).then(async ({ response: connectionsResponse }) => {

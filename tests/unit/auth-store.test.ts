@@ -159,17 +159,7 @@ describe('auth store', () => {
     expect(mockSupabase.from).toHaveBeenCalledTimes(4);
   });
 
-  it('uses direct Supabase REST lookup when the SDK auth lookup stalls', async () => {
-    const failingQuery = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      limit: vi.fn().mockReturnThis(),
-      abortSignal: vi.fn().mockReturnThis(),
-      then: (resolve: (value: unknown) => unknown) => Promise.resolve({
-        data: null,
-        error: { message: 'query timeout' },
-      }).then(resolve),
-    };
+  it('uses direct Supabase REST lookup before the SDK auth lookup', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue([{
@@ -182,7 +172,6 @@ describe('auth store', () => {
         },
       }]),
     });
-    mockSupabase.from.mockReturnValue(failingQuery);
     vi.stubGlobal('fetch', fetchMock);
 
     const accounts = await findAccountsByEmail('AgentOS-Proof@Example.Com');
@@ -193,6 +182,7 @@ describe('auth store', () => {
       email: 'agentos-proof@example.com',
       passwordHash: 'rest-hash',
     });
+    expect(mockSupabase.from).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({
       href: expect.stringContaining('/rest/v1/agents?'),
     }), expect.objectContaining({
