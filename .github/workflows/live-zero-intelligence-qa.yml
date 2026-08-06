@@ -1,0 +1,70 @@
+name: Live zero-intelligence QA
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  live-browser-flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run live production browser flow
+        run: |
+          mkdir -p artifacts
+          cat > /tmp/live-flow.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const out={startedAt:new Date().toISOString(),steps:[],requests:[],errors:[]};
+          const step=(name,data={})=>out.steps.push({name,at:new Date().toISOString(),...data});
+          const browser=await chromium.launch({headless:true});
+          const context=await browser.newContext({viewport:{width:1440,height:1000},recordVideo:{dir:'artifacts/video',size:{width:1440,height:1000}}});
+          const page=await context.newPage();
+          page.on('requestfinished',r=>{if(r.url().includes('/api/'))out.requests.push({method:r.method(),url:r.url()})});
+          page.on('pageerror',e=>out.errors.push({type:'pageerror',text:e.message}));
+          page.on('requestfailed',r=>out.errors.push({type:'requestfailed',text:`${r.method()} ${r.url()} ${r.failure()?.errorText||''}`}));
+          try {
+            const res=await page.goto('https://www.agentos.services',{waitUntil:'networkidle',timeout:120000});
+            step('opened',{status:res?.status(),url:page.url(),title:await page.title()});
+            await page.screenshot({path:'artifacts/01-home.png',fullPage:true});
+            let text=await page.locator('body').innerText(); fs.writeFileSync('artifacts/01-body.txt',text);
+            step('zero-intelligence',{passed:/external agents\s*:?\s*0|connected intelligence\s*:?\s*0|0\s+external agents/i.test(text),text:text.slice(0,4000)});
+            const locators=[page.locator('textarea'),page.locator('[contenteditable="true"]'),page.getByRole('textbox'),page.locator('input[type="text"]')];
+            let composer=null;
+            for(const l of locators){for(let i=0;i<await l.count();i++){const e=l.nth(i);if(await e.isVisible().catch(()=>false)){composer=e;break}}if(composer)break}
+            step('composer',{passed:!!composer});
+            if(composer){
+              const task='Create a project called AgentOS Live Browser Test, add three tasks named Review landing page, Test Appstore, and Prepare launch announcement, then mark Review landing page as completed.';
+              await composer.fill(task).catch(async()=>{await composer.click();await page.keyboard.type(task)});
+              await page.screenshot({path:'artifacts/02-entered.png',fullPage:true});
+              let sent=false;
+              for(const l of [page.getByRole('button',{name:/send|submit|run|execute/i}),page.locator('button[type="submit"]')]){for(let i=0;i<await l.count();i++){const b=l.nth(i);if(await b.isVisible().catch(()=>false)&&await b.isEnabled().catch(()=>false)){await b.click();sent=true;break}}if(sent)break}
+              if(!sent){await composer.press('Enter');sent=true} step('submitted',{passed:sent});
+              await page.waitForTimeout(20000); await page.screenshot({path:'artifacts/03-response.png',fullPage:true});
+              text=await page.locator('body').innerText();fs.writeFileSync('artifacts/03-response.txt',text);step('response',{text:text.slice(0,7000)});
+              const approve=page.getByRole('button',{name:/approve|confirm|allow|execute/i}).first();
+              if(await approve.isVisible().catch(()=>false)){await approve.click();step('approved',{passed:true});await page.waitForTimeout(15000)}else step('approved',{passed:false});
+              await page.screenshot({path:'artifacts/04-post-approval.png',fullPage:true});
+              await page.reload({waitUntil:'networkidle',timeout:120000});await page.screenshot({path:'artifacts/05-refreshed.png',fullPage:true});
+              text=await page.locator('body').innerText();fs.writeFileSync('artifacts/05-refreshed.txt',text);step('refresh-persistence',{projectVisible:/AgentOS Live Browser Test/i.test(text),text:text.slice(0,7000)});
+              const nav=page.getByRole('link',{name:/projects/i}).first();const btn=page.getByRole('button',{name:/projects/i}).first();
+              if(await nav.isVisible().catch(()=>false))await nav.click();else if(await btn.isVisible().catch(()=>false))await btn.click();
+              await page.waitForTimeout(7000);await page.screenshot({path:'artifacts/06-projects.png',fullPage:true});
+              text=await page.locator('body').innerText();fs.writeFileSync('artifacts/06-projects.txt',text);step('projects',{projectVisible:/AgentOS Live Browser Test/i.test(text),taskVisible:/Review landing page/i.test(text),text:text.slice(0,7000)});
+            }
+          }catch(e){out.errors.push({type:'fatal',text:e?.stack||String(e)});try{await page.screenshot({path:'artifacts/fatal.png',fullPage:true})}catch{}}
+          out.finishedAt=new Date().toISOString();fs.writeFileSync('artifacts/result.json',JSON.stringify(out,null,2));await context.close();await browser.close();
+          EOF
+          node /tmp/live-flow.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-zero-intelligence-evidence
+          path: artifacts
+          if-no-files-found: error
