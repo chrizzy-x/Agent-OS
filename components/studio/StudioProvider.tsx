@@ -559,10 +559,15 @@ export function StudioProvider(props: {
   }, []);
 
   const currentWorkspaceId = session?.workspaceId ?? currentProject?.workspaceId ?? requestedWorkspaceId ?? workspaces[0]?.id ?? null;
+  const currentWorkspaceIdRef = useRef<string | null>(currentWorkspaceId);
   const activeSubagent = useMemo(
     () => session?.linkedSubagentId ? subagents.find(item => item.id === session.linkedSubagentId) ?? null : null,
     [session?.linkedSubagentId, subagents],
   );
+
+  useEffect(() => {
+    currentWorkspaceIdRef.current = currentWorkspaceId;
+  }, [currentWorkspaceId]);
 
   const pushRoute = useCallback((nextMode: StudioMode, nextSessionId?: string | null, nextProjectId?: string | null) => {
     router.replace(buildStudioRoute({
@@ -1318,7 +1323,10 @@ export function StudioProvider(props: {
   }, []);
 
   useEffect(() => {
-    const handleWorkspaceChange = () => {
+    const handleWorkspaceChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ workspaceId?: unknown }>).detail;
+      const nextWorkspaceId = typeof detail?.workspaceId === 'string' ? detail.workspaceId : null;
+      if (nextWorkspaceId && nextWorkspaceId === currentWorkspaceIdRef.current) return;
       if (streamAbortRef.current || streamSettledRef.current) void stopGeneration();
     };
     window.addEventListener('agentos:workspace-change', handleWorkspaceChange);

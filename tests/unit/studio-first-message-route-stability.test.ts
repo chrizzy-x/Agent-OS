@@ -17,6 +17,9 @@ describe('Studio first message route stability', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
 
     expect(source).toContain('const streamingSessionIdRef = useRef<string | null>(null);');
+    expect(source).toContain('const currentWorkspaceIdRef = useRef<string | null>(currentWorkspaceId);');
+    expect(source).toContain('currentWorkspaceIdRef.current = currentWorkspaceId;');
+    expect(source).toContain('nextWorkspaceId && nextWorkspaceId === currentWorkspaceIdRef.current');
     expect(source).toContain('if (!activeStreamingSessionId || nextSession?.id !== activeStreamingSessionId) {');
     expect(source).toContain('if (payload.messages && streamingSessionIdRef.current !== sessionId) {');
     expect(source).toContain('streamingSessionIdRef.current = activeSession.id;');
