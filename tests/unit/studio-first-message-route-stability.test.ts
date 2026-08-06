@@ -35,6 +35,16 @@ describe('Studio first message route stability', () => {
   it('backfills connected intelligence when bootstrap returns an empty connection list', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
 
+    expect(source).toContain('const SHELL_WORKSPACE_STORAGE_KEY = \'agentos.shell.workspace\';');
+    expect(source).toContain('const STUDIO_BOOTSTRAP_CLIENT_TIMEOUT_MS = 15_000;');
+    expect(source).toContain('function readStoredStudioWorkspaceId');
+    expect(source).toContain('function fetchStudioBootstrapWithTimeout');
+    expect(source).toContain('const [storedWorkspaceId, setStoredWorkspaceId] = useState<string | null>(null);');
+    expect(source).toContain('applicationShell.activeWorkspaceId ?? storedWorkspaceId');
+    expect(source).toContain('const refreshSequenceRef = useRef(0);');
+    expect(source).toContain('const backfillIntelligenceConnections = useCallback');
+    expect(source).toContain('if (requestedWorkspaceId) backfillIntelligenceConnections(requestedWorkspaceId);');
+    expect(source).toContain('const response = await fetchStudioBootstrapWithTimeout');
     expect(source).toContain('const bootstrapIntelligenceConnections = (payload.intelligenceConnections ?? []) as IntelligenceConnectionRecord[];');
     expect(source).toContain('const bootstrapIntelligenceConnectionsLoaded = payload.intelligenceConnectionsLoaded !== false;');
     expect(source).toContain('cacheIntelligenceConnections(nextWorkspaceId, bootstrapIntelligenceConnections);');
@@ -43,7 +53,7 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('intelligenceConnectionsWorkspaceIdRef.current !== nextWorkspaceId');
     expect(source).toContain('bootstrapIntelligenceConnections.length === 0 && nextWorkspaceId');
     expect(source).toContain('/api/intelligence/connections?workspaceId=');
-    expect(source).toContain('cacheIntelligenceConnections(nextWorkspaceId, connections);');
+    expect(source).toContain('cacheIntelligenceConnections(workspaceId, connections);');
     expect(source).toContain('setIntelligenceConnections(connections)');
   });
 

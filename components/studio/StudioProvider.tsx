@@ -178,6 +178,8 @@ type IntelligenceConnectionRecord = {
 };
 
 const INTELLIGENCE_CONNECTION_CACHE_PREFIX = 'agentos:intelligence-connections:';
+const SHELL_WORKSPACE_STORAGE_KEY = 'agentos.shell.workspace';
+const STUDIO_BOOTSTRAP_CLIENT_TIMEOUT_MS = 15_000;
 
 function intelligenceConnectionCacheKey(workspaceId: string): string {
   return `${INTELLIGENCE_CONNECTION_CACHE_PREFIX}${workspaceId}`;
@@ -205,6 +207,31 @@ function cacheIntelligenceConnections(workspaceId: string | null | undefined, co
     window.sessionStorage.setItem(intelligenceConnectionCacheKey(workspaceId), JSON.stringify(connections));
   } catch {
     return;
+  }
+}
+
+function readStoredStudioWorkspaceId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = window.localStorage.getItem(SHELL_WORKSPACE_STORAGE_KEY)?.trim();
+    return value || null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchStudioBootstrapWithTimeout(url: string): Promise<Awaited<ReturnType<typeof fetchWithBrowserSession>> | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STUDIO_BOOTSTRAP_CLIENT_TIMEOUT_MS);
+  try {
+    return await fetchWithBrowserSession(url, {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -447,7 +474,8 @@ export function StudioProvider(props: {
   const requestedMode = normalizeStudioMode(searchParams.get('mode') ?? props.initialMode);
   const requestedSessionId = searchParams.get('session') ?? props.initialSessionId ?? null;
   const requestedProjectId = searchParams.get('project');
-  const requestedWorkspaceId = searchParams.get('workspace') ?? applicationShell.activeWorkspaceId;
+  const [storedWorkspaceId, setStoredWorkspaceId] = useState<string | null>(null);
+  const requestedWorkspaceId = searchParams.get('workspace') ?? applicationShell.activeWorkspaceId ?? storedWorkspaceId;
   const advancedKey = getStudioAdvancedSessionKey('studio-shell');
   const activeBootstrapModeRef = useRef(requestedMode);
 
@@ -505,6 +533,17 @@ export function StudioProvider(props: {
   const activeStreamExecutionIdRef = useRef<string | null>(null);
   const streamingSessionIdRef = useRef<string | null>(null);
   const studioVisibleRef = useRef(false);
+  const refreshSequenceRef = useRef(0);
+
+  useEffect(() => {
+    setStoredWorkspaceId(readStoredStudioWorkspaceId());
+    function handleWorkspaceChange(event: Event) {
+      const detail = (event as CustomEvent<{ workspaceId?: unknown }>).detail;
+      setStoredWorkspaceId(typeof detail?.workspaceId === 'string' ? detail.workspaceId : readStoredStudioWorkspaceId());
+    }
+    window.addEventListener('agentos:workspace-change', handleWorkspaceChange);
+    return () => window.removeEventListener('agentos:workspace-change', handleWorkspaceChange);
+  }, []);
 
   useEffect(() => {
     sessionIntelligenceSelectionRef.current = sessionIntelligenceSelection;
@@ -548,9 +587,37 @@ export function StudioProvider(props: {
     router.replace(route);
   }, [router]);
 
+  const backfillIntelligenceConnections = useCallback((workspaceId: string | null | undefined) => {
+    if (!workspaceId) return;
+    const cachedIntelligenceConnections = readCachedIntelligenceConnections(workspaceId);
+    if (cachedIntelligenceConnections.length > 0) {
+      intelligenceConnectionsWorkspaceIdRef.current = workspaceId;
+      setIntelligenceConnections(cachedIntelligenceConnections);
+    }
+    void fetchWithBrowserSession(`/api/intelligence/connections?workspaceId=${encodeURIComponent(workspaceId)}`, {
+      cache: 'no-store',
+    }).then(async ({ response: connectionsResponse }) => {
+      if (!connectionsResponse.ok) return;
+      const connectionsPayload = await connectionsResponse.json().catch(() => null) as { connections?: unknown[] } | null;
+      const connections = Array.isArray(connectionsPayload?.connections)
+        ? connectionsPayload.connections as IntelligenceConnectionRecord[]
+        : [];
+      cacheIntelligenceConnections(workspaceId, connections);
+      if (connections.length > 0) {
+        intelligenceConnectionsWorkspaceIdRef.current = workspaceId;
+        setIntelligenceConnections(connections);
+      } else if (intelligenceConnectionsWorkspaceIdRef.current === workspaceId) {
+        setIntelligenceConnections([]);
+      }
+    }).catch(() => undefined);
+  }, []);
+
   const refresh = useCallback(async () => {
+    const refreshSequence = refreshSequenceRef.current + 1;
+    refreshSequenceRef.current = refreshSequence;
     if (!studioVisibleRef.current) setLoading(true);
     const auth = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
+    if (refreshSequence !== refreshSequenceRef.current) return;
     setBrowserSession(auth.session);
     if (!auth.session) {
       studioVisibleRef.current = false;
@@ -565,11 +632,11 @@ export function StudioProvider(props: {
     if (requestedSessionId) params.set('session', requestedSessionId);
     if (requestedProjectId) params.set('project', requestedProjectId);
     if (requestedWorkspaceId) params.set('workspace', requestedWorkspaceId);
-    const response = await fetchWithBrowserSession(`/api/studio/bootstrap?${params.toString()}`, {
-      cache: 'no-store',
-    });
+    if (requestedWorkspaceId) backfillIntelligenceConnections(requestedWorkspaceId);
+    const response = await fetchStudioBootstrapWithTimeout(`/api/studio/bootstrap?${params.toString()}`);
+    if (refreshSequence !== refreshSequenceRef.current) return;
 
-    if (!response.response.ok) {
+    if (!response?.response.ok) {
       setLoading(false);
       return;
     }
@@ -638,24 +705,9 @@ export function StudioProvider(props: {
     });
     setLoading(false);
     if (bootstrapIntelligenceConnections.length === 0 && nextWorkspaceId) {
-      void fetchWithBrowserSession(`/api/intelligence/connections?workspaceId=${encodeURIComponent(nextWorkspaceId)}`, {
-        cache: 'no-store',
-      }).then(async ({ response: connectionsResponse }) => {
-        if (!connectionsResponse.ok) return;
-        const connectionsPayload = await connectionsResponse.json().catch(() => null) as { connections?: unknown[] } | null;
-        const connections = Array.isArray(connectionsPayload?.connections)
-          ? connectionsPayload.connections as IntelligenceConnectionRecord[]
-          : [];
-        cacheIntelligenceConnections(nextWorkspaceId, connections);
-        if (connections.length > 0) {
-          intelligenceConnectionsWorkspaceIdRef.current = nextWorkspaceId;
-          setIntelligenceConnections(connections);
-        } else if (intelligenceConnectionsWorkspaceIdRef.current === nextWorkspaceId) {
-          setIntelligenceConnections([]);
-        }
-      }).catch(() => undefined);
+      backfillIntelligenceConnections(nextWorkspaceId);
     }
-  }, [applicationShell.syncContext, requestedProjectId, requestedSessionId, requestedWorkspaceId]);
+  }, [applicationShell.syncContext, backfillIntelligenceConnections, requestedProjectId, requestedSessionId, requestedWorkspaceId]);
 
   const refreshLinkedFiles = useCallback(async () => {
     const search = new URLSearchParams();
