@@ -20,6 +20,8 @@ import { toErrorResponse } from '@/src/utils/errors';
 export const runtime = 'nodejs';
 
 const STUDIO_SESSION_REST_TIMEOUT_MS = 8_000;
+const STUDIO_SESSION_REST_ATTEMPTS = 2;
+const STUDIO_SESSION_REST_RETRY_DELAY_MS = 250;
 
 class StudioSessionRestError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -54,19 +56,38 @@ function restUrl(table: string, params: Record<string, string> = {}): URL {
   return url;
 }
 
-async function restRows(table: string, params: Record<string, string>): Promise<Array<Record<string, unknown>> | null> {
-  try {
-    const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
-    const response = await fetch(restUrl(table, params), {
-      headers: serviceRoleHeaders(),
-      signal: typeof timeout === 'function' ? timeout(STUDIO_SESSION_REST_TIMEOUT_MS) : undefined,
-    });
-    if (!response.ok) return null;
-    const rows = await response.json().catch(() => null) as unknown;
-    return Array.isArray(rows) ? rows as Array<Record<string, unknown>> : null;
-  } catch {
-    return null;
+function waitForStudioSessionRestRetry(attempt: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, STUDIO_SESSION_REST_RETRY_DELAY_MS * attempt));
+}
+
+async function withStudioSessionRestRetry(
+  operation: () => Promise<Array<Record<string, unknown>> | null>,
+): Promise<Array<Record<string, unknown>> | null> {
+  for (let attempt = 1; attempt <= STUDIO_SESSION_REST_ATTEMPTS; attempt += 1) {
+    const rows = await operation();
+    if (rows) return rows;
+    if (attempt < STUDIO_SESSION_REST_ATTEMPTS) {
+      await waitForStudioSessionRestRetry(attempt);
+    }
   }
+  return null;
+}
+
+async function restRows(table: string, params: Record<string, string>): Promise<Array<Record<string, unknown>> | null> {
+  return withStudioSessionRestRetry(async () => {
+    try {
+      const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+      const response = await fetch(restUrl(table, params), {
+        headers: serviceRoleHeaders(),
+        signal: typeof timeout === 'function' ? timeout(STUDIO_SESSION_REST_TIMEOUT_MS) : undefined,
+      });
+      if (!response.ok) return null;
+      const rows = await response.json().catch(() => null) as unknown;
+      return Array.isArray(rows) ? rows as Array<Record<string, unknown>> : null;
+    } catch {
+      return null;
+    }
+  });
 }
 
 async function restWriteRows(
@@ -75,23 +96,25 @@ async function restWriteRows(
   params: Record<string, string> = {},
   prefer = 'return=representation',
 ): Promise<Array<Record<string, unknown>> | null> {
-  try {
-    const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
-    const response = await fetch(restUrl(table, params), {
-      method: 'POST',
-      headers: serviceRoleHeaders({
-        'Content-Type': 'application/json',
-        Prefer: prefer,
-      }),
-      body: JSON.stringify(body),
-      signal: typeof timeout === 'function' ? timeout(STUDIO_SESSION_REST_TIMEOUT_MS) : undefined,
-    });
-    if (!response.ok) return null;
-    const rows = await response.json().catch(() => null) as unknown;
-    return Array.isArray(rows) ? rows as Array<Record<string, unknown>> : null;
-  } catch {
-    return null;
-  }
+  return withStudioSessionRestRetry(async () => {
+    try {
+      const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+      const response = await fetch(restUrl(table, params), {
+        method: 'POST',
+        headers: serviceRoleHeaders({
+          'Content-Type': 'application/json',
+          Prefer: prefer,
+        }),
+        body: JSON.stringify(body),
+        signal: typeof timeout === 'function' ? timeout(STUDIO_SESSION_REST_TIMEOUT_MS) : undefined,
+      });
+      if (!response.ok) return null;
+      const rows = await response.json().catch(() => null) as unknown;
+      return Array.isArray(rows) ? rows as Array<Record<string, unknown>> : null;
+    } catch {
+      return null;
+    }
+  });
 }
 
 function mapRestSession(row: Record<string, unknown>): StudioSessionRecord {

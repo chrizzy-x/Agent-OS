@@ -92,6 +92,8 @@ describe('Studio first message route stability', () => {
     const fallbackProjectIndex = postSource.indexOf('const project = await resolveProjectForWorkspace');
 
     expect(source).toContain('const STUDIO_SESSION_REST_TIMEOUT_MS = 8_000;');
+    expect(source).toContain('const STUDIO_SESSION_REST_ATTEMPTS = 2;');
+    expect(source).toContain('withStudioSessionRestRetry');
     expect(postSource).toContain('const requestedWorkspaceId =');
     expect(postSource).toContain('let workspaceId = requestedWorkspaceId;');
     expect(postSource).toContain('const reconcileProvisioning = async () => {');
