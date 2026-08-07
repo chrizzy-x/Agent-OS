@@ -872,7 +872,7 @@ async function main() {
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 });
     await waitForStudio(page);
     const tokenResult = await api(page, '/api/session/token', { method: 'POST', label: 'issue-agent-token-for-db-correlation', sensitive: true });
-    ids.agentId = decodeAgentId(tokenResult.json?.credentials?.bearerToken ?? '');
+    ids.agentId = decodeAgentId(tokenResult.json?.credentials?.bearerToken ?? '') ?? ids.agentId;
     task('Auth + desktop/mobile Studio', 'PASS', {
       registered: true,
       loginRestored: true,
