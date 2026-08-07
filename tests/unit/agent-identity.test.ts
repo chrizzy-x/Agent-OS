@@ -65,6 +65,36 @@ describe('agent identity route auth', () => {
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
+  it('uses a bounded SDK tier lookup in production when REST tier lookup is unavailable', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const fetchMock = vi.fn().mockRejectedValue(new Error('rest unavailable'));
+    vi.stubGlobal('fetch', fetchMock);
+    const agentQuery = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          tier: 'enterprise',
+          metadata: { plan: 'enterprise_plus' },
+        },
+        error: null,
+      }),
+      abortSignal: vi.fn().mockReturnThis(),
+    };
+    mockSupabase.from.mockReturnValue(agentQuery);
+
+    try {
+      const token = createAgentToken('agent-route-production-sdk', { expiresIn: '1h' });
+      const ctx = await verifyAgentTokenWithTier(token);
+
+      expect(ctx.tier).toBe('enterprise_plus');
+      expect(mockSupabase.from).toHaveBeenCalledWith('agents');
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  });
+
   it('validates stored bearer tokens through REST and updates usage without blocking tier lookup', async () => {
     const token = createAgentToken('agent-bearer-rest', { bearerTokenId: 'token-1', expiresIn: '1h' });
     const tokenHash = createHash('sha256').update(token).digest('hex');

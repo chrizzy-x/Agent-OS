@@ -245,7 +245,7 @@ export async function verifyAgentTokenWithTier(token: string): Promise<AgentCont
     const cachedTier = getCachedTier(payload.sub);
     if (cachedTier) {
       tier = cachedTier;
-    } else if (process.env.NODE_ENV !== 'production') {
+    } else {
       try {
         const supabase = getSupabaseAdmin();
         const { data } = await applyAgentIdentityQueryTimeout(supabase
