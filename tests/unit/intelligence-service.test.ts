@@ -17,6 +17,7 @@ vi.mock('../../src/audit/super-agent.js', () => ({
 
 import {
   createIntelligenceConnection,
+  listIntelligenceConnections,
   recordIntelligenceInvocation,
   setIntelligenceDefault,
   setStudioSessionIntelligence,
@@ -67,6 +68,17 @@ function updateBuilder(capture: (row: Record<string, unknown>) => void, data?: R
         }),
       };
     }),
+  };
+}
+
+function listBuilder(data: Record<string, unknown>[]) {
+  return {
+    data,
+    error: null,
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
   };
 }
 
@@ -140,6 +152,39 @@ describe('intelligence service', () => {
       displayName: 'Anthropic Production',
       selectedModelId: 'claude-opus-4-1',
     })).rejects.toThrow(PermissionError);
+  });
+
+  it('lists owner-scoped connections before relying on workspace membership repair', async () => {
+    const connections = listBuilder([
+      {
+        id: 'connection-1',
+        owner_agent_id: 'agent-1',
+        workspace_id: 'workspace-1',
+        vault_secret_id: 'secret-1',
+        vendor: 'openai',
+        display_name: 'OpenAI Production',
+        status: 'active',
+        selected_model_id: 'gpt-5-mini',
+        available_models: ['gpt-5-mini'],
+        capabilities: {},
+        health: {},
+      },
+    ]);
+    serviceMocks.assertWorkspaceMembership.mockRejectedValue(new PermissionError('Workspace not found or not accessible'));
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'intelligence_connections') return connections;
+      throw new Error(`unexpected table ${table}`);
+    });
+
+    const result = await listIntelligenceConnections({
+      ownerAgentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      includeRevoked: true,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].selectedModelId).toBe('gpt-5-mini');
+    expect(serviceMocks.assertWorkspaceMembership).not.toHaveBeenCalled();
   });
 
   it('persists session selection only for an owned active connection in the same workspace', async () => {

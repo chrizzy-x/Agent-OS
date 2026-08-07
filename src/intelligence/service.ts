@@ -294,7 +294,6 @@ export async function listIntelligenceConnections(params: {
   workspaceId: string;
   includeRevoked?: boolean;
 }): Promise<IntelligenceConnectionRecord[]> {
-  await assertWorkspaceMembership(params.workspaceId, params.ownerAgentId);
   let query = getSupabaseAdmin()
     .from('intelligence_connections')
     .select('*')
@@ -305,7 +304,10 @@ export async function listIntelligenceConnections(params: {
   if (!params.includeRevoked) query = query.neq('status', 'revoked');
   const { data, error } = await query;
   if (error) throw new Error(`Failed to list intelligence connections: ${error.message}`);
-  return ((data ?? []) as Record<string, unknown>[]).map(mapConnection);
+  const rows = (data ?? []) as Record<string, unknown>[];
+  if (rows.length > 0) return rows.map(mapConnection);
+  await assertWorkspaceMembership(params.workspaceId, params.ownerAgentId);
+  return [];
 }
 
 export async function createIntelligenceConnection(params: {
