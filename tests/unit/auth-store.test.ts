@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockSupabase } from '../setup.js';
-import { AuthStoreUnavailableError, createAgentAccount, findAccountsByEmail } from '../../src/auth/agent-store.js';
+import { AuthStoreUnavailableError, createAgentAccount, findAccountsByEmail, resetAuthStoreLookupCacheForTests } from '../../src/auth/agent-store.js';
 
 describe('auth store', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    resetAuthStoreLookupCacheForTests();
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch unavailable')));
   });
 
@@ -85,7 +86,7 @@ describe('auth store', () => {
           id: 'agent-1',
           name: 'Proof Agent',
           metadata: {
-            email: 'agentos-proof@example.com',
+            email: 'agentos-cache@example.com',
             password_hash: 'hash',
             plan: 'enterprise_plus',
           },
@@ -107,17 +108,17 @@ describe('auth store', () => {
       .mockReturnValueOnce(successfulQuery)
       .mockReturnValue(failingQuery);
 
-    await expect(findAccountsByEmail('AgentOS-Proof@Example.Com')).resolves.toHaveLength(1);
-    const fallback = await findAccountsByEmail('agentos-proof@example.com');
+    await expect(findAccountsByEmail('AgentOS-Cache@Example.Com')).resolves.toHaveLength(1);
+    const fallback = await findAccountsByEmail('agentos-cache@example.com');
 
     expect(fallback).toHaveLength(1);
     expect(fallback[0]).toMatchObject({
       id: 'agent-1',
-      email: 'agentos-proof@example.com',
+      email: 'agentos-cache@example.com',
       passwordHash: 'hash',
     });
-    expect(successfulQuery.eq).toHaveBeenCalledWith('metadata->>email', 'agentos-proof@example.com');
-    expect(mockSupabase.from).toHaveBeenCalledTimes(4);
+    expect(successfulQuery.eq).toHaveBeenCalledWith('metadata->>email', 'agentos-cache@example.com');
+    expect(mockSupabase.from).toHaveBeenCalledTimes(1);
   });
 
   it('uses a recent created account when the auth store stalls after signup', async () => {
@@ -156,7 +157,7 @@ describe('auth store', () => {
       email: 'Created-Proof@Example.Com',
       passwordHash: 'created-hash',
     });
-    expect(mockSupabase.from).toHaveBeenCalledTimes(4);
+    expect(mockSupabase.from).toHaveBeenCalledTimes(1);
   });
 
   it('uses direct Supabase REST lookup before the SDK auth lookup', async () => {
@@ -220,5 +221,38 @@ describe('auth store', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
+  it('does not fall into slow SDK auth lookup after production REST lookup failure', async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const fetchMock = vi.fn().mockRejectedValue(new Error('rest unavailable'));
+    vi.stubGlobal('fetch', fetchMock);
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      abortSignal: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve({
+        data: [{
+          id: 'agent-sdk-should-not-run',
+          name: 'SDK Should Not Run',
+          metadata: {
+            email: 'production-fast-fail@example.com',
+            password_hash: 'hash',
+            plan: 'enterprise_plus',
+          },
+        }],
+        error: null,
+      }).then(resolve),
+    });
+
+    try {
+      await expect(findAccountsByEmail('production-fast-fail@example.com')).rejects.toBeInstanceOf(AuthStoreUnavailableError);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(mockSupabase.from).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
   });
 });

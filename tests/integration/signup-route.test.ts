@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { mockSupabase } from '../setup.js';
 import { POST } from '../../app/api/signup/route.js';
+import { resetAuthStoreLookupCacheForTests } from '../../src/auth/agent-store.js';
 
 function createSignupRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/signup', {
@@ -60,6 +61,12 @@ function mockSignupDatabase(options: { duplicateInsert?: boolean } = {}) {
 describe('POST /api/signup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetAuthStoreLookupCacheForTests();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch unavailable')));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it.each([

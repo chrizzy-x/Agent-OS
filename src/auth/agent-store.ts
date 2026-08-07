@@ -5,13 +5,19 @@ import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
 const AUTH_STORE_QUERY_TIMEOUT_MS = 5_000;
-const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 8_000;
-const AUTH_STORE_DIRECT_LOOKUP_ATTEMPTS = 3;
+const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 4_000;
+const AUTH_STORE_DIRECT_LOOKUP_ATTEMPTS = 2;
 const AUTH_STORE_QUERY_ATTEMPTS = 3;
 const AUTH_STORE_RETRY_DELAY_MS = 250;
 const DEFAULT_AUTH_STORE_FALLBACK_CACHE_TTL_MS = 120_000;
 
 const authLookupCache = new Map<string, { accounts: AgentAccount[]; cachedAt: number }>();
+
+export function resetAuthStoreLookupCacheForTests(): void {
+  if (process.env.NODE_ENV === 'test') {
+    authLookupCache.clear();
+  }
+}
 
 export class AuthStoreUnavailableError extends Error {
   constructor(message = 'Authentication store is temporarily unavailable') {
@@ -197,6 +203,13 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
     return directAccounts;
   }
 
+  const cachedAccounts = getCachedAccountsByEmail(lookupEmail);
+  if (cachedAccounts) return cachedAccounts;
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new AuthStoreUnavailableError();
+  }
+
   for (let attempt = 1; attempt <= AUTH_STORE_QUERY_ATTEMPTS; attempt += 1) {
     try {
       const { data, error } = await applyAuthStoreQueryTimeout(supabase
@@ -218,9 +231,6 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
       await waitForAuthStoreRetry(attempt);
     }
   }
-
-  const cachedAccounts = getCachedAccountsByEmail(lookupEmail);
-  if (cachedAccounts) return cachedAccounts;
 
   throw new AuthStoreUnavailableError();
 }
