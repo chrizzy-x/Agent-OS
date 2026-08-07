@@ -5,8 +5,8 @@ import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
 const AUTH_STORE_QUERY_TIMEOUT_MS = 5_000;
-const AUTH_STORE_PRODUCTION_QUERY_TIMEOUT_MS = 2_500;
-const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 4_000;
+const AUTH_STORE_PRODUCTION_QUERY_TIMEOUT_MS = 6_000;
+const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 8_000;
 const AUTH_STORE_DIRECT_LOOKUP_ATTEMPTS = 2;
 const AUTH_STORE_QUERY_ATTEMPTS = 3;
 const AUTH_STORE_RETRY_DELAY_MS = 250;
