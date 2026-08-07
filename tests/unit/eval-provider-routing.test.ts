@@ -9,6 +9,7 @@ vi.mock('../../src/storage/supabase.js', () => ({
   getSupabaseAdmin: vi.fn(() => {
     throw new Error('Supabase is not configured in this unit test.');
   }),
+  withSupabaseQueryTimeout: <T>(query: T) => query,
 }));
 
 vi.mock('../../src/studio/providers.js', () => ({

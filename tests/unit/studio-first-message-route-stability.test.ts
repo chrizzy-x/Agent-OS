@@ -50,9 +50,28 @@ describe('Studio first message route stability', () => {
     const intelligence = readFileSync(join(process.cwd(), 'src', 'intelligence', 'service.ts'), 'utf8');
 
     expect(persistence).toContain('const STUDIO_PERSISTENCE_QUERY_TIMEOUT_MS = 4_000;');
-    expect(persistence.match(/applyStudioPersistenceQueryTimeout/g)?.length ?? 0).toBeGreaterThanOrEqual(6);
+    expect(persistence.match(/applyStudioPersistenceQueryTimeout/g)?.length ?? 0).toBeGreaterThanOrEqual(12);
     expect(intelligence).toContain('const INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS = 4_000;');
     expect(intelligence).toContain('Fall back to the selection persisted on the Studio session row.');
+  });
+
+  it('falls back to the direct session bundle when Studio bootstrap stalls', () => {
+    const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
+
+    expect(source).toContain('function mergeActiveSession');
+    expect(source).toContain('const bundleResponse = await fetchStudioBootstrapWithTimeout(`/api/studio/sessions/${requestedSessionId}`);');
+    expect(source).toContain('setSessions(current => mergeActiveSession(current, bundlePayload.session as StudioSessionRecord));');
+    expect(source).toContain('sessionId: bundlePayload.session.id');
+  });
+
+  it('bounds Studio persistence writes used by session creation and streaming', () => {
+    const persistence = readFileSync(join(process.cwd(), 'src', 'studio', 'persistence.ts'), 'utf8');
+    const intelligence = readFileSync(join(process.cwd(), 'src', 'intelligence', 'service.ts'), 'utf8');
+
+    expect(persistence).toMatch(/applyStudioPersistenceQueryTimeout\(supabase\s+\.from\('nl_studio_sessions'\)\s+\.insert\(row\)/);
+    expect(persistence).toMatch(/applyStudioPersistenceQueryTimeout\(supabase\s+\.from\('nl_studio_messages'\)\s+\.insert\(row\)/);
+    expect(persistence).toMatch(/applyStudioPersistenceQueryTimeout\(supabase\s+\.from\('nl_studio_events'\)\s+\.insert\(row\)/);
+    expect(intelligence).toMatch(/applyIntelligenceSessionQueryTimeout\(getSupabaseAdmin\(\)\s+\.from\('studio_session_intelligence'\)\s+\.upsert\(row, \{ onConflict: 'session_id' \}\)/);
   });
 
   it('backfills connected intelligence when bootstrap returns an empty connection list', () => {

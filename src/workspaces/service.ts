@@ -2,7 +2,7 @@
 import { normalizeAgentDisplayName } from '../auth/agent-names.js';
 import { normalizePlan } from '../auth/tiers.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
-import { getSupabaseAdmin } from '../storage/supabase.js';
+import { getSupabaseAdmin, withSupabaseQueryTimeout } from '../storage/supabase.js';
 import { PermissionError } from '../utils/errors.js';
 
 export type WorkspaceRole = 'owner' | 'admin' | 'member' | 'viewer';
@@ -152,10 +152,10 @@ async function appendAudit(workspaceId: string, actorId: string | null, action: 
 export async function listWorkspaces(userId: string): Promise<Workspace[]> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await withSupabaseQueryTimeout(supabase
       .from('workspace_members')
       .select('workspaces(id,name,slug,owner_id,plan,created_at)')
-      .eq('user_id', userId);
+      .eq('user_id', userId));
 
     if (!error) {
       const remoteWorkspaces = ((data ?? []) as Array<Record<string, unknown>>).flatMap(row => {
@@ -165,10 +165,10 @@ export async function listWorkspaces(userId: string): Promise<Workspace[]> {
       if (remoteWorkspaces.length > 0) return remoteWorkspaces;
     }
 
-    const owned = await supabase
+    const owned = await withSupabaseQueryTimeout(supabase
       .from('workspaces')
       .select('id,name,slug,owner_id,plan,created_at')
-      .eq('owner_id', userId);
+      .eq('owner_id', userId));
     if (!owned.error && owned.data?.length) {
       return ((owned.data ?? []) as Array<Record<string, unknown>>)
         .map(row => mapWorkspaceJoin(row))
@@ -193,12 +193,12 @@ export async function assertWorkspaceMembership(workspaceId: string, userId: str
 }> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await withSupabaseQueryTimeout(supabase
       .from('workspace_members')
       .select('role, workspaces(id,name,slug,owner_id,plan,created_at)')
       .eq('workspace_id', workspaceId)
       .eq('user_id', userId)
-      .maybeSingle();
+      .maybeSingle());
 
     if (!error && data) {
       const row = data as Record<string, unknown>;
@@ -211,18 +211,18 @@ export async function assertWorkspaceMembership(workspaceId: string, userId: str
       }
     }
 
-    const member = await supabase
+    const member = await withSupabaseQueryTimeout(supabase
       .from('workspace_members')
       .select('role')
       .eq('workspace_id', workspaceId)
       .eq('user_id', userId)
-      .maybeSingle();
+      .maybeSingle());
     if (!member.error && member.data) {
-      const workspaceResult = await supabase
+      const workspaceResult = await withSupabaseQueryTimeout(supabase
         .from('workspaces')
         .select('id,name,slug,owner_id,plan,created_at')
         .eq('id', workspaceId)
-        .maybeSingle();
+        .maybeSingle());
       const workspace = !workspaceResult.error ? mapWorkspaceJoin(workspaceResult.data) : null;
       if (workspace) {
         return {

@@ -540,14 +540,14 @@ export async function setStudioSessionIntelligence(params: {
     created_at: now,
     updated_at: now,
   };
-  const { data, error } = await getSupabaseAdmin()
+  const { data, error } = await applyIntelligenceSessionQueryTimeout(getSupabaseAdmin()
     .from('studio_session_intelligence')
     .upsert(row, { onConflict: 'session_id' })
     .select('*')
-    .single();
+    .single());
   if (error) throw new Error(`Failed to set Studio session intelligence: ${error.message}`);
 
-  await getSupabaseAdmin()
+  await applyIntelligenceSessionQueryTimeout(getSupabaseAdmin()
     .from('nl_studio_sessions')
     .update({
       intelligence_selection: selection,
@@ -558,7 +558,7 @@ export async function setStudioSessionIntelligence(params: {
       updated_at: now,
     })
     .eq('id', params.sessionId)
-    .eq('owner_agent_id', params.ownerAgentId);
+    .eq('owner_agent_id', params.ownerAgentId));
 
   await audit({
     ownerAgentId: params.ownerAgentId,

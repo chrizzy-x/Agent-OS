@@ -236,6 +236,13 @@ async function fetchStudioBootstrapWithTimeout(url: string): Promise<Awaited<Ret
   }
 }
 
+function mergeActiveSession(
+  sessions: StudioSessionRecord[],
+  activeSession: StudioSessionRecord,
+): StudioSessionRecord[] {
+  return [activeSession, ...sessions.filter(item => item.id !== activeSession.id)];
+}
+
 type InstalledSkillRecord = {
   id: string;
   name: string;
@@ -648,6 +655,30 @@ export function StudioProvider(props: {
     if (refreshSequence !== refreshSequenceRef.current) return;
 
     if (!response?.response.ok) {
+      if (requestedSessionId) {
+        const bundleResponse = await fetchStudioBootstrapWithTimeout(`/api/studio/sessions/${requestedSessionId}`);
+        if (refreshSequence !== refreshSequenceRef.current) return;
+        if (bundleResponse?.response.ok) {
+          const bundlePayload = await bundleResponse.response.json() as {
+            session?: StudioSessionRecord;
+            messages?: StudioMessageRecord[];
+            events?: StudioEventRecord[];
+            lineage?: StudioLineage;
+          };
+          if (bundlePayload.session) {
+            setSession(bundlePayload.session);
+            setSessions(current => mergeActiveSession(current, bundlePayload.session as StudioSessionRecord));
+            setLineage(bundlePayload.lineage ?? { parent: null, children: [] });
+            setMessages(bundlePayload.messages ?? []);
+            setEvents(bundlePayload.events ?? []);
+            applicationShell.syncContext({
+              workspaceId: bundlePayload.session.workspaceId,
+              projectId: bundlePayload.session.projectId ?? null,
+              sessionId: bundlePayload.session.id,
+            });
+          }
+        }
+      }
       setLoading(false);
       return;
     }
@@ -661,7 +692,9 @@ export function StudioProvider(props: {
       || null;
 
     setSession(nextSession);
-    setSessions((payload.sessions ?? []) as StudioSessionRecord[]);
+    setSessions(nextSession
+      ? mergeActiveSession((payload.sessions ?? []) as StudioSessionRecord[], nextSession)
+      : (payload.sessions ?? []) as StudioSessionRecord[]);
     setLineage((payload.lineage ?? { parent: null, children: [] }) as StudioLineage);
     const activeStreamingSessionId = streamingSessionIdRef.current;
     if (!activeStreamingSessionId || nextSession?.id !== activeStreamingSessionId) {

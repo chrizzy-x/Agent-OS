@@ -17,6 +17,7 @@ vi.mock('../../src/auth/request.js', () => ({
 
 vi.mock('../../src/storage/supabase.js', () => ({
   getSupabaseAdmin: vi.fn(() => ({ from: routeMocks.from })),
+  withSupabaseQueryTimeout: <T>(query: T) => query,
 }));
 
 vi.mock('../../src/execution/service.js', () => ({

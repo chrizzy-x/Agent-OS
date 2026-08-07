@@ -4,7 +4,7 @@ import {
   updateLocalRuntimeState,
   type LocalProjectRecord,
 } from '../storage/local-state.js';
-import { getSupabaseAdmin } from '../storage/supabase.js';
+import { getSupabaseAdmin, withSupabaseQueryTimeout } from '../storage/supabase.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { appendStudioEvent } from '../studio/persistence.js';
 import { assertWorkspaceMembership, assertWorkspaceOwnership, listWorkspaces, type Workspace } from '../workspaces/service.js';
@@ -119,7 +119,7 @@ export async function listProjects(params: {
       query = query.eq('status', params.status);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await withSupabaseQueryTimeout(query);
     if (!error) {
       let projects = ((data ?? []) as Array<Record<string, unknown>>).map(mapRow);
       if (params.search?.trim()) {
@@ -150,11 +150,11 @@ export async function getProject(params: {
 }): Promise<ProjectRecord> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await withSupabaseQueryTimeout(supabase
       .from('projects')
       .select('*')
       .eq('id', params.projectId)
-      .maybeSingle();
+      .maybeSingle());
 
     if (!error && data) {
       const project = mapRow(data as Record<string, unknown>);
@@ -194,7 +194,7 @@ export async function ensureWorkspaceDefaultProject(params: {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await withSupabaseQueryTimeout(supabase
       .from('projects')
       .upsert({
         id: seed.id,
@@ -209,7 +209,7 @@ export async function ensureWorkspaceDefaultProject(params: {
         updated_at: seed.updatedAt,
       }, { onConflict: 'id' })
       .select('*')
-      .single();
+      .single());
 
     if (!error && data) {
       return mapRow(data as Record<string, unknown>);

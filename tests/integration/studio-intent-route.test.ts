@@ -64,6 +64,7 @@ vi.mock('../../src/appstore/service.js', () => ({
 
 vi.mock('../../src/storage/supabase.js', () => ({
   getSupabaseAdmin: intentRouteMocks.getSupabaseAdmin,
+  withSupabaseQueryTimeout: <T>(query: T) => query,
 }));
 
 import { POST } from '../../app/api/studio/intent/route.js';

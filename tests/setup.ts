@@ -93,6 +93,7 @@ export const mockSupabase = {
 vi.mock('../src/storage/supabase.js', () => ({
   getSupabaseAdmin: vi.fn(() => mockSupabase),
   setSupabaseClient: vi.fn(),
+  withSupabaseQueryTimeout: <T>(query: T) => query,
   STORAGE_BUCKET: 'agent-files',
   storagePath: (agentId: string, path: string) => `${agentId}/${path}`,
 }));

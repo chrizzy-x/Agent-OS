@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getSupabaseAdmin } from '../storage/supabase.js';
+import { getSupabaseAdmin, withSupabaseQueryTimeout } from '../storage/supabase.js';
 import { redactSecretsDeep } from '../security/secret-redaction.js';
 import { sanitizeErrorMessage, sanitizeOutput } from '../utils/output-sanitizer.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
@@ -663,7 +663,7 @@ export async function listExecutions(params: {
     if (params.skillId) query = query.eq('skill_id', params.skillId);
     if (params.search?.trim()) query = query.ilike('title', `%${params.search.trim()}%`);
 
-    const { data, error } = await query;
+    const { data, error } = await withSupabaseQueryTimeout(query);
     if (error) throw new Error(`Failed to list executions: ${error.message}`);
     return ((data ?? []) as Record<string, unknown>[]).map(mapExecution);
   } catch (error) {

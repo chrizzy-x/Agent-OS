@@ -320,11 +320,11 @@ export async function createStudioSession(params: {
   let persistenceFailure: { code?: string; message: string } | null = null;
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyStudioPersistenceQueryTimeout(supabase
       .from('nl_studio_sessions')
       .insert(row)
       .select()
-      .single();
+      .single());
 
     if (!error && data) return mapSession(data as Record<string, unknown>);
     if (error) {
@@ -476,18 +476,18 @@ export async function appendStudioMessage(params: {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyStudioPersistenceQueryTimeout(supabase
       .from('nl_studio_messages')
       .insert(row)
       .select()
-      .single();
+      .single());
 
     if (!error && data) {
-      await supabase
+      await applyStudioPersistenceQueryTimeout(supabase
         .from('nl_studio_sessions')
         .update({ updated_at: now })
         .eq('id', params.sessionId)
-        .eq('owner_agent_id', params.ownerAgentId);
+        .eq('owner_agent_id', params.ownerAgentId));
 
       return mapMessage(data as Record<string, unknown>);
     }
@@ -503,11 +503,11 @@ export async function appendStudioMessage(params: {
       ...state,
       messages: [...messages, row],
     };
-    const { error } = await supabase
+    const { error } = await applyStudioPersistenceQueryTimeout(supabase
       .from('nl_studio_sessions')
       .update({ state: nextState, updated_at: now })
       .eq('id', params.sessionId)
-      .eq('owner_agent_id', params.ownerAgentId);
+      .eq('owner_agent_id', params.ownerAgentId));
 
     if (!error) return mapMessage(row);
   } catch {
@@ -545,11 +545,11 @@ export async function appendStudioEvent(params: {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyStudioPersistenceQueryTimeout(supabase
       .from('nl_studio_events')
       .insert(row)
       .select()
-      .single();
+      .single());
 
     if (!error && data) return mapEvent(data as Record<string, unknown>);
   } catch {
@@ -665,13 +665,13 @@ export async function updateStudioSession(params: {
 
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyStudioPersistenceQueryTimeout(supabase
       .from('nl_studio_sessions')
       .update(patch)
       .eq('id', params.sessionId)
       .eq('owner_agent_id', params.ownerAgentId)
       .select('*')
-      .maybeSingle();
+      .maybeSingle());
 
     if (!error && data) return mapSession(data as Record<string, unknown>);
   } catch {

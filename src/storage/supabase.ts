@@ -20,6 +20,14 @@ export function getSupabaseAdmin(): SupabaseClient {
   return adminClient;
 }
 
+export function withSupabaseQueryTimeout<T>(query: T, timeoutMs = 4_000): T {
+  const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
+  return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
+    ? abortable.abortSignal(timeout(timeoutMs))
+    : query;
+}
+
 // Allow replacing the client in tests
 export function setSupabaseClient(c: SupabaseClient): void {
   adminClient = c;
