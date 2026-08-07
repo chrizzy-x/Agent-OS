@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createAgentToken } from '../../src/auth/agent-identity.js';
+import { getCookieRequestContext, setAgentSessionCookies } from '../../src/auth/session-cookie.js';
 import { mockSupabase } from '../setup.js';
 import { POST as issueToken } from '../../app/api/session/token/route.js';
 
@@ -8,6 +9,9 @@ const browserSessionMocks = vi.hoisted(() => ({
   findRefreshSessionByToken: vi.fn(),
   revokeRefreshSession: vi.fn(),
   revokeAllRefreshSessions: vi.fn(),
+}));
+const browserAuthMocks = vi.hoisted(() => ({
+  rotateBrowserSession: vi.fn(),
 }));
 
 vi.mock('../../src/auth/browser-sessions.js', async () => {
@@ -17,6 +21,14 @@ vi.mock('../../src/auth/browser-sessions.js', async () => {
     findRefreshSessionByToken: browserSessionMocks.findRefreshSessionByToken,
     revokeRefreshSession: browserSessionMocks.revokeRefreshSession,
     revokeAllRefreshSessions: browserSessionMocks.revokeAllRefreshSessions,
+  };
+});
+
+vi.mock('../../src/auth/browser-auth.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/auth/browser-auth.js')>('../../src/auth/browser-auth.js');
+  return {
+    ...actual,
+    rotateBrowserSession: browserAuthMocks.rotateBrowserSession,
   };
 });
 
@@ -37,6 +49,14 @@ describe('session routes', () => {
     browserSessionMocks.findRefreshSessionByToken.mockResolvedValue(null);
     browserSessionMocks.revokeRefreshSession.mockResolvedValue(undefined);
     browserSessionMocks.revokeAllRefreshSessions.mockResolvedValue(undefined);
+    browserAuthMocks.rotateBrowserSession.mockImplementation(async (response, params) => {
+      const accessToken = createAgentToken('agent-1', { expiresIn: '1h' });
+      setAgentSessionCookies(response, {
+        accessToken,
+        refreshToken: 'next.selector.secret',
+      }, getCookieRequestContext(params.request));
+      return { accessToken, refreshToken: 'next.selector.secret', agentId: 'agent-1' };
+    });
   });
 
   it('returns 401 without clearing cookies when no session cookie is present', async () => {
@@ -107,6 +127,27 @@ describe('session routes', () => {
 
     expect(response.status).toBe(200);
     expect(body.credentials.bearerToken).toBeTruthy();
+    expect(response.headers.get('set-cookie')).toContain('agent_session=');
+  });
+
+  it('issues a fresh bearer token after rotating a valid refresh session', async () => {
+    const request = new NextRequest('http://localhost/api/session/token', {
+      method: 'POST',
+      headers: {
+        Cookie: 'agent_refresh=selector.secret',
+      },
+    });
+
+    const response = await issueToken(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(browserAuthMocks.rotateBrowserSession).toHaveBeenCalledWith(expect.anything(), {
+      rawRefreshToken: 'selector.secret',
+      request,
+    });
+    expect(body.credentials.bearerToken).toBeTruthy();
+    expect(response.headers.get('set-cookie')).toContain('agent_refresh=next.selector.secret');
     expect(response.headers.get('set-cookie')).toContain('agent_session=');
   });
 
