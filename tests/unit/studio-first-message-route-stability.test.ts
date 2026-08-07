@@ -88,7 +88,6 @@ describe('Studio first message route stability', () => {
       source.indexOf('async function resolveRestWorkspaceOwnerId'),
     );
     const directIndex = postSource.indexOf('const directSession = await createStudioSessionViaRest');
-    const unavailableIndex = postSource.indexOf("code: 'STUDIO_SESSION_UNAVAILABLE'");
     const fallbackProjectIndex = postSource.indexOf('const project = await resolveProjectForWorkspace');
 
     expect(source).toContain('const STUDIO_SESSION_REST_TIMEOUT_MS = 8_000;');
@@ -101,7 +100,7 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('async function resolveRestWorkspaceOwnerId');
     expect(projectResolverSource).not.toContain('owner_agent_id:');
     expect(directIndex).toBeGreaterThan(-1);
-    expect(unavailableIndex).toBeGreaterThan(directIndex);
-    expect(fallbackProjectIndex).toBeGreaterThan(unavailableIndex);
+    expect(fallbackProjectIndex).toBeGreaterThan(directIndex);
+    expect(postSource).not.toContain("code: 'STUDIO_SESSION_UNAVAILABLE'");
   });
 });

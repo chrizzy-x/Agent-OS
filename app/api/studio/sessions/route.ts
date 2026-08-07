@@ -395,13 +395,6 @@ export async function POST(request: NextRequest) {
       }, { status: 201 });
     }
 
-    if (process.env.NODE_ENV === 'production' && process.env.AGENTOS_ALLOW_LOCAL_STATE !== '1') {
-      return NextResponse.json(
-        { code: 'STUDIO_SESSION_UNAVAILABLE', error: 'studio_session_unavailable', message: 'Chat storage is temporarily unavailable. Please retry.' },
-        { status: 503 },
-      );
-    }
-
     await reconcileProvisioning();
     const project = await resolveProjectForWorkspace({
       ownerAgentId: ctx.agentId,
