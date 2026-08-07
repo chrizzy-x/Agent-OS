@@ -82,9 +82,18 @@ export type IntelligenceInvocationRecord = {
 const VENDORS = new Set<IntelligenceVendor>(['openai', 'anthropic', 'gemini']);
 const CONNECTION_STATUSES = new Set<IntelligenceConnectionStatus>(['pending_validation', 'active', 'invalid', 'disabled', 'revoked']);
 const INVOCATION_STATUSES = new Set<IntelligenceInvocationStatus>(['queued', 'running', 'completed', 'failed', 'cancelled']);
+const INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS = 4_000;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function applyIntelligenceSessionQueryTimeout<T>(query: T): T {
+  const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
+  return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
+    ? abortable.abortSignal(timeout(INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS))
+    : query;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -244,12 +253,12 @@ async function assertSessionOwner(params: {
   ownerAgentId: string;
   sessionId: string;
 }): Promise<Record<string, unknown>> {
-  const { data, error } = await getSupabaseAdmin()
+  const { data, error } = await applyIntelligenceSessionQueryTimeout(getSupabaseAdmin()
     .from('nl_studio_sessions')
     .select('*')
     .eq('id', params.sessionId)
     .eq('owner_agent_id', params.ownerAgentId)
-    .maybeSingle();
+    .maybeSingle());
 
   if (error) throw new Error(`Failed to validate Studio session: ${error.message}`);
   if (!data) throw new PermissionError('Studio session not found or not accessible');
@@ -568,14 +577,18 @@ export async function getStudioSessionIntelligence(params: {
   connectionsByVendor?: LegacyIntelligenceConnectionMap;
 }): Promise<StudioSessionIntelligenceRecord> {
   const session = await assertSessionOwner({ ownerAgentId: params.ownerAgentId, sessionId: params.sessionId });
-  const { data, error } = await getSupabaseAdmin()
-    .from('studio_session_intelligence')
-    .select('*')
-    .eq('session_id', params.sessionId)
-    .eq('owner_agent_id', params.ownerAgentId)
-    .maybeSingle();
-  if (error) throw new Error(`Failed to load Studio session intelligence: ${error.message}`);
-  if (data) return mapSessionIntelligence(data as Record<string, unknown>);
+  try {
+    const { data, error } = await applyIntelligenceSessionQueryTimeout(getSupabaseAdmin()
+      .from('studio_session_intelligence')
+      .select('*')
+      .eq('session_id', params.sessionId)
+      .eq('owner_agent_id', params.ownerAgentId)
+      .maybeSingle());
+    if (error) throw new Error(`Failed to load Studio session intelligence: ${error.message}`);
+    if (data) return mapSessionIntelligence(data as Record<string, unknown>);
+  } catch {
+    // Fall back to the selection persisted on the Studio session row.
+  }
 
   const state = asRecord(session.state);
   const storedSelection = (session as Record<string, unknown>).intelligence_selection ?? state.intelligenceSelection;

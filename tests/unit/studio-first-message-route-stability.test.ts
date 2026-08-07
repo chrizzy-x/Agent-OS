@@ -45,6 +45,16 @@ describe('Studio first message route stability', () => {
     expect(authIndex).toBeGreaterThan(firstStatusIndex);
   });
 
+  it('bounds Studio session reload persistence reads', () => {
+    const persistence = readFileSync(join(process.cwd(), 'src', 'studio', 'persistence.ts'), 'utf8');
+    const intelligence = readFileSync(join(process.cwd(), 'src', 'intelligence', 'service.ts'), 'utf8');
+
+    expect(persistence).toContain('const STUDIO_PERSISTENCE_QUERY_TIMEOUT_MS = 4_000;');
+    expect(persistence.match(/applyStudioPersistenceQueryTimeout/g)?.length ?? 0).toBeGreaterThanOrEqual(6);
+    expect(intelligence).toContain('const INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS = 4_000;');
+    expect(intelligence).toContain('Fall back to the selection persisted on the Studio session row.');
+  });
+
   it('backfills connected intelligence when bootstrap returns an empty connection list', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
 

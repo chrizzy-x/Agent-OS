@@ -6,6 +6,8 @@ import { redactSecretsDeep, redactSecretsInString } from '../security/secret-red
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
 
+const STUDIO_PERSISTENCE_QUERY_TIMEOUT_MS = 4_000;
+
 export type StudioEventType =
   | 'thinking_started'
   | 'plan_created'
@@ -180,6 +182,14 @@ function sortSessionRows(rows: Record<string, unknown>[]): Record<string, unknow
   });
 }
 
+function applyStudioPersistenceQueryTimeout<T>(query: T): T {
+  const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+  const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
+  return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
+    ? abortable.abortSignal(timeout(STUDIO_PERSISTENCE_QUERY_TIMEOUT_MS))
+    : query;
+}
+
 async function findLocalSessionRow(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown> | null> {
   const state = await readLocalRuntimeState();
   return state.studioSessions.find(row =>
@@ -192,12 +202,12 @@ async function findLocalSessionRow(sessionId: string, ownerAgentId: string): Pro
 async function assertSessionOwner(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown>> {
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    const { data, error } = await applyStudioPersistenceQueryTimeout(supabase
       .from('nl_studio_sessions')
       .select('*')
       .eq('id', sessionId)
       .eq('owner_agent_id', ownerAgentId)
-      .maybeSingle();
+      .maybeSingle());
 
     if (!error && data) return data as Record<string, unknown>;
   } catch {
@@ -235,7 +245,7 @@ export async function listStudioSessions(
       query = query.limit(Math.floor(options.limit));
     }
 
-    const { data, error } = await query;
+    const { data, error } = await applyStudioPersistenceQueryTimeout(query);
     if (!error) return ((data ?? []) as Record<string, unknown>[]).map(mapSession);
   } catch {
     // Fall through to local state.
@@ -347,16 +357,16 @@ export async function getStudioSessionBundle(ownerAgentId: string, sessionId: st
   try {
     const supabase = getSupabaseAdmin();
     const [messages, events, lineage] = await Promise.all([
-      supabase
+      applyStudioPersistenceQueryTimeout(supabase
         .from('nl_studio_messages')
         .select('*')
         .eq('session_id', sessionId)
-        .order('created_at', { ascending: true }),
-      supabase
+        .order('created_at', { ascending: true })),
+      applyStudioPersistenceQueryTimeout(supabase
         .from('nl_studio_events')
         .select('*')
         .eq('session_id', sessionId)
-        .order('created_at', { ascending: true }),
+        .order('created_at', { ascending: true })),
       getStudioSessionLineage(ownerAgentId, sessionId),
     ]);
 
@@ -395,19 +405,19 @@ export async function getStudioSessionLineage(ownerAgentId: string, sessionId: s
     const supabase = getSupabaseAdmin();
     const [parentResult, childResult] = await Promise.all([
       current.parentSessionId
-        ? supabase
+        ? applyStudioPersistenceQueryTimeout(supabase
           .from('nl_studio_sessions')
           .select('*')
           .eq('id', current.parentSessionId)
           .eq('owner_agent_id', ownerAgentId)
-          .maybeSingle()
+          .maybeSingle())
         : Promise.resolve({ data: null, error: null }),
-      supabase
+      applyStudioPersistenceQueryTimeout(supabase
         .from('nl_studio_sessions')
         .select('*')
         .eq('owner_agent_id', ownerAgentId)
         .eq('parent_session_id', sessionId)
-        .order('updated_at', { ascending: false }),
+        .order('updated_at', { ascending: false })),
     ]);
 
     if (!childResult.error && !(parentResult && 'error' in parentResult && parentResult.error)) {
