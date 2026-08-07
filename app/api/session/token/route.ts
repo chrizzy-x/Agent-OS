@@ -4,7 +4,7 @@ import { rotateBrowserSession } from '@/src/auth/browser-auth';
 import { assertCapability } from '@/src/auth/capabilities';
 import { requireRouteCapability } from '@/src/auth/request';
 import { ROUTE_CAPABILITY_POLICY } from '@/src/auth/route-policy';
-import { extractRefreshTokenFromCookie, getCookieRequestContext, setAgentSessionCookie } from '@/src/auth/session-cookie';
+import { extractRefreshTokenFromCookie } from '@/src/auth/session-cookie';
 import { AuthError, toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
         expiresIn: '90 days',
       },
     }, { headers: sessionCookieResponse.headers });
-    setAgentSessionCookie(response, bearerToken, getCookieRequestContext(request));
     return response;
   } catch (error) {
     const err = toErrorResponse(error);

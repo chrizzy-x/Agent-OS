@@ -127,7 +127,7 @@ describe('session routes', () => {
 
     expect(response.status).toBe(200);
     expect(body.credentials.bearerToken).toBeTruthy();
-    expect(response.headers.get('set-cookie')).toContain('agent_session=');
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it('issues a fresh bearer token after rotating a valid refresh session', async () => {
@@ -155,12 +155,11 @@ describe('session routes', () => {
     vi.useRealTimers();
   });
 
-  it('does not mark browser session cookies as secure on localhost http requests', async () => {
-    const token = createAgentToken('agent-1', { expiresIn: '1h' });
+  it('does not mark rotated browser session cookies as secure on localhost http requests', async () => {
     const request = new NextRequest('http://127.0.0.1:3000/api/session/token', {
       method: 'POST',
       headers: {
-        Cookie: `agent_session=${token}`,
+        Cookie: 'agent_refresh=selector.secret',
       },
     });
 
