@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAgentToken } from '@/src/auth/agent-identity';
 import { issueBrowserSession } from '@/src/auth/browser-auth';
 import { verifyPassword } from '@/src/auth/password';
-import { authStoreUnavailableResponse, findAccountsByEmail, isAuthStoreUnavailableError } from '@/src/auth/agent-store';
+import { authStoreUnavailableResponse, findAccountById, findAccountsByEmail, isAuthStoreUnavailableError, type AgentAccount } from '@/src/auth/agent-store';
 import { hasCapability } from '@/src/auth/capabilities';
+import { createSigninLookupHint, resolveSigninLookupHint } from '@/src/auth/signin-hint';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
+  const signinHint = typeof body.signinHint === 'string' ? body.signinHint : '';
 
   if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: 'invalid_email', message: 'Valid email required' }, { status: 400 });
@@ -30,9 +32,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_password', message: 'Password required' }, { status: 400 });
   }
 
-  let accounts;
+  let accounts: AgentAccount[] | null = null;
+  const hintedAgentId = signinHint ? resolveSigninLookupHint(signinHint, email) : null;
+  if (hintedAgentId) {
+    const hintedAccount = await findAccountById(hintedAgentId).catch(() => null);
+    if (hintedAccount?.email.trim().toLowerCase() === email) {
+      accounts = [hintedAccount];
+    }
+  }
+
   try {
-    accounts = await findAccountsByEmail(email);
+    accounts ??= await findAccountsByEmail(email);
   } catch (error) {
     if (isAuthStoreUnavailableError(error)) {
       return NextResponse.json(authStoreUnavailableResponse(), { status: 503 });
@@ -86,6 +96,7 @@ export async function POST(req: NextRequest) {
       bearerToken: canIssueBearerToken ? bearerToken : null,
       apiKey: canIssueBearerToken ? bearerToken : null,
       agentName: account.name,
+      signinHint: createSigninLookupHint(account.id, email),
       expiresIn: '90 days',
     },
   });

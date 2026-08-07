@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { fetchBrowserSession } from '@/src/auth/browser-session';
+import { readSigninLookupHint, rememberSigninLookupHint } from '@/src/auth/signin-hint-client';
 
 const LINK_ERRORS: Record<string, string> = {
   invalid_link: 'This login link is invalid.',
@@ -40,13 +41,14 @@ function SignInContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, signinHint: readSigninLookupHint(email) }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Something went wrong. Please try again.');
         return;
       }
+      rememberSigninLookupHint(email, data.credentials?.signinHint);
       router.push('/');
     } catch {
       setError('Network error. Check your connection and try again.');

@@ -6,6 +6,7 @@ import { authStoreUnavailableResponse, createAgentAccount, findAccountsByEmail, 
 import { defaultPlanForAccountType, parseAccountTypeSelection, parsePlanSelection, PLAN_LABELS, type AccountType, type AgentPlan } from '@/src/auth/tiers';
 import { getPlanDescriptor } from '@/src/auth/capabilities';
 import { provisionAgentOSAccount } from '@/src/agentos/provisioning';
+import { createSigninLookupHint } from '@/src/auth/signin-hint';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -144,6 +145,7 @@ export async function POST(req: NextRequest) {
         accountIntent: accountType,
         planSelectionSkipped,
         capabilities: planDescriptor.capabilities,
+        signinHint: createSigninLookupHint(agentId, email),
         expiresIn: '90 days',
       },
     },

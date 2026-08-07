@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { APP_URL } from '@/lib/config';
 import { fetchBrowserSession } from '@/src/auth/browser-session';
+import { rememberSigninLookupHint } from '@/src/auth/signin-hint-client';
 
 interface Credentials {
   bearerToken: string | null;
@@ -17,6 +18,7 @@ interface Credentials {
   accountIntent?: AccountType | null;
   planSelectionSkipped?: boolean;
   capabilities?: string[];
+  signinHint?: string;
 }
 
 type AccountType = 'retail' | 'enterprise';
@@ -305,6 +307,7 @@ function SignupForm({ onSuccess }: { onSuccess: (creds: Credentials) => void }) 
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Something went wrong. Please try again.'); return; }
+      rememberSigninLookupHint(email, data.credentials?.signinHint);
       onSuccess(data.credentials);
     } catch {
       setError('Network error. Check your connection and try again.');
