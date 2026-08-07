@@ -5,11 +5,12 @@ import { POST } from '../../app/api/signin/route.js';
 import { hashPassword } from '../../src/auth/password.js';
 import { createSigninLookupHint } from '../../src/auth/signin-hint.js';
 import { resetAuthStoreLookupCacheForTests } from '../../src/auth/agent-store.js';
+import { AGENT_SIGNIN_HINT_COOKIE } from '../../src/auth/session-cookie.js';
 
-function createSigninRequest(body: Record<string, unknown>) {
+function createSigninRequest(body: Record<string, unknown>, headers: Record<string, string> = {}) {
   return new NextRequest('http://localhost/api/signin', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify({
       email: 'proof@example.com',
       password: 'strongpass123',
@@ -29,7 +30,7 @@ describe('POST /api/signin', () => {
     vi.unstubAllGlobals();
   });
 
-  it('uses a valid signin hint for persistent re-login before falling back to email lookup', async () => {
+  it('uses a valid signin hint cookie for persistent re-login before falling back to email lookup', async () => {
     const passwordHash = await hashPassword('strongpass123');
     const agentQuery = {
       select: vi.fn().mockReturnThis(),
@@ -59,13 +60,14 @@ describe('POST /api/signin', () => {
       return sessionQuery;
     });
 
-    const response = await POST(createSigninRequest({
-      signinHint: createSigninLookupHint('agent_hint', 'proof@example.com'),
+    const response = await POST(createSigninRequest({}, {
+      cookie: `${AGENT_SIGNIN_HINT_COOKIE}=${encodeURIComponent(createSigninLookupHint('agent_hint', 'proof@example.com'))}`,
     }));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.credentials.signinHint).toEqual(expect.any(String));
+    expect(response.headers.get('set-cookie')).toContain(`${AGENT_SIGNIN_HINT_COOKIE}=`);
     expect(agentQuery.eq).toHaveBeenCalledWith('id', 'agent_hint');
     expect(agentQuery.eq).not.toHaveBeenCalledWith('metadata->>email', 'proof@example.com');
   });

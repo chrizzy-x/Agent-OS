@@ -7,6 +7,7 @@ import { defaultPlanForAccountType, parseAccountTypeSelection, parsePlanSelectio
 import { getPlanDescriptor } from '@/src/auth/capabilities';
 import { provisionAgentOSAccount } from '@/src/agentos/provisioning';
 import { createSigninLookupHint } from '@/src/auth/signin-hint';
+import { getCookieRequestContext, setSigninLookupHintCookie } from '@/src/auth/session-cookie';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -128,6 +129,7 @@ export async function POST(req: NextRequest) {
 
   const planDescriptor = getPlanDescriptor(plan);
   const canIssueBearerToken = planDescriptor.capabilities.includes('use_bearer_token');
+  const signinHint = createSigninLookupHint(agentId, email);
   const response = NextResponse.json(
     {
       success: true,
@@ -145,12 +147,13 @@ export async function POST(req: NextRequest) {
         accountIntent: accountType,
         planSelectionSkipped,
         capabilities: planDescriptor.capabilities,
-        signinHint: createSigninLookupHint(agentId, email),
+        signinHint,
         expiresIn: '90 days',
       },
     },
     { status: 201 },
   );
+  setSigninLookupHintCookie(response, signinHint, getCookieRequestContext(req));
   await issueBrowserSession(response, {
     agentId,
     request: req,

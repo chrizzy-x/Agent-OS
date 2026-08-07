@@ -3,8 +3,10 @@ import type { NextRequest, NextResponse } from 'next/server';
 export const AGENT_ACCESS_COOKIE = 'agent_access';
 export const AGENT_REFRESH_COOKIE = 'agent_refresh';
 export const AGENT_LEGACY_SESSION_COOKIE = 'agent_session';
+export const AGENT_SIGNIN_HINT_COOKIE = 'agentos_signin_hint';
 const ACCESS_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24;
 const REFRESH_TOKEN_MAX_AGE_SECONDS = 60 * 60 * 24 * 90;
+const SIGNIN_HINT_MAX_AGE_SECONDS = 60 * 60 * 24 * 120;
 
 function shouldUseSecureCookie(): boolean {
   return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
@@ -77,6 +79,26 @@ export function extractRefreshTokenFromCookie(cookieHeader: string | undefined):
 
 export function extractSessionTokenFromCookie(cookieHeader: string | undefined): string | undefined {
   return extractAccessTokenFromCookie(cookieHeader);
+}
+
+export function extractSigninLookupHintFromCookie(cookieHeader: string | undefined): string | undefined {
+  return readCookieValue(cookieHeader, AGENT_SIGNIN_HINT_COOKIE);
+}
+
+export function setSigninLookupHintCookie(
+  response: NextResponse,
+  hint: string,
+  options?: CookieRequestContext,
+): void {
+  response.cookies.set({
+    name: AGENT_SIGNIN_HINT_COOKIE,
+    value: hint,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: resolveSecureCookie(options),
+    path: '/',
+    maxAge: SIGNIN_HINT_MAX_AGE_SECONDS,
+  });
 }
 
 export function setAgentSessionCookies(

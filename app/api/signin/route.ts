@@ -5,6 +5,7 @@ import { verifyPassword } from '@/src/auth/password';
 import { authStoreUnavailableResponse, findAccountById, findAccountsByEmail, isAuthStoreUnavailableError, type AgentAccount } from '@/src/auth/agent-store';
 import { hasCapability } from '@/src/auth/capabilities';
 import { createSigninLookupHint, resolveSigninLookupHint } from '@/src/auth/signin-hint';
+import { extractSigninLookupHintFromCookie, getCookieRequestContext, setSigninLookupHintCookie } from '@/src/auth/session-cookie';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +23,9 @@ export async function POST(req: NextRequest) {
 
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
-  const signinHint = typeof body.signinHint === 'string' ? body.signinHint : '';
+  const signinHint = typeof body.signinHint === 'string' && body.signinHint
+    ? body.signinHint
+    : extractSigninLookupHintFromCookie(req.headers.get('cookie') ?? undefined) ?? '';
 
   if (!email || !isValidEmail(email)) {
     return NextResponse.json({ error: 'invalid_email', message: 'Valid email required' }, { status: 400 });
@@ -90,16 +93,18 @@ export async function POST(req: NextRequest) {
   }
 
   const canIssueBearerToken = hasCapability(account.metadata.plan, 'use_bearer_token');
+  const nextSigninHint = createSigninLookupHint(account.id, email);
   const response = NextResponse.json({
     success: true,
     credentials: {
       bearerToken: canIssueBearerToken ? bearerToken : null,
       apiKey: canIssueBearerToken ? bearerToken : null,
       agentName: account.name,
-      signinHint: createSigninLookupHint(account.id, email),
+      signinHint: nextSigninHint,
       expiresIn: '90 days',
     },
   });
+  setSigninLookupHintCookie(response, nextSigninHint, getCookieRequestContext(req));
   await issueBrowserSession(response, {
     agentId: account.id,
     request: req,
