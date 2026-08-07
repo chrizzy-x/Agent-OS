@@ -231,6 +231,17 @@ export async function assertWorkspaceMembership(workspaceId: string, userId: str
         };
       }
     }
+
+    const ownedWorkspace = await withSupabaseQueryTimeout(supabase
+      .from('workspaces')
+      .select('id,name,slug,owner_id,plan,created_at')
+      .eq('id', workspaceId)
+      .eq('owner_id', userId)
+      .maybeSingle());
+    const workspace = !ownedWorkspace.error ? mapWorkspaceJoin(ownedWorkspace.data) : null;
+    if (workspace) {
+      return { workspace, role: 'owner' };
+    }
   } catch {
     // Fall back to local state below.
   }
