@@ -256,7 +256,7 @@ describe('auth store', () => {
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
-  it('does not fall into slow SDK auth lookup after production REST lookup failure', async () => {
+  it('uses one bounded SDK auth lookup after production REST lookup failure', async () => {
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     const fetchMock = vi.fn().mockRejectedValue(new Error('rest unavailable'));
@@ -281,9 +281,16 @@ describe('auth store', () => {
     });
 
     try {
-      await expect(findAccountsByEmail('production-fast-fail@example.com')).rejects.toBeInstanceOf(AuthStoreUnavailableError);
+      const accounts = await findAccountsByEmail('production-fast-fail@example.com');
+
+      expect(accounts).toHaveLength(1);
+      expect(accounts[0]).toMatchObject({
+        id: 'agent-sdk-should-not-run',
+        email: 'production-fast-fail@example.com',
+        passwordHash: 'hash',
+      });
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(mockSupabase.from).not.toHaveBeenCalled();
+      expect(mockSupabase.from).toHaveBeenCalledTimes(1);
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
     }

@@ -5,6 +5,7 @@ import { cleanAgentDisplayName, normalizeAgentDisplayName } from './agent-names.
 import { normalizePlan, PLAN_ACCOUNT_TYPE, toPersistedTier, type AccountType, type AgentPlan } from './tiers.js';
 
 const AUTH_STORE_QUERY_TIMEOUT_MS = 5_000;
+const AUTH_STORE_PRODUCTION_QUERY_TIMEOUT_MS = 2_500;
 const AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS = 4_000;
 const AUTH_STORE_DIRECT_LOOKUP_ATTEMPTS = 2;
 const AUTH_STORE_QUERY_ATTEMPTS = 3;
@@ -138,8 +139,18 @@ function applyAuthStoreQueryTimeout<T>(query: T): T {
   const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
   const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
   return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
-    ? abortable.abortSignal(timeout(AUTH_STORE_QUERY_TIMEOUT_MS))
+    ? abortable.abortSignal(timeout(authStoreQueryTimeoutMs()))
     : query;
+}
+
+function authStoreQueryTimeoutMs(): number {
+  return process.env.NODE_ENV === 'production'
+    ? AUTH_STORE_PRODUCTION_QUERY_TIMEOUT_MS
+    : AUTH_STORE_QUERY_TIMEOUT_MS;
+}
+
+function authStoreQueryAttempts(): number {
+  return process.env.NODE_ENV === 'production' ? 1 : AUTH_STORE_QUERY_ATTEMPTS;
 }
 
 async function readLocalAccounts(): Promise<AgentAccount[]> {
@@ -243,11 +254,8 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
   const cachedAccounts = getCachedAccountsByEmail(lookupEmail);
   if (cachedAccounts) return cachedAccounts;
 
-  if (process.env.NODE_ENV === 'production') {
-    throw new AuthStoreUnavailableError();
-  }
-
-  for (let attempt = 1; attempt <= AUTH_STORE_QUERY_ATTEMPTS; attempt += 1) {
+  const queryAttempts = authStoreQueryAttempts();
+  for (let attempt = 1; attempt <= queryAttempts; attempt += 1) {
     try {
       const { data, error } = await applyAuthStoreQueryTimeout(supabase
         .from('agents')
@@ -264,7 +272,7 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
       // Retry below.
     }
 
-    if (attempt < AUTH_STORE_QUERY_ATTEMPTS) {
+    if (attempt < queryAttempts) {
       await waitForAuthStoreRetry(attempt);
     }
   }
