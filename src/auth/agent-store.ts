@@ -172,6 +172,32 @@ async function findSupabaseAccountsByEmailRest(lookupEmail: string): Promise<Age
   }
 }
 
+async function findSupabaseAccountByIdRest(agentId: string): Promise<AgentAccount | null | undefined> {
+  try {
+    const supabaseUrl = getSupabaseUrl().replace(/\/+$/, '');
+    const serviceRoleKey = getSupabaseServiceRoleKey();
+    const url = new URL(`${supabaseUrl}/rest/v1/agents`);
+    url.searchParams.set('select', 'id,name,metadata');
+    url.searchParams.set('id', `eq.${agentId}`);
+    url.searchParams.set('limit', '1');
+    const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+      },
+      signal: typeof timeout === 'function' ? timeout(AUTH_STORE_DIRECT_LOOKUP_TIMEOUT_MS) : undefined,
+    });
+    if (!response.ok) return undefined;
+    const rows = await response.json().catch(() => null) as unknown;
+    if (!Array.isArray(rows)) return undefined;
+    const [row] = rows as Record<string, unknown>[];
+    return row ? mapSupabaseAccount(row) : null;
+  } catch {
+    return undefined;
+  }
+}
+
 function waitForAuthStoreRetry(attempt: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, AUTH_STORE_RETRY_DELAY_MS * attempt));
 }
@@ -185,6 +211,17 @@ async function findSupabaseAccountsByEmailRestWithRetry(lookupEmail: string): Pr
     }
   }
   return null;
+}
+
+async function findSupabaseAccountByIdRestWithRetry(agentId: string): Promise<AgentAccount | null | undefined> {
+  for (let attempt = 1; attempt <= AUTH_STORE_DIRECT_LOOKUP_ATTEMPTS; attempt += 1) {
+    const account = await findSupabaseAccountByIdRest(agentId);
+    if (account !== undefined) return account;
+    if (attempt < AUTH_STORE_DIRECT_LOOKUP_ATTEMPTS) {
+      await waitForAuthStoreRetry(attempt);
+    }
+  }
+  return undefined;
 }
 
 export async function findAccountsByEmail(email: string): Promise<AgentAccount[]> {
@@ -238,6 +275,11 @@ export async function findAccountsByEmail(email: string): Promise<AgentAccount[]
 export async function findAccountById(agentId: string): Promise<AgentAccount | null> {
   try {
     const supabase = getSupabaseAdmin();
+    const directAccount = await findSupabaseAccountByIdRestWithRetry(agentId);
+    if (directAccount !== undefined) {
+      return directAccount;
+    }
+
     const { data, error } = await applyAuthStoreQueryTimeout(supabase
       .from('agents')
       .select('id, name, metadata')

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockSupabase } from '../setup.js';
-import { AuthStoreUnavailableError, createAgentAccount, findAccountsByEmail, resetAuthStoreLookupCacheForTests } from '../../src/auth/agent-store.js';
+import { AuthStoreUnavailableError, createAgentAccount, findAccountById, findAccountsByEmail, resetAuthStoreLookupCacheForTests } from '../../src/auth/agent-store.js';
 
 describe('auth store', () => {
   beforeEach(() => {
@@ -192,6 +192,39 @@ describe('auth store', () => {
       }),
     }));
     expect(decodeURIComponent(String(fetchMock.mock.calls[0]?.[0]))).toContain('metadata->>email=eq.AgentOS-Proof@Example.Com'.toLowerCase());
+  });
+
+  it('uses direct Supabase REST lookup for hinted account id before the SDK auth lookup', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([{
+        id: 'agent-rest-id',
+        name: 'REST Id Proof Agent',
+        metadata: {
+          email: 'agentos-id-proof@example.com',
+          password_hash: 'rest-id-hash',
+          plan: 'enterprise_plus',
+        },
+      }]),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const account = await findAccountById('agent-rest-id');
+
+    expect(account).toMatchObject({
+      id: 'agent-rest-id',
+      email: 'agentos-id-proof@example.com',
+      passwordHash: 'rest-id-hash',
+    });
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(expect.objectContaining({
+      href: expect.stringContaining('/rest/v1/agents?'),
+    }), expect.objectContaining({
+      headers: expect.objectContaining({
+        apikey: 'test-service-role-key',
+      }),
+    }));
+    expect(decodeURIComponent(String(fetchMock.mock.calls[0]?.[0]))).toContain('id=eq.agent-rest-id');
   });
 
   it('retries transient REST lookup failures before using the SDK auth lookup', async () => {
