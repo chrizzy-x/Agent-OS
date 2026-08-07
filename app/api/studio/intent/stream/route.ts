@@ -440,6 +440,7 @@ export async function POST(request: NextRequest) {
       };
 
       try {
+        push('status', { text: 'Starting Super AgentOS...' });
         const ctx = await requireRouteCapability(request.headers, 'studio.intent');
         agentId = ctx.agentId;
         sessionId = typeof body.sessionId === 'string' ? body.sessionId : null;

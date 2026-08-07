@@ -19,8 +19,8 @@ import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
-const STUDIO_SESSION_REST_TIMEOUT_MS = 8_000;
-const STUDIO_SESSION_REST_ATTEMPTS = 2;
+const STUDIO_SESSION_REST_TIMEOUT_MS = 1_500;
+const STUDIO_SESSION_REST_ATTEMPTS = 1;
 const STUDIO_SESSION_REST_RETRY_DELAY_MS = 250;
 
 class StudioSessionRestError extends Error {

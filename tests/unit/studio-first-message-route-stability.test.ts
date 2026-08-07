@@ -35,6 +35,16 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('!hasPersistedAssistantForTurn(bundle?.messages ?? [], createdAt)');
   });
 
+  it('sends an immediate stream status before slow backend work', () => {
+    const source = readFileSync(join(process.cwd(), 'app', 'api', 'studio', 'intent', 'stream', 'route.ts'), 'utf8');
+    const streamSource = source.slice(source.indexOf('async start(controller)'));
+    const firstStatusIndex = streamSource.indexOf("push('status', { text: 'Starting Super AgentOS...' });");
+    const authIndex = streamSource.indexOf("requireRouteCapability(request.headers, 'studio.intent')");
+
+    expect(firstStatusIndex).toBeGreaterThan(-1);
+    expect(authIndex).toBeGreaterThan(firstStatusIndex);
+  });
+
   it('backfills connected intelligence when bootstrap returns an empty connection list', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
 
@@ -90,8 +100,8 @@ describe('Studio first message route stability', () => {
     const directIndex = postSource.indexOf('const directSession = await createStudioSessionViaRest');
     const fallbackProjectIndex = postSource.indexOf('const project = await resolveProjectForWorkspace');
 
-    expect(source).toContain('const STUDIO_SESSION_REST_TIMEOUT_MS = 8_000;');
-    expect(source).toContain('const STUDIO_SESSION_REST_ATTEMPTS = 2;');
+    expect(source).toContain('const STUDIO_SESSION_REST_TIMEOUT_MS = 1_500;');
+    expect(source).toContain('const STUDIO_SESSION_REST_ATTEMPTS = 1;');
     expect(source).toContain('withStudioSessionRestRetry');
     expect(postSource).toContain('const requestedWorkspaceId =');
     expect(postSource).toContain('let workspaceId = requestedWorkspaceId;');
