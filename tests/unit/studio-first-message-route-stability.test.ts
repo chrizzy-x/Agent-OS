@@ -129,7 +129,7 @@ describe('Studio first message route stability', () => {
     const directIndex = postSource.indexOf('const directSession = await createStudioSessionViaRest');
     const fallbackProjectIndex = postSource.indexOf('const project = await resolveProjectForWorkspace');
 
-    expect(source).toContain('const STUDIO_SESSION_REST_TIMEOUT_MS = 6_000;');
+    expect(source).toContain('const STUDIO_SESSION_REST_TIMEOUT_MS = 12_000;');
     expect(source).toContain('const STUDIO_SESSION_REST_ATTEMPTS = 2;');
     expect(source).toContain('withStudioSessionRestRetry');
     expect(postSource).toContain('const requestedWorkspaceId =');

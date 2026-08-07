@@ -11,10 +11,33 @@ const videoDir = path.join(root, 'video');
 const openaiKey = process.env.E2E_OPENAI_API_KEY || process.env.OPENAI_API_KEY || '';
 const anthropicKey = process.env.E2E_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || '';
 const reuseLatestProofAccount = process.env.AGENTOS_PROOF_REUSE_LATEST === '1';
+const requestedProofTask = (process.env.AGENTOS_PROOF_TASK || 'chain').toLowerCase();
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const dbUrl = process.env.DATABASE_URL || process.env.DIRECT_URL || '';
 const sensitiveValues = [openaiKey, anthropicKey, supabaseServiceRoleKey, dbUrl].filter(Boolean);
+const proofTaskAliases = {
+  chain: 'chain',
+  all: 'chain',
+  task1: 'auth',
+  auth: 'auth',
+  task2: 'research',
+  research: 'research',
+  task3: 'trade',
+  trade: 'trade',
+  task4: 'dezypher',
+  dezypher: 'dezypher',
+  task5: 'primeflow',
+  primeflow: 'primeflow',
+};
+const proofTask = proofTaskAliases[requestedProofTask];
+if (!proofTask) {
+  throw new Error(`Unsupported AGENTOS_PROOF_TASK ${requestedProofTask}`);
+}
+
+function wantsTask(taskName) {
+  return proofTask === 'chain' || proofTask === taskName;
+}
 
 const colors = {
   reset: '\x1b[0m',
@@ -36,6 +59,7 @@ const evidence = {
     openaiKeyPresent: Boolean(openaiKey),
     anthropicKeyPresent: Boolean(anthropicKey),
     reuseLatestProofAccount,
+    proofTask,
     supabaseVerificationConfigured: Boolean(supabaseUrl && supabaseServiceRoleKey),
     directDatabaseVerificationConfigured: Boolean(dbUrl),
   },
@@ -430,6 +454,23 @@ async function selectNative(page) {
       && panel.getAttribute('data-intelligence-model') === '';
   }, null, { timeout: 30000 });
   await panel(page, ['Selected intelligence: Native Super AgentOS']);
+}
+
+async function ensureStudioSession(page, ids) {
+  if (ids.sessionId) return ids.sessionId;
+  await openStudio(page);
+  await selectNative(page);
+  await sendAndWait(page,
+    `Create a live proof session marker ${runToken}. Reply with "proof session ready" and do not use external intelligence.`,
+    {
+      expect: /proof session ready|session ready|AgentOS/i,
+      panelLines: ['Session setup', 'Creating a real Studio session through the composer'],
+      timeout: 120000,
+    });
+  ids.sessionId = new URL(page.url()).searchParams.get('session')
+    || await page.locator('.nl-studio-panel').first().getAttribute('data-session-id');
+  if (!ids.sessionId) throw new Error('Studio did not create a session for this task.');
+  return ids.sessionId;
 }
 
 async function connectIntelligenceThroughVault(page, params) {
@@ -843,76 +884,85 @@ async function main() {
     });
     }
 
-    let openaiSelectionLabel = '';
-    let anthropicSelectionLabel = '';
+    if (wantsTask('research')) {
+      let openaiSelectionLabel = '';
+      let anthropicSelectionLabel = '';
 
-    if (reusableAccount) {
-      const existingConnections = await api(page, `/api/intelligence/connections?workspaceId=${encodeURIComponent(ids.workspaceId)}&includeRevoked=1`, { label: 'existing-vault-connections' });
-      const connections = Array.isArray(existingConnections.json?.connections) ? existingConnections.json.connections : [];
-      const openaiConnection = connections.find(item => item.vendor === 'openai' && item.status === 'active' && item.selectedModelId === 'gpt-5-mini');
-      const anthropicConnection = connections.find(item => item.vendor === 'anthropic' && item.status === 'active' && item.selectedModelId === 'claude-sonnet-4-6');
-      openaiSelectionLabel = openaiConnection?.displayName ?? '';
-      anthropicSelectionLabel = anthropicConnection?.displayName ?? '';
-      if (!openaiConnection || !anthropicConnection) throw new Error('Reusable proof account does not have both required active Vault-backed connections.');
-      if (anthropicKey && process.env.AGENTOS_PROOF_REFRESH_ANTHROPIC === '1') {
-        const connection = await connectIntelligenceThroughVault(page, {
+      if (reusableAccount) {
+        const existingConnections = await api(page, `/api/intelligence/connections?workspaceId=${encodeURIComponent(ids.workspaceId)}&includeRevoked=1`, { label: 'existing-vault-connections' });
+        const connections = Array.isArray(existingConnections.json?.connections) ? existingConnections.json.connections : [];
+        const openaiConnection = connections.find(item => item.vendor === 'openai' && item.status === 'active' && item.selectedModelId === 'gpt-5-mini');
+        const anthropicConnection = connections.find(item => item.vendor === 'anthropic' && item.status === 'active' && item.selectedModelId === 'claude-sonnet-4-6');
+        openaiSelectionLabel = openaiConnection?.displayName ?? '';
+        anthropicSelectionLabel = anthropicConnection?.displayName ?? '';
+        if (!openaiConnection || !anthropicConnection) throw new Error('Reusable proof account does not have both required active Vault-backed connections.');
+        if (anthropicKey && process.env.AGENTOS_PROOF_REFRESH_ANTHROPIC === '1') {
+          const connection = await connectIntelligenceThroughVault(page, {
+            vendor: 'anthropic',
+            label: 'Anthropic',
+            modelId: 'claude-sonnet-4-6',
+            displayName: `Anthropic proof ${runToken}`,
+            credential: anthropicKey,
+          });
+          anthropicSelectionLabel = connection.displayName ?? `Anthropic proof ${runToken}`;
+        }
+      } else {
+        if (!openaiKey) throw new Error('OpenAI proof credential is missing from local env.');
+        if (!anthropicKey) throw new Error('Anthropic proof credential is missing from local env.');
+        await connectIntelligenceThroughVault(page, {
+          vendor: 'openai',
+          label: 'OpenAI',
+          modelId: 'gpt-5-mini',
+          displayName: `OpenAI proof ${runToken}`,
+          credential: openaiKey,
+        });
+        openaiSelectionLabel = `OpenAI proof ${runToken}`;
+        const anthropicConnection = await connectIntelligenceThroughVault(page, {
           vendor: 'anthropic',
           label: 'Anthropic',
           modelId: 'claude-sonnet-4-6',
           displayName: `Anthropic proof ${runToken}`,
           credential: anthropicKey,
         });
-        anthropicSelectionLabel = connection.displayName ?? `Anthropic proof ${runToken}`;
+        anthropicSelectionLabel = anthropicConnection.displayName ?? `Anthropic proof ${runToken}`;
       }
-    } else {
-      if (!openaiKey) throw new Error('OpenAI proof credential is missing from local env.');
-      if (!anthropicKey) throw new Error('Anthropic proof credential is missing from local env.');
-      await connectIntelligenceThroughVault(page, {
-        vendor: 'openai',
-        label: 'OpenAI',
-        modelId: 'gpt-5-mini',
-        displayName: `OpenAI proof ${runToken}`,
-        credential: openaiKey,
+
+      ids.sessionId = await ensureStudioSession(page, ids);
+      await openStudio(page, ids.sessionId);
+      await selectIntelligence(page, 'OpenAI', 'gpt-5-mini', openaiSelectionLabel);
+      const research = await sendAndWait(page,
+        `Research a quick app idea for AgentOS builders: a tiny deployment checklist app. Compare user need, risks, required AgentOS capabilities, and a 3-step implementation path. Proof token ${runToken}.`,
+        {
+          expect: /deployment|checklist|AgentOS|capabilities/i,
+          panelLines: ['Task 2: Connected research', 'OpenAI / gpt-5-mini selected in composer'],
+          timeout: 300000,
+        });
+      ids.sessionId = new URL(page.url()).searchParams.get('session')
+        || await page.locator('.nl-studio-panel').first().getAttribute('data-session-id')
+        || ids.sessionId;
+      await selectIntelligence(page, 'Anthropic', 'claude-sonnet-4-6', anthropicSelectionLabel);
+      const followup = await sendAndWait(page,
+        `Use the previous answer in this same session. Return only the top three acceptance checks for the deployment checklist app. Proof token ${runToken}.`,
+        {
+          expect: /deployment|verified|required|observability|rollback|canary|permission/i,
+          panelLines: ['Task 2: Context follow-up', 'Anthropic / claude-sonnet-4-6 selected in composer'],
+          timeout: 300000,
+        });
+      const streamPass = research.stream.sawStreaming && research.stream.grew;
+      task('Connected research + context follow-up', streamPass ? 'PASS' : 'FAIL', {
+        openaiModelSelectable: true,
+        anthropicModelSelectable: true,
+        visibleStreaming: research.stream,
+        contextFollowupText: followup.text.slice(0, 700),
+        sessionId: ids.sessionId,
       });
-      openaiSelectionLabel = `OpenAI proof ${runToken}`;
-      const anthropicConnection = await connectIntelligenceThroughVault(page, {
-        vendor: 'anthropic',
-        label: 'Anthropic',
-        modelId: 'claude-sonnet-4-6',
-        displayName: `Anthropic proof ${runToken}`,
-        credential: anthropicKey,
-      });
-      anthropicSelectionLabel = anthropicConnection.displayName ?? `Anthropic proof ${runToken}`;
     }
 
-    await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await waitForStudio(page);
-    await selectIntelligence(page, 'OpenAI', 'gpt-5-mini', openaiSelectionLabel);
-    const research = await sendAndWait(page,
-      `Research a quick app idea for AgentOS builders: a tiny deployment checklist app. Compare user need, risks, required AgentOS capabilities, and a 3-step implementation path. Proof token ${runToken}.`,
-      {
-        expect: /deployment|checklist|AgentOS|capabilities/i,
-        panelLines: ['Task 2: Connected research', 'OpenAI / gpt-5-mini selected in composer'],
-        timeout: 300000,
-      });
-    ids.sessionId = new URL(page.url()).searchParams.get('session');
-    await selectIntelligence(page, 'Anthropic', 'claude-sonnet-4-6', anthropicSelectionLabel);
-    const followup = await sendAndWait(page,
-      `Use the previous answer in this same session. Return only the top three acceptance checks for the deployment checklist app. Proof token ${runToken}.`,
-      {
-        expect: /acceptance|check/i,
-        panelLines: ['Task 2: Context follow-up', 'Anthropic / claude-sonnet-4-6 selected in composer'],
-        timeout: 300000,
-      });
-    const streamPass = research.stream.sawStreaming && research.stream.grew;
-    task('Connected research + context follow-up', streamPass ? 'PASS' : 'FAIL', {
-      openaiModelSelectable: true,
-      anthropicModelSelectable: true,
-      visibleStreaming: research.stream,
-      contextFollowupText: followup.text.slice(0, 700),
-      sessionId: ids.sessionId,
-    });
+    if (wantsTask('trade') || wantsTask('dezypher') || wantsTask('primeflow')) {
+      await ensureStudioSession(page, ids);
+    }
 
+    if (wantsTask('trade')) {
     await selectNative(page);
     await sendForApproval(page, `Create private app ${appName}`, /Create private app/i);
     await approve(page, { waitForUrl: /\/appstore\//, timeout: 90000 });
@@ -934,7 +984,9 @@ async function main() {
       paperTradeUnsupportedText: paper.text.slice(0, 800),
       fakeOrderDetected: fakeOrder,
     });
+    }
 
+    if (wantsTask('dezypher')) {
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `install app dezypher`, /deZypher|Install app/i);
     const installApp = await approve(page, { expectText: /Installed app|Installed/i, sessionId: ids.sessionId });
@@ -962,7 +1014,9 @@ async function main() {
       mcpSet: mcpSet.text.slice(0, 400),
       mcpGet: mcpGet.text.slice(0, 500),
     });
+    }
 
+    if (wantsTask('primeflow')) {
     await openStudio(page, ids.sessionId);
     await sendForApproval(page, `Create Prime Agent ${primeAgentName}`, /Create Prime Agent/i);
     await approve(page, { timeout: 90000 });
@@ -998,6 +1052,7 @@ async function main() {
       retryPrimeflow: retryPrimeflow.text.slice(0, 300),
       deletePrimeflow: deletePrimeflow.text.slice(0, 300),
     });
+    }
 
     evidence.backend = {
       connections: (await api(page, `/api/intelligence/connections?workspaceId=${encodeURIComponent(ids.workspaceId)}&includeRevoked=1`, { label: 'postrun-connections' })).json,

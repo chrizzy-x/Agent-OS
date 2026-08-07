@@ -153,7 +153,7 @@ type ExecutionUpdateInput = {
 
 const LOCAL_EXECUTION_PREFIX = 'local-exec-';
 const EXECUTION_WRITE_TIMEOUT_MS = 8_000;
-const EXECUTION_LIST_TIMEOUT_MS = 8_000;
+const EXECUTION_LIST_TIMEOUT_MS = 12_000;
 const localExecutions = new Map<string, ExecutionRecord>();
 const localExecutionLogs = new Map<string, ExecutionLogRecord[]>();
 
