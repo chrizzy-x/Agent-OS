@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { createNotification } from '../notifications/service.js';
 import { redactSecretsDeep } from '../security/secret-redaction.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
-import { getSupabaseAdmin } from '../storage/supabase.js';
+import { getSupabaseAdmin, withSupabaseQueryTimeout } from '../storage/supabase.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 
 export type AgentTaskStatus =
@@ -159,6 +159,8 @@ const TASK_STEP_STATUSES = new Set<AgentTaskStepStatus>([
   'cancelled',
   'needs_configuration',
 ]);
+const TASK_WRITE_TIMEOUT_MS = 8_000;
+const TASK_READ_TIMEOUT_MS = 8_000;
 
 function localFallbackAllowed(): boolean {
   return process.env.NODE_ENV !== 'production';
@@ -309,11 +311,11 @@ function taskPatchToDb(patch: TaskPatchInput): Record<string, unknown> {
 export async function createAgentTask(input: TaskCreateInput): Promise<AgentTaskRecord> {
   const row = toTaskRow(input);
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_tasks')
       .insert(row)
       .select('*')
-      .single();
+      .single(), TASK_WRITE_TIMEOUT_MS);
     if (error) throw new Error(error.message);
     return mapTask(data as Record<string, unknown>);
   } catch (error) {
@@ -332,13 +334,13 @@ export async function updateAgentTask(params: {
 }): Promise<AgentTaskRecord> {
   const dbPatch = taskPatchToDb(params.patch);
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_tasks')
       .update(dbPatch)
       .eq('id', params.taskId)
       .eq('user_id', params.userId)
       .select('*')
-      .maybeSingle();
+      .maybeSingle(), TASK_WRITE_TIMEOUT_MS);
     if (error) throw new Error(error.message);
     if (!data) throw new NotFoundError('Task not found');
     const task = mapTask(data as Record<string, unknown>);
@@ -387,7 +389,7 @@ export async function listAgentTasks(params: {
     if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
     if (params.sessionId) query = query.eq('session_id', params.sessionId);
     if (params.status && params.status !== 'all') query = query.eq('status', params.status);
-    const { data, error } = await query;
+    const { data, error } = await withSupabaseQueryTimeout(query, TASK_READ_TIMEOUT_MS);
     if (error) throw new Error(error.message);
     return ((data ?? []) as Record<string, unknown>[]).map(mapTask);
   } catch (error) {
@@ -411,8 +413,8 @@ export async function getAgentTaskBundle(params: {
   try {
     const supabase = getSupabaseAdmin();
     const [taskResult, stepResult] = await Promise.all([
-      supabase.from('agent_tasks').select('*').eq('id', params.taskId).eq('user_id', params.userId).maybeSingle(),
-      supabase.from('agent_task_steps').select('*').eq('task_id', params.taskId).eq('user_id', params.userId).order('created_at', { ascending: true }),
+      withSupabaseQueryTimeout(supabase.from('agent_tasks').select('*').eq('id', params.taskId).eq('user_id', params.userId).maybeSingle(), TASK_READ_TIMEOUT_MS),
+      withSupabaseQueryTimeout(supabase.from('agent_task_steps').select('*').eq('task_id', params.taskId).eq('user_id', params.userId).order('created_at', { ascending: true }), TASK_READ_TIMEOUT_MS),
     ]);
     if (taskResult.error) throw new Error(taskResult.error.message);
     if (!taskResult.data) throw new NotFoundError('Task not found');
@@ -463,11 +465,11 @@ export async function appendAgentTaskStep(params: {
     created_at: now,
   };
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_task_steps')
       .insert(row)
       .select('*')
-      .single();
+      .single(), TASK_WRITE_TIMEOUT_MS);
     if (error) throw new Error(error.message);
     return mapStep(data as Record<string, unknown>);
   } catch (error) {

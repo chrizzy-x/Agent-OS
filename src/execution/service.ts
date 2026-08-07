@@ -152,6 +152,8 @@ type ExecutionUpdateInput = {
 };
 
 const LOCAL_EXECUTION_PREFIX = 'local-exec-';
+const EXECUTION_WRITE_TIMEOUT_MS = 8_000;
+const EXECUTION_LIST_TIMEOUT_MS = 8_000;
 const localExecutions = new Map<string, ExecutionRecord>();
 const localExecutionLogs = new Map<string, ExecutionLogRecord[]>();
 
@@ -438,7 +440,7 @@ export async function createExecution(params: ExecutionCreateInput): Promise<Exe
     updated_at: now,
   };
   try {
-    const canonical = await getSupabaseAdmin()
+    const canonical = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_executions')
       .insert({
         ...baseInsert,
@@ -449,11 +451,11 @@ export async function createExecution(params: ExecutionCreateInput): Promise<Exe
         metadata: redactSecretsDeep(params.metadata ?? {}) as Record<string, unknown>,
       })
       .select('*')
-      .single();
+      .single(), EXECUTION_WRITE_TIMEOUT_MS);
 
     if (!canonical.error) return mapExecution(canonical.data as Record<string, unknown>);
 
-    const legacy = await getSupabaseAdmin()
+    const legacy = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_executions')
       .insert({
         id: baseInsert.id,
@@ -475,7 +477,7 @@ export async function createExecution(params: ExecutionCreateInput): Promise<Exe
         status: 'queued',
       })
       .select('*')
-      .single();
+      .single(), EXECUTION_WRITE_TIMEOUT_MS);
 
     if (legacy.error) {
       if (useLocalExecutionFallback()) return createLocalExecution(params, now);
@@ -524,13 +526,13 @@ export async function updateExecution(params: {
   if (params.patch.completedAt !== undefined) patch.completed_at = params.patch.completedAt;
 
   try {
-    const canonical = await getSupabaseAdmin()
+    const canonical = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_executions')
       .update(patch)
       .eq('id', params.executionId)
       .eq('agent_id', params.agentId)
       .select('*')
-      .maybeSingle();
+      .maybeSingle(), EXECUTION_WRITE_TIMEOUT_MS);
 
     if (!canonical.error && canonical.data) return mapExecution(canonical.data as Record<string, unknown>);
 
@@ -552,13 +554,13 @@ export async function updateExecution(params: {
     delete legacyPatch.token_completion;
     delete legacyPatch.token_total;
     delete legacyPatch.estimated_cost;
-    const legacy = await getSupabaseAdmin()
+    const legacy = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_executions')
       .update(legacyPatch)
       .eq('id', params.executionId)
       .eq('agent_id', params.agentId)
       .select('*')
-      .maybeSingle();
+      .maybeSingle(), EXECUTION_WRITE_TIMEOUT_MS);
 
     if (legacy.error) throw new Error(`Failed to update execution: ${legacy.error.message}`);
     if (!legacy.data) throw new NotFoundError('Execution not found');
@@ -596,7 +598,7 @@ export async function appendExecutionLog(params: {
   if (isLocalExecutionId(params.executionId)) return localLog();
 
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_execution_logs')
       .insert({
         id: crypto.randomUUID(),
@@ -608,7 +610,7 @@ export async function appendExecutionLog(params: {
         created_at: new Date().toISOString(),
       })
       .select('*')
-      .single();
+      .single(), EXECUTION_WRITE_TIMEOUT_MS);
 
     if (error) throw new Error(`Failed to append execution log: ${error.message}`);
     return mapLog(data as Record<string, unknown>);
@@ -663,7 +665,7 @@ export async function listExecutions(params: {
     if (params.skillId) query = query.eq('skill_id', params.skillId);
     if (params.search?.trim()) query = query.ilike('title', `%${params.search.trim()}%`);
 
-    const { data, error } = await withSupabaseQueryTimeout(query);
+    const { data, error } = await withSupabaseQueryTimeout(query, EXECUTION_LIST_TIMEOUT_MS);
     if (error) throw new Error(`Failed to list executions: ${error.message}`);
     return ((data ?? []) as Record<string, unknown>[]).map(mapExecution);
   } catch (error) {

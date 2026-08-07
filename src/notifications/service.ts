@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getSupabaseAdmin } from '../storage/supabase.js';
+import { getSupabaseAdmin, withSupabaseQueryTimeout } from '../storage/supabase.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { redactSecretsDeep } from '../security/secret-redaction.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
@@ -18,6 +18,7 @@ export type NotificationRecord = {
   createdAt: string;
   readAt: string | null;
 };
+const NOTIFICATION_QUERY_TIMEOUT_MS = 8_000;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -108,11 +109,11 @@ export async function createNotification(params: {
   };
 
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_notifications')
       .insert(row)
       .select('*')
-      .single();
+      .single(), NOTIFICATION_QUERY_TIMEOUT_MS);
 
     if (!error && data) return mapNotification(data as Record<string, unknown>);
   } catch {
@@ -142,7 +143,7 @@ export async function listNotifications(params: {
       query = query.eq('status', params.status);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await withSupabaseQueryTimeout(query, NOTIFICATION_QUERY_TIMEOUT_MS);
     if (!error) return consolidateNotifications(((data ?? []) as Record<string, unknown>[]).map(mapNotification));
   } catch {
     // Fall through to local state.
@@ -167,13 +168,13 @@ export async function updateNotification(params: {
     read_at: params.status === 'read' ? new Date().toISOString() : null,
   };
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_notifications')
       .update(patch)
       .eq('id', params.notificationId)
       .eq('agent_id', params.agentId)
       .select('*')
-      .maybeSingle();
+      .maybeSingle(), NOTIFICATION_QUERY_TIMEOUT_MS);
 
     if (!error && data) return mapNotification(data as Record<string, unknown>);
   } catch {
@@ -196,12 +197,12 @@ export async function markAllNotificationsRead(params: {
 }): Promise<{ updated: number }> {
   const readAt = new Date().toISOString();
   try {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await withSupabaseQueryTimeout(getSupabaseAdmin()
       .from('agent_notifications')
       .update({ status: 'read', read_at: readAt })
       .eq('agent_id', params.agentId)
       .eq('status', 'unread')
-      .select('id');
+      .select('id'), NOTIFICATION_QUERY_TIMEOUT_MS);
 
     if (!error) return { updated: (data ?? []).length };
   } catch {
