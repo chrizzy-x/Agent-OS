@@ -3,9 +3,8 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { fetchBrowserSession } from '@/src/auth/browser-session';
 import { readSigninLookupHint, rememberSigninLookupHint } from '@/src/auth/signin-hint-client';
-import { postBrowserSignin } from '@/src/auth/signin-client';
+import { hasExistingBrowserSigninSession, postBrowserSignin } from '@/src/auth/signin-client';
 
 const LINK_ERRORS: Record<string, string> = {
   invalid_link: 'This login link is invalid.',
@@ -27,8 +26,8 @@ function SignInContent() {
 
   useEffect(() => {
     let active = true;
-    void fetchBrowserSession().then(session => {
-      if (active && session) router.replace('/');
+    void hasExistingBrowserSigninSession().then(authenticated => {
+      if (active && authenticated) router.replace('/');
     });
     return () => { active = false; };
   }, [router]);

@@ -1,3 +1,5 @@
+import { clearBrowserSessionLogoutBlock } from './browser-session.js';
+
 export type BrowserSigninPayload = {
   email: string;
   password: string;
@@ -39,6 +41,16 @@ async function postSigninAttempt(payload: BrowserSigninPayload, timeoutMs: numbe
   }
 }
 
+export async function hasExistingBrowserSigninSession(): Promise<boolean> {
+  const response = await fetch('/api/session?optional=1', {
+    cache: 'no-store',
+    credentials: 'include',
+  });
+  if (!response.ok) return false;
+  const payload = await response.json().catch(() => null) as { authenticated?: boolean } | null;
+  return payload?.authenticated === true;
+}
+
 export async function postBrowserSignin(
   payload: BrowserSigninPayload,
   options: BrowserSigninOptions = {},
@@ -60,4 +72,3 @@ export async function postBrowserSignin(
 
   throw new Error('Sign-in request failed');
 }
-import { clearBrowserSessionLogoutBlock } from './browser-session.js';

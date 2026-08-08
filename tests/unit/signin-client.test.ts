@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { postBrowserSignin } from '../../src/auth/signin-client.js';
+import { hasExistingBrowserSigninSession, postBrowserSignin } from '../../src/auth/signin-client.js';
 
 function abortError(): Error {
   const error = new Error('aborted');
@@ -48,5 +48,21 @@ describe('signin client', () => {
     })).rejects.toThrow('network down');
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks existing sign-in state without refreshing the browser session', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ authenticated: true }), {
+      status: 200,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(hasExistingBrowserSigninSession()).resolves.toBe(true);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/session?optional=1', {
+      cache: 'no-store',
+      credentials: 'include',
+    });
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/session/refresh', expect.anything());
   });
 });
