@@ -2,21 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRouteCapability } from '@/src/auth/request';
 import { resolveProjectForWorkspace } from '@/src/projects/service';
 import { getStudioSessionIntelligence, setStudioSessionIntelligence } from '@/src/intelligence/service';
-import { normalizeIntelligenceSelection } from '@/src/intelligence/selection';
+import { createNativeIntelligenceSelection, migrateLegacyExecutionTargetToIntelligenceSelection, normalizeIntelligenceSelection } from '@/src/intelligence/selection';
 import { getStudioSessionBundle, updateStudioSession } from '@/src/studio/persistence';
 import { buildStudioSyncContract } from '@/src/studio/sync-contract';
 import { toErrorResponse } from '@/src/utils/errors';
 
 export const runtime = 'nodejs';
 
+function fallbackSessionIntelligenceSelection(state: Record<string, unknown>) {
+  const storedSelection = state.intelligenceSelection;
+  if (storedSelection && typeof storedSelection === 'object' && !Array.isArray(storedSelection)) {
+    return normalizeIntelligenceSelection(storedSelection, 'session');
+  }
+  const legacySelection = migrateLegacyExecutionTargetToIntelligenceSelection(
+    state.executionTargetId ?? state.provider ?? state.executionMode,
+    { selectionSource: 'session' },
+  );
+  return legacySelection ?? createNativeIntelligenceSelection('session');
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await requireRouteCapability(request.headers, 'studio.sessions.read');
     const { id } = await params;
-    const [bundle, intelligence] = await Promise.all([
-      getStudioSessionBundle(ctx.agentId, id),
-      getStudioSessionIntelligence({ ownerAgentId: ctx.agentId, sessionId: id }),
-    ]);
+    const bundle = await getStudioSessionBundle(ctx.agentId, id);
+    const intelligence = await getStudioSessionIntelligence({ ownerAgentId: ctx.agentId, sessionId: id })
+      .catch(() => ({ selection: fallbackSessionIntelligenceSelection(bundle.session.state) }));
     return NextResponse.json({ syncContract: buildStudioSyncContract(), ...bundle, intelligenceSelection: intelligence.selection });
   } catch (error: unknown) {
     const err = toErrorResponse(error);

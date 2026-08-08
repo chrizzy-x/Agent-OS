@@ -22,6 +22,7 @@ vi.mock('../../src/storage/supabase-rest.js', () => ({
 
 import {
   createIntelligenceConnection,
+  getStudioSessionIntelligence,
   listIntelligenceConnections,
   recordIntelligenceInvocation,
   setIntelligenceDefault,
@@ -303,6 +304,56 @@ describe('intelligence service', () => {
       modelId: 'gemini-2.5-pro',
     });
     expect(result.selection.mode).toBe('single');
+  });
+
+  it('loads session intelligence after recovering session ownership through Supabase REST', async () => {
+    serviceMocks.supabaseRestRows.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        workspace_id: 'workspace-1',
+        owner_agent_id: 'agent-1',
+        state: {},
+        created_at: '2026-08-08T00:00:00Z',
+        updated_at: '2026-08-08T00:00:00Z',
+      },
+    ]);
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'nl_studio_sessions') {
+        return maybeSingleBuilder(null, { message: 'timeout' });
+      }
+      if (table === 'studio_session_intelligence') {
+        return maybeSingleBuilder({
+          session_id: 'session-1',
+          owner_agent_id: 'agent-1',
+          workspace_id: 'workspace-1',
+          mode: 'single',
+          connection_id: 'connection-1',
+          model_id: 'gpt-5-mini',
+          consensus_configuration_id: null,
+          selection_source: 'session',
+          created_at: '2026-08-08T00:00:00Z',
+          updated_at: '2026-08-08T00:00:00Z',
+        });
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+
+    const result = await getStudioSessionIntelligence({
+      ownerAgentId: 'agent-1',
+      sessionId: 'session-1',
+    });
+
+    expect(result.selection).toMatchObject({
+      mode: 'single',
+      connectionId: 'connection-1',
+      modelId: 'gpt-5-mini',
+    });
+    expect(serviceMocks.supabaseRestRows).toHaveBeenCalledWith('nl_studio_sessions', expect.objectContaining({
+      id: 'eq.session-1',
+      owner_agent_id: 'eq.agent-1',
+      deleted_at: 'is.null',
+    }), expect.any(Number));
   });
 
   it('updates workspace defaults through lookup then update instead of partial-index upsert', async () => {

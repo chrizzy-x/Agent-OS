@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { supabaseRestRows } from '../storage/supabase-rest.js';
 import { createNativeIntelligenceSelection } from '../intelligence/selection.js';
 import { readLocalRuntimeState, updateLocalRuntimeState } from '../storage/local-state.js';
 import { redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
@@ -7,6 +8,7 @@ import { PermissionError, ValidationError } from '../utils/errors.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
 
 const STUDIO_PERSISTENCE_QUERY_TIMEOUT_MS = 4_000;
+const STUDIO_PERSISTENCE_REST_TIMEOUT_MS = 12_000;
 
 export type StudioEventType =
   | 'thinking_started'
@@ -199,6 +201,17 @@ async function findLocalSessionRow(sessionId: string, ownerAgentId: string): Pro
   ) ?? null;
 }
 
+async function findRestSessionRow(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown> | null> {
+  const rows = await supabaseRestRows('nl_studio_sessions', {
+    select: '*',
+    id: `eq.${sessionId}`,
+    owner_agent_id: `eq.${ownerAgentId}`,
+    deleted_at: 'is.null',
+    limit: '1',
+  }, STUDIO_PERSISTENCE_REST_TIMEOUT_MS);
+  return rows[0] ?? null;
+}
+
 async function assertSessionOwner(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown>> {
   try {
     const supabase = getSupabaseAdmin();
@@ -214,9 +227,30 @@ async function assertSessionOwner(sessionId: string, ownerAgentId: string): Prom
     // Fall through to local state.
   }
 
+  const rest = await findRestSessionRow(sessionId, ownerAgentId).catch(() => null);
+  if (rest) return rest;
+
   const local = await findLocalSessionRow(sessionId, ownerAgentId);
   if (local) return local;
   throw new PermissionError('Studio session not found or not accessible');
+}
+
+async function listStudioSessionsViaRest(
+  ownerAgentId: string,
+  options: { status?: string | 'all'; includeDeleted?: boolean; limit?: number },
+): Promise<StudioSessionRecord[]> {
+  const params: Record<string, string> = {
+    select: '*',
+    owner_agent_id: `eq.${ownerAgentId}`,
+    order: 'pinned_at.desc.nullslast,updated_at.desc',
+  };
+  if (!options.includeDeleted) params.deleted_at = 'is.null';
+  if (options.status && options.status !== 'all') params.status = `eq.${options.status}`;
+  if (!options.status) params.status = 'eq.active';
+  if (typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
+    params.limit = String(Math.floor(options.limit));
+  }
+  return (await supabaseRestRows('nl_studio_sessions', params, STUDIO_PERSISTENCE_REST_TIMEOUT_MS)).map(mapSession);
 }
 
 export async function listStudioSessions(
@@ -250,6 +284,9 @@ export async function listStudioSessions(
   } catch {
     // Fall through to local state.
   }
+
+  const rest = await listStudioSessionsViaRest(ownerAgentId, options).catch(() => null);
+  if (rest) return rest;
 
   const state = await readLocalRuntimeState();
   const rows = state.studioSessions.filter(row => {

@@ -40,6 +40,7 @@ describe('studio session route', () => {
         workspaceId: 'workspace-1',
         projectId: null,
         title: 'Session',
+        state: {},
       },
       messages: [],
       events: [],
@@ -83,6 +84,42 @@ describe('studio session route', () => {
     expect(routeMocks.getStudioSessionIntelligence).toHaveBeenCalledWith({
       ownerAgentId: 'agent-1',
       sessionId: 'session-1',
+    });
+  });
+
+  it('keeps an authorized session readable when persisted intelligence lookup is temporarily unavailable', async () => {
+    routeMocks.getStudioSessionIntelligence.mockRejectedValueOnce(new Error('temporary Supabase read timeout'));
+    routeMocks.getStudioSessionBundle.mockResolvedValueOnce({
+      session: {
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+        projectId: null,
+        title: 'Session',
+        state: {
+          intelligenceSelection: {
+            mode: 'single',
+            connectionId: 'connection-1',
+            modelId: 'gpt-5-mini',
+            consensusConfigurationId: null,
+            selectionSource: 'session',
+          },
+        },
+      },
+      messages: [],
+      events: [],
+      lineage: { parent: null, children: [] },
+    });
+
+    const response = await GET(new NextRequest('http://localhost/api/studio/sessions/session-1'), {
+      params: Promise.resolve({ id: 'session-1' }),
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.intelligenceSelection).toMatchObject({
+      mode: 'single',
+      connectionId: 'connection-1',
+      modelId: 'gpt-5-mini',
     });
   });
 

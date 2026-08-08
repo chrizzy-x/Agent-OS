@@ -85,6 +85,7 @@ const CONNECTION_STATUSES = new Set<IntelligenceConnectionStatus>(['pending_vali
 const INVOCATION_STATUSES = new Set<IntelligenceInvocationStatus>(['queued', 'running', 'completed', 'failed', 'cancelled']);
 const INTELLIGENCE_CONNECTION_LIST_TIMEOUT_MS = 8_000;
 const INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS = 4_000;
+const INTELLIGENCE_SESSION_REST_TIMEOUT_MS = 12_000;
 
 function applyIntelligenceQueryTimeout<T>(query: T, timeoutMs: number): T {
   const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
@@ -259,16 +260,30 @@ async function assertSessionOwner(params: {
   ownerAgentId: string;
   sessionId: string;
 }): Promise<Record<string, unknown>> {
-  const { data, error } = await applyIntelligenceSessionQueryTimeout(getSupabaseAdmin()
-    .from('nl_studio_sessions')
-    .select('*')
-    .eq('id', params.sessionId)
-    .eq('owner_agent_id', params.ownerAgentId)
-    .maybeSingle());
+  try {
+    const { data, error } = await applyIntelligenceSessionQueryTimeout(getSupabaseAdmin()
+      .from('nl_studio_sessions')
+      .select('*')
+      .eq('id', params.sessionId)
+      .eq('owner_agent_id', params.ownerAgentId)
+      .maybeSingle());
 
-  if (error) throw new Error(`Failed to validate Studio session: ${error.message}`);
-  if (!data) throw new PermissionError('Studio session not found or not accessible');
-  return data as Record<string, unknown>;
+    if (!error && data) return data as Record<string, unknown>;
+    if (error) throw new Error(`Failed to validate Studio session: ${error.message}`);
+  } catch {
+    // Fall through to the service-role REST read used by production recovery paths.
+  }
+
+  const rows = await supabaseRestRows('nl_studio_sessions', {
+    select: '*',
+    id: `eq.${params.sessionId}`,
+    owner_agent_id: `eq.${params.ownerAgentId}`,
+    deleted_at: 'is.null',
+    limit: '1',
+  }, INTELLIGENCE_SESSION_REST_TIMEOUT_MS).catch(() => []);
+  if (rows[0]) return rows[0];
+
+  throw new PermissionError('Studio session not found or not accessible');
 }
 
 export async function assertIntelligenceConnectionAccess(params: {
