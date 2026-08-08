@@ -27,6 +27,17 @@ describe('phase 45 panic button production contract', () => {
     expect(source).toContain('disabledReason={disabledReason}');
   });
 
+  it('does not poll session refresh from public auth routes', () => {
+    const panicSource = read('components/os/PanicButton.tsx');
+    const guardSource = read('components/os/BrowserSessionFetchGuard.tsx');
+
+    expect(panicSource).toContain('PANIC_EXCLUDED_PREFIXES');
+    expect(panicSource).toContain("'/signin'");
+    expect(panicSource).toContain('if (excluded || !status) return null;');
+    expect(guardSource).toContain('SESSION_REFRESH_EXCLUDED_PREFIXES');
+    expect(guardSource).toContain('isRefreshExcludedPath()');
+  });
+
   it('documents the panic scope without overclaiming external control', () => {
     const docs = read('docs/panic-control.md');
 

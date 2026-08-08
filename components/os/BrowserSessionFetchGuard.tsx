@@ -31,6 +31,14 @@ function isSessionEndpoint(input: RequestInfo | URL): boolean {
   return url.origin === window.location.origin && url.pathname.startsWith('/api/session');
 }
 
+const SESSION_REFRESH_EXCLUDED_PREFIXES = ['/', '/signin', '/signup', '/login', '/forgot-password'];
+
+function isRefreshExcludedPath(): boolean {
+  if (typeof window === 'undefined') return true;
+  const pathname = window.location.pathname;
+  return SESSION_REFRESH_EXCLUDED_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
 function withCredentials(init?: RequestInit): RequestInit {
   return {
     ...init,
@@ -77,7 +85,7 @@ export default function BrowserSessionFetchGuard() {
 
       const first = await nativeFetch(input, guarded ? withCredentials(init) : init);
       if (logoutRequest) settleLogoutRefresh(2_000);
-      if (!guarded || first.status !== 401 || sessionEndpoint || isLogoutBlocked()) return first;
+      if (!guarded || first.status !== 401 || sessionEndpoint || isLogoutBlocked() || isRefreshExcludedPath()) return first;
 
       const refresh = await nativeFetch('/api/session/refresh', {
         method: 'POST',

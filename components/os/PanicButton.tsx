@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Drawer } from '@/components/os/overlays';
 import { Badge, Button, Card } from '@/components/os/ui';
 import { fetchBrowserSessionState, fetchWithBrowserSession } from '@/src/auth/browser-session';
@@ -18,6 +19,12 @@ type PanicContext = {
   workspaceId: string | null;
   sessionId: string | null;
 };
+
+const PANIC_EXCLUDED_PREFIXES = ['/', '/signin', '/signup', '/login', '/forgot-password'];
+
+function isPanicExcludedPath(pathname: string): boolean {
+  return PANIC_EXCLUDED_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
 
 function readStoredContext(): PanicContext {
   if (typeof window === 'undefined') return { workspaceId: null, sessionId: null };
@@ -60,6 +67,8 @@ function panicActionDisabledReason(status: PanicStatus, working: boolean): strin
 }
 
 export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: string | null; sessionId?: string | null }) {
+  const pathname = usePathname();
+  const excluded = isPanicExcludedPath(pathname);
   const [status, setStatus] = useState<PanicStatus | null>(null);
   const [context, setContext] = useState<PanicContext>({ workspaceId: workspaceId ?? null, sessionId: sessionId ?? null });
   const [open, setOpen] = useState(false);
@@ -101,6 +110,10 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
   }, [sessionId, workspaceId]);
 
   const refresh = useCallback(async () => {
+    if (excluded) {
+      setStatus(null);
+      return;
+    }
     const session = await fetchBrowserSessionState().catch(() => ({ state: 'signed_out' as const, session: null }));
     if (session.state !== 'active') {
       setStatus(null);
@@ -118,13 +131,13 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
     }
     const payload = await response.response.json() as PanicStatus;
     setStatus({ ...payload, available: true });
-  }, [context.sessionId, context.workspaceId]);
+  }, [context.sessionId, context.workspaceId, excluded]);
 
   useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => void refresh(), 30000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [excluded, refresh]);
 
   useEffect(() => {
     function handleOpen() {
@@ -160,7 +173,7 @@ export default function PanicButton({ workspaceId, sessionId }: { workspaceId?: 
     setWorking(false);
   }
 
-  if (!status) return null;
+  if (excluded || !status) return null;
 
   const visibleStatus = status;
   const disabledReason = panicActionDisabledReason(visibleStatus, working);
