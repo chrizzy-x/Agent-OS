@@ -76,7 +76,7 @@ describe('execution service DB compatibility', () => {
     expect(updatePayloads[1]).not.toHaveProperty('status_detail');
   });
 
-  it('falls back to Supabase REST rows when the primary execution list fails', async () => {
+  it('lists Supabase REST rows before using the primary execution client', async () => {
     serviceMocks.supabaseRestRows.mockResolvedValue([
       {
         id: 'execution-1',
@@ -90,18 +90,6 @@ describe('execution service DB compatibility', () => {
         updated_at: '2026-08-08T00:00:01.000Z',
       },
     ]);
-
-    mockSupabase.from.mockImplementation((table: string) => {
-      expect(table).toBe('agent_executions');
-      return {
-        data: null,
-        error: { message: 'timeout' },
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-      };
-    });
 
     const result = await listExecutions({
       agentId: 'agent-1',
@@ -118,5 +106,6 @@ describe('execution service DB compatibility', () => {
       order: 'updated_at.desc',
       limit: '40',
     }), expect.any(Number));
+    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 });

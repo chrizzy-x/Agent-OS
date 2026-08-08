@@ -670,33 +670,32 @@ export async function listExecutions(params: {
   };
 
   try {
-    let query = getSupabaseAdmin()
-      .from('agent_executions')
-      .select('*')
-      .eq('agent_id', params.agentId)
-      .order('updated_at', { ascending: false })
-      .limit(limit);
-
-    if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
-    if (params.sessionId) query = query.eq('session_id', params.sessionId);
-    if (params.status && params.status !== 'all') query = query.eq('status', normalizeExecutionStatus(params.status));
-    if (params.sourceType && params.sourceType !== 'all') query = query.eq('source_type', toDbSourceType(params.sourceType));
-    if (params.workflowId) query = query.eq('workflow_id', params.workflowId);
-    if (params.appId) query = query.eq('app_id', params.appId);
-    if (params.skillId) query = query.eq('skill_id', params.skillId);
-    if (params.search?.trim()) query = query.ilike('title', `%${params.search.trim()}%`);
-
-    const { data, error } = await withSupabaseQueryTimeout(query, EXECUTION_LIST_TIMEOUT_MS);
-    if (error) throw new Error(`Failed to list executions: ${error.message}`);
-    return ((data ?? []) as Record<string, unknown>[]).map(mapExecution);
-  } catch (error) {
+    return await listViaRest();
+  } catch (restError) {
     try {
-      return await listViaRest();
-    } catch {
-      // Preserve the primary database failure unless local fallback is explicitly allowed.
+      let query = getSupabaseAdmin()
+        .from('agent_executions')
+        .select('*')
+        .eq('agent_id', params.agentId)
+        .order('updated_at', { ascending: false })
+        .limit(limit);
+
+      if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
+      if (params.sessionId) query = query.eq('session_id', params.sessionId);
+      if (params.status && params.status !== 'all') query = query.eq('status', normalizeExecutionStatus(params.status));
+      if (params.sourceType && params.sourceType !== 'all') query = query.eq('source_type', toDbSourceType(params.sourceType));
+      if (params.workflowId) query = query.eq('workflow_id', params.workflowId);
+      if (params.appId) query = query.eq('app_id', params.appId);
+      if (params.skillId) query = query.eq('skill_id', params.skillId);
+      if (params.search?.trim()) query = query.ilike('title', `%${params.search.trim()}%`);
+
+      const { data, error } = await withSupabaseQueryTimeout(query, EXECUTION_LIST_TIMEOUT_MS);
+      if (error) throw new Error(`Failed to list executions: ${error.message}`);
+      return ((data ?? []) as Record<string, unknown>[]).map(mapExecution);
+    } catch (primaryError) {
+      if (useLocalExecutionFallback()) return listLocal();
+      throw primaryError instanceof Error ? primaryError : restError;
     }
-    if (useLocalExecutionFallback()) return listLocal();
-    throw error;
   }
 }
 

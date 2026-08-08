@@ -286,6 +286,27 @@ async function assertSessionOwner(params: {
   throw new PermissionError('Studio session not found or not accessible');
 }
 
+async function hasWorkspaceMembershipViaRest(params: {
+  ownerAgentId: string;
+  workspaceId: string;
+}): Promise<boolean> {
+  const membership = await supabaseRestRows('workspace_members', {
+    select: 'role',
+    workspace_id: `eq.${params.workspaceId}`,
+    user_id: `eq.${params.ownerAgentId}`,
+    limit: '1',
+  }, INTELLIGENCE_SESSION_REST_TIMEOUT_MS).catch(() => []);
+  if (membership.length > 0) return true;
+
+  const ownedWorkspace = await supabaseRestRows('workspaces', {
+    select: 'id',
+    id: `eq.${params.workspaceId}`,
+    owner_id: `eq.${params.ownerAgentId}`,
+    limit: '1',
+  }, INTELLIGENCE_SESSION_REST_TIMEOUT_MS).catch(() => []);
+  return ownedWorkspace.length > 0;
+}
+
 export async function assertIntelligenceConnectionAccess(params: {
   ownerAgentId: string;
   connectionId: string;
@@ -317,6 +338,7 @@ export async function listIntelligenceConnections(params: {
 }): Promise<IntelligenceConnectionRecord[]> {
   const mapRows = async (rows: Record<string, unknown>[]) => {
     if (rows.length > 0) return rows.map(mapConnection);
+    if (await hasWorkspaceMembershipViaRest(params)) return [];
     await assertWorkspaceMembership(params.workspaceId, params.ownerAgentId);
     return [];
   };
@@ -331,24 +353,20 @@ export async function listIntelligenceConnections(params: {
     return mapRows(await supabaseRestRows('intelligence_connections', queryParams, INTELLIGENCE_CONNECTION_LIST_TIMEOUT_MS));
   };
 
-  let query = getSupabaseAdmin()
-    .from('intelligence_connections')
-    .select('*')
-    .eq('owner_agent_id', params.ownerAgentId)
-    .eq('workspace_id', params.workspaceId)
-    .order('updated_at', { ascending: false });
-
-  if (!params.includeRevoked) query = query.neq('status', 'revoked');
   try {
+    return await listViaRest();
+  } catch {
+    let query = getSupabaseAdmin()
+      .from('intelligence_connections')
+      .select('*')
+      .eq('owner_agent_id', params.ownerAgentId)
+      .eq('workspace_id', params.workspaceId)
+      .order('updated_at', { ascending: false });
+
+    if (!params.includeRevoked) query = query.neq('status', 'revoked');
     const { data, error } = await applyIntelligenceQueryTimeout(query, INTELLIGENCE_CONNECTION_LIST_TIMEOUT_MS);
     if (error) throw new Error(`Failed to list intelligence connections: ${error.message}`);
     return mapRows((data ?? []) as Record<string, unknown>[]);
-  } catch (error) {
-    try {
-      return await listViaRest();
-    } catch {
-      throw error;
-    }
   }
 }
 

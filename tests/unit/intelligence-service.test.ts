@@ -176,6 +176,7 @@ describe('intelligence service', () => {
         health: {},
       },
     ]);
+    serviceMocks.supabaseRestRows.mockRejectedValue(new Error('rest unavailable'));
     serviceMocks.assertWorkspaceMembership.mockRejectedValue(new PermissionError('Workspace not found or not accessible'));
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === 'intelligence_connections') return connections;
@@ -193,7 +194,7 @@ describe('intelligence service', () => {
     expect(serviceMocks.assertWorkspaceMembership).not.toHaveBeenCalled();
   });
 
-  it('falls back to Supabase REST rows when the primary connection list fails', async () => {
+  it('lists Supabase REST connection rows before using the primary client', async () => {
     serviceMocks.supabaseRestRows.mockResolvedValue([
       {
         id: 'connection-1',
@@ -209,20 +210,6 @@ describe('intelligence service', () => {
         health: {},
       },
     ]);
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === 'intelligence_connections') {
-        return {
-          data: null,
-          error: { message: 'timeout' },
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          neq: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-        };
-      }
-      throw new Error(`unexpected table ${table}`);
-    });
-
     const result = await listIntelligenceConnections({
       ownerAgentId: 'agent-1',
       workspaceId: 'workspace-1',
@@ -235,6 +222,7 @@ describe('intelligence service', () => {
       status: 'neq.revoked',
       order: 'updated_at.desc',
     }), expect.any(Number));
+    expect(mockSupabase.from).not.toHaveBeenCalled();
   });
 
   it('persists session selection only for an owned active connection in the same workspace', async () => {
