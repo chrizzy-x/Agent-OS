@@ -75,6 +75,11 @@ export function resetBrowserSessionLogoutBlockForTests(): void {
   }
 }
 
+export function clearBrowserSessionLogoutBlock(): void {
+  logoutBlockGeneration += 1;
+  setLogoutRefreshBlock(0);
+}
+
 function readStorage(storage: Storage | undefined, key: string): string | null {
   try {
     return storage?.getItem(key) ?? null;
@@ -257,7 +262,7 @@ export async function destroyBrowserSession(): Promise<void> {
   } finally {
     clearLegacyBrowserAuth();
     forgetBrowserSession();
-    settleLogoutRefreshBlock(logoutGeneration, 2_000);
+    settleLogoutRefreshBlock(logoutGeneration, 15_000);
   }
 }
 

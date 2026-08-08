@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { destroyBrowserSession, fetchBrowserSessionState, resetBrowserSessionLogoutBlockForTests } from '../../src/auth/browser-session.js';
+import {
+  clearBrowserSessionLogoutBlock,
+  destroyBrowserSession,
+  fetchBrowserSessionState,
+  resetBrowserSessionLogoutBlockForTests,
+} from '../../src/auth/browser-session.js';
 
 const SESSION_MARKER_KEY = 'agentos.browserSessionSeen';
 
@@ -135,7 +140,7 @@ describe('browser session persistence', () => {
     expect(fetchMock).not.toHaveBeenCalledWith('/api/session/refresh', expect.anything());
   });
 
-  it('allows same-tab session reads shortly after logout completes', async () => {
+  it('keeps same-tab session reads signed out during the logout settle window', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true }));
@@ -143,7 +148,7 @@ describe('browser session persistence', () => {
 
     await destroyBrowserSession();
 
-    expect(window.__agentosSessionLogoutBlockedUntil).toBe(Date.now() + 2_000);
+    expect(window.__agentosSessionLogoutBlockedUntil).toBe(Date.now() + 15_000);
     fetchMock.mockReset();
     fetchMock.mockResolvedValue(jsonResponse({
       authenticated: true,
@@ -160,8 +165,14 @@ describe('browser session persistence', () => {
     vi.advanceTimersByTime(2_001);
     const state = await fetchBrowserSessionState();
 
-    expect(state.state).toBe('active');
-    expect(state.session?.agentName).toBe('Agent One');
+    expect(state.state).toBe('signed_out');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    clearBrowserSessionLogoutBlock();
+    const signedInState = await fetchBrowserSessionState();
+
+    expect(signedInState.state).toBe('active');
+    expect(signedInState.session?.agentName).toBe('Agent One');
     expect(fetchMock).toHaveBeenCalledWith('/api/session?optional=1', {
       cache: 'no-store',
       credentials: 'include',
