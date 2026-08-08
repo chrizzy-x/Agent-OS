@@ -258,6 +258,18 @@ describe('storage migrations', () => {
     expect(sql).toContain('-- ROLLBACK:');
   });
 
+  it('adds execution listing latency indexes for production Studio recovery', () => {
+    const sql = migrationSql('043_agent_executions_listing_latency.sql');
+
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_executions_agent_updated_idx');
+    expect(sql).toContain('ON agent_executions(agent_id, updated_at DESC)');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_executions_agent_session_updated_idx');
+    expect(sql).toContain('ON agent_executions(agent_id, session_id, updated_at DESC)');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS agent_executions_agent_workspace_session_updated_idx');
+    expect(sql).toContain('ON agent_executions(agent_id, workspace_id, session_id, updated_at DESC)');
+    expect(sql).toContain('-- ROLLBACK:');
+  });
+
   it('formalizes FFP execution logs and removes legacy persisted plan identifiers', () => {
     const sql = migrationSql('023_ffp_audit_and_plan_cleanup.sql');
 
