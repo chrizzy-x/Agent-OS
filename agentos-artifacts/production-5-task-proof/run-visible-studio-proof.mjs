@@ -624,19 +624,35 @@ async function findLatestReusableProofAccount() {
     if (!token) continue;
     const connections = await supabaseSelect('intelligence_connections', {
       owner_agent_id: `eq.${agent.id}`,
-      select: 'vendor,status,selected_model_id,created_at',
+      select: 'vendor,status,selected_model_id,workspace_id,created_at',
       order: 'created_at.desc',
       limit: '10',
     });
     if (!Array.isArray(connections)) continue;
-    const hasOpenAI = connections.some(item => item.vendor === 'openai' && item.status === 'active' && item.selected_model_id === 'gpt-5-mini');
-    const hasAnthropic = connections.some(item => item.vendor === 'anthropic' && item.status === 'active' && item.selected_model_id === 'claude-sonnet-4-6');
-    if (hasOpenAI && hasAnthropic) {
+    const openaiConnection = connections.find(item => item.vendor === 'openai' && item.status === 'active' && item.selected_model_id === 'gpt-5-mini');
+    const anthropicConnection = connections.find(item => item.vendor === 'anthropic' && item.status === 'active' && item.selected_model_id === 'claude-sonnet-4-6');
+    if (openaiConnection && anthropicConnection) {
+      const workspaceId = typeof openaiConnection.workspace_id === 'string'
+        ? openaiConnection.workspace_id
+        : typeof anthropicConnection.workspace_id === 'string'
+          ? anthropicConnection.workspace_id
+          : null;
+      const projects = workspaceId
+        ? await supabaseSelect('projects', {
+          workspace_id: `eq.${workspaceId}`,
+          owner_agent_id: `eq.${agent.id}`,
+          select: 'id,updated_at',
+          order: 'updated_at.desc',
+          limit: '1',
+        })
+        : [];
       return {
         agentId: String(agent.id),
         email,
         password: `ProofPass-${token}!9`,
         createdAt: agent.created_at,
+        workspaceId,
+        projectId: Array.isArray(projects) && typeof projects[0]?.id === 'string' ? projects[0].id : null,
         connections,
       };
     }
@@ -728,8 +744,8 @@ async function main() {
       await page.goto(`${BASE_URL}/studio?mode=nl`, { waitUntil: 'domcontentloaded', timeout: 90000 });
       await waitForStudio(page);
       const bootstrap = await api(page, '/api/studio/bootstrap?mode=nl', { label: 'studio-bootstrap-desktop' });
-      ids.workspaceId = bootstrap.json?.workspaces?.[0]?.id ?? bootstrap.json?.currentProject?.workspaceId ?? null;
-      ids.projectId = bootstrap.json?.currentProject?.id ?? bootstrap.json?.projects?.[0]?.id ?? null;
+      ids.workspaceId = bootstrap.json?.workspaces?.[0]?.id ?? bootstrap.json?.currentProject?.workspaceId ?? reusableAccount.workspaceId ?? null;
+      ids.projectId = bootstrap.json?.currentProject?.id ?? bootstrap.json?.projects?.[0]?.id ?? reusableAccount.projectId ?? null;
       if (!ids.workspaceId) throw new Error('Studio did not provide a workspace.');
 
       await page.setViewportSize({ width: 390, height: 844 });
