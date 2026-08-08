@@ -55,7 +55,29 @@ describe('studio persistence REST fallback', () => {
     });
   });
 
-  it('recovers a requested session bundle when the primary owner lookup times out', async () => {
+  it('loads a requested session bundle through REST before using the primary client', async () => {
+    persistenceMocks.supabaseRestRows.mockImplementation((table: string) => {
+      if (table === 'nl_studio_sessions') return Promise.resolve([sessionRow]);
+      if (table === 'nl_studio_messages') {
+        return Promise.resolve([{
+          id: 'message-1',
+          session_id: 'session-1',
+          role: 'user',
+          content: 'continue the research',
+          created_at: '2026-08-08T00:01:00Z',
+        }]);
+      }
+      if (table === 'nl_studio_events') {
+        return Promise.resolve([{
+          id: 'event-1',
+          session_id: 'session-1',
+          type: 'task_started',
+          payload: { task: 'research' },
+          created_at: '2026-08-08T00:02:00Z',
+        }]);
+      }
+      return Promise.resolve([]);
+    });
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === 'nl_studio_sessions') return queryBuilder([], { message: 'timeout' });
       if (table === 'nl_studio_messages') {
@@ -89,9 +111,13 @@ describe('studio persistence REST fallback', () => {
       owner_agent_id: 'eq.agent-1',
       deleted_at: 'is.null',
     }), expect.any(Number));
+    expect(persistenceMocks.supabaseRestRows).toHaveBeenCalledWith('nl_studio_messages', expect.objectContaining({
+      session_id: 'eq.session-1',
+      order: 'created_at.asc',
+    }), expect.any(Number));
   });
 
-  it('recovers the session list through REST before local fallback', async () => {
+  it('loads the session list through REST before local fallback', async () => {
     mockSupabase.from.mockImplementation((table: string) => {
       if (table === 'nl_studio_sessions') return queryBuilder([], { message: 'timeout' });
       throw new Error(`unexpected table ${table}`);

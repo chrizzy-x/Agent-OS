@@ -213,6 +213,9 @@ async function findRestSessionRow(sessionId: string, ownerAgentId: string): Prom
 }
 
 async function assertSessionOwner(sessionId: string, ownerAgentId: string): Promise<Record<string, unknown>> {
+  const rest = await findRestSessionRow(sessionId, ownerAgentId).catch(() => null);
+  if (rest) return rest;
+
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await applyStudioPersistenceQueryTimeout(supabase
@@ -226,9 +229,6 @@ async function assertSessionOwner(sessionId: string, ownerAgentId: string): Prom
   } catch {
     // Fall through to local state.
   }
-
-  const rest = await findRestSessionRow(sessionId, ownerAgentId).catch(() => null);
-  if (rest) return rest;
 
   const local = await findLocalSessionRow(sessionId, ownerAgentId);
   if (local) return local;
@@ -257,6 +257,9 @@ export async function listStudioSessions(
   ownerAgentId: string,
   options: { status?: string | 'all'; includeDeleted?: boolean; limit?: number } = {},
 ): Promise<StudioSessionRecord[]> {
+  const rest = await listStudioSessionsViaRest(ownerAgentId, options).catch(() => null);
+  if (rest) return rest;
+
   try {
     const supabase = getSupabaseAdmin();
     let query = supabase
@@ -284,9 +287,6 @@ export async function listStudioSessions(
   } catch {
     // Fall through to local state.
   }
-
-  const rest = await listStudioSessionsViaRest(ownerAgentId, options).catch(() => null);
-  if (rest) return rest;
 
   const state = await readLocalRuntimeState();
   const rows = state.studioSessions.filter(row => {
@@ -391,6 +391,31 @@ export async function getStudioSessionBundle(ownerAgentId: string, sessionId: st
   lineage: StudioSessionLineage;
 }> {
   const row = await assertSessionOwner(sessionId, ownerAgentId);
+  try {
+    const [messageRows, eventRows, lineage] = await Promise.all([
+      supabaseRestRows('nl_studio_messages', {
+        select: '*',
+        session_id: `eq.${sessionId}`,
+        order: 'created_at.asc',
+      }, STUDIO_PERSISTENCE_REST_TIMEOUT_MS),
+      supabaseRestRows('nl_studio_events', {
+        select: '*',
+        session_id: `eq.${sessionId}`,
+        order: 'created_at.asc',
+      }, STUDIO_PERSISTENCE_REST_TIMEOUT_MS),
+      getStudioSessionLineage(ownerAgentId, sessionId).catch(() => ({ parent: null, children: [] })),
+    ]);
+    const persistedMessages = messageRows.map(mapMessage);
+    return {
+      session: mapSession(row),
+      messages: persistedMessages.length > 0 ? persistedMessages : mapStateMessages(row),
+      events: eventRows.map(mapEvent),
+      lineage,
+    };
+  } catch {
+    // Fall through to the primary client and then local state.
+  }
+
   try {
     const supabase = getSupabaseAdmin();
     const [messages, events, lineage] = await Promise.all([
