@@ -5,15 +5,14 @@ import {
   listIntelligenceConnections,
   setIntelligenceDefault,
   updateIntelligenceConnectionStatus,
-  type IntelligenceConnectionRecord,
   type IntelligenceVendor,
 } from '@/src/intelligence/service';
 import {
   discoverConnectedIntelligenceModels,
   getIntelligenceAdapter,
-  getKnownIntelligenceModels,
   type ConnectedIntelligenceModel,
 } from '@/src/intelligence/adapters';
+import { publicKnownModelsByVendor, safePublicIntelligenceConnection } from '@/src/intelligence/public-connections';
 import { assignVaultSecret, createRuntimeSecretGrant, upsertVaultSecret } from '@/src/vault/service';
 import { redactSecretsInString } from '@/src/security/secret-redaction';
 import { toErrorResponse, ValidationError } from '@/src/utils/errors';
@@ -79,32 +78,8 @@ function parseVendor(value: unknown): IntelligenceVendor {
   throw new ValidationError('Unsupported intelligence vendor');
 }
 
-function safeConnection(connection: IntelligenceConnectionRecord) {
-  return {
-    id: connection.id,
-    ownerAgentId: connection.ownerAgentId,
-    workspaceId: connection.workspaceId,
-    vendor: connection.vendor,
-    displayName: connection.displayName,
-    status: connection.status,
-    selectedModelId: connection.selectedModelId,
-    availableModels: connection.availableModels,
-    capabilities: connection.capabilities,
-    health: connection.health,
-    lastValidatedAt: connection.lastValidatedAt,
-    lastError: connection.lastError,
-    createdAt: connection.createdAt,
-    updatedAt: connection.updatedAt,
-  };
-}
-
 function modelsByVendor(vendor?: IntelligenceVendor) {
-  const models = getKnownIntelligenceModels(vendor);
-  return models.reduce<Record<string, ConnectedIntelligenceModel[]>>((acc, model) => {
-    acc[model.vendor] ??= [];
-    acc[model.vendor].push(model);
-    return acc;
-  }, {});
+  return publicKnownModelsByVendor(vendor);
 }
 
 function secretNameForVendor(vendor: IntelligenceVendor): string {
@@ -125,7 +100,7 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      connections: connections.map(safeConnection),
+      connections: connections.map(safePublicIntelligenceConnection),
       models: modelsByVendor(),
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
@@ -205,7 +180,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      connection: safeConnection(connection),
+      connection: safePublicIntelligenceConnection(connection),
       validated: active,
       validationError,
       models: modelIds,
@@ -265,7 +240,7 @@ export async function PATCH(request: NextRequest) {
       validated: status === 'active',
       lastError: status === 'active' ? null : undefined,
     });
-    return NextResponse.json({ connection: safeConnection(connection) }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ connection: safePublicIntelligenceConnection(connection) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });
@@ -284,7 +259,7 @@ export async function DELETE(request: NextRequest) {
       workspaceId: searchParams.get('workspaceId')?.trim() || undefined,
       status: 'revoked',
     });
-    return NextResponse.json({ revoked: true, connection: safeConnection(connection) }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ revoked: true, connection: safePublicIntelligenceConnection(connection) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
     const err = toErrorResponse(error);
     return NextResponse.json({ code: err.code, error: err.message, message: err.message }, { status: err.statusCode });

@@ -14,6 +14,7 @@ import {
   listIntelligenceConnections,
   type IntelligenceConnectionRecord,
 } from '../intelligence/service.js';
+import { safePublicIntelligenceConnection } from '../intelligence/public-connections.js';
 import {
   createNativeIntelligenceSelection,
   migrateLegacyExecutionTargetToIntelligenceSelection,
@@ -30,25 +31,6 @@ import { buildStudioSyncContract } from './sync-contract.js';
 import type { StudioMode } from './types.js';
 import type { StudioSessionRecord } from './persistence.js';
 import { readLocalRuntimeState } from '../storage/local-state.js';
-
-function safeIntelligenceConnection(connection: IntelligenceConnectionRecord): Omit<IntelligenceConnectionRecord, 'vaultSecretId'> {
-  return {
-    id: connection.id,
-    ownerAgentId: connection.ownerAgentId,
-    workspaceId: connection.workspaceId,
-    vendor: connection.vendor,
-    displayName: connection.displayName,
-    status: connection.status,
-    selectedModelId: connection.selectedModelId,
-    availableModels: connection.availableModels,
-    capabilities: connection.capabilities,
-    health: connection.health,
-    lastValidatedAt: connection.lastValidatedAt,
-    lastError: connection.lastError,
-    createdAt: connection.createdAt,
-    updatedAt: connection.updatedAt,
-  };
-}
 
 function activeConnectionsByVendor(connections: IntelligenceConnectionRecord[]): LegacyIntelligenceConnectionMap {
   return connections
@@ -128,7 +110,10 @@ function selectionUsable(selection: IntelligenceSelection, connections: Intellig
   return connections.some(connection =>
     connection.id === selection.connectionId
     && connection.status === 'active'
-    && connection.availableModels.includes(selection.modelId ?? connection.selectedModelId)
+    && (
+      (selection.modelId ?? connection.selectedModelId) === connection.selectedModelId
+      || connection.availableModels.includes(selection.modelId ?? connection.selectedModelId)
+    )
   );
 }
 
@@ -456,7 +441,7 @@ export async function buildStudioBootstrap(params: {
     providerStatus,
     executionTargets,
     sessionExecutionTargetId: sessionExecutionTarget.id,
-    intelligenceConnections: intelligenceConnections.map(safeIntelligenceConnection),
+    intelligenceConnections: intelligenceConnections.map(safePublicIntelligenceConnection),
     intelligenceConnectionsLoaded: intelligenceConnectionLoad.loaded,
     sessionIntelligenceSelection,
     session: bundle?.session ?? session,

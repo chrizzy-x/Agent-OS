@@ -191,6 +191,19 @@ describe('intelligence connections route', () => {
   });
 
   it('lists safe connection metadata and known exact models', async () => {
+    routeMocks.listIntelligenceConnections.mockResolvedValue([connection({
+      selectedModelId: 'custom-openai-production-model',
+      availableModels: [
+        ...Array.from({ length: 50 }, (_, index) => `stored-model-${index}`),
+        'tail-model-that-should-not-be-public',
+      ],
+      capabilities: {
+        models: [
+          ...Array.from({ length: 50 }, (_, index) => `capability-model-${index}`),
+          'capability-tail-model-that-should-not-be-public',
+        ],
+      },
+    })]);
     const response = await GET(request('http://localhost/api/intelligence/connections?workspaceId=workspace-1', 'GET'));
     const body = await response.json();
 
@@ -202,6 +215,13 @@ describe('intelligence connections route', () => {
     });
     expect(body.connections[0].id).toBe('connection-1');
     expect(body.connections[0].vaultSecretId).toBeUndefined();
+    expect(body.connections[0].selectedModelId).toBe('custom-openai-production-model');
+    expect(body.connections[0].availableModels).toContain('custom-openai-production-model');
+    expect(body.connections[0].availableModels).toContain('gpt-5');
+    expect(body.connections[0].availableModels).toContain('stored-model-39');
+    expect(body.connections[0].availableModels).not.toContain('stored-model-40');
+    expect(body.connections[0].availableModels).not.toContain('tail-model-that-should-not-be-public');
+    expect(body.connections[0].capabilities.models).toEqual(body.connections[0].availableModels);
     expect(body.models.openai.map((model: { id: string }) => model.id)).toContain('gpt-5');
   });
 
