@@ -21,6 +21,7 @@ vi.mock('../../src/storage/supabase-rest.js', () => ({
 }));
 
 import {
+  assertIntelligenceConnectionAccess,
   createIntelligenceConnection,
   getStudioSessionIntelligence,
   listIntelligenceConnections,
@@ -221,6 +222,42 @@ describe('intelligence service', () => {
       workspace_id: 'eq.workspace-1',
       status: 'neq.revoked',
       order: 'updated_at.desc',
+    }), expect.any(Number));
+    expect(mockSupabase.from).not.toHaveBeenCalled();
+  });
+
+  it('validates connection access through Supabase REST before using the primary client', async () => {
+    serviceMocks.supabaseRestRows.mockResolvedValue([
+      {
+        id: 'connection-1',
+        owner_agent_id: 'agent-1',
+        workspace_id: 'workspace-1',
+        vault_secret_id: 'secret-1',
+        vendor: 'openai',
+        display_name: 'OpenAI',
+        status: 'active',
+        selected_model_id: 'gpt-5',
+        available_models: ['gpt-5'],
+        capabilities: {},
+        health: {},
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    const connection = await assertIntelligenceConnectionAccess({
+      ownerAgentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      connectionId: 'connection-1',
+      requireActive: true,
+    });
+
+    expect(connection.id).toBe('connection-1');
+    expect(serviceMocks.supabaseRestRows).toHaveBeenCalledWith('intelligence_connections', expect.objectContaining({
+      id: 'eq.connection-1',
+      owner_agent_id: 'eq.agent-1',
+      workspace_id: 'eq.workspace-1',
+      limit: '1',
     }), expect.any(Number));
     expect(mockSupabase.from).not.toHaveBeenCalled();
   });

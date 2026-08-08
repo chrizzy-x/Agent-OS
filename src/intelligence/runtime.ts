@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { supabaseRestRows } from '../storage/supabase-rest.js';
 import { createRuntimeSecretGrant } from '../vault/service.js';
 import type { buildWorkspaceContextPackage } from '../workspace-context/service.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
@@ -21,6 +22,8 @@ import { normalizeIntelligenceSelection, type IntelligenceSelection } from './se
 type WorkspaceContextPackage = Awaited<ReturnType<typeof buildWorkspaceContextPackage>>;
 export type IntelligenceRuntimePurpose = 'conversation' | 'proposal_only' | 'multi_worker';
 const CONNECTED_INTELLIGENCE_RUNTIME_TIMEOUT_MS = 55_000;
+const CONNECTED_INTELLIGENCE_METADATA_REST_TIMEOUT_MS = 12_000;
+const CONNECTED_INTELLIGENCE_METADATA_QUERY_TIMEOUT_MS = 4_000;
 
 export type SingleIntelligenceRuntimeResult = {
   text: string;
@@ -91,18 +94,39 @@ async function loadVaultSecretName(params: {
   workspaceId: string;
   vaultSecretId: string;
 }): Promise<string> {
-  const { data, error } = await getSupabaseAdmin()
-    .from('vault_secrets')
-    .select('id,name,status')
-    .eq('id', params.vaultSecretId)
-    .eq('owner_agent_id', params.ownerAgentId)
-    .eq('workspace_id', params.workspaceId)
-    .maybeSingle();
-  if (error) throw new Error(`Failed to load Vault credential metadata: ${error.message}`);
-  if (!data || data.status !== 'active' || typeof data.name !== 'string') {
+  const readViaRest = async () => {
+    const rows = await supabaseRestRows('vault_secrets', {
+      select: 'id,name,status',
+      id: `eq.${params.vaultSecretId}`,
+      owner_agent_id: `eq.${params.ownerAgentId}`,
+      workspace_id: `eq.${params.workspaceId}`,
+      limit: '1',
+    }, CONNECTED_INTELLIGENCE_METADATA_REST_TIMEOUT_MS);
+    return rows[0] ?? null;
+  };
+  let row: Record<string, unknown> | null = null;
+  try {
+    row = await readViaRest();
+  } catch {
+    const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
+    let query = getSupabaseAdmin()
+      .from('vault_secrets')
+      .select('id,name,status')
+      .eq('id', params.vaultSecretId)
+      .eq('owner_agent_id', params.ownerAgentId)
+      .eq('workspace_id', params.workspaceId);
+    const abortable = query as typeof query & { abortSignal?: (signal: AbortSignal) => typeof query };
+    if (typeof timeout === 'function' && typeof abortable.abortSignal === 'function') {
+      query = abortable.abortSignal(timeout(CONNECTED_INTELLIGENCE_METADATA_QUERY_TIMEOUT_MS));
+    }
+    const { data, error } = await query.maybeSingle();
+    if (error) throw new Error(`Failed to load Vault credential metadata: ${error.message}`);
+    row = data as Record<string, unknown> | null;
+  }
+  if (!row || row.status !== 'active' || typeof row.name !== 'string') {
     throw new PermissionError('Selected intelligence credential is not active');
   }
-  return data.name;
+  return row.name;
 }
 
 export async function resolveSingleIntelligenceSelection(params: {

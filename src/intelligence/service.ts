@@ -313,18 +313,36 @@ export async function assertIntelligenceConnectionAccess(params: {
   workspaceId?: string | null;
   requireActive?: boolean;
 }): Promise<IntelligenceConnectionRecord> {
-  let query = getSupabaseAdmin()
-    .from('intelligence_connections')
-    .select('*')
-    .eq('id', params.connectionId)
-    .eq('owner_agent_id', params.ownerAgentId);
+  const readViaRest = async () => {
+    const queryParams: Record<string, string> = {
+      select: '*',
+      id: `eq.${params.connectionId}`,
+      owner_agent_id: `eq.${params.ownerAgentId}`,
+      limit: '1',
+    };
+    if (params.workspaceId) queryParams.workspace_id = `eq.${params.workspaceId}`;
+    const rows = await supabaseRestRows('intelligence_connections', queryParams, INTELLIGENCE_SESSION_REST_TIMEOUT_MS);
+    return rows[0] ?? null;
+  };
 
-  if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
-  const { data, error } = await query.maybeSingle();
-  if (error) throw new Error(`Failed to validate intelligence connection: ${error.message}`);
-  if (!data) throw new PermissionError('Intelligence connection not found or not accessible');
+  let row: Record<string, unknown> | null = null;
+  try {
+    row = await readViaRest();
+  } catch {
+    let query = getSupabaseAdmin()
+      .from('intelligence_connections')
+      .select('*')
+      .eq('id', params.connectionId)
+      .eq('owner_agent_id', params.ownerAgentId);
 
-  const connection = mapConnection(data as Record<string, unknown>);
+    if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
+    const { data, error } = await applyIntelligenceSessionQueryTimeout(query).maybeSingle();
+    if (error) throw new Error(`Failed to validate intelligence connection: ${error.message}`);
+    row = data as Record<string, unknown> | null;
+  }
+  if (!row) throw new PermissionError('Intelligence connection not found or not accessible');
+
+  const connection = mapConnection(row);
   if (params.requireActive && connection.status !== 'active') {
     throw new PermissionError('Intelligence connection is not active');
   }

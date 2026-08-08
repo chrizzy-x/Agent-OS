@@ -7,6 +7,7 @@ const runtimeMocks = vi.hoisted(() => ({
   logSuperAgentAudit: vi.fn(),
   createRuntimeSecretGrant: vi.fn(),
   generateConnectedIntelligenceText: vi.fn(),
+  supabaseRestRows: vi.fn(),
 }));
 
 vi.mock('../../src/workspaces/service.js', () => ({
@@ -19,6 +20,10 @@ vi.mock('../../src/audit/super-agent.js', () => ({
 
 vi.mock('../../src/vault/service.js', () => ({
   createRuntimeSecretGrant: runtimeMocks.createRuntimeSecretGrant,
+}));
+
+vi.mock('../../src/storage/supabase-rest.js', () => ({
+  supabaseRestRows: runtimeMocks.supabaseRestRows,
 }));
 
 vi.mock('../../src/intelligence/adapters.js', async importOriginal => {
@@ -114,6 +119,7 @@ describe('single intelligence runtime', () => {
     runtimeMocks.assertWorkspaceMembership.mockResolvedValue({ workspace: { id: 'workspace-1' }, role: 'owner' });
     runtimeMocks.logSuperAgentAudit.mockResolvedValue('audit-1');
     runtimeMocks.createRuntimeSecretGrant.mockResolvedValue({ id: 'grant-1' });
+    runtimeMocks.supabaseRestRows.mockRejectedValue(new Error('rest unavailable'));
     runtimeMocks.generateConnectedIntelligenceText.mockResolvedValue({
       vendor: 'openai',
       modelId: 'gpt-5',
