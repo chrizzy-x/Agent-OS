@@ -226,6 +226,7 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS agent_executions_agent_updated_idx ON public.agent_executions(agent_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS agent_executions_agent_session_updated_idx ON public.agent_executions(agent_id, session_id, updated_at DESC)`,
   `CREATE INDEX IF NOT EXISTS agent_executions_agent_workspace_session_updated_idx ON public.agent_executions(agent_id, workspace_id, session_id, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS intelligence_connections_owner_workspace_updated_idx ON public.intelligence_connections(owner_agent_id, workspace_id, updated_at DESC)`,
   `ALTER TABLE public.nl_studio_messages ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE public.nl_studio_snapshots ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY`,

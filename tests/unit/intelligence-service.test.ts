@@ -5,6 +5,7 @@ import { PermissionError } from '../../src/utils/errors.js';
 const serviceMocks = vi.hoisted(() => ({
   assertWorkspaceMembership: vi.fn(),
   logSuperAgentAudit: vi.fn(),
+  supabaseRestRows: vi.fn(),
 }));
 
 vi.mock('../../src/workspaces/service.js', () => ({
@@ -13,6 +14,10 @@ vi.mock('../../src/workspaces/service.js', () => ({
 
 vi.mock('../../src/audit/super-agent.js', () => ({
   logSuperAgentAudit: serviceMocks.logSuperAgentAudit,
+}));
+
+vi.mock('../../src/storage/supabase-rest.js', () => ({
+  supabaseRestRows: serviceMocks.supabaseRestRows,
 }));
 
 import {
@@ -185,6 +190,50 @@ describe('intelligence service', () => {
     expect(result).toHaveLength(1);
     expect(result[0].selectedModelId).toBe('gpt-5-mini');
     expect(serviceMocks.assertWorkspaceMembership).not.toHaveBeenCalled();
+  });
+
+  it('falls back to Supabase REST rows when the primary connection list fails', async () => {
+    serviceMocks.supabaseRestRows.mockResolvedValue([
+      {
+        id: 'connection-1',
+        owner_agent_id: 'agent-1',
+        workspace_id: 'workspace-1',
+        vault_secret_id: 'secret-1',
+        vendor: 'openai',
+        display_name: 'OpenAI Production',
+        status: 'active',
+        selected_model_id: 'gpt-5-mini',
+        available_models: ['gpt-5-mini'],
+        capabilities: {},
+        health: {},
+      },
+    ]);
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'intelligence_connections') {
+        return {
+          data: null,
+          error: { message: 'timeout' },
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          neq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+        };
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+
+    const result = await listIntelligenceConnections({
+      ownerAgentId: 'agent-1',
+      workspaceId: 'workspace-1',
+    });
+
+    expect(result[0].selectedModelId).toBe('gpt-5-mini');
+    expect(serviceMocks.supabaseRestRows).toHaveBeenCalledWith('intelligence_connections', expect.objectContaining({
+      owner_agent_id: 'eq.agent-1',
+      workspace_id: 'eq.workspace-1',
+      status: 'neq.revoked',
+      order: 'updated_at.desc',
+    }), expect.any(Number));
   });
 
   it('persists session selection only for an owned active connection in the same workspace', async () => {

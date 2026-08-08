@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockSupabase } from '../setup.js';
-import { updateExecution } from '../../src/execution/service.js';
+
+const serviceMocks = vi.hoisted(() => ({
+  supabaseRestRows: vi.fn(),
+}));
+
+vi.mock('../../src/storage/supabase-rest.js', () => ({
+  supabaseRestRows: serviceMocks.supabaseRestRows,
+}));
+
+import { listExecutions, updateExecution } from '../../src/execution/service.js';
 
 describe('execution service DB compatibility', () => {
   beforeEach(() => {
@@ -65,5 +74,49 @@ describe('execution service DB compatibility', () => {
     expect(updatePayloads[1]).not.toHaveProperty('recovery_action');
     expect(updatePayloads[1]).not.toHaveProperty('recovery_requested_at');
     expect(updatePayloads[1]).not.toHaveProperty('status_detail');
+  });
+
+  it('falls back to Supabase REST rows when the primary execution list fails', async () => {
+    serviceMocks.supabaseRestRows.mockResolvedValue([
+      {
+        id: 'execution-1',
+        agent_id: 'agent-1',
+        workspace_id: 'workspace-1',
+        session_id: 'session-1',
+        source_type: 'super_agent',
+        title: 'Research task',
+        status: 'completed',
+        created_at: '2026-08-08T00:00:00.000Z',
+        updated_at: '2026-08-08T00:00:01.000Z',
+      },
+    ]);
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      expect(table).toBe('agent_executions');
+      return {
+        data: null,
+        error: { message: 'timeout' },
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+      };
+    });
+
+    const result = await listExecutions({
+      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
+      sessionId: 'session-1',
+      limit: 40,
+    });
+
+    expect(result[0].id).toBe('execution-1');
+    expect(serviceMocks.supabaseRestRows).toHaveBeenCalledWith('agent_executions', expect.objectContaining({
+      agent_id: 'eq.agent-1',
+      workspace_id: 'eq.workspace-1',
+      session_id: 'eq.session-1',
+      order: 'updated_at.desc',
+      limit: '40',
+    }), expect.any(Number));
   });
 });

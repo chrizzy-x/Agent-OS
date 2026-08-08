@@ -270,6 +270,14 @@ describe('storage migrations', () => {
     expect(sql).toContain('-- ROLLBACK:');
   });
 
+  it('adds connected intelligence listing latency indexes for production Studio selection', () => {
+    const sql = migrationSql('044_intelligence_connections_listing_latency.sql');
+
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS intelligence_connections_owner_workspace_updated_idx');
+    expect(sql).toContain('ON intelligence_connections(owner_agent_id, workspace_id, updated_at DESC)');
+    expect(sql).toContain('-- ROLLBACK:');
+  });
+
   it('formalizes FFP execution logs and removes legacy persisted plan identifiers', () => {
     const sql = migrationSql('023_ffp_audit_and_plan_cleanup.sql');
 

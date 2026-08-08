@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { getSupabaseAdmin, withSupabaseQueryTimeout } from '../storage/supabase.js';
+import { supabaseRestRows } from '../storage/supabase-rest.js';
 import { redactSecretsDeep } from '../security/secret-redaction.js';
 import { sanitizeErrorMessage, sanitizeOutput } from '../utils/output-sanitizer.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
@@ -632,6 +633,7 @@ export async function listExecutions(params: {
   search?: string | null;
   limit?: number;
 }): Promise<ExecutionRecord[]> {
+  const limit = Math.max(1, Math.min(params.limit ?? 100, 250));
   const listLocal = () => {
     const search = params.search?.trim().toLowerCase();
     return Array.from(localExecutions.values())
@@ -645,7 +647,26 @@ export async function listExecutions(params: {
       .filter(item => !params.skillId || item.skillId === params.skillId)
       .filter(item => !search || item.title.toLowerCase().includes(search))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-      .slice(0, Math.max(1, Math.min(params.limit ?? 100, 250)));
+      .slice(0, limit);
+  };
+
+  const listViaRest = async () => {
+    const queryParams: Record<string, string> = {
+      select: '*',
+      agent_id: `eq.${params.agentId}`,
+      order: 'updated_at.desc',
+      limit: String(limit),
+    };
+    if (params.workspaceId) queryParams.workspace_id = `eq.${params.workspaceId}`;
+    if (params.sessionId) queryParams.session_id = `eq.${params.sessionId}`;
+    if (params.status && params.status !== 'all') queryParams.status = `eq.${normalizeExecutionStatus(params.status)}`;
+    if (params.sourceType && params.sourceType !== 'all') queryParams.source_type = `eq.${toDbSourceType(params.sourceType)}`;
+    if (params.workflowId) queryParams.workflow_id = `eq.${params.workflowId}`;
+    if (params.appId) queryParams.app_id = `eq.${params.appId}`;
+    if (params.skillId) queryParams.skill_id = `eq.${params.skillId}`;
+    if (params.search?.trim()) queryParams.title = `ilike.*${params.search.trim().replaceAll('*', '')}*`;
+
+    return (await supabaseRestRows('agent_executions', queryParams, EXECUTION_LIST_TIMEOUT_MS)).map(mapExecution);
   };
 
   try {
@@ -654,7 +675,7 @@ export async function listExecutions(params: {
       .select('*')
       .eq('agent_id', params.agentId)
       .order('updated_at', { ascending: false })
-      .limit(Math.max(1, Math.min(params.limit ?? 100, 250)));
+      .limit(limit);
 
     if (params.workspaceId) query = query.eq('workspace_id', params.workspaceId);
     if (params.sessionId) query = query.eq('session_id', params.sessionId);
@@ -669,6 +690,11 @@ export async function listExecutions(params: {
     if (error) throw new Error(`Failed to list executions: ${error.message}`);
     return ((data ?? []) as Record<string, unknown>[]).map(mapExecution);
   } catch (error) {
+    try {
+      return await listViaRest();
+    } catch {
+      // Preserve the primary database failure unless local fallback is explicitly allowed.
+    }
     if (useLocalExecutionFallback()) return listLocal();
     throw error;
   }

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { logSuperAgentAudit } from '../audit/super-agent.js';
 import { redactSecretsDeep, redactSecretsInString } from '../security/secret-redaction.js';
 import { getSupabaseAdmin } from '../storage/supabase.js';
+import { supabaseRestRows } from '../storage/supabase-rest.js';
 import { PermissionError, ValidationError } from '../utils/errors.js';
 import { assertWorkspaceMembership } from '../workspaces/service.js';
 import {
@@ -82,18 +83,23 @@ export type IntelligenceInvocationRecord = {
 const VENDORS = new Set<IntelligenceVendor>(['openai', 'anthropic', 'gemini']);
 const CONNECTION_STATUSES = new Set<IntelligenceConnectionStatus>(['pending_validation', 'active', 'invalid', 'disabled', 'revoked']);
 const INVOCATION_STATUSES = new Set<IntelligenceInvocationStatus>(['queued', 'running', 'completed', 'failed', 'cancelled']);
+const INTELLIGENCE_CONNECTION_LIST_TIMEOUT_MS = 8_000;
 const INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS = 4_000;
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-function applyIntelligenceSessionQueryTimeout<T>(query: T): T {
+function applyIntelligenceQueryTimeout<T>(query: T, timeoutMs: number): T {
   const timeout = (globalThis.AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal }).timeout;
   const abortable = query as T & { abortSignal?: (signal: AbortSignal) => T };
   return typeof timeout === 'function' && typeof abortable.abortSignal === 'function'
-    ? abortable.abortSignal(timeout(INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS))
+    ? abortable.abortSignal(timeout(timeoutMs))
     : query;
+}
+
+function applyIntelligenceSessionQueryTimeout<T>(query: T): T {
+  return applyIntelligenceQueryTimeout(query, INTELLIGENCE_SESSION_QUERY_TIMEOUT_MS);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function asStringArray(value: unknown): string[] {
@@ -294,6 +300,22 @@ export async function listIntelligenceConnections(params: {
   workspaceId: string;
   includeRevoked?: boolean;
 }): Promise<IntelligenceConnectionRecord[]> {
+  const mapRows = async (rows: Record<string, unknown>[]) => {
+    if (rows.length > 0) return rows.map(mapConnection);
+    await assertWorkspaceMembership(params.workspaceId, params.ownerAgentId);
+    return [];
+  };
+  const listViaRest = async () => {
+    const queryParams: Record<string, string> = {
+      select: '*',
+      owner_agent_id: `eq.${params.ownerAgentId}`,
+      workspace_id: `eq.${params.workspaceId}`,
+      order: 'updated_at.desc',
+    };
+    if (!params.includeRevoked) queryParams.status = 'neq.revoked';
+    return mapRows(await supabaseRestRows('intelligence_connections', queryParams, INTELLIGENCE_CONNECTION_LIST_TIMEOUT_MS));
+  };
+
   let query = getSupabaseAdmin()
     .from('intelligence_connections')
     .select('*')
@@ -302,12 +324,17 @@ export async function listIntelligenceConnections(params: {
     .order('updated_at', { ascending: false });
 
   if (!params.includeRevoked) query = query.neq('status', 'revoked');
-  const { data, error } = await query;
-  if (error) throw new Error(`Failed to list intelligence connections: ${error.message}`);
-  const rows = (data ?? []) as Record<string, unknown>[];
-  if (rows.length > 0) return rows.map(mapConnection);
-  await assertWorkspaceMembership(params.workspaceId, params.ownerAgentId);
-  return [];
+  try {
+    const { data, error } = await applyIntelligenceQueryTimeout(query, INTELLIGENCE_CONNECTION_LIST_TIMEOUT_MS);
+    if (error) throw new Error(`Failed to list intelligence connections: ${error.message}`);
+    return mapRows((data ?? []) as Record<string, unknown>[]);
+  } catch (error) {
+    try {
+      return await listViaRest();
+    } catch {
+      throw error;
+    }
+  }
 }
 
 export async function createIntelligenceConnection(params: {
