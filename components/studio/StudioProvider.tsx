@@ -1176,6 +1176,8 @@ export function StudioProvider(props: {
         const payload = await response.response.json() as { session?: StudioSessionRecord };
         activeSession = payload.session ?? null;
         if (activeSession) {
+          streamingSessionIdRef.current = activeSession.id;
+          executionSession = activeSession;
           const activeProjectId = activeSession.projectId ?? currentProject?.id ?? requestedProjectId ?? null;
           setSession(activeSession);
           setSessions(current => [activeSession as StudioSessionRecord, ...current.filter(item => item.id !== activeSession?.id)]);
@@ -1208,7 +1210,9 @@ export function StudioProvider(props: {
         throw new Error('NO_WORKSPACE');
       }
       executionSession = activeSession;
-      streamingSessionIdRef.current = activeSession.id;
+      if (streamingSessionIdRef.current !== activeSession.id) {
+        streamingSessionIdRef.current = activeSession.id;
+      }
       setStreamingStatus('Generating...');
       const response = await fetchWithBrowserSession('/api/studio/intent/stream', {
         method: 'POST',

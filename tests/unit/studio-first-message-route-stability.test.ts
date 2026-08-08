@@ -15,6 +15,12 @@ describe('Studio first message route stability', () => {
 
   it('does not let background session refresh replace active streaming messages', () => {
     const source = readFileSync(join(process.cwd(), 'components', 'studio', 'StudioProvider.tsx'), 'utf8');
+    const createdSessionSource = source.slice(
+      source.indexOf('activeSession = payload.session ?? null;'),
+      source.indexOf('      }\n      if (!activeSession)'),
+    );
+    const markerIndex = createdSessionSource.indexOf('streamingSessionIdRef.current = activeSession.id;');
+    const routeIndex = createdSessionSource.indexOf('replaceCurrentHistoryRoute({');
 
     expect(source).toContain('const streamingSessionIdRef = useRef<string | null>(null);');
     expect(source).toContain('const currentWorkspaceIdRef = useRef<string | null>(currentWorkspaceId);');
@@ -24,6 +30,8 @@ describe('Studio first message route stability', () => {
     expect(source).toContain('if (payload.messages && streamingSessionIdRef.current !== sessionId) {');
     expect(source).toContain('streamingSessionIdRef.current = activeSession.id;');
     expect(source).toContain('streamingSessionIdRef.current = null;');
+    expect(markerIndex).toBeGreaterThan(-1);
+    expect(routeIndex).toBeGreaterThan(markerIndex);
   });
 
   it('preserves completed streamed turns when the immediate bundle reload is stale', () => {
